@@ -13,6 +13,10 @@ vi.mock('@/lib/kakao/load-kakao-sdk', () => ({
   loadKakaoMapSdk: () => new Promise(() => {}),
 }));
 
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: () => {} }),
+}));
+
 describe('Home', () => {
   it('renders the map explorer controls', async () => {
     render(<Home />);

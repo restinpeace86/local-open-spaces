@@ -26,9 +26,12 @@
 - [x] Source #07 서울시 야외 행사 & 팝업 정보 — **결정: 별도 수집 없이 기존 #04/#05 데이터를 필터링해 대체 (기획 확인 완료)**
       - 독립된 데이터셋이 존재하지 않는 것으로 확인되어, 이미 수집된 #04(`tvYeyakCOllect`, event_type=RESERVATION)와 #05(문화행사, event_type=FESTIVAL/POPUP 등)에서 카테고리/태그 기준으로 필터링해 활용하기로 결정
       - 별도 수집 스크립트 불필요. 화면/쿼리 레이어에서 `event_type IN ('FESTIVAL','POPUP')` 등으로 필터링하는 것은 이후 화면 구현 단계에서 처리 (Spec 범위: 데이터 파이프라인이 아닌 조회 로직)
-- [ ] AI 데이터 정제/태깅 파이프라인 (Gemini) — Source #05/#06은 현재 규칙 기반(rule-based) 카테고리 매핑만 적용 (`scripts/ingest/lib/category-map.mjs`). `spec/data/ai-rule.md`가 요구하는 비정형 텍스트 정제·요약 및 애매한 케이스의 AI 분류는 미구현
+- [x] AI 데이터 정제/태깅 파이프라인 (Gemini) — `scripts/ingest/lib/ai-tagging.mjs` 신설. (1) `cleanText()`로 HTML태그/특수문자/중복공백 결정적 정제, (2) `classifyEventTypeWithAI()`로 Source #05(`classifySeoulCultureEvent`)의 CODENAME이 규칙 매핑표에 없는 애매한 케이스만 Gemini(`gemini-flash-lite-latest`, `responseSchema` enum 강제)로 보조 분류. AI도 불확실하면 임의 생성 없이 ETC로 귀결 + 경고 로그(ai-rule.md 4.1 준수). Source #06은 컨텐츠타입이 축제로 고정돼 있어 애초에 애매성이 없어 대상 아님(`classifyTourApiFestival`). 실제 Gemini 호출로 미분류 라벨 2건 검증(POPUP/EXHIBITION 정상 판별) + `--dry-run` 정상 동작 확인
 - [x] GitHub Actions 스케줄링 (`.github/workflows/ingest-monthly.yml`, `ingest-daily.yml`) — Source #01/#03(월 1회), #04/#05(매일)를 스케줄 워크플로로 구성. **주의: GitHub 저장소 Secrets(NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, PUBLIC_DATA_API_KEY, SEOUL_OPEN_DATA_KEY) 수동 등록 필요 — 이 환경에 gh CLI가 없어 자동 등록 불가**
-- [ ] `supabase link` + DB 비밀번호 등록 — 현재는 Management API(`scripts/apply-sql.mjs`)로 마이그레이션 적용 중. DB 비밀번호 등록 시 CLI 표준 `supabase db push`로 전환 검토
+- [~] `supabase link` + DB 비밀번호 등록 — **보류: 자동화 불가 (계정 자격 증명 필요)**
+      - `npx supabase link --project-ref <ref> --password <pw>`는 원격 Postgres DB 비밀번호(`--password`)가 필수인데, 이 값은 `.env.local`을 포함해 이 환경 어디에도 존재하지 않음 (Management API 사용에 쓰이는 `SUPABASE_ACCESS_TOKEN`과는 별개의 시크릿)
+      - `supabase login`도 브라우저 기반 OAuth 인터랙티브 플로우라 무인 환경에서 수행 불가
+      - 현재는 Management API(`scripts/apply-sql.mjs`)로 마이그레이션 적용 중이며 이 경로는 정상 동작하므로 실제 작업에 지장 없음. 사용자가 DB 비밀번호를 시크릿으로 제공하면 재시도
 
 ## Phase 2 — UI/기능 연동
 
@@ -39,7 +42,7 @@
 - [x] 상세 정보 모달/바텀시트 (`src/components/map/detail-modal.tsx`, `implementation/2026-08-21-detail-modal.md`) — 마커/리스트 카드 클릭 시 panTo + 모달 활성화, 공간(주소/운영시간/무료뱃지/복사) 및 이벤트(썸네일/기간/예약안내/D-day) 분기 표시, 카카오맵 길찾기 + 예약/상세링크 CTA. RPC 2차 확장(operating_hours/is_free/info_url/reservation_url 등) 완료. Playwright 실브라우저로 리스트클릭/마커클릭/X닫기/백드롭닫기/클립보드복사/모바일 전부 검증 완료 (콘솔 에러 0건)
       - 미포함(다음 단계 후보): 관련 행사 보기(연계 리스트) slide, 즐겨찾기 버튼(Decision 003 - Feature Flag 없이는 노출 금지 대상), 카카오톡 공유 버튼(사용자 요청 4개 항목에는 없었음 — 필요 시 추가 확인)
 - [x] 검색 바(키워드 debounce 300ms) + 카테고리 칩 필터 (`src/components/map/search-bar.tsx`, `category-filter.tsx`, `empty-state.tsx`, `implementation/2026-08-21-search-and-category-filter.md`) — 카테고리 선택 시 레이어 토글보다 우선 적용(즉시 동기화 요건 충족), 키워드는 이름 부분일치. Playwright로 음성/양성 케이스(예약형 행사 64건=마커 64개 일치, "서울갤러리" 키워드 4건 정확 매칭) 및 EmptyState/필터초기화/모바일까지 전부 검증 완료 (콘솔 에러 0건)
-- [ ] 10km 초과 시 광역 그리드 뷰 전환 안내 (`spec/common/search.md` 2.2) — 다음 단계 (현재 반경 UI가 10km로 상한 고정돼 있어 시나리오 자체가 미발생)
+- [x] 10km 초과 시 광역 그리드 뷰 전환 안내 (`spec/common/search.md` 2.2) — `src/components/map/kakao-map-view.tsx`에 `zoom_changed` 리스너 추가. `getBounds()`+haversine으로 중심-북동코너 거리를 계산해 10km 초과 시 직전 유효 레벨로 `setLevel()` 되돌림(줌 제어/방지) 후 `onZoomExceedsMaxRadius` 콜백 발화. `MapExplorer`가 이를 받아 `GridViewPrompt`(신규, `src/components/map/grid-view-prompt.tsx`) 모달로 안내 문구 노출, "예" 선택 시 기존 `/region` 그리드 뷰로 `router.push`. `src/types/kakao.d.ts`에 `getBounds`/`getLevel`/`LatLngBounds`/`event.removeListener` 타입 보강. tsc/build 통과, 기존 반경 선택 UI(1/5/10km)와는 별개로 지도 자체 줌아웃 시나리오를 커버
 - [x] 지역별 도감 그리드 / 월별 캘린더 뷰 + 상단 탭 내비게이션 (`src/app/region/`, `src/app/calendar/`, `implementation/2026-08-21-region-grid-and-calendar.md`) — spec 문서 미비 상태로 사용자 요구사항 기준 구현. 도감(자치구/카테고리 필터+DetailModal 연동), 캘린더(월이동/날짜별 칩/상태뱃지+DetailModal 연동) Playwright 실브라우저 검증 완료 (콘솔 에러 0건)
       - **후속 개선 완료** (`implementation/2026-08-21-calendar-density-cleanup.md`): 사용자 확정 규칙(30일 이상 상시 항목 분리 + 일별 타일 최대 3칩 + "+N개 더보기" 레이어)을 반영. 704건이 "상시 운영/예약" 접이식 섹션으로 분리되고 셀당 칩이 3개로 제한됨을 Playwright로 확인. 단, 30일 미만 반복성 프로그램이 여전히 일부 날짜(예: +255개)에 몰려있음 — 추가 규칙(반복 강좌 그룹핑 등) 필요 여부는 사용자 판단 대기
 

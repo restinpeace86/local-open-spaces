@@ -5,6 +5,7 @@ import { loadEnv } from '../lib/load-env.mjs';
 import { createAdminClient, upsertRows } from './lib/supabase-admin.mjs';
 import { toPointWKT } from './lib/geometry.mjs';
 import { classifySeoulCultureEvent } from './lib/category-map.mjs';
+import { cleanText } from './lib/ai-tagging.mjs';
 
 const env = loadEnv();
 const dryRun = process.argv.includes('--dry-run');
@@ -41,15 +42,17 @@ function buildExternalId(item) {
   return `SEOUL_CULTURE_${hash}`;
 }
 
-function mapToEventRow(item) {
+async function mapToEventRow(item, { apiKey }) {
   const lng = Number(item.LOT);
   const lat = Number(item.LAT);
   if (!lng || !lat || !item.STRTDATE || !item.END_DATE || !item.TITLE) return null;
 
+  const title = cleanText(item.TITLE);
+
   return {
     external_id: buildExternalId(item),
-    title: item.TITLE,
-    event_type: classifySeoulCultureEvent(item.CODENAME),
+    title,
+    event_type: await classifySeoulCultureEvent(item.CODENAME, { title, apiKey }),
     start_date: item.STRTDATE.slice(0, 10),
     end_date: item.END_DATE.slice(0, 10),
     location: toPointWKT(lng, lat),
@@ -63,7 +66,8 @@ async function main() {
   const items = await fetchCultureEvents({ startIdx: 1, endIdx: 20 });
   console.log(`✅ 서울 열린데이터광장 호출 성공: ${items.length}건 수신`);
 
-  const rows = items.map(mapToEventRow).filter(Boolean);
+  const mapped = await Promise.all(items.map((item) => mapToEventRow(item, { apiKey: env.GEMINI_API_KEY })));
+  const rows = mapped.filter(Boolean);
   console.log(`  → 좌표/일자 유효 데이터: ${rows.length}건`);
 
   if (dryRun) {

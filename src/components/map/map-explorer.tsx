@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { KakaoMapView } from '@/components/map/kakao-map-view';
 import { RadiusSelector } from '@/components/map/radius-selector';
 import { LayerToggle } from '@/components/map/layer-toggle';
@@ -10,6 +11,7 @@ import { ItemListPanel } from '@/components/map/item-list-panel';
 import { EmptyState } from '@/components/map/empty-state';
 import { DetailModal } from '@/components/map/detail-modal';
 import { Toast } from '@/components/map/toast';
+import { GridViewPrompt } from '@/components/map/grid-view-prompt';
 import { getNearbySpacesAndEvents, NearbyItem } from '@/lib/spaces/get-nearby';
 import { useUserLocation } from '@/hooks/use-user-location';
 
@@ -17,6 +19,7 @@ import { useUserLocation } from '@/hooks/use-user-location';
 const MARKER_LIMIT = 200;
 
 export function MapExplorer() {
+  const router = useRouter();
   const userLocation = useUserLocation();
   const [center, setCenter] = useState(userLocation);
   const [radius, setRadius] = useState(5000);
@@ -28,6 +31,7 @@ export function MapExplorer() {
   const [isSheetExpanded, setIsSheetExpanded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showGridViewPrompt, setShowGridViewPrompt] = useState(false);
 
   useEffect(() => {
     setCenter(userLocation);
@@ -121,6 +125,7 @@ export function MapExplorer() {
           items={visibleItems}
           focusPosition={focusPosition}
           onSelectItem={handleSelectItem}
+          onZoomExceedsMaxRadius={() => setShowGridViewPrompt(true)}
         />
 
         {/* 모바일 플로팅 헤더 (spec/common/search.md 2.1) */}
@@ -171,6 +176,13 @@ export function MapExplorer() {
 
       {selectedItem && (
         <DetailModal item={selectedItem} onClose={() => setSelectedItem(null)} />
+      )}
+
+      {showGridViewPrompt && (
+        <GridViewPrompt
+          onConfirm={() => router.push('/region')}
+          onCancel={() => setShowGridViewPrompt(false)}
+        />
       )}
     </div>
   );

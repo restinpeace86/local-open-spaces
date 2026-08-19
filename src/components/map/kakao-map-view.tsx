@@ -5,6 +5,10 @@ import { loadKakaoMapSdk } from '@/lib/kakao/load-kakao-sdk';
 import { buildMarkerSvgDataUrl } from '@/lib/kakao/marker-image';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
+import { haversineDistanceMeters } from '@/lib/geo/haversine';
+
+// spec/common/search.md 2.2: 서비스가 지원하는 최대 단일 반경(10km)을 초과하는 지도 축소를 방지한다.
+const MAX_SINGLE_RADIUS_METERS = 10000;
 
 // spec/map/kakao-map.md 3: 리사이징/회전 시 relayout()+setCenter()로 회색 타일 방지
 // spec/map/kakao-map.md 4.1: 카테고리별 커스텀 마커 + MarkerClusterer 연동
@@ -13,16 +17,22 @@ export function KakaoMapView({
   items,
   focusPosition,
   onSelectItem,
+  onZoomExceedsMaxRadius,
 }: {
   center: { lat: number; lng: number };
   items: NearbyItem[];
   focusPosition?: { lat: number; lng: number } | null;
   onSelectItem: (item: NearbyItem) => void;
+  onZoomExceedsMaxRadius?: () => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<kakao.maps.Map | null>(null);
   const clustererRef = useRef<kakao.maps.MarkerClusterer | null>(null);
   const markersRef = useRef<kakao.maps.Marker[]>([]);
+  const lastValidLevelRef = useRef<number>(5);
+  const isRevertingRef = useRef(false);
+  const onZoomExceedsMaxRadiusRef = useRef(onZoomExceedsMaxRadius);
+  onZoomExceedsMaxRadiusRef.current = onZoomExceedsMaxRadius;
 
   useEffect(() => {
     let cancelled = false;
@@ -48,9 +58,35 @@ export function KakaoMapView({
       window.addEventListener('resize', handleResize);
       window.addEventListener('orientationchange', handleResize);
 
+      // spec/common/search.md 2.2: 핀치 줌/휠로 10km를 초과해 축소하면 이전 레벨로 되돌리고 광역 그리드 전환 안내를 띄운다.
+      const handleZoomChanged = () => {
+        if (isRevertingRef.current) {
+          isRevertingRef.current = false;
+          return;
+        }
+
+        const bounds = map.getBounds();
+        const ne = bounds.getNorthEast();
+        const mapCenter = map.getCenter();
+        const visibleRadius = haversineDistanceMeters(
+          { lat: mapCenter.getLat(), lng: mapCenter.getLng() },
+          { lat: ne.getLat(), lng: ne.getLng() }
+        );
+
+        if (visibleRadius > MAX_SINGLE_RADIUS_METERS) {
+          isRevertingRef.current = true;
+          map.setLevel(lastValidLevelRef.current);
+          onZoomExceedsMaxRadiusRef.current?.();
+        } else {
+          lastValidLevelRef.current = map.getLevel();
+        }
+      };
+      window.kakao.maps.event.addListener(map, 'zoom_changed', handleZoomChanged);
+
       return () => {
         window.removeEventListener('resize', handleResize);
         window.removeEventListener('orientationchange', handleResize);
+        window.kakao.maps.event.removeListener(map, 'zoom_changed', handleZoomChanged);
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     });

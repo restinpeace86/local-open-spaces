@@ -14,6 +14,13 @@ declare namespace kakao.maps {
     getCenter(): LatLng;
     relayout(): void;
     setLevel(level: number): void;
+    getLevel(): number;
+    getBounds(): LatLngBounds;
+  }
+
+  class LatLngBounds {
+    getSouthWest(): LatLng;
+    getNorthEast(): LatLng;
   }
 
   class MarkerImage {
@@ -36,6 +43,7 @@ declare namespace kakao.maps {
 
   namespace event {
     function addListener(target: unknown, type: string, handler: (...args: unknown[]) => void): void;
+    function removeListener(target: unknown, type: string, handler: (...args: unknown[]) => void): void;
   }
 
   namespace MarkerClusterer {

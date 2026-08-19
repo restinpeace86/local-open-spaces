@@ -1,6 +1,7 @@
 // spec/data/ai-rule.md 3.2 표준 이벤트 유형 매핑
-// 명확히 매핑되는 값은 규칙 기반으로 분류하고, 매핑표에 없는 값은 임의로 생성하지 않고
-// 기본값(ETC)으로 분류한 뒤 경고 로그를 남긴다 (ai-rule.md 4.1 준수).
+// 명확히 매핑되는 값은 규칙 기반으로 분류하고, 매핑표에 없는 애매한 값은 Gemini AI로 보조 분류한다.
+// AI도 명확히 판별하지 못하면 임의로 생성하지 않고 기본값(ETC)으로 분류한 뒤 경고 로그를 남긴다 (ai-rule.md 4.1 준수).
+import { classifyEventTypeWithAI } from './ai-tagging.mjs';
 
 const SEOUL_CODENAME_MAP = {
   '축제-문화/예술': 'FESTIVAL',
@@ -18,13 +19,11 @@ const SEOUL_CODENAME_MAP = {
   '교육/체험': 'POPUP',
 };
 
-export function classifySeoulCultureEvent(codename) {
+export async function classifySeoulCultureEvent(codename, { title, apiKey } = {}) {
   const mapped = SEOUL_CODENAME_MAP[codename?.trim()];
-  if (!mapped) {
-    console.warn(`⚠️ 미분류 CODENAME "${codename}" → ETC로 분류`);
-    return 'ETC';
-  }
-  return mapped;
+  if (mapped) return mapped;
+
+  return classifyEventTypeWithAI({ title, rawLabel: codename, apiKey });
 }
 
 // TourAPI contenttypeid=15(축제공연행사)는 서비스 전체가 축제/행사 카테고리로 고정되어 있어
