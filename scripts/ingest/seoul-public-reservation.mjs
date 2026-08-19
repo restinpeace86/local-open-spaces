@@ -1,6 +1,8 @@
-// Source 04: 서울시 공공서비스예약 - 체육시설 (spec/data/data_sources.md #04)
-// 목록 조회(ListPublicReservationSport) 응답에 예약 URL/좌표/접수기간이 모두 포함되어 있어
-// 별도 상세 조회 없이 단일 호출로 수집 가능함을 확인함 (사용자 제공 샘플 URL로 실증)
+// Source 04: 서울시 공공서비스예약 - 종합 (spec/data/data_sources.md #04)
+// tvYeyakCOllect는 체육시설/문화행사/진료복지 등 모든 예약 카테고리를 포괄하는 통합 조회로,
+// 카테고리별 개별 엔드포인트(ListPublicReservationSport/Culture/Medical 등)의 상위 집합임을
+// 실제 호출로 확인함 (전체 2,600건 vs 체육시설 단독 606건). 응답에 예약 URL/좌표/접수기간이
+// 모두 포함되어 있어 별도 상세 조회 없이 단일 목록 호출로 수집 가능 (사용자 제공 샘플 URL로 실증)
 import { loadEnv } from '../lib/load-env.mjs';
 import { createAdminClient, upsertRows } from './lib/supabase-admin.mjs';
 import { toPointWKT } from './lib/geometry.mjs';
@@ -9,7 +11,7 @@ const env = loadEnv();
 const dryRun = process.argv.includes('--dry-run');
 
 const BASE = 'http://openapi.seoul.go.kr:8088';
-const SERVICE_NAME = 'ListPublicReservationSport';
+const SERVICE_NAME = 'tvYeyakCOllect';
 const PAGE_SIZE = 100;
 
 async function fetchPage(startIdx, endIdx) {
@@ -37,6 +39,11 @@ function toDateOnly(dateTimeStr) {
   return dateTimeStr ? dateTimeStr.slice(0, 10) : null;
 }
 
+function isActiveStatus(svcStatNm) {
+  if (!svcStatNm) return true;
+  return !svcStatNm.includes('종료') && !svcStatNm.includes('마감');
+}
+
 function mapToEventRow(item) {
   const lng = Number(item.X);
   const lat = Number(item.Y);
@@ -56,23 +63,28 @@ function mapToEventRow(item) {
     reservation_url: item.SVCURL || null,
     location: toPointWKT(lng, lat),
     thumbnail_url: item.IMGURL || null,
-    is_active: item.SVCSTATNM !== '접수마감' && item.SVCSTATNM !== '종료',
+    is_active: isActiveStatus(item.SVCSTATNM),
   };
 }
 
 async function main() {
-  console.log(`▶ 서울시 공공서비스예약(체육시설) 수집 시작 (dry-run: ${dryRun})`);
+  console.log(`▶ 서울시 공공서비스예약(종합) 수집 시작 (dry-run: ${dryRun})`);
 
   const client = dryRun ? null : createAdminClient();
   let startIdx = 1;
   let totalCount = Infinity;
   let totalUpserted = 0;
   const sample = [];
+  const divCounts = {};
 
   while (startIdx <= totalCount) {
     const endIdx = startIdx + PAGE_SIZE - 1;
     const { items, totalCount: tc } = await fetchPage(startIdx, endIdx);
     totalCount = tc;
+
+    for (const item of items) {
+      divCounts[item.DIV] = (divCounts[item.DIV] ?? 0) + 1;
+    }
 
     const rows = items.map(mapToEventRow).filter(Boolean);
 
@@ -86,6 +98,8 @@ async function main() {
     console.log(`  ${startIdx}~${endIdx}: ${items.length}건 수신 (전체 ${totalCount}건 중)`);
     startIdx += PAGE_SIZE;
   }
+
+  console.log('  카테고리(DIV)별 건수:', divCounts);
 
   if (dryRun) {
     console.log(JSON.stringify(sample, null, 2));

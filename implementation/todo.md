@@ -17,10 +17,9 @@
 - [ ] Source #03 LocalData 전국 문화기반시설 현황 — **보류: 데이터셋명 불일치 발견**
       - "LocalData"(지방행정 인허가 API)는 opnSvcId 기준 체계로 박물관/미술관/공연장의 정확한 opnSvcId 미확인
       - 더 적합해 보이는 대안: 한국문화정보원_전국문화기반시설총람(dataset 15125097) — 스펙 작성 의도가 LocalData인지 15125097인지 기획 확인 필요
-- [x] Source #04 서울시 공공서비스예약 - 체육시설 (`scripts/ingest/seoul-public-reservation.mjs`) — 실제 호출 및 DB upsert 검증 완료
-      - 사용자가 확인해준 정확한 서비스명(`ListPublicReservationSport`)으로 목록 조회 성공. 응답에 SVCID/예약URL/좌표/접수기간이 모두 포함되어 있어 별도 상세 조회 없이 단일 호출로 수집
-      - 전체 606건 중 573건(좌표·일자 유효 데이터) `events` 테이블(`event_type=RESERVATION`) upsert 성공, RPC 반경 검색으로 확인 완료
-      - **범위 한정**: 이 엔드포인트는 "체육시설" 카테고리 전용. 스펙(#04)이 말하는 "공공서비스예약(공간/시설)" 전체 중 문화시설/교육프로그램 등 다른 카테고리는 별도 서비스명(`ListPublicReservationCulture` 등 추정)이 있을 수 있으나 미확인 — 필요 시 추가 확인 후 확장
+- [x] Source #04 서울시 공공서비스예약 - 종합 (`scripts/ingest/seoul-public-reservation.mjs`) — 실제 호출 및 DB upsert 검증 완료
+      - 사용자가 확인해준 통합 서비스명(`tvYeyakCOllect`)으로 전환. 문화행사(978)/시설대관(594)/진료(28)/체육시설(606)/교육(394) 등 전체 5개 카테고리 2,600건을 단일 엔드포인트로 커버 (카테고리별 개별 엔드포인트의 상위 집합임을 실증)
+      - 전체 2,600건 중 2,494건(좌표·일자 유효 데이터) `events` 테이블(`event_type=RESERVATION`) upsert 성공, RPC 반경 검색으로 확인 완료
 - [ ] Source #07 서울시 야외 행사 & 팝업 정보 — **보류: 데이터셋 존재 여부 자체가 불확실**
       - data.seoul.go.kr에서 "야외행사"/"팝업" 키워드로 매칭되는 독립 데이터셋을 찾지 못함
       - #04 또는 #05에 통합된 것인지, 스펙 작성 시점 오류인지 기획 확인 필요
