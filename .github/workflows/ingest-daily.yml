@@ -1,0 +1,54 @@
+name: Daily Data Ingestion (Events)
+
+# spec/data/data_sources.md: 행사·이벤트형 데이터는 매일 1회(03:00~04:30 KST) 동기화.
+# KST 03:00/03:30은 UTC로 전일 18:00/18:30에 해당한다.
+on:
+  schedule:
+    - cron: '0 18 * * *'  # 03:00 KST - Source 04 서울시 공공서비스예약
+    - cron: '30 18 * * *' # 03:30 KST - Source 05 서울시 문화행사 정보
+  workflow_dispatch:
+
+jobs:
+  ingest-public-reservation:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '0 18 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Source 04 - 서울시 공공서비스예약(종합)
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SEOUL_OPEN_DATA_KEY: ${{ secrets.SEOUL_OPEN_DATA_KEY }}
+        run: node scripts/ingest/seoul-public-reservation.mjs
+
+  ingest-culture-events:
+    if: github.event_name == 'workflow_dispatch' || github.event.schedule == '30 18 * * *'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Source 05 - 서울시 문화행사 정보
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SEOUL_OPEN_DATA_KEY: ${{ secrets.SEOUL_OPEN_DATA_KEY }}
+        run: node scripts/ingest/seoul-culture-events.mjs
+
+      # Source 06(TourAPI 축제)는 계정 활용신청 승인 대기 중으로 보류.
+      # Source 07(야외행사&팝업)은 별도 수집 없이 Source 04/05 데이터를 필터링해 대체.
+      # implementation/todo.md 참고.

@@ -13,7 +13,12 @@
     "test:all": "npm run validate && npm run test",
     "db:migrate": "node scripts/apply-sql.mjs",
     "gen:types": "node scripts/gen-types.mjs",
-    "check:api-keys": "node scripts/check-api-keys.mjs"
+    "check:api-keys": "node scripts/check-api-keys.mjs",
+    "ingest:city-parks": "node scripts/ingest/city-parks.mjs",
+    "ingest:cultural-spaces": "node scripts/ingest/cultural-spaces.mjs",
+    "ingest:public-reservation": "node scripts/ingest/seoul-public-reservation.mjs",
+    "ingest:culture-events": "node scripts/ingest/seoul-culture-events.mjs",
+    "ingest:tour-festival": "node scripts/ingest/tour-api-festival.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

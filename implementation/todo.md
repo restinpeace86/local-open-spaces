@@ -12,11 +12,11 @@
       - 같은 키로 Source #01(전국 도시공원) 호출은 정상 동작 → 키 자체는 유효하며, TourAPI 4.0 상품만 별도 활용신청 승인이 안 된 상태로 확인됨 (인코딩 문제 아님)
       - data.go.kr 마이페이지 > 활용신청 현황에서 "한국관광공사_국문 관광정보 서비스_GW(TourAPI 4.0)" 상품 승인 여부 확인 필요
       - 승인 확인되면 `node scripts/ingest/tour-api-festival.mjs --dry-run`으로 재검증
-- [ ] Source #02 전국(서울시) 공공체육시설 현황 — **보류: 서비스명이 서버에서 인식되지 않음 (ERROR-500, 2차 시도까지 실패)**
-      - 1차 시도: `ListPublicSportsFacility` 및 케이싱/단복수 변형 4종(`ListPublicSportFacility`, `listPublicSportsFacility`, `ListPublicSportsFacilities`) — 전부 `ERROR-500`
-      - 2차 시도(사용자 재확인 이름): `SearchPublicSportsFacilitiesInfo`, 대안명 `PhysicalTrainingFacility`, 및 각각의 첫글자 소문자 변형(`searchPublicSportsFacilitiesInfo`, `physicalTrainingFacility`), 추가 변형(`SearchPublicSportsFacilitieInfo`, `publicSportsFacilitiesInfo`) — 총 6종 모두 `ERROR-500`
-      - 누적 10종의 서비스명 변형 모두 실패. Source #04(`tvYeyakCOllect`)·#03(`culturalSpaceInfo`) 사례처럼 실제 서비스명이 "체육시설/Sports/Facility" 단어 조합과 전혀 다른 이름일 가능성이 높음
-      - 다음 필요: 서울 열린데이터광장 "Open API" 상세설명 문서 페이지에서 **샘플 URL 텍스트를 그대로 복사**해 전달 요청 (수기 재구성 시 오탈자 가능성 배제)
+- [ ] Source #02 전국(서울시) 공공체육시설 현황 — **Skip/Mock: 서울시 서버 측 장애로 잠정 보류 (사용자 확인, 다음 단계로 진행)**
+      - 사용자가 서울 열린데이터광장 공식 문서에서 확인한 정확한 서비스명 `ListPublicSportsFacility` (공식 샘플 URL 원문 기준)로도 `/json/`, `/xml/` 두 방식 모두 `ERROR-500` 지속 확인
+      - 누적 11종의 서비스명/포맷 조합이 모두 실패했고 공식 문서 원문과 일치하는 이름으로도 실패하므로, 서비스명 문제가 아니라 **서울시 서버의 해당 데이터셋 자체 장애**로 결론 (사용자 확인)
+      - 사용자 지시에 따라 별도 수집 스크립트를 만들지 않고(가짜/목 데이터 생성 금지 원칙) Skip 상태로 유지, 이후 서울시 서버 정상화 시 재시도
+      - 재시도 시: `node -e` 스니펫으로 `http://openapi.seoul.go.kr:8088/{KEY}/json/ListPublicSportsFacility/1/5/` 상태만 먼저 확인 후 정식 스크립트 작성
 - [x] Source #03 서울시 문화공간 정보 (`scripts/ingest/cultural-spaces.mjs`, 서비스명 `culturalSpaceInfo`) — 실제 호출 및 DB upsert 검증 완료
       - 전체 1,076건 중 1,075건 `open_spaces` 테이블(`category=CULTURE`) upsert 성공
       - **주의**: 응답 필드명 `X_COORD`/`Y_COORD`가 실제로는 위도/경도가 뒤바뀌어 있음을 확인 (X_COORD≈37.x=위도, Y_COORD≈127.x=경도) → 값 범위(30~40)로 판별하도록 방어적으로 매핑
@@ -27,7 +27,7 @@
       - 독립된 데이터셋이 존재하지 않는 것으로 확인되어, 이미 수집된 #04(`tvYeyakCOllect`, event_type=RESERVATION)와 #05(문화행사, event_type=FESTIVAL/POPUP 등)에서 카테고리/태그 기준으로 필터링해 활용하기로 결정
       - 별도 수집 스크립트 불필요. 화면/쿼리 레이어에서 `event_type IN ('FESTIVAL','POPUP')` 등으로 필터링하는 것은 이후 화면 구현 단계에서 처리 (Spec 범위: 데이터 파이프라인이 아닌 조회 로직)
 - [ ] AI 데이터 정제/태깅 파이프라인 (Gemini) — Source #05/#06은 현재 규칙 기반(rule-based) 카테고리 매핑만 적용 (`scripts/ingest/lib/category-map.mjs`). `spec/data/ai-rule.md`가 요구하는 비정형 텍스트 정제·요약 및 애매한 케이스의 AI 분류는 미구현
-- [ ] GitHub Actions 스케줄링 (월 1회 공간형 3종 / 매일 1회 행사형 4종) — 개별 수집 스크립트 확정 후 구성
+- [x] GitHub Actions 스케줄링 (`.github/workflows/ingest-monthly.yml`, `ingest-daily.yml`) — Source #01/#03(월 1회), #04/#05(매일)를 스케줄 워크플로로 구성. **주의: GitHub 저장소 Secrets(NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, PUBLIC_DATA_API_KEY, SEOUL_OPEN_DATA_KEY) 수동 등록 필요 — 이 환경에 gh CLI가 없어 자동 등록 불가**
 - [ ] `supabase link` + DB 비밀번호 등록 — 현재는 Management API(`scripts/apply-sql.mjs`)로 마이그레이션 적용 중. DB 비밀번호 등록 시 CLI 표준 `supabase db push`로 전환 검토
 
 ## 참고

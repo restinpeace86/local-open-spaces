@@ -1,0 +1,41 @@
+name: Monthly Data Ingestion (Open Spaces)
+
+# spec/data/data_sources.md: 공간형 데이터 3종은 매월 1일 03:00~04:00 KST 동기화.
+# GitHub Actions cron은 UTC 기준이라 '0 0 1 * *'(UTC 00:00, 매월 1일)로 실행하면
+# KST로는 09:00 매월 1일에 해당한다. 정확한 03시가 아니라 09시가 되지만
+# "매월 1일"이라는 날짜 요건은 그대로 지켜지며, 월 1회 배치 작업 특성상
+# 시각 차이는 서비스에 영향을 주지 않는다.
+on:
+  schedule:
+    - cron: '0 0 1 * *'
+  workflow_dispatch:
+
+jobs:
+  ingest-open-spaces:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Source 01 - 전국 도시공원 정보
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PUBLIC_DATA_API_KEY: ${{ secrets.PUBLIC_DATA_API_KEY }}
+        run: node scripts/ingest/city-parks.mjs
+
+      - name: Source 03 - 서울시 문화공간 정보
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SEOUL_OPEN_DATA_KEY: ${{ secrets.SEOUL_OPEN_DATA_KEY }}
+        run: node scripts/ingest/cultural-spaces.mjs
+
+      # Source 02(전국 공공체육시설 현황)는 서울시 서버 측 장애(ERROR-500)로 보류 중.
+      # implementation/todo.md 참고. 서버 정상화 확인 후 이 워크플로에 스텝 추가 예정.
