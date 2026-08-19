@@ -5,7 +5,7 @@ import { KakaoMapView } from '@/components/map/kakao-map-view';
 import { RadiusSelector } from '@/components/map/radius-selector';
 import { LayerToggle } from '@/components/map/layer-toggle';
 import { ItemListPanel } from '@/components/map/item-list-panel';
-import { ItemInfoCard } from '@/components/map/item-info-card';
+import { DetailModal } from '@/components/map/detail-modal';
 import { Toast } from '@/components/map/toast';
 import { getNearbySpacesAndEvents, NearbyItem } from '@/lib/spaces/get-nearby';
 
@@ -68,9 +68,12 @@ export function MapExplorer() {
   const visibleItems = useMemo(() => filteredItems.slice(0, MARKER_LIMIT), [filteredItems]);
   const isOverLimit = filteredItems.length > MARKER_LIMIT;
 
+  // spec/space/space-card.md 3, spec/event/event-card.md 3: 카드/마커 클릭 시 지도 panTo + 상세 모달 활성화
   const handleSelectItem = useCallback((item: NearbyItem) => {
     setSelectedItem(item);
   }, []);
+
+  const focusPosition = selectedItem ? { lat: selectedItem.lat, lng: selectedItem.lng } : null;
 
   return (
     <div className="relative flex-1 flex flex-col md:flex-row overflow-hidden">
@@ -95,7 +98,12 @@ export function MapExplorer() {
 
       {/* 지도 영역 */}
       <div className="relative flex-1">
-        <KakaoMapView center={center} items={visibleItems} onSelectItem={handleSelectItem} />
+        <KakaoMapView
+          center={center}
+          items={visibleItems}
+          focusPosition={focusPosition}
+          onSelectItem={handleSelectItem}
+        />
 
         {/* 모바일 플로팅 헤더 (spec/common/search.md 2.1) */}
         <div className="md:hidden absolute top-3 left-3 right-3 flex flex-col gap-2 z-10">
@@ -105,11 +113,6 @@ export function MapExplorer() {
           </div>
         </div>
 
-        {selectedItem && (
-          <div className="absolute left-3 right-3 bottom-3 md:bottom-4 md:left-4 md:right-4 z-20">
-            <ItemInfoCard item={selectedItem} onClose={() => setSelectedItem(null)} />
-          </div>
-        )}
       </div>
 
       {/* 모바일 바텀시트 (spec/common/responsive.md 2.1) */}
@@ -142,6 +145,10 @@ export function MapExplorer() {
 
       {isOverLimit && (
         <Toast message="반경 내 시설이 너무 많습니다. 지도를 확대하거나 범위를 좁혀 상세히 탐색하세요." />
+      )}
+
+      {selectedItem && (
+        <DetailModal item={selectedItem} onClose={() => setSelectedItem(null)} />
       )}
     </div>
   );

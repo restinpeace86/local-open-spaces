@@ -11,10 +11,12 @@ import { NearbyItem } from '@/lib/spaces/get-nearby';
 export function KakaoMapView({
   center,
   items,
+  focusPosition,
   onSelectItem,
 }: {
   center: { lat: number; lng: number };
   items: NearbyItem[];
+  focusPosition?: { lat: number; lng: number } | null;
   onSelectItem: (item: NearbyItem) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -64,6 +66,12 @@ export function KakaoMapView({
     if (!mapRef.current) return;
     mapRef.current.setCenter(new window.kakao.maps.LatLng(center.lat, center.lng));
   }, [center.lat, center.lng]);
+
+  // spec/space/space-card.md 3, spec/event/event-card.md 3: 카드/마커 선택 시 해당 좌표로 부드럽게 이동(panTo)
+  useEffect(() => {
+    if (!mapRef.current || !focusPosition) return;
+    mapRef.current.panTo(new window.kakao.maps.LatLng(focusPosition.lat, focusPosition.lng));
+  }, [focusPosition?.lat, focusPosition?.lng]);
 
   useEffect(() => {
     if (!mapRef.current || !clustererRef.current) return;

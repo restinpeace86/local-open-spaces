@@ -12,7 +12,13 @@ export type NearbyItem = {
   thumbnail_url: string | null;
   start_date: string | null;
   end_date: string | null;
+  reservation_start_date: string | null;
   reservation_end_date: string | null;
+  reservation_url: string | null;
+  is_reservation_required: boolean | null;
+  operating_hours: string | null;
+  is_free: boolean | null;
+  info_url: string | null;
 };
 
 export async function getNearbySpacesAndEvents(

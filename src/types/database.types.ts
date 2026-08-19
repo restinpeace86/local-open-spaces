@@ -485,11 +485,17 @@ export type Database = {
           distance_meters: number
           end_date: string
           id: string
+          info_url: string
+          is_free: boolean
+          is_reservation_required: boolean
           item_type: string
           lat: number
           lng: number
           name: string
+          operating_hours: string
           reservation_end_date: string
+          reservation_start_date: string
+          reservation_url: string
           start_date: string
           thumbnail_url: string
         }[]
