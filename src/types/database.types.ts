@@ -480,11 +480,18 @@ export type Database = {
       get_nearby_spaces_and_events: {
         Args: { radius_meters?: number; user_lat: number; user_lng: number }
         Returns: {
+          address: string
           category: string
           distance_meters: number
+          end_date: string
           id: string
           item_type: string
+          lat: number
+          lng: number
           name: string
+          reservation_end_date: string
+          start_date: string
+          thumbnail_url: string
         }[]
       }
       gettransactionid: { Args: never; Returns: unknown }

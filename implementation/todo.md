@@ -30,6 +30,17 @@
 - [x] GitHub Actions 스케줄링 (`.github/workflows/ingest-monthly.yml`, `ingest-daily.yml`) — Source #01/#03(월 1회), #04/#05(매일)를 스케줄 워크플로로 구성. **주의: GitHub 저장소 Secrets(NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, PUBLIC_DATA_API_KEY, SEOUL_OPEN_DATA_KEY) 수동 등록 필요 — 이 환경에 gh CLI가 없어 자동 등록 불가**
 - [ ] `supabase link` + DB 비밀번호 등록 — 현재는 Management API(`scripts/apply-sql.mjs`)로 마이그레이션 적용 중. DB 비밀번호 등록 시 CLI 표준 `supabase db push`로 전환 검토
 
+## Phase 2 — UI/기능 연동
+
+- [x] DB 데이터 표준화 사전 검증 (`implementation/2026-08-21-map-view-phase1.md`) — null/좌표범위 0건, 4개 소스 RPC 표준 구조 통합 확인
+- [x] RPC 확장 (`get_nearby_spaces_and_events`에 lng/lat/address/thumbnail_url/start_date/end_date/reservation_end_date 추가) — 지도 마커 렌더링 필수 선행 작업
+- [x] 지도 뷰 1단계 (`src/components/map/`) — 반경 선택(1/5/10km), 상시시설 토글, 반응형(모바일 풀스크린+바텀시트 / 데스크톱 2단 split), 마커 클릭 정보카드, 200건 초과 토스트. tsc/test/build 통과 + Playwright 실브라우저 검증(리스트/토글/반경 정상, DB 실데이터 D-day 계산까지 정상 확인)
+      - **Kakao 지도 타일 렌더링 실패**: `dapi.kakao.com` SDK 요청이 `401 domain mismatched! caller=http://localhost:3000`로 거부됨 (직접 fetch로 재현). 코드 문제 아님 — Kakao Developers 콘솔의 Web 플랫폼 도메인 등록 상태 재확인 필요 (사용자는 등록했다고 안내했으나 실제로는 거부 중)
+- [ ] 검색 바(키워드 debounce) + 카테고리 칩 필터 (`spec/common/search.md` 2.1, 2.3) — 1단계 범위 밖, 다음 단계
+- [ ] 10km 초과 시 광역 그리드 뷰 전환 안내 (`spec/common/search.md` 2.2) — 1단계 범위 밖, 다음 단계
+- [ ] 상세 정보 모달 (카카오맵 길찾기, 카톡 공유) — `spec/space/`, `spec/event/` 상세 스펙 확인 후 진행
+- [ ] 지역별 도감 그리드 / 월별 캘린더 뷰 (`project/overview.md` 탐색 흐름 4단계) — 미착수
+
 ## 참고
 - 보류 항목은 `implementation/2026-08-19-tech-stack-and-core-schema.md`와 `implementation/2026-08-19-data-ingestion-pipeline.md`에 상세 근거 기록됨
 - 위 보류 항목들은 임의로 구현 가능 상태로 바꾸지 말 것 — 엔드포인트/데이터셋 확정 후 진행
