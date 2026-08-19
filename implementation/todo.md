@@ -1,52 +1,16 @@
-# local-open-spaces 구현 Todo
+지도 뷰의 [내 위치 마커 + 반경 시각화 + 반경별 자동 줌 스케일 + 마커 클러스터링] 기능을 최종 통합 구현해 주세요.
 
-## Phase 1 (MVP) — 데이터 파이프라인
+[작업 스펙 요구사항]
+1. 내 위치(기준점) 커스텀 마커:
+   - 사용자 설정 위치(userLocation) 좌표에 일반 마커와 구분되는 '내 위치' 전용 펄스 마커(파란색 원형 + 파동 애니메이션)를 노출해 주세요.
 
-- [x] 기술 스택 설치 (Next.js/TS/Tailwind/Supabase)
-- [x] Supabase PostGIS Core 스키마 적용 (`open_spaces`, `events`, `get_nearby_spaces_and_events` RPC)
-- [x] API 키 연결 상태 점검 스크립트 (`scripts/check-api-keys.mjs`)
-- [x] Source #05 서울시 문화행사 정보 수집 스크립트 (`scripts/ingest/seoul-culture-events.mjs`) — 실제 호출 및 DB upsert 검증 완료
-- [x] Source #01 전국 도시공원 정보 표준데이터 (`scripts/ingest/city-parks.mjs`) — 실제 호출 및 DB upsert 검증 완료 (전체 19,154건 중 200건 테스트 upsert). 전체 재수집 시 `--max-pages` 없이 실행
-- [~] Source #06 한국관광공사 TourAPI 축제 정보 (`scripts/ingest/tour-api-festival.mjs`) — **보류: 코드 아님, 계정 이슈 (재확인 완료)**
-      - 엔드포인트(`KorService2/searchFestival2`)는 정상. 디코딩 키(+encodeURIComponent)/인코딩 키(raw) 두 방식 모두 재테스트했으나 동일하게 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR` (returnReasonCode 30)
-      - 같은 키로 Source #01(전국 도시공원) 호출은 정상 동작 → 키 자체는 유효하며, TourAPI 4.0 상품만 별도 활용신청 승인이 안 된 상태로 확인됨 (인코딩 문제 아님)
-      - data.go.kr 마이페이지 > 활용신청 현황에서 "한국관광공사_국문 관광정보 서비스_GW(TourAPI 4.0)" 상품 승인 여부 확인 필요
-      - 승인 확인되면 `node scripts/ingest/tour-api-festival.mjs --dry-run`으로 재검증
-- [~] Source #02 전국(서울시) 공공체육시설 현황 — **Skip/Mock: 서울시 서버 측 장애로 잠정 보류 (사용자 확인, 다음 단계로 진행)**
-      - 사용자가 서울 열린데이터광장 공식 문서에서 확인한 정확한 서비스명 `ListPublicSportsFacility` (공식 샘플 URL 원문 기준)로도 `/json/`, `/xml/` 두 방식 모두 `ERROR-500` 지속 확인
-      - 누적 11종의 서비스명/포맷 조합이 모두 실패했고 공식 문서 원문과 일치하는 이름으로도 실패하므로, 서비스명 문제가 아니라 **서울시 서버의 해당 데이터셋 자체 장애**로 결론 (사용자 확인)
-      - 사용자 지시에 따라 별도 수집 스크립트를 만들지 않고(가짜/목 데이터 생성 금지 원칙) Skip 상태로 유지, 이후 서울시 서버 정상화 시 재시도
-      - 재시도 시: `node -e` 스니펫으로 `http://openapi.seoul.go.kr:8088/{KEY}/json/ListPublicSportsFacility/1/5/` 상태만 먼저 확인 후 정식 스크립트 작성
-- [x] Source #03 서울시 문화공간 정보 (`scripts/ingest/cultural-spaces.mjs`, 서비스명 `culturalSpaceInfo`) — 실제 호출 및 DB upsert 검증 완료
-      - 전체 1,076건 중 1,075건 `open_spaces` 테이블(`category=CULTURE`) upsert 성공
-      - **주의**: 응답 필드명 `X_COORD`/`Y_COORD`가 실제로는 위도/경도가 뒤바뀌어 있음을 확인 (X_COORD≈37.x=위도, Y_COORD≈127.x=경도) → 값 범위(30~40)로 판별하도록 방어적으로 매핑
-- [x] Source #04 서울시 공공서비스예약 - 종합 (`scripts/ingest/seoul-public-reservation.mjs`) — 실제 호출 및 DB upsert 검증 완료
-      - 사용자가 확인해준 통합 서비스명(`tvYeyakCOllect`)으로 전환. 문화행사(978)/시설대관(594)/진료(28)/체육시설(606)/교육(394) 등 전체 5개 카테고리 2,600건을 단일 엔드포인트로 커버 (카테고리별 개별 엔드포인트의 상위 집합임을 실증)
-      - 전체 2,600건 중 2,494건(좌표·일자 유효 데이터) `events` 테이블(`event_type=RESERVATION`) upsert 성공, RPC 반경 검색으로 확인 완료
-- [x] Source #07 서울시 야외 행사 & 팝업 정보 — **결정: 별도 수집 없이 기존 #04/#05 데이터를 필터링해 대체 (기획 확인 완료)**
-      - 독립된 데이터셋이 존재하지 않는 것으로 확인되어, 이미 수집된 #04(`tvYeyakCOllect`, event_type=RESERVATION)와 #05(문화행사, event_type=FESTIVAL/POPUP 등)에서 카테고리/태그 기준으로 필터링해 활용하기로 결정
-      - 별도 수집 스크립트 불필요. 화면/쿼리 레이어에서 `event_type IN ('FESTIVAL','POPUP')` 등으로 필터링하는 것은 이후 화면 구현 단계에서 처리 (Spec 범위: 데이터 파이프라인이 아닌 조회 로직)
-- [x] AI 데이터 정제/태깅 파이프라인 (Gemini) — `scripts/ingest/lib/ai-tagging.mjs` 신설. (1) `cleanText()`로 HTML태그/특수문자/중복공백 결정적 정제, (2) `classifyEventTypeWithAI()`로 Source #05(`classifySeoulCultureEvent`)의 CODENAME이 규칙 매핑표에 없는 애매한 케이스만 Gemini(`gemini-flash-lite-latest`, `responseSchema` enum 강제)로 보조 분류. AI도 불확실하면 임의 생성 없이 ETC로 귀결 + 경고 로그(ai-rule.md 4.1 준수). Source #06은 컨텐츠타입이 축제로 고정돼 있어 애초에 애매성이 없어 대상 아님(`classifyTourApiFestival`). 실제 Gemini 호출로 미분류 라벨 2건 검증(POPUP/EXHIBITION 정상 판별) + `--dry-run` 정상 동작 확인
-- [x] GitHub Actions 스케줄링 (`.github/workflows/ingest-monthly.yml`, `ingest-daily.yml`) — Source #01/#03(월 1회), #04/#05(매일)를 스케줄 워크플로로 구성. **주의: GitHub 저장소 Secrets(NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, PUBLIC_DATA_API_KEY, SEOUL_OPEN_DATA_KEY) 수동 등록 필요 — 이 환경에 gh CLI가 없어 자동 등록 불가**
-- [~] `supabase link` + DB 비밀번호 등록 — **보류: 자동화 불가 (계정 자격 증명 필요)**
-      - `npx supabase link --project-ref <ref> --password <pw>`는 원격 Postgres DB 비밀번호(`--password`)가 필수인데, 이 값은 `.env.local`을 포함해 이 환경 어디에도 존재하지 않음 (Management API 사용에 쓰이는 `SUPABASE_ACCESS_TOKEN`과는 별개의 시크릿)
-      - `supabase login`도 브라우저 기반 OAuth 인터랙티브 플로우라 무인 환경에서 수행 불가
-      - 현재는 Management API(`scripts/apply-sql.mjs`)로 마이그레이션 적용 중이며 이 경로는 정상 동작하므로 실제 작업에 지장 없음. 사용자가 DB 비밀번호를 시크릿으로 제공하면 재시도
+2. 검색 반경 시각화 및 자동 줌 스케일 (Kakao Maps Circle & Bounds):
+   - 선택된 반경(1km, 5km, 10km)에 맞춰 내 위치 중심의 반투명 원형 레이어(Circle)를 그려주세요.
+   - 반경 선택이 바뀌면(예: 1km -> 10km) 해당 원 전체가 화면 한눈에 들어오도록 circle.getBounds()를 사용하여 지도 줌 레벨(Zoom Level)과 중심을 자동 조정해 주세요.
 
-## Phase 2 — UI/기능 연동
+3. 마커 클러스터링 (Kakao MarkerClusterer):
+   - 축척 확대/축소 시 마커 밀도에 따라 숫자로 자동 그룹핑/해제되는 Kakao MarkerClusterer를 적용해 주세요.
 
-- [x] DB 데이터 표준화 사전 검증 (`implementation/2026-08-21-map-view-phase1.md`) — null/좌표범위 0건, 4개 소스 RPC 표준 구조 통합 확인
-- [x] RPC 확장 (`get_nearby_spaces_and_events`에 lng/lat/address/thumbnail_url/start_date/end_date/reservation_end_date 추가) — 지도 마커 렌더링 필수 선행 작업
-- [x] 지도 뷰 1단계 (`src/components/map/`) — 반경 선택(1/5/10km), 상시시설 토글, 반응형(모바일 풀스크린+바텀시트 / 데스크톱 2단 split), 마커 클릭 정보카드, 200건 초과 토스트. tsc/test/build 통과 + Playwright 실브라우저 검증 완료 (지도 타일/마커 65개/정보카드/리스트-마커 동기화 모두 정상)
-      - **Kakao 지도 타일 렌더링 이슈 → 해결 완료**: 원인은 도메인 등록 위치 문제였음. [제품 링크 관리]>[웹 도메인]과 [앱 설정]>[플랫폼]>[Web] 둘 다 아니었고, 실제로는 **[JavaScript 키 수정] > [JavaScript SDK 도메인]**이 Maps SDK의 Referer 검증에 사용되는 항목이었음. 사용자가 이 경로에 `http://localhost:3000` 등록 후 최종 저장하자 즉시 해결됨 — 직접 fetch 200 OK 확인 + Playwright 실브라우저에서 지도 타일 26개, 커스텀 마커 65개, 마커 클릭 정보카드(D-day/카테고리/거리) 및 리스트 동기화 하이라이트까지 전부 정상 렌더링 확인 (콘솔 에러 0건)
-- [x] 상세 정보 모달/바텀시트 (`src/components/map/detail-modal.tsx`, `implementation/2026-08-21-detail-modal.md`) — 마커/리스트 카드 클릭 시 panTo + 모달 활성화, 공간(주소/운영시간/무료뱃지/복사) 및 이벤트(썸네일/기간/예약안내/D-day) 분기 표시, 카카오맵 길찾기 + 예약/상세링크 CTA. RPC 2차 확장(operating_hours/is_free/info_url/reservation_url 등) 완료. Playwright 실브라우저로 리스트클릭/마커클릭/X닫기/백드롭닫기/클립보드복사/모바일 전부 검증 완료 (콘솔 에러 0건)
-      - 미포함(다음 단계 후보): 관련 행사 보기(연계 리스트) slide, 즐겨찾기 버튼(Decision 003 - Feature Flag 없이는 노출 금지 대상), 카카오톡 공유 버튼(사용자 요청 4개 항목에는 없었음 — 필요 시 추가 확인)
-- [x] 검색 바(키워드 debounce 300ms) + 카테고리 칩 필터 (`src/components/map/search-bar.tsx`, `category-filter.tsx`, `empty-state.tsx`, `implementation/2026-08-21-search-and-category-filter.md`) — 카테고리 선택 시 레이어 토글보다 우선 적용(즉시 동기화 요건 충족), 키워드는 이름 부분일치. Playwright로 음성/양성 케이스(예약형 행사 64건=마커 64개 일치, "서울갤러리" 키워드 4건 정확 매칭) 및 EmptyState/필터초기화/모바일까지 전부 검증 완료 (콘솔 에러 0건)
-- [x] 10km 초과 시 광역 그리드 뷰 전환 안내 (`spec/common/search.md` 2.2) — `src/components/map/kakao-map-view.tsx`에 `zoom_changed` 리스너 추가. `getBounds()`+haversine으로 중심-북동코너 거리를 계산해 10km 초과 시 직전 유효 레벨로 `setLevel()` 되돌림(줌 제어/방지) 후 `onZoomExceedsMaxRadius` 콜백 발화. `MapExplorer`가 이를 받아 `GridViewPrompt`(신규, `src/components/map/grid-view-prompt.tsx`) 모달로 안내 문구 노출, "예" 선택 시 기존 `/region` 그리드 뷰로 `router.push`. `src/types/kakao.d.ts`에 `getBounds`/`getLevel`/`LatLngBounds`/`event.removeListener` 타입 보강. tsc/build 통과, 기존 반경 선택 UI(1/5/10km)와는 별개로 지도 자체 줌아웃 시나리오를 커버
-- [x] 지역별 도감 그리드 / 월별 캘린더 뷰 + 상단 탭 내비게이션 (`src/app/region/`, `src/app/calendar/`, `implementation/2026-08-21-region-grid-and-calendar.md`) — spec 문서 미비 상태로 사용자 요구사항 기준 구현. 도감(자치구/카테고리 필터+DetailModal 연동), 캘린더(월이동/날짜별 칩/상태뱃지+DetailModal 연동) Playwright 실브라우저 검증 완료 (콘솔 에러 0건)
-      - **후속 개선 완료** (`implementation/2026-08-21-calendar-density-cleanup.md`): 사용자 확정 규칙(30일 이상 상시 항목 분리 + 일별 타일 최대 3칩 + "+N개 더보기" 레이어)을 반영. 704건이 "상시 운영/예약" 접이식 섹션으로 분리되고 셀당 칩이 3개로 제한됨을 Playwright로 확인. 단, 30일 미만 반복성 프로그램이 여전히 일부 날짜(예: +255개)에 몰려있음 — 추가 규칙(반복 강좌 그룹핑 등) 필요 여부는 사용자 판단 대기
+4. Playwright 실브라우저로 내 위치 마커 노출, 반경별 원 렌더링, 반경 전환 시 지도 줌 스케일 자동 변경, 클러스터링 동작을 검증해 주세요.
 
-## 참고
-- 보류 항목은 `implementation/2026-08-19-tech-stack-and-core-schema.md`와 `implementation/2026-08-19-data-ingestion-pipeline.md`에 상세 근거 기록됨
-- 위 보류 항목들은 임의로 구현 가능 상태로 바꾸지 말 것 — 엔드포인트/데이터셋 확정 후 진행
-- **체크박스 표기 규칙**: 빈 대괄호(스페이스만 있는 상태)는 "지금 바로 착수 가능한 작업", `x`가 채워지면 완료, 물결표(`~`)가 채워지면 **외부 요인(계정 승인 대기, 타사 서버 장애 등)으로 Claude가 재시도해도 진전이 없는 보류 상태**를 뜻함. `auto-dev.bat`이 빈 대괄호 패턴으로 미완료 작업 존재 여부를 감지해 무인 루프를 도는데, 물결표로 표시된 항목은 이 감지에서 제외되어 외부 조건이 바뀌기 전까지 불필요하게 반복 재확인되지 않음. 외부 조건이 해소되면 물결표를 지우고 다시 빈 대괄호로 되돌려 다음 루프에서 재시도되게 할 것. (주의: 이 설명 문단 자체에 빈 대괄호 리터럴을 쓰지 않도록 항상 유지 — 그렇지 않으면 이 줄 때문에 루프가 영원히 멈추지 않음)
+위 계획에 따라 구현을 진행해 주세요!
