@@ -1,17 +1,6 @@
-import fs from 'fs';
-import path from 'path';
+import { loadEnv } from './lib/load-env.mjs';
 
-// .env.local 파일에서 환경변수 로드
-const envPath = path.resolve(process.cwd(), '.env.local');
-if (fs.existsSync(envPath)) {
-  const envConfig = fs.readFileSync(envPath, 'utf8');
-  envConfig.split('\n').forEach((line) => {
-    const [key, ...values] = line.split('=');
-    if (key && values.length > 0) {
-      process.env[key.trim()] = values.join('=').trim();
-    }
-  });
-}
+loadEnv();
 
 const webhookUrl = process.env.DISCORD_WEBHOOK_URL;
 

@@ -11,8 +11,9 @@
     "validate": "npm run lint && npm run type-check",
     "test": "vitest run",
     "test:all": "npm run validate && npm run test",
-    "db:push": "npx supabase db push",
-    "gen:types": "npx supabase gen types typescript --project-id \"$SUPABASE_PROJECT_ID\" > src/types/database.types.ts"
+    "db:migrate": "node scripts/apply-sql.mjs",
+    "gen:types": "node scripts/gen-types.mjs",
+    "check:api-keys": "node scripts/check-api-keys.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

@@ -1,3 +1,6 @@
+# Google Drive 임시 동기화 폴더
+.tmp.driveupload/
+
 # dependencies
 /node_modules
 /.pnp
