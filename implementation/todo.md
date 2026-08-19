@@ -6,13 +6,12 @@
 - [x] Supabase PostGIS Core 스키마 적용 (`open_spaces`, `events`, `get_nearby_spaces_and_events` RPC)
 - [x] API 키 연결 상태 점검 스크립트 (`scripts/check-api-keys.mjs`)
 - [x] Source #05 서울시 문화행사 정보 수집 스크립트 (`scripts/ingest/seoul-culture-events.mjs`) — 실제 호출 및 DB upsert 검증 완료
-- [ ] Source #06 한국관광공사 TourAPI 축제 정보 (`scripts/ingest/tour-api-festival.mjs`) — **보류: 코드 아님, 계정 이슈**
-      - 엔드포인트(`KorService2/searchFestival2`)는 정상이나 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR` (returnReasonCode 30) 발생
+- [x] Source #01 전국 도시공원 정보 표준데이터 (`scripts/ingest/city-parks.mjs`) — 실제 호출 및 DB upsert 검증 완료 (전체 19,154건 중 200건 테스트 upsert). 전체 재수집 시 `--max-pages` 없이 실행
+- [ ] Source #06 한국관광공사 TourAPI 축제 정보 (`scripts/ingest/tour-api-festival.mjs`) — **보류: 코드 아님, 계정 이슈 (재확인 완료)**
+      - 엔드포인트(`KorService2/searchFestival2`)는 정상. 디코딩 키(+encodeURIComponent)/인코딩 키(raw) 두 방식 모두 재테스트했으나 동일하게 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR` (returnReasonCode 30)
+      - 같은 키로 Source #01(전국 도시공원) 호출은 정상 동작 → 키 자체는 유효하며, TourAPI 4.0 상품만 별도 활용신청 승인이 안 된 상태로 확인됨 (인코딩 문제 아님)
       - data.go.kr 마이페이지 > 활용신청 현황에서 "한국관광공사_국문 관광정보 서비스_GW(TourAPI 4.0)" 상품 승인 여부 확인 필요
       - 승인 확인되면 `node scripts/ingest/tour-api-festival.mjs --dry-run`으로 재검증
-- [ ] Source #01 전국 도시공원 정보 표준데이터 — **보류: 추측 금지 (제3장 제5조)**
-      - data.go.kr dataset 15012890 추정되나 정확한 오퍼레이션/파라미터명 미확인 (JS 렌더링 페이지라 자동 조사 실패)
-      - data.go.kr "전국도시공원정보표준데이터" OpenAPI 명세 탭에서 정확한 요청 URL/파라미터 확인 후 구현
 - [ ] Source #02 전국 공공체육시설 현황 — **보류: 후보 데이터셋 2개 중 스펙과 일치하는 것 미확정**
       - "전국체육시설표준데이터"(15096288) vs "국민체육진흥공단 전국체육시설정보"(B551014/SRVC_API_SFMS_FACI) 중 어느 쪽인지 확인 필요
 - [ ] Source #03 LocalData 전국 문화기반시설 현황 — **보류: 데이터셋명 불일치 발견**

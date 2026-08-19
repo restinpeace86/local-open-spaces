@@ -125,11 +125,26 @@ async function checkTourApi() {
   }
 }
 
-// 7. 공공데이터포털 - 도시공원/체육시설/문화기반시설 정확한 엔드포인트 미확정으로 존재 여부만 확인
-async function checkPresenceOnly(envKey, label) {
-  const value = process.env[envKey];
-  if (!value) return record(label, 'MISSING', '환경변수 없음');
-  record(label, 'SKIP', '값 존재 확인됨. 실제 호출 테스트는 정확한 엔드포인트 스펙 확정 후 추가 예정');
+// 7. 공공데이터포털 - 전국 도시공원 정보 엔드포인트로 실제 호출 검증 (spec/data/data_sources.md #01)
+async function checkPublicDataPortal() {
+  const key = process.env.PUBLIC_DATA_API_KEY;
+  if (!key) return record('공공데이터포털 (data.go.kr)', 'MISSING', '환경변수 없음');
+  try {
+    const url = `http://api.data.go.kr/openapi/tn_pubr_public_cty_park_info_api?serviceKey=${encodeURIComponent(key)}&pageNo=1&numOfRows=1&type=json`;
+    const res = await fetch(url);
+    const json = await res.json();
+    if (json.header?.resultCode === '00') {
+      record(
+        '공공데이터포털 (data.go.kr)',
+        'OK',
+        `전국 도시공원 정보 호출 성공 (전체 ${json.body?.totalCount ?? '?'}건). 체육시설/문화기반시설 등 나머지 상품은 활용신청 승인 여부 별도 확인 필요`
+      );
+    } else {
+      record('공공데이터포털 (data.go.kr)', 'FAIL', `${json.header?.resultCode} ${json.header?.resultMsg}`);
+    }
+  } catch (e) {
+    record('공공데이터포털 (data.go.kr)', 'ERROR', e.message);
+  }
 }
 
 async function main() {
@@ -139,7 +154,7 @@ async function main() {
   await checkKakao();
   await checkSeoulOpenData();
   await checkTourApi();
-  await checkPresenceOnly('PUBLIC_DATA_API_KEY', '공공데이터포털 (data.go.kr - 도시공원/체육시설/문화기반시설)');
+  await checkPublicDataPortal();
 
   console.log('\n=== API 키 연결 상태 점검 결과 ===\n');
   const iconOf = { OK: '✅', FAIL: '❌', ERROR: '❌', MISSING: '⚠️', SKIP: '⏭️' };
