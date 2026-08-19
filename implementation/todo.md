@@ -35,7 +35,9 @@
 - [x] DB 데이터 표준화 사전 검증 (`implementation/2026-08-21-map-view-phase1.md`) — null/좌표범위 0건, 4개 소스 RPC 표준 구조 통합 확인
 - [x] RPC 확장 (`get_nearby_spaces_and_events`에 lng/lat/address/thumbnail_url/start_date/end_date/reservation_end_date 추가) — 지도 마커 렌더링 필수 선행 작업
 - [x] 지도 뷰 1단계 (`src/components/map/`) — 반경 선택(1/5/10km), 상시시설 토글, 반응형(모바일 풀스크린+바텀시트 / 데스크톱 2단 split), 마커 클릭 정보카드, 200건 초과 토스트. tsc/test/build 통과 + Playwright 실브라우저 검증(리스트/토글/반경 정상, DB 실데이터 D-day 계산까지 정상 확인)
-      - **Kakao 지도 타일 렌더링 실패**: `dapi.kakao.com` SDK 요청이 `401 domain mismatched! caller=http://localhost:3000`로 거부됨 (직접 fetch로 재현). 코드 문제 아님 — Kakao Developers 콘솔의 Web 플랫폼 도메인 등록 상태 재확인 필요 (사용자는 등록했다고 안내했으나 실제로는 거부 중)
+      - **Kakao 지도 타일 렌더링 실패 (재검증 완료, 여전히 실패)**: 사용자가 Kakao Developers [제품 링크 관리] > [웹 도메인]에 `http://localhost:3000`을 등록했다고 확인했으나, 재검증 결과 동일하게 `401 domain mismatched! caller=http://localhost:3000`. Playwright 실브라우저에서도 동일 원인으로 `net::ERR_BLOCKED_BY_ORB`(401 응답이 script MIME 타입이 아니라 Chromium이 차단) 재현됨 — 직접 fetch 결과와 정확히 일치하는 근본 원인
+      - 부수 수정: SDK 로드 URL을 프로토콜 상대경로(`//dapi.kakao.com/...`)에서 `https://dapi.kakao.com/...`로 명시 (http 로컬 개발 시 프로토콜 다운그레이드 방지 목적, 정확성 개선이며 이번 실패의 원인은 아니었음)
+      - 다음 확인 필요: Kakao Developers 콘솔에서 (a) 도메인이 실제로 저장/반영됐는지(등록 후 별도 저장 버튼 확인), (b) `.env.local`의 `NEXT_PUBLIC_KAKAO_MAP_API_KEY`가 도메인을 등록한 바로 그 앱의 JavaScript 키가 맞는지, (c) 등록 반영에 몇 분 정도 지연이 있을 수 있어 잠시 후 재확인 필요
 - [ ] 검색 바(키워드 debounce) + 카테고리 칩 필터 (`spec/common/search.md` 2.1, 2.3) — 1단계 범위 밖, 다음 단계
 - [ ] 10km 초과 시 광역 그리드 뷰 전환 안내 (`spec/common/search.md` 2.2) — 1단계 범위 밖, 다음 단계
 - [ ] 상세 정보 모달 (카카오맵 길찾기, 카톡 공유) — `spec/space/`, `spec/event/` 상세 스펙 확인 후 진행
