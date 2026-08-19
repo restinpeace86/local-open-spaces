@@ -38,8 +38,8 @@
       - **Kakao 지도 타일 렌더링 이슈 → 해결 완료**: 원인은 도메인 등록 위치 문제였음. [제품 링크 관리]>[웹 도메인]과 [앱 설정]>[플랫폼]>[Web] 둘 다 아니었고, 실제로는 **[JavaScript 키 수정] > [JavaScript SDK 도메인]**이 Maps SDK의 Referer 검증에 사용되는 항목이었음. 사용자가 이 경로에 `http://localhost:3000` 등록 후 최종 저장하자 즉시 해결됨 — 직접 fetch 200 OK 확인 + Playwright 실브라우저에서 지도 타일 26개, 커스텀 마커 65개, 마커 클릭 정보카드(D-day/카테고리/거리) 및 리스트 동기화 하이라이트까지 전부 정상 렌더링 확인 (콘솔 에러 0건)
 - [x] 상세 정보 모달/바텀시트 (`src/components/map/detail-modal.tsx`, `implementation/2026-08-21-detail-modal.md`) — 마커/리스트 카드 클릭 시 panTo + 모달 활성화, 공간(주소/운영시간/무료뱃지/복사) 및 이벤트(썸네일/기간/예약안내/D-day) 분기 표시, 카카오맵 길찾기 + 예약/상세링크 CTA. RPC 2차 확장(operating_hours/is_free/info_url/reservation_url 등) 완료. Playwright 실브라우저로 리스트클릭/마커클릭/X닫기/백드롭닫기/클립보드복사/모바일 전부 검증 완료 (콘솔 에러 0건)
       - 미포함(다음 단계 후보): 관련 행사 보기(연계 리스트) slide, 즐겨찾기 버튼(Decision 003 - Feature Flag 없이는 노출 금지 대상), 카카오톡 공유 버튼(사용자 요청 4개 항목에는 없었음 — 필요 시 추가 확인)
-- [ ] 검색 바(키워드 debounce) + 카테고리 칩 필터 (`spec/common/search.md` 2.1, 2.3) — 다음 단계
-- [ ] 10km 초과 시 광역 그리드 뷰 전환 안내 (`spec/common/search.md` 2.2) — 다음 단계
+- [x] 검색 바(키워드 debounce 300ms) + 카테고리 칩 필터 (`src/components/map/search-bar.tsx`, `category-filter.tsx`, `empty-state.tsx`, `implementation/2026-08-21-search-and-category-filter.md`) — 카테고리 선택 시 레이어 토글보다 우선 적용(즉시 동기화 요건 충족), 키워드는 이름 부분일치. Playwright로 음성/양성 케이스(예약형 행사 64건=마커 64개 일치, "서울갤러리" 키워드 4건 정확 매칭) 및 EmptyState/필터초기화/모바일까지 전부 검증 완료 (콘솔 에러 0건)
+- [ ] 10km 초과 시 광역 그리드 뷰 전환 안내 (`spec/common/search.md` 2.2) — 다음 단계 (현재 반경 UI가 10km로 상한 고정돼 있어 시나리오 자체가 미발생)
 - [ ] 지역별 도감 그리드 / 월별 캘린더 뷰 (`project/overview.md` 탐색 흐름 4단계) — 미착수
 
 ## 참고
