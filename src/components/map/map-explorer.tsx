@@ -14,6 +14,7 @@ import { Toast } from '@/components/map/toast';
 import { GridViewPrompt } from '@/components/map/grid-view-prompt';
 import { LocationHeader } from '@/components/map/location-header';
 import { LocationOnboardingModal } from '@/components/map/location-onboarding-modal';
+import { RecenterButton } from '@/components/map/recenter-button';
 import { getNearbySpacesAndEvents, NearbyItem } from '@/lib/spaces/get-nearby';
 import { useUserLocation } from '@/hooks/use-user-location';
 
@@ -40,13 +41,20 @@ export function MapExplorer() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showGridViewPrompt, setShowGridViewPrompt] = useState(false);
+  // implementation/todo.md: 지도 드래그로 이동한 위치를 새로운 검색 기준점으로 지정하기 위한 override 상태.
+  // '내 위치' 원본 좌표(useUserLocation)는 그대로 유지하고, 재검색 버튼 클릭 시에만 탐색 기준점을 갱신한다.
+  const [searchOverrideCenter, setSearchOverrideCenter] = useState<{ lat: number; lng: number } | null>(
+    null
+  );
+  const [pendingRecenter, setPendingRecenter] = useState<{ lat: number; lng: number } | null>(null);
+  const effectiveCenter = searchOverrideCenter ?? center;
 
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
     setErrorMessage(null);
 
-    getNearbySpacesAndEvents(center.lng, center.lat, radius)
+    getNearbySpacesAndEvents(effectiveCenter.lng, effectiveCenter.lat, radius)
       .then((result) => {
         if (!cancelled) setItems(result);
       })
@@ -60,7 +68,29 @@ export function MapExplorer() {
     return () => {
       cancelled = true;
     };
-  }, [center.lat, center.lng, radius]);
+  }, [effectiveCenter.lat, effectiveCenter.lng, radius]);
+
+  // implementation/todo.md: '내 동네' 재설정 시 지도 드래그로 인한 임시 재검색 기준점은 초기화한다.
+  const handleConfirmLocation = useCallback(
+    (location: Parameters<typeof confirmLocation>[0]) => {
+      setSearchOverrideCenter(null);
+      setPendingRecenter(null);
+      confirmLocation(location);
+    },
+    [confirmLocation]
+  );
+
+  // implementation/todo.md: dragend 발생 시 새로운 지도 중심을 재검색 후보로 저장해 Floating 버튼을 노출한다.
+  const handleMapDragEnd = useCallback((dragCenter: { lat: number; lng: number }) => {
+    setPendingRecenter(dragCenter);
+  }, []);
+
+  // implementation/todo.md: 재검색 버튼 클릭 시 지도 중심을 새로운 탐색 기준점으로 지정하고 버튼을 숨긴다.
+  const handleRecenterSearch = useCallback(() => {
+    if (!pendingRecenter) return;
+    setSearchOverrideCenter(pendingRecenter);
+    setPendingRecenter(null);
+  }, [pendingRecenter]);
 
   const resetFilters = useCallback(() => {
     setKeyword('');
@@ -126,13 +156,21 @@ export function MapExplorer() {
       {/* 지도 영역 */}
       <div className="relative flex-1">
         <KakaoMapView
-          center={center}
+          center={effectiveCenter}
           radius={radius}
           items={visibleItems}
           focusPosition={focusPosition}
           onSelectItem={handleSelectItem}
           onZoomExceedsMaxRadius={() => setShowGridViewPrompt(true)}
+          onDragEnd={handleMapDragEnd}
         />
+
+        {/* 데스크톱: 지도 상단 중앙에 재검색 Floating 버튼 노출 (지도 위 별도 오버레이 없어 최상단 사용 가능) */}
+        {pendingRecenter && (
+          <div className="hidden md:flex absolute top-3 left-1/2 -translate-x-1/2 z-20">
+            <RecenterButton onClick={handleRecenterSearch} />
+          </div>
+        )}
 
         {/* 모바일 플로팅 헤더 (spec/common/search.md 2.1) */}
         <div className="md:hidden absolute top-3 left-3 right-3 flex flex-col gap-2 z-10">
@@ -143,6 +181,12 @@ export function MapExplorer() {
             <LayerToggle showSpaces={showSpaces} onChange={setShowSpaces} />
           </div>
           <CategoryFilter value={category} onChange={setCategory} />
+          {/* implementation/todo.md: 지도 드래그 후 재검색 버튼 - 모바일에서는 필터 스택 하단에 노출해 겹침 방지 */}
+          {pendingRecenter && (
+            <div className="flex justify-center">
+              <RecenterButton onClick={handleRecenterSearch} />
+            </div>
+          )}
         </div>
       </div>
 
@@ -193,7 +237,7 @@ export function MapExplorer() {
       )}
 
       {isOnboardingOpen && (
-        <LocationOnboardingModal onConfirm={confirmLocation} onClose={closeOnboarding} />
+        <LocationOnboardingModal onConfirm={handleConfirmLocation} onClose={closeOnboarding} />
       )}
     </div>
   );

@@ -19,6 +19,7 @@ export function KakaoMapView({
   focusPosition,
   onSelectItem,
   onZoomExceedsMaxRadius,
+  onDragEnd,
 }: {
   center: { lat: number; lng: number };
   radius: number;
@@ -26,6 +27,7 @@ export function KakaoMapView({
   focusPosition?: { lat: number; lng: number } | null;
   onSelectItem: (item: NearbyItem) => void;
   onZoomExceedsMaxRadius?: () => void;
+  onDragEnd?: (center: { lat: number; lng: number }) => void;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<kakao.maps.Map | null>(null);
@@ -37,6 +39,8 @@ export function KakaoMapView({
   const isRevertingRef = useRef(false);
   const onZoomExceedsMaxRadiusRef = useRef(onZoomExceedsMaxRadius);
   onZoomExceedsMaxRadiusRef.current = onZoomExceedsMaxRadius;
+  const onDragEndRef = useRef(onDragEnd);
+  onDragEndRef.current = onDragEnd;
 
   useEffect(() => {
     let cancelled = false;
@@ -117,10 +121,19 @@ export function KakaoMapView({
       };
       window.kakao.maps.event.addListener(map, 'zoom_changed', handleZoomChanged);
 
+      // implementation/todo.md: 지도 드래그(dragend) 시 새로운 중심 좌표를 상위로 전달해 '이 위치에서 재검색' 버튼을 노출한다.
+      // 패닝만으로는 데이터를 재조회하지 않는다(spec/common/search.md 2.2) — 버튼 클릭 시에만 상위에서 재조회를 트리거한다.
+      const handleDragEnd = () => {
+        const dragCenter = map.getCenter();
+        onDragEndRef.current?.({ lat: dragCenter.getLat(), lng: dragCenter.getLng() });
+      };
+      window.kakao.maps.event.addListener(map, 'dragend', handleDragEnd);
+
       return () => {
         window.removeEventListener('resize', handleResize);
         window.removeEventListener('orientationchange', handleResize);
         window.kakao.maps.event.removeListener(map, 'zoom_changed', handleZoomChanged);
+        window.kakao.maps.event.removeListener(map, 'dragend', handleDragEnd);
       };
       // eslint-disable-next-line react-hooks/exhaustive-deps
     });
