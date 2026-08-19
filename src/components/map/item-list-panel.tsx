@@ -3,6 +3,7 @@
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
 import { formatDDay } from '@/lib/spaces/d-day';
+import { formatDistance } from '@/lib/spaces/format';
 
 // spec/common/responsive.md 2.1/2.2: 데스크톱 좌측 패널 리스트 / 모바일 바텀시트 리스트 공용 컴포넌트
 export function ItemListPanel({
@@ -48,7 +49,8 @@ export function ItemListPanel({
                   {item.name}
                 </span>
                 <span className="block text-xs text-gray-500">
-                  {meta.label} · {Math.round(item.distance_meters)}m
+                  {meta.label}
+                  {item.distance_meters >= 0 && ` · ${formatDistance(item.distance_meters)}`}
                 </span>
               </span>
               {dDay && (

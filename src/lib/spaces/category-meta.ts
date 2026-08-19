@@ -21,3 +21,8 @@ export const CATEGORY_FILTER_OPTIONS = Object.keys(CATEGORY_META).map((category)
   category,
   ...CATEGORY_META[category],
 }));
+
+const SPACE_CATEGORIES = ['PARK', 'SPORTS', 'CULTURE'];
+export const SPACE_CATEGORY_FILTER_OPTIONS = CATEGORY_FILTER_OPTIONS.filter((opt) =>
+  SPACE_CATEGORIES.includes(opt.category)
+);

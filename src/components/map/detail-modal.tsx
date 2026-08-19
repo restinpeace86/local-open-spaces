@@ -82,7 +82,9 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
           </div>
 
           <h2 className="mt-2 text-lg font-bold text-gray-900">{item.name}</h2>
-          <p className="text-sm text-gray-400">현재 위치에서 {formatDistance(item.distance_meters)}</p>
+          {item.distance_meters >= 0 && (
+            <p className="text-sm text-gray-400">현재 위치에서 {formatDistance(item.distance_meters)}</p>
+          )}
 
           <dl className="mt-4 flex flex-col gap-3 text-sm">
             {!isEvent && (

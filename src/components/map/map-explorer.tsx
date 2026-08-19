@@ -11,15 +11,14 @@ import { EmptyState } from '@/components/map/empty-state';
 import { DetailModal } from '@/components/map/detail-modal';
 import { Toast } from '@/components/map/toast';
 import { getNearbySpacesAndEvents, NearbyItem } from '@/lib/spaces/get-nearby';
+import { useUserLocation } from '@/hooks/use-user-location';
 
 // spec/map/spatial-search.md 3.1: 반경 내 최대 200개 마커만 우선 렌더링
 const MARKER_LIMIT = 200;
 
-// 기본 위치: 서울시청 (위치 권한 거부/미지원 시 폴백)
-const DEFAULT_CENTER = { lat: 37.5665, lng: 126.978 };
-
 export function MapExplorer() {
-  const [center, setCenter] = useState(DEFAULT_CENTER);
+  const userLocation = useUserLocation();
+  const [center, setCenter] = useState(userLocation);
   const [radius, setRadius] = useState(5000);
   const [showSpaces, setShowSpaces] = useState(false);
   const [keyword, setKeyword] = useState('');
@@ -31,18 +30,8 @@ export function MapExplorer() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!navigator.geolocation) return;
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setCenter({ lat: position.coords.latitude, lng: position.coords.longitude });
-      },
-      () => {
-        // 위치 권한 거부/실패 시 기본 위치(서울시청) 유지
-      },
-      { timeout: 5000 }
-    );
-  }, []);
+    setCenter(userLocation);
+  }, [userLocation]);
 
   useEffect(() => {
     let cancelled = false;

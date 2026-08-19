@@ -5,12 +5,15 @@ import { CATEGORY_FILTER_OPTIONS } from '@/lib/spaces/category-meta';
 export const ALL_CATEGORY = 'ALL';
 
 // spec/common/search.md 2.3: 카테고리/유형 필터 칩 - 선택 시 지도 마커와 리스트가 즉시 동기화
+// options를 지정하면 표시할 카테고리를 제한할 수 있다 (예: 도감 뷰는 공간 카테고리만 노출)
 export function CategoryFilter({
   value,
   onChange,
+  options = CATEGORY_FILTER_OPTIONS,
 }: {
   value: string;
   onChange: (category: string) => void;
+  options?: typeof CATEGORY_FILTER_OPTIONS;
 }) {
   return (
     <div className="flex gap-1.5 overflow-x-auto pb-0.5">
@@ -25,7 +28,7 @@ export function CategoryFilter({
       >
         전체
       </button>
-      {CATEGORY_FILTER_OPTIONS.map((opt) => {
+      {options.map((opt) => {
         const isActive = value === opt.category;
         return (
           <button

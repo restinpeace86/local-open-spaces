@@ -40,7 +40,8 @@
       - 미포함(다음 단계 후보): 관련 행사 보기(연계 리스트) slide, 즐겨찾기 버튼(Decision 003 - Feature Flag 없이는 노출 금지 대상), 카카오톡 공유 버튼(사용자 요청 4개 항목에는 없었음 — 필요 시 추가 확인)
 - [x] 검색 바(키워드 debounce 300ms) + 카테고리 칩 필터 (`src/components/map/search-bar.tsx`, `category-filter.tsx`, `empty-state.tsx`, `implementation/2026-08-21-search-and-category-filter.md`) — 카테고리 선택 시 레이어 토글보다 우선 적용(즉시 동기화 요건 충족), 키워드는 이름 부분일치. Playwright로 음성/양성 케이스(예약형 행사 64건=마커 64개 일치, "서울갤러리" 키워드 4건 정확 매칭) 및 EmptyState/필터초기화/모바일까지 전부 검증 완료 (콘솔 에러 0건)
 - [ ] 10km 초과 시 광역 그리드 뷰 전환 안내 (`spec/common/search.md` 2.2) — 다음 단계 (현재 반경 UI가 10km로 상한 고정돼 있어 시나리오 자체가 미발생)
-- [ ] 지역별 도감 그리드 / 월별 캘린더 뷰 (`project/overview.md` 탐색 흐름 4단계) — 미착수
+- [x] 지역별 도감 그리드 / 월별 캘린더 뷰 + 상단 탭 내비게이션 (`src/app/region/`, `src/app/calendar/`, `implementation/2026-08-21-region-grid-and-calendar.md`) — spec 문서 미비 상태로 사용자 요구사항 기준 구현. 도감(자치구/카테고리 필터+DetailModal 연동), 캘린더(월이동/날짜별 칩/상태뱃지+DetailModal 연동) Playwright 실브라우저 검증 완료 (콘솔 에러 0건)
+      - **후속 논의 필요**: 캘린더가 연중 상시 예약 슬롯(#04) 때문에 거의 모든 날짜에 동일 항목이 반복 노출되어 시각적으로 매우 혼잡함 ("+500건 더보기"). 요구사항을 그대로 구현한 결과이며 버그 아님 — 예약형 행사를 캘린더에서 제외할지, 정렬/필터를 추가할지는 사용자 판단 필요
 
 ## 참고
 - 보류 항목은 `implementation/2026-08-19-tech-stack-and-core-schema.md`와 `implementation/2026-08-19-data-ingestion-pipeline.md`에 상세 근거 기록됨
