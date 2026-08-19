@@ -7,12 +7,12 @@
 - [x] API 키 연결 상태 점검 스크립트 (`scripts/check-api-keys.mjs`)
 - [x] Source #05 서울시 문화행사 정보 수집 스크립트 (`scripts/ingest/seoul-culture-events.mjs`) — 실제 호출 및 DB upsert 검증 완료
 - [x] Source #01 전국 도시공원 정보 표준데이터 (`scripts/ingest/city-parks.mjs`) — 실제 호출 및 DB upsert 검증 완료 (전체 19,154건 중 200건 테스트 upsert). 전체 재수집 시 `--max-pages` 없이 실행
-- [ ] Source #06 한국관광공사 TourAPI 축제 정보 (`scripts/ingest/tour-api-festival.mjs`) — **보류: 코드 아님, 계정 이슈 (재확인 완료)**
+- [~] Source #06 한국관광공사 TourAPI 축제 정보 (`scripts/ingest/tour-api-festival.mjs`) — **보류: 코드 아님, 계정 이슈 (재확인 완료)**
       - 엔드포인트(`KorService2/searchFestival2`)는 정상. 디코딩 키(+encodeURIComponent)/인코딩 키(raw) 두 방식 모두 재테스트했으나 동일하게 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR` (returnReasonCode 30)
       - 같은 키로 Source #01(전국 도시공원) 호출은 정상 동작 → 키 자체는 유효하며, TourAPI 4.0 상품만 별도 활용신청 승인이 안 된 상태로 확인됨 (인코딩 문제 아님)
       - data.go.kr 마이페이지 > 활용신청 현황에서 "한국관광공사_국문 관광정보 서비스_GW(TourAPI 4.0)" 상품 승인 여부 확인 필요
       - 승인 확인되면 `node scripts/ingest/tour-api-festival.mjs --dry-run`으로 재검증
-- [ ] Source #02 전국(서울시) 공공체육시설 현황 — **Skip/Mock: 서울시 서버 측 장애로 잠정 보류 (사용자 확인, 다음 단계로 진행)**
+- [~] Source #02 전국(서울시) 공공체육시설 현황 — **Skip/Mock: 서울시 서버 측 장애로 잠정 보류 (사용자 확인, 다음 단계로 진행)**
       - 사용자가 서울 열린데이터광장 공식 문서에서 확인한 정확한 서비스명 `ListPublicSportsFacility` (공식 샘플 URL 원문 기준)로도 `/json/`, `/xml/` 두 방식 모두 `ERROR-500` 지속 확인
       - 누적 11종의 서비스명/포맷 조합이 모두 실패했고 공식 문서 원문과 일치하는 이름으로도 실패하므로, 서비스명 문제가 아니라 **서울시 서버의 해당 데이터셋 자체 장애**로 결론 (사용자 확인)
       - 사용자 지시에 따라 별도 수집 스크립트를 만들지 않고(가짜/목 데이터 생성 금지 원칙) Skip 상태로 유지, 이후 서울시 서버 정상화 시 재시도
@@ -46,3 +46,4 @@
 ## 참고
 - 보류 항목은 `implementation/2026-08-19-tech-stack-and-core-schema.md`와 `implementation/2026-08-19-data-ingestion-pipeline.md`에 상세 근거 기록됨
 - 위 보류 항목들은 임의로 구현 가능 상태로 바꾸지 말 것 — 엔드포인트/데이터셋 확정 후 진행
+- **체크박스 표기 규칙**: 빈 대괄호(스페이스만 있는 상태)는 "지금 바로 착수 가능한 작업", `x`가 채워지면 완료, 물결표(`~`)가 채워지면 **외부 요인(계정 승인 대기, 타사 서버 장애 등)으로 Claude가 재시도해도 진전이 없는 보류 상태**를 뜻함. `auto-dev.bat`이 빈 대괄호 패턴으로 미완료 작업 존재 여부를 감지해 무인 루프를 도는데, 물결표로 표시된 항목은 이 감지에서 제외되어 외부 조건이 바뀌기 전까지 불필요하게 반복 재확인되지 않음. 외부 조건이 해소되면 물결표를 지우고 다시 빈 대괄호로 되돌려 다음 루프에서 재시도되게 할 것. (주의: 이 설명 문단 자체에 빈 대괄호 리터럴을 쓰지 않도록 항상 유지 — 그렇지 않으면 이 줄 때문에 루프가 영원히 멈추지 않음)
