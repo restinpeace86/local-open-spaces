@@ -14,17 +14,18 @@ echo [1/2] Checking DB...
 node scripts/check-db.mjs
 if errorlevel 1 goto ERR_DB
 
+for /f %%h in ('git rev-parse HEAD') do set BEFORE_HASH=%%h
+
 echo [2/2] Running Claude...
 call claude --dangerously-skip-permissions -p "Read CLAUDE.md and implementation/todo.md. Execute all unchecked tasks [ ] in implementation/todo.md. Run typecheck, lint, build tests and push to git with discord notification upon completion."
 if errorlevel 1 goto ERR_CLAUDE
 
-git status --porcelain > temp_status.txt
-for %%A in (temp_status.txt) do set FSIZE=%%~zA
-if exist temp_status.txt del temp_status.txt
+git pull origin main
+for /f %%h in ('git rev-parse HEAD') do set AFTER_HASH=%%h
 
-if "%FSIZE%"=="0" goto WAIT_SPEC
+if "%AFTER_HASH%"=="%BEFORE_HASH%" goto WAIT_SPEC
 
-echo [Success] Task completed.
+echo [Success] Task completed. (%BEFORE_HASH% -> %AFTER_HASH%)
 goto SLEEP
 
 :ERR_DB
@@ -38,7 +39,7 @@ node scripts/notify-error.mjs CLAUDE_BUILD_OR_GIT_ERROR CLAUDE_EXEC_FAIL
 goto RETRY
 
 :WAIT_SPEC
-echo [Notice] No file changes.
+echo [Notice] No new commits after this run.
 node scripts/notify-error.mjs CLAUDE_WAITING_OR_SPEC_ISSUE NO_CHANGES_SPEC_ISSUE
 goto SLEEP
 
