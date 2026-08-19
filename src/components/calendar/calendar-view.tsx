@@ -3,21 +3,51 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getEventsForMonth } from '@/lib/spaces/get-events-for-month';
 import { buildCalendarGrid } from '@/lib/spaces/calendar-grid';
+import { splitByDuration } from '@/lib/spaces/event-duration';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
 import { getEventStatus } from '@/lib/spaces/event-status';
 import { DetailModal } from '@/components/map/detail-modal';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
-const MAX_CHIPS_PER_DAY = 2;
+const MAX_CHIPS_PER_DAY = 3;
 
 function todayKey(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
-// spec 문서 미비 영역 — project/overview.md의 "월별 캘린더(Calendar View)" 요구를 기준으로 구현.
-// 날짜별 행사 칩 + 접수/진행 상태 뱃지 + 클릭 시 상세 모달 연동
+function statusColorClass(tone: ReturnType<typeof getEventStatus>['tone']): string {
+  if (tone === 'urgent') return 'text-red-600';
+  if (tone === 'closed') return 'text-gray-400';
+  if (tone === 'upcoming') return 'text-blue-600';
+  return 'text-emerald-600';
+}
+
+function EventStatusListItem({ item, onSelect }: { item: NearbyItem; onSelect: (item: NearbyItem) => void }) {
+  const meta = getCategoryMeta(item.category);
+  const status = getEventStatus(item);
+
+  return (
+    <li>
+      <button
+        type="button"
+        onClick={() => onSelect(item)}
+        className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-gray-50"
+      >
+        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: meta.color }} aria-hidden />
+        <span className="flex-1 min-w-0">
+          <span className="block text-sm font-medium text-gray-900 truncate">{item.name}</span>
+          <span className="block text-xs text-gray-500">{meta.label}</span>
+        </span>
+        <span className={`shrink-0 text-xs font-semibold ${statusColorClass(status.tone)}`}>{status.label}</span>
+      </button>
+    </li>
+  );
+}
+
+// spec 문서 미비 영역 — project/overview.md의 "월별 캘린더(Calendar View)" 요구 + 사용자 확정 규칙 기준 구현.
+// 30일 이상 상시 예약/운영 항목은 일별 타일에서 제외하고 별도 접이식 영역으로 분리해 과밀을 방지한다.
 export function CalendarView() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -27,6 +57,7 @@ export function CalendarView() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedDateKey, setSelectedDateKey] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
+  const [isLongRunningExpanded, setIsLongRunningExpanded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -49,7 +80,8 @@ export function CalendarView() {
     };
   }, [year, month]);
 
-  const grid = useMemo(() => buildCalendarGrid(year, month, events), [year, month, events]);
+  const { shortTerm, longRunning } = useMemo(() => splitByDuration(events), [events]);
+  const grid = useMemo(() => buildCalendarGrid(year, month, shortTerm), [year, month, shortTerm]);
 
   const goToPrevMonth = () => {
     setSelectedDateKey(null);
@@ -71,9 +103,7 @@ export function CalendarView() {
     }
   };
 
-  const selectedDayItems = selectedDateKey
-    ? (grid.find((day) => day.dateKey === selectedDateKey)?.items ?? [])
-    : [];
+  const selectedDay = selectedDateKey ? grid.find((day) => day.dateKey === selectedDateKey) : null;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -95,6 +125,27 @@ export function CalendarView() {
 
         {!isLoading && !errorMessage && (
           <>
+            {/* 30일 이상 상시 운영/예약 항목 - 일별 타일 과밀 방지를 위해 분리 노출 */}
+            {longRunning.length > 0 && (
+              <div className="border-b border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setIsLongRunningExpanded((v) => !v)}
+                  className="w-full flex items-center justify-between px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                >
+                  <span>상시 운영/예약 ({longRunning.length}건)</span>
+                  <span className="text-gray-400">{isLongRunningExpanded ? '접기 ▲' : '펼치기 ▼'}</span>
+                </button>
+                {isLongRunningExpanded && (
+                  <ul className="divide-y divide-gray-100 max-h-64 overflow-y-auto">
+                    {longRunning.map((item) => (
+                      <EventStatusListItem key={item.id} item={item} onSelect={setSelectedItem} />
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+
             <div className="grid grid-cols-7 text-center text-xs text-gray-400 py-2 border-b border-gray-100">
               {WEEKDAY_LABELS.map((label) => (
                 <div key={label}>{label}</div>
@@ -103,7 +154,6 @@ export function CalendarView() {
             <div className="grid grid-cols-7 auto-rows-fr">
               {grid.map((day) => {
                 const isToday = day.dateKey === todayKey();
-                const isSelected = day.dateKey === selectedDateKey;
                 const visibleChips = day.items.slice(0, MAX_CHIPS_PER_DAY);
                 const overflowCount = day.items.length - visibleChips.length;
 
@@ -114,7 +164,7 @@ export function CalendarView() {
                     onClick={() => setSelectedDateKey(day.dateKey)}
                     className={`min-h-[88px] border-b border-r border-gray-100 p-1.5 text-left align-top flex flex-col gap-1 ${
                       day.inCurrentMonth ? 'bg-white' : 'bg-gray-50'
-                    } ${isSelected ? 'ring-2 ring-inset ring-blue-500' : ''}`}
+                    }`}
                   >
                     <span
                       className={`text-xs ${
@@ -143,70 +193,48 @@ export function CalendarView() {
                         );
                       })}
                       {overflowCount > 0 && (
-                        <span className="text-[10px] text-gray-400">+{overflowCount}건 더보기</span>
+                        <span className="text-[10px] text-blue-600 font-medium">+{overflowCount}개 더보기</span>
                       )}
                     </div>
                   </button>
                 );
               })}
             </div>
-
-            {selectedDateKey && (
-              <div className="border-t border-gray-200">
-                <div className="px-4 py-2 text-sm font-medium text-gray-700 flex items-center justify-between">
-                  <span>{selectedDateKey} 행사 {selectedDayItems.length}건</span>
-                  <button
-                    type="button"
-                    onClick={() => setSelectedDateKey(null)}
-                    className="text-xs text-gray-400 hover:text-gray-600"
-                  >
-                    닫기
-                  </button>
-                </div>
-                <ul className="divide-y divide-gray-100">
-                  {selectedDayItems.map((item) => {
-                    const meta = getCategoryMeta(item.category);
-                    const status = getEventStatus(item);
-                    const statusColor =
-                      status.tone === 'urgent'
-                        ? 'text-red-600'
-                        : status.tone === 'closed'
-                          ? 'text-gray-400'
-                          : status.tone === 'upcoming'
-                            ? 'text-blue-600'
-                            : 'text-emerald-600';
-
-                    return (
-                      <li key={item.id}>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedItem(item)}
-                          className="w-full text-left px-4 py-3 flex items-center gap-3 hover:bg-gray-50"
-                        >
-                          <span
-                            className="w-2.5 h-2.5 rounded-full shrink-0"
-                            style={{ backgroundColor: meta.color }}
-                            aria-hidden
-                          />
-                          <span className="flex-1 min-w-0">
-                            <span className="block text-sm font-medium text-gray-900 truncate">
-                              {item.name}
-                            </span>
-                            <span className="block text-xs text-gray-500">{meta.label}</span>
-                          </span>
-                          <span className={`shrink-0 text-xs font-semibold ${statusColor}`}>
-                            {status.label}
-                          </span>
-                        </button>
-                      </li>
-                    );
-                  })}
-                </ul>
-              </div>
-            )}
           </>
         )}
       </div>
+
+      {/* 날짜별 전체 목록 레이어 (spec 없음 - 사용자 확정 요구사항: "+N개 더보기" 클릭 시 레이어로 확인) */}
+      {selectedDay && (
+        <div
+          className="fixed inset-0 bg-black/40 z-40 flex items-end md:items-center justify-center"
+          onClick={() => setSelectedDateKey(null)}
+        >
+          <div
+            className="w-full md:w-[420px] max-h-[75vh] overflow-y-auto bg-white rounded-t-2xl md:rounded-2xl shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-4 py-3 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white">
+              <span className="text-sm font-semibold text-gray-900">
+                {selectedDay.dateKey} 행사 {selectedDay.items.length}건
+              </span>
+              <button
+                type="button"
+                onClick={() => setSelectedDateKey(null)}
+                className="text-gray-400 hover:text-gray-600"
+                aria-label="닫기"
+              >
+                ✕
+              </button>
+            </div>
+            <ul className="divide-y divide-gray-100">
+              {selectedDay.items.map((item) => (
+                <EventStatusListItem key={item.id} item={item} onSelect={setSelectedItem} />
+              ))}
+            </ul>
+          </div>
+        </div>
+      )}
 
       {selectedItem && (
         <DetailModal item={selectedItem} onClose={() => setSelectedItem(null)} />

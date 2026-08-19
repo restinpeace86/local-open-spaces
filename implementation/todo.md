@@ -41,7 +41,7 @@
 - [x] 검색 바(키워드 debounce 300ms) + 카테고리 칩 필터 (`src/components/map/search-bar.tsx`, `category-filter.tsx`, `empty-state.tsx`, `implementation/2026-08-21-search-and-category-filter.md`) — 카테고리 선택 시 레이어 토글보다 우선 적용(즉시 동기화 요건 충족), 키워드는 이름 부분일치. Playwright로 음성/양성 케이스(예약형 행사 64건=마커 64개 일치, "서울갤러리" 키워드 4건 정확 매칭) 및 EmptyState/필터초기화/모바일까지 전부 검증 완료 (콘솔 에러 0건)
 - [ ] 10km 초과 시 광역 그리드 뷰 전환 안내 (`spec/common/search.md` 2.2) — 다음 단계 (현재 반경 UI가 10km로 상한 고정돼 있어 시나리오 자체가 미발생)
 - [x] 지역별 도감 그리드 / 월별 캘린더 뷰 + 상단 탭 내비게이션 (`src/app/region/`, `src/app/calendar/`, `implementation/2026-08-21-region-grid-and-calendar.md`) — spec 문서 미비 상태로 사용자 요구사항 기준 구현. 도감(자치구/카테고리 필터+DetailModal 연동), 캘린더(월이동/날짜별 칩/상태뱃지+DetailModal 연동) Playwright 실브라우저 검증 완료 (콘솔 에러 0건)
-      - **후속 논의 필요**: 캘린더가 연중 상시 예약 슬롯(#04) 때문에 거의 모든 날짜에 동일 항목이 반복 노출되어 시각적으로 매우 혼잡함 ("+500건 더보기"). 요구사항을 그대로 구현한 결과이며 버그 아님 — 예약형 행사를 캘린더에서 제외할지, 정렬/필터를 추가할지는 사용자 판단 필요
+      - **후속 개선 완료** (`implementation/2026-08-21-calendar-density-cleanup.md`): 사용자 확정 규칙(30일 이상 상시 항목 분리 + 일별 타일 최대 3칩 + "+N개 더보기" 레이어)을 반영. 704건이 "상시 운영/예약" 접이식 섹션으로 분리되고 셀당 칩이 3개로 제한됨을 Playwright로 확인. 단, 30일 미만 반복성 프로그램이 여전히 일부 날짜(예: +255개)에 몰려있음 — 추가 규칙(반복 강좌 그룹핑 등) 필요 여부는 사용자 판단 대기
 
 ## 참고
 - 보류 항목은 `implementation/2026-08-19-tech-stack-and-core-schema.md`와 `implementation/2026-08-19-data-ingestion-pipeline.md`에 상세 근거 기록됨
