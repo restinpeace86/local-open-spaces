@@ -1,0 +1,39 @@
+{
+  "name": "local-open-spaces",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "type-check": "tsc --noEmit",
+    "validate": "npm run lint && npm run type-check",
+    "test": "vitest run",
+    "test:all": "npm run validate && npm run test",
+    "db:push": "npx supabase db push",
+    "gen:types": "npx supabase gen types typescript --project-id \"$SUPABASE_PROJECT_ID\" > src/types/database.types.ts"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.12.4",
+    "@supabase/supabase-js": "^2.112.2",
+    "next": "16.3.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/node": "^20.19.43",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "@vitejs/plugin-react": "^6.0.5",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.3.0",
+    "jsdom": "^30.0.1",
+    "tailwindcss": "^4",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
+  }
+}
