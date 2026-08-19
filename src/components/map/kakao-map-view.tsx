@@ -14,12 +14,14 @@ const MAX_SINGLE_RADIUS_METERS = 10000;
 // spec/map/kakao-map.md 4.1: 카테고리별 커스텀 마커 + MarkerClusterer 연동
 export function KakaoMapView({
   center,
+  radius,
   items,
   focusPosition,
   onSelectItem,
   onZoomExceedsMaxRadius,
 }: {
   center: { lat: number; lng: number };
+  radius: number;
   items: NearbyItem[];
   focusPosition?: { lat: number; lng: number } | null;
   onSelectItem: (item: NearbyItem) => void;
@@ -29,6 +31,8 @@ export function KakaoMapView({
   const mapRef = useRef<kakao.maps.Map | null>(null);
   const clustererRef = useRef<kakao.maps.MarkerClusterer | null>(null);
   const markersRef = useRef<kakao.maps.Marker[]>([]);
+  const userCircleRef = useRef<kakao.maps.Circle | null>(null);
+  const userPulseOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null);
   const lastValidLevelRef = useRef<number>(5);
   const isRevertingRef = useRef(false);
   const onZoomExceedsMaxRadiusRef = useRef(onZoomExceedsMaxRadius);
@@ -50,6 +54,36 @@ export function KakaoMapView({
         averageCenter: true,
         minLevel: 6,
       });
+
+      // implementation/todo.md Phase 2: 내 위치 전용 펄스 마커 + 반경 Circle Overlay
+      const initialPosition = new window.kakao.maps.LatLng(center.lat, center.lng);
+      const circle = new window.kakao.maps.Circle({
+        center: initialPosition,
+        radius,
+        strokeWeight: 2,
+        strokeColor: '#2563eb',
+        strokeOpacity: 0.85,
+        strokeStyle: 'solid',
+        fillColor: '#3b82f6',
+        fillOpacity: 0.12,
+      });
+      circle.setMap(map);
+      userCircleRef.current = circle;
+
+      const pulseContent = document.createElement('div');
+      pulseContent.className = 'user-location-pulse';
+      const pulseOverlay = new window.kakao.maps.CustomOverlay({
+        position: initialPosition,
+        content: pulseContent,
+        zIndex: 10,
+        xAnchor: 0.5,
+        yAnchor: 0.5,
+      });
+      pulseOverlay.setMap(map);
+      userPulseOverlayRef.current = pulseOverlay;
+
+      // spec/map/spatial-search.md 3.1, 반경 선택 시 원 전체가 한눈에 들어오도록 bounds 기준 자동 줌
+      map.setBounds(circle.getBounds());
 
       const handleResize = () => {
         map.relayout();
@@ -98,10 +132,16 @@ export function KakaoMapView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // implementation/todo.md Phase 2: 위치/반경 변경 시 펄스 마커·반경 원 갱신 및 circle.getBounds() 기반 자동 줌
   useEffect(() => {
-    if (!mapRef.current) return;
-    mapRef.current.setCenter(new window.kakao.maps.LatLng(center.lat, center.lng));
-  }, [center.lat, center.lng]);
+    if (!mapRef.current || !userCircleRef.current || !userPulseOverlayRef.current) return;
+
+    const position = new window.kakao.maps.LatLng(center.lat, center.lng);
+    userCircleRef.current.setPosition(position);
+    userCircleRef.current.setRadius(radius);
+    userPulseOverlayRef.current.setPosition(position);
+    mapRef.current.setBounds(userCircleRef.current.getBounds());
+  }, [center.lat, center.lng, radius]);
 
   // spec/space/space-card.md 3, spec/event/event-card.md 3: 카드/마커 선택 시 해당 좌표로 부드럽게 이동(panTo)
   useEffect(() => {

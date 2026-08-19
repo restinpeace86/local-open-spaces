@@ -15,7 +15,7 @@ const ALL_DISTRICT = 'ALL';
 
 // 지역별 도감 그리드 뷰: 자치구/카테고리별로 open_spaces 전체 카탈로그를 탐색한다.
 export function RegionGridView() {
-  const userLocation = useUserLocation();
+  const { center: userLocation } = useUserLocation();
   const [items, setItems] = useState<NearbyItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);

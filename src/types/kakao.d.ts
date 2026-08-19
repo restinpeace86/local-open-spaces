@@ -16,11 +16,41 @@ declare namespace kakao.maps {
     setLevel(level: number): void;
     getLevel(): number;
     getBounds(): LatLngBounds;
+    setBounds(bounds: LatLngBounds): void;
   }
 
   class LatLngBounds {
     getSouthWest(): LatLng;
     getNorthEast(): LatLng;
+  }
+
+  class Circle {
+    constructor(options: {
+      center: LatLng;
+      radius: number;
+      strokeWeight?: number;
+      strokeColor?: string;
+      strokeOpacity?: number;
+      strokeStyle?: string;
+      fillColor?: string;
+      fillOpacity?: number;
+    });
+    setMap(map: Map | null): void;
+    setPosition(latlng: LatLng): void;
+    setRadius(radius: number): void;
+    getBounds(): LatLngBounds;
+  }
+
+  class CustomOverlay {
+    constructor(options: {
+      position: LatLng;
+      content: string | HTMLElement;
+      zIndex?: number;
+      xAnchor?: number;
+      yAnchor?: number;
+    });
+    setMap(map: Map | null): void;
+    setPosition(latlng: LatLng): void;
   }
 
   class MarkerImage {
@@ -57,6 +87,49 @@ declare namespace kakao.maps {
   }
 
   function load(callback: () => void): void;
+}
+
+// Kakao Geocoding/Places API(libraries=services): 주소 검색 및 좌표→주소 역geocoding에 사용
+declare namespace kakao.maps.services {
+  enum Status {
+    OK = 'OK',
+    ZERO_RESULT = 'ZERO_RESULT',
+    ERROR = 'ERROR',
+  }
+
+  interface RegionAddress {
+    address_name: string;
+    region_1depth_name: string;
+    region_2depth_name: string;
+    region_3depth_name: string;
+  }
+
+  interface Coord2AddressResult {
+    address: RegionAddress | null;
+  }
+
+  class Geocoder {
+    coord2Address(
+      lng: number,
+      lat: number,
+      callback: (result: Coord2AddressResult[], status: Status) => void
+    ): void;
+  }
+
+  interface PlacesSearchResultItem {
+    place_name: string;
+    address_name: string;
+    road_address_name: string;
+    x: string;
+    y: string;
+  }
+
+  class Places {
+    keywordSearch(
+      keyword: string,
+      callback: (result: PlacesSearchResultItem[], status: Status) => void
+    ): void;
+  }
 }
 
 interface Window {

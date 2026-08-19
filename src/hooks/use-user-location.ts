@@ -1,26 +1,42 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import {
+  getStoredUserLocation,
+  setStoredUserLocation,
+  UserLocation,
+} from '@/lib/location/user-location-storage';
 
-// 기본 위치: 서울시청 (위치 권한 거부/미지원 시 폴백)
+// 기본 위치: 서울시청 (위치 미설정 시 폴백)
 export const DEFAULT_CENTER = { lat: 37.5665, lng: 126.978 };
 
+// implementation/todo.md Phase 2: LocalStorage(`user_location`) 기반 비로그인 위치 온보딩
+// 최초 진입 시 저장된 위치가 없으면 온보딩 모달을 노출하고, 확정 시 즉시 LocalStorage에 반영한다.
 export function useUserLocation() {
-  const [location, setLocation] = useState(DEFAULT_CENTER);
+  const [userLocation, setUserLocation] = useState<UserLocation | null>(null);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
 
   useEffect(() => {
-    if (!navigator.geolocation) return;
-
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
-      },
-      () => {
-        // 위치 권한 거부/실패 시 기본 위치 유지
-      },
-      { timeout: 5000 }
-    );
+    const stored = getStoredUserLocation();
+    setUserLocation(stored);
+    setIsOnboardingOpen(!stored);
   }, []);
 
-  return location;
+  const confirmLocation = useCallback((location: UserLocation) => {
+    setStoredUserLocation(location);
+    setUserLocation(location);
+    setIsOnboardingOpen(false);
+  }, []);
+
+  const openOnboarding = useCallback(() => setIsOnboardingOpen(true), []);
+  const closeOnboarding = useCallback(() => setIsOnboardingOpen(false), []);
+
+  return {
+    center: userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : DEFAULT_CENTER,
+    addressName: userLocation?.address_name ?? null,
+    isOnboardingOpen,
+    confirmLocation,
+    openOnboarding,
+    closeOnboarding,
+  };
 }

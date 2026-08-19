@@ -24,3 +24,41 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* implementation/todo.md Phase 2: 내 위치 전용 펄스 마커 (Kakao CustomOverlay content) */
+.user-location-pulse {
+  position: relative;
+  width: 18px;
+  height: 18px;
+}
+
+.user-location-pulse::before,
+.user-location-pulse::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+}
+
+.user-location-pulse::before {
+  background: rgba(37, 99, 235, 0.35);
+  animation: user-location-pulse-ring 1.8s ease-out infinite;
+}
+
+.user-location-pulse::after {
+  margin: 4px;
+  background: #2563eb;
+  border: 2px solid #ffffff;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.4);
+}
+
+@keyframes user-location-pulse-ring {
+  0% {
+    transform: scale(0.6);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}

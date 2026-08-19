@@ -12,6 +12,8 @@ import { EmptyState } from '@/components/map/empty-state';
 import { DetailModal } from '@/components/map/detail-modal';
 import { Toast } from '@/components/map/toast';
 import { GridViewPrompt } from '@/components/map/grid-view-prompt';
+import { LocationHeader } from '@/components/map/location-header';
+import { LocationOnboardingModal } from '@/components/map/location-onboarding-modal';
 import { getNearbySpacesAndEvents, NearbyItem } from '@/lib/spaces/get-nearby';
 import { useUserLocation } from '@/hooks/use-user-location';
 
@@ -20,8 +22,14 @@ const MARKER_LIMIT = 200;
 
 export function MapExplorer() {
   const router = useRouter();
-  const userLocation = useUserLocation();
-  const [center, setCenter] = useState(userLocation);
+  const {
+    center,
+    addressName,
+    isOnboardingOpen,
+    confirmLocation,
+    openOnboarding,
+    closeOnboarding,
+  } = useUserLocation();
   const [radius, setRadius] = useState(5000);
   const [showSpaces, setShowSpaces] = useState(false);
   const [keyword, setKeyword] = useState('');
@@ -32,10 +40,6 @@ export function MapExplorer() {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showGridViewPrompt, setShowGridViewPrompt] = useState(false);
-
-  useEffect(() => {
-    setCenter(userLocation);
-  }, [userLocation]);
 
   useEffect(() => {
     let cancelled = false;
@@ -99,6 +103,7 @@ export function MapExplorer() {
       {/* 데스크톱 좌측 패널 (spec/common/responsive.md 2.2) */}
       <aside className="hidden md:flex md:w-[400px] md:shrink-0 flex-col border-r border-gray-200 bg-white overflow-hidden">
         <div className="p-4 border-b border-gray-100 flex flex-col gap-3">
+          <LocationHeader addressName={addressName} onClick={openOnboarding} />
           <SearchBar value={keyword} onChange={setKeyword} />
           <RadiusSelector value={radius} onChange={setRadius} />
           <LayerToggle showSpaces={showSpaces} onChange={setShowSpaces} />
@@ -122,6 +127,7 @@ export function MapExplorer() {
       <div className="relative flex-1">
         <KakaoMapView
           center={center}
+          radius={radius}
           items={visibleItems}
           focusPosition={focusPosition}
           onSelectItem={handleSelectItem}
@@ -130,6 +136,7 @@ export function MapExplorer() {
 
         {/* 모바일 플로팅 헤더 (spec/common/search.md 2.1) */}
         <div className="md:hidden absolute top-3 left-3 right-3 flex flex-col gap-2 z-10">
+          <LocationHeader addressName={addressName} onClick={openOnboarding} />
           <SearchBar value={keyword} onChange={setKeyword} />
           <div className="flex items-center gap-2 overflow-x-auto">
             <RadiusSelector value={radius} onChange={setRadius} />
@@ -183,6 +190,10 @@ export function MapExplorer() {
           onConfirm={() => router.push('/region')}
           onCancel={() => setShowGridViewPrompt(false)}
         />
+      )}
+
+      {isOnboardingOpen && (
+        <LocationOnboardingModal onConfirm={confirmLocation} onClose={closeOnboarding} />
       )}
     </div>
   );
