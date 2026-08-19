@@ -17,12 +17,10 @@
 - [ ] Source #03 LocalData 전국 문화기반시설 현황 — **보류: 데이터셋명 불일치 발견**
       - "LocalData"(지방행정 인허가 API)는 opnSvcId 기준 체계로 박물관/미술관/공연장의 정확한 opnSvcId 미확인
       - 더 적합해 보이는 대안: 한국문화정보원_전국문화기반시설총람(dataset 15125097) — 스펙 작성 의도가 LocalData인지 15125097인지 기획 확인 필요
-- [ ] Source #04 서울시 공공서비스예약 (`scripts/ingest/seoul-public-reservation.mjs`) — **보류: 목록 API가 서버 오류(ERROR-500) 반환 중**
-      - 사용자 확인: 상세 조회는 `ListPublicReservationDetail/1/1/{SVCID}`, 목록 조회는 `ListPublicReservationViaGUI/1/100/`
-      - `ListPublicReservationDetail`은 구조적으로 정상 확인됨 (테스트한 만료 SVCID에 대해 정확히 INFO-200 "데이터 없음" 응답, 파라미터 누락 시 ERROR-300 응답 — 즉 서비스명 자체는 유효)
-      - `ListPublicReservationViaGUI`는 케이싱/범위(1~1, 1~5, 1~100)를 바꿔 4회 이상 재시도해도 계속 `ERROR-500`(서버 오류) 반환 → 일시적 오류로 보이지 않음
-      - 목록 응답의 실제 필드 구조(SVCID 필드명 등)를 아직 확보하지 못해 상세 매핑은 미구현 상태로 코드에 방어적으로 표시해둠
-      - 다음 확인 필요: (a) 서울 열린데이터광장에서 이 목록 API가 현재 정상 동작하는지 직접 재확인, (b) 정확한 서비스명이 맞는지, (c) 가능하면 정상 응답 샘플 1건 공유
+- [x] Source #04 서울시 공공서비스예약 - 체육시설 (`scripts/ingest/seoul-public-reservation.mjs`) — 실제 호출 및 DB upsert 검증 완료
+      - 사용자가 확인해준 정확한 서비스명(`ListPublicReservationSport`)으로 목록 조회 성공. 응답에 SVCID/예약URL/좌표/접수기간이 모두 포함되어 있어 별도 상세 조회 없이 단일 호출로 수집
+      - 전체 606건 중 573건(좌표·일자 유효 데이터) `events` 테이블(`event_type=RESERVATION`) upsert 성공, RPC 반경 검색으로 확인 완료
+      - **범위 한정**: 이 엔드포인트는 "체육시설" 카테고리 전용. 스펙(#04)이 말하는 "공공서비스예약(공간/시설)" 전체 중 문화시설/교육프로그램 등 다른 카테고리는 별도 서비스명(`ListPublicReservationCulture` 등 추정)이 있을 수 있으나 미확인 — 필요 시 추가 확인 후 확장
 - [ ] Source #07 서울시 야외 행사 & 팝업 정보 — **보류: 데이터셋 존재 여부 자체가 불확실**
       - data.seoul.go.kr에서 "야외행사"/"팝업" 키워드로 매칭되는 독립 데이터셋을 찾지 못함
       - #04 또는 #05에 통합된 것인지, 스펙 작성 시점 오류인지 기획 확인 필요
