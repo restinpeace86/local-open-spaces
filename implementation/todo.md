@@ -12,10 +12,11 @@
       - 같은 키로 Source #01(전국 도시공원) 호출은 정상 동작 → 키 자체는 유효하며, TourAPI 4.0 상품만 별도 활용신청 승인이 안 된 상태로 확인됨 (인코딩 문제 아님)
       - data.go.kr 마이페이지 > 활용신청 현황에서 "한국관광공사_국문 관광정보 서비스_GW(TourAPI 4.0)" 상품 승인 여부 확인 필요
       - 승인 확인되면 `node scripts/ingest/tour-api-festival.mjs --dry-run`으로 재검증
-- [ ] Source #02 전국(서울시) 공공체육시설 현황 (`ListPublicSportsFacility`) — **보류: 서비스명이 서버에서 인식되지 않음 (ERROR-500)**
-      - 사용자가 확인해준 서비스명(`ListPublicSportsFacility`)으로 시도했으나 `ERROR-500 서버 오류` 반환
-      - 케이싱/단복수 변형(`ListPublicSportFacility`, `listPublicSportsFacility`, `ListPublicSportsFacilities`) 4종 모두 재시도했으나 동일 오류 — Source #04에서 목록 서비스명이 예상과 전혀 다른 이름(`tvYeyakCOllect`)이었던 전례처럼, 정확한 이름이 다를 가능성이 높음
-      - 다음 필요: 서울 열린데이터광장에서 이 API가 실제로 정상 동작하는지 직접 확인 후 정확한 서비스명 재확인 요청
+- [ ] Source #02 전국(서울시) 공공체육시설 현황 — **보류: 서비스명이 서버에서 인식되지 않음 (ERROR-500, 2차 시도까지 실패)**
+      - 1차 시도: `ListPublicSportsFacility` 및 케이싱/단복수 변형 4종(`ListPublicSportFacility`, `listPublicSportsFacility`, `ListPublicSportsFacilities`) — 전부 `ERROR-500`
+      - 2차 시도(사용자 재확인 이름): `SearchPublicSportsFacilitiesInfo`, 대안명 `PhysicalTrainingFacility`, 및 각각의 첫글자 소문자 변형(`searchPublicSportsFacilitiesInfo`, `physicalTrainingFacility`), 추가 변형(`SearchPublicSportsFacilitieInfo`, `publicSportsFacilitiesInfo`) — 총 6종 모두 `ERROR-500`
+      - 누적 10종의 서비스명 변형 모두 실패. Source #04(`tvYeyakCOllect`)·#03(`culturalSpaceInfo`) 사례처럼 실제 서비스명이 "체육시설/Sports/Facility" 단어 조합과 전혀 다른 이름일 가능성이 높음
+      - 다음 필요: 서울 열린데이터광장 "Open API" 상세설명 문서 페이지에서 **샘플 URL 텍스트를 그대로 복사**해 전달 요청 (수기 재구성 시 오탈자 가능성 배제)
 - [x] Source #03 서울시 문화공간 정보 (`scripts/ingest/cultural-spaces.mjs`, 서비스명 `culturalSpaceInfo`) — 실제 호출 및 DB upsert 검증 완료
       - 전체 1,076건 중 1,075건 `open_spaces` 테이블(`category=CULTURE`) upsert 성공
       - **주의**: 응답 필드명 `X_COORD`/`Y_COORD`가 실제로는 위도/경도가 뒤바뀌어 있음을 확인 (X_COORD≈37.x=위도, Y_COORD≈127.x=경도) → 값 범위(30~40)로 판별하도록 방어적으로 매핑
