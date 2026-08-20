@@ -1,5 +1,4 @@
-- [ ] [긴급 복구] 빌드 무한 루프 탈출 및 GridViewPrompt 제거 반영 수복
-  - 최신 원격 변경사항 수신을 위해 `git pull` 우선 수행
-  - `npm run build` 및 `npm run test:e2e` 실행하여 실패하는 지점 즉시 확인
-  - `GridViewPrompt` 팝업 삭제에 따라 해당 팝업 존재 여부를 검증하던 E2E 테스트(`tests/e2e/core-scenarios.spec.ts`) 내 assertion 코드를 삭제/수정하여 팝업 없이 20km/30km 줌인/줌아웃이 정상 작동하는지 확인하는 검증으로 대치
-  - 타입 에러 및 미사용 컴포넌트 참조 정돈 후 `npm run build` 통과 확인 및 즉시 clean commit/push 수행하여 알림 루프 종료
+- [ ] [강제 리셋 및 복구] Git 로컬 변경사항 초기화 후 E2E 테스트 및 빌드 수복
+  - `git fetch origin && git reset --hard origin/main` (또는 작업 중인 브랜치명) 실행하여 깨진 로컬 코드 완전 초기화
+  - `git pull` 수행 후 `tests/e2e/core-scenarios.spec.ts` 내 팝업 검증 코드를 '팝업 없이 자유 줌 조작 허용' 검증으로 업데이트
+  - 미사용 import 정돈 후 `npm run build` 및 `npm run test:e2e` 정상 통과 확인하여 clean commit/push 수행
