@@ -28,3 +28,9 @@ export const FEATURE_FLAGS = {
 
 // 컴포넌트 내부 사용 예시
 {FEATURE_FLAGS.ENABLE_USER_BOOKMARK && <BookmarkButton/>}
+
+
+## Parental UX & Scale Optimization Flags
+- PARENTAL_QUICK_FILTERS: ENABLED: true
+- AI_CARD_BADGES: ENABLED: true
+- WIDE_RADIUS_EXPANSION: ENABLED: true
