@@ -26,3 +26,17 @@
   - 지도 중심이 해당 행사 장소 좌표로 이동하며, 화면 하단 또는 패널에 이벤트 상세 모달(`event-detail.md`)이 활성화됨.
 - 마커 연동 
   - 리스트에서 카드를 호버하거나 터치할 경우, 지도 위의 해당 이벤트 마커가 강조됨.
+
+## Parental Checkpoint Badges (AI Tagging & Schedule 연동)
+
+행사 카드 정면에 AI 정제 파이프라인(`ai-rule.md`)에서 추출된 핵심 체크포인트 뱃지 및 예약/접수 상태 뱃지를 최우선 노출한다.
+
+### 1. Badge Display Rules
+- **예약/접수 상태**: `booking_status` ("⚡ 오늘방문", "⏳ D-1 마감임박", "📅 주말예약", "접수중")
+- **무료/유료**: `is_free` (true: "🎁 무료", false: "유료")
+- **키즈/연령대**: `is_kids_friendly` / `target_age_group` ("👶 키즈/어린이", "👶 유아전용")
+- **실내/야외**: `facility_type` ("실내" | "야외")
+
+### 2. Layout Requirements
+- 카드 정면에 예약 상태 뱃지 및 핵심 체크포인트 뱃지를 최대 3~4개 칩(Chip) 형태로 노출.
+- 'D-1 마감임박' 및 '오늘방문' 뱃지는 시인성을 위해 강조 컬러 적용.
