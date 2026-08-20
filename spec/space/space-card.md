@@ -24,3 +24,18 @@
   - 지도 중심이 해당 공간의 좌표로 부드럽게 이동(`panTo`)하며, 화면 하단 또는 패널에 **공간 상세 모달(`space-detail.md`)**이 활성화됨.
 - **마커 연동:** 
   - 리스트에서 카드를 호버(Hover)하거나 터치할 경우, 지도 위 해당 마커가 강조(Active/Pulse 효과)됨.
+
+## Parental Checkpoint Badges (AI Tagging 연동)
+
+공간 카드 정면 하단/상단에 AI 정제 파이프라인(`ai-rule.md`)에서 추출된 핵심 체크포인트 뱃지를 최우선 노출한다.
+
+### 1. Badge Display Rules
+- **무료/유료**: `is_free` (true: "🎁 무료", false: "유료")
+- **주차 여부**: `has_parking` (true: "🅿️ 주차가능")
+- **키즈 친화**: `is_kids_friendly` (true: "👶 키즈")
+- **유모차 접근성**: `stroller_accessible` (true: "🛺 유모차가능")
+- **실내/야외**: `facility_type` ("실내" | "야외" | "복합")
+
+### 2. Layout Requirements
+- 카드 정면에 최대 3~4개의 핵심 뱃지를 우선순위에 따라 칩(Chip) 형태로 컴팩트하게 노출.
+- 뱃지 클릭 시 관련 Quick Filter 또는 상세 검색과 연동 가능.
