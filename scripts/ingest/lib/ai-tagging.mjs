@@ -53,6 +53,17 @@ export function deriveParentalTags(sourceText) {
   };
 }
 
+// spec/data/ai-rule.md 5.2-7 (OCR 이외 부분) 구현: 요금 정보가 원본에 전혀 없고
+// 제공기관이 국공립/공공기관으로 "확정"된 경우에만 is_free: true를 기본 추정한다.
+// isPublicProvider는 호출부(어댑터)가 소스 전체가 정부/공공기관 자체 운영 데이터임을
+// 이미 확인한 경우에만 true로 넘겨야 한다(예: 국립공원공단 생태관광 프로그램).
+// 민간 시설이 섞여 있거나 운영주체를 원본 데이터로 판별할 수 없는 소스(GoCamping,
+// TourAPI 4.0 관광지/문화시설/레포츠 등)에는 이 예외를 적용하지 않는다(5.3 Guardrail, 추측 금지).
+export function deriveIsFreeFallback({ hasFeeInfo, isPublicProvider }) {
+  if (hasFeeInfo) return null; // 요금 정보가 있으면 호출부가 실제 파싱값을 사용해야 함
+  return isPublicProvider ? true : null;
+}
+
 // spec/data/ai-rule.md 5.2.6 구현: booking_status는 예약 접수 정보/일정이라는
 // 객관적 구조화 데이터(날짜)만으로 판별 가능한 경우에만 값을 부여하고,
 // '주말예약'처럼 판별 기준이 Spec에 명확히 정의되지 않은 값은 임의 추측하지 않고

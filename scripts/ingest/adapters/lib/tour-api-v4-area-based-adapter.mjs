@@ -111,7 +111,9 @@ export class TourApiV4AreaBasedAdapter extends BaseCollectorAdapter {
           address: item.addr1 || '',
           lng,
           lat,
-          isFree: null, // 원본에 요금 정보 없음 — 임의 추정하지 않음
+          // 관광지/문화시설/레포츠는 공공/민간 운영이 혼재하고 areaBasedList2 응답에
+          // 운영주체를 판별할 필드가 없어 ai-rule.md 5.2-7 Fallback 대상이 아님 — null 유지(추측 금지)
+          isFree: null,
           infoUrl: null,
           rawData: item,
         });

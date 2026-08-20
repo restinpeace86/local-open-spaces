@@ -45,5 +45,9 @@
   - 정리 전/후 실제 행 수 확인: 정리 전 `KOR_PET_TOUR_*`=857 / `KOR_WITH_TOUR_*`=5,040 / `KOR_TOUR_API_V4_*`=0 (open_spaces 총 10,359건) → KorService2 실제 수집·마이그레이션 후 `KOR_PET_TOUR_*`=0 / `KOR_WITH_TOUR_*`=0 / `KOR_TOUR_API_V4_*`=19,148 (open_spaces 총 23,610건, 10,359-5,897+19,148과 정확히 일치 확인)
 - [~] **[코드] 하단 5탭 내비게이션 + 홈 화면 신규 구현** — `docs/spec.md` 2 기준. 현재 상단 3탭(지도/도감/캘린더) 구조를 대체하는 것이 아니라 그 기능들을 [내주변]/[카테고리] 탭 안으로 재배치. 홈 캐러셀/서브탭(특가·핫딜/무료·공공)/큐레이션 피드는 신규 UI 컴포넌트 필요. **범위가 커서 화면 목업/우선순위를 먼저 사용자와 확정한 뒤 착수 — 확정되면 이 표시를 빈 대괄호로 바꿔 자동 루프가 집을 수 있게 할 것**
 - [~] **[코드] 커머스 핫딜 API 연동(쿠팡 파트너스/네이버 쇼핑)** — 신규 API 키/제휴 계약이 있어야 착수 가능 (Claude가 스스로 발급/체결 불가)
-- [ ] **[코드] 요금 오탐 방지 Fallback 룰(비-OCR 부분) 구현** — `spec/data/ai-rule.md` 5.2-7의 "요금 미기재 국공립 시설 → `is_free: true` 기본 추정" 로직만 우선 반영 (기존 ingest 스크립트에 조건 추가 수준으로 착수 가능)
+- [x] **[코드] 요금 오탐 방지 Fallback 룰(비-OCR 부분) 구현** — `spec/data/ai-rule.md` 5.2-7의 "요금 미기재 국공립 시설 → `is_free: true` 기본 추정" 로직만 우선 반영 (기존 ingest 스크립트에 조건 추가 수준으로 착수 가능)
+  - `scripts/ingest/lib/ai-tagging.mjs`에 `deriveIsFreeFallback({ hasFeeInfo, isPublicProvider })` 추가. `isPublicProvider`는 호출부(어댑터)가 소스 전체가 정부/공공기관 자체 운영 데이터임을 이미 확인한 경우에만 `true`로 넘기도록 설계(추측 금지 — 5.3 Guardrail).
+  - **실제 적용은 `NationalParkEcotourAdapter` 1건에 한정**: 국립공원공단(공공기관)이 직접 운영하는 생태관광 프로그램 전체라 민간 시설 혼재가 없음이 확정적 — `isFree: deriveIsFreeFallback({ hasFeeInfo: false, isPublicProvider: true })`.
+  - `GoCampingAdapter`, `TourApiV4AreaBasedAdapter`(KorPetTour/KorWithTour/KorTour 공통 베이스)는 **적용하지 않음** — 캠핑장/관광지/문화시설/레포츠는 공공·민간 운영이 혼재하고 원본 응답에 운영주체를 판별할 필드가 없어 "국공립 확정" 조건을 만족하지 못함(임의 확대 적용 금지, 5.3 Guardrail). `isFree: null` 유지하되 이유를 코드 주석으로 명시.
+  - `NationalParkEcotourAdapter`는 여전히 `KAKAO_REST_API_KEY` 부재로 실제 재수집 실행은 보류 상태 — 코드 변경 자체는 `npx tsc --noEmit` / `npm run test` / `npm run build`로 검증 완료, 실제 DB 반영은 키 확보 후 `npm run ingest:national-park-ecotour`로 재검증 필요.
 - [~] **[코드] 요금 포스터 이미지 OCR 파싱** — 비전 API(Gemini Vision 등) 연동 및 비용/키 확인 필요

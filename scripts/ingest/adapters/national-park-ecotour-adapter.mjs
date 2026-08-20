@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { BaseCollectorAdapter } from './base-collector-adapter.mjs';
 import { buildOpenSpaceRow, UI_CATEGORY } from './lib/schema-mapper.mjs';
 import { geocode, hasKakaoRestApiKey } from './lib/kakao-geocoder.mjs';
+import { deriveIsFreeFallback } from '../lib/ai-tagging.mjs';
 
 const BASE_URL =
   'https://api.odcloud.kr/api/3068312/v1/uddi:d529eac9-fcbb-468a-81f8-eacb1d9568e2_201808161131';
@@ -89,7 +90,10 @@ export class NationalParkEcotourAdapter extends BaseCollectorAdapter {
         address: region,
         lng: coords.lng,
         lat: coords.lat,
-        isFree: null, // 원본에 요금 정보 없음 — 임의 추정하지 않음
+        // ai-rule.md 5.2-7 Fallback: 이 소스는 국립공원공단(공공기관)이 직접 운영하는
+        // 생태관광 프로그램 전체를 다루며 민간 시설이 섞여 있지 않으므로(다른 관광 API와
+        // 달리 운영주체가 확정적) 요금 정보 부재 시 무료로 기본 추정한다.
+        isFree: deriveIsFreeFallback({ hasFeeInfo: false, isPublicProvider: true }),
         infoUrl: null,
         facilityType: '야외',
         rawData: { ...item, _geocoded_from: primaryRegion },

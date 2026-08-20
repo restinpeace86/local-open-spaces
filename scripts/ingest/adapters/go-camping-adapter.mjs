@@ -86,7 +86,9 @@ export class GoCampingAdapter extends BaseCollectorAdapter {
           address: item.addr1 || '',
           lng,
           lat,
-          isFree: null, // 원본에 요금 정보 없음 — 임의 추정하지 않음
+          // 캠핑장은 공공/민간 운영이 혼재하고 원본에 운영주체를 판별할 필드가 없어
+          // ai-rule.md 5.2-7 Fallback(국공립 확정 시 무료 추정) 대상이 아님 — null 유지(추측 금지)
+          isFree: null,
           infoUrl: item.resveUrl || item.homepage || null,
           facilityType: '야외', // 캠핑장은 정의상 야외 시설
           rawData: item,
