@@ -1,7 +1,5 @@
-- [x] [기능 구현] search.md 2.2절 개정 반영(git pull) 후 광역 반경(20km/30km) 조건부 해제 및 지도 클러스터링 연동
-  - 최신 원격 개정 스펙(`spec/common/search.md`) 수신을 위해 `git pull` 우선 수행 → 로컬이 이미 origin/main과 동기화되어 있음을 확인
-  - `radius-selector.tsx`에 20km/30km 옵션 추가, `isWideRadiusUnlocked`(카테고리 ≠ 전체 OR Quick 필터 1개 이상) 조건부 해금 적용. 잠금 상태에서 클릭 시 `onBlockedWideRadiusSelect` 콜백으로 안내 팝업 노출(반경 변경 없음)
-  - `kakao-map-view.tsx`의 핀치줌/휠 방어 임계값을 고정 10km(`MAX_SINGLE_RADIUS_METERS`)에서 현재 선택된 `radius` 기준 동적 값으로 변경하여, 20km/30km 선택 시 `circle.getBounds()` 기반 자동 줌아웃이 방어 로직에 의해 되돌려지지 않고 정상 작동하도록 연동. 마커 클러스터링(`MarkerClusterer`)은 기존 구현을 그대로 재사용
-  - `grid-view-prompt.md`(`GridViewPrompt` 컴포넌트) 문구를 신규 2.2절 가드레일 문구로 갱신, 확인 시 10km로 반경을 조정하도록 동작 변경(기존 `/region` 이동 로직 제거)
-  - 참고: `spec/map/spatial-search.md` 2.1에는 구버전 10km 상한 정책이 남아있어 상충하나, CLAUDE.md 제5장 제1조 문서 우선순위(spec/common > spec/{영역})에 따라 spec/common/search.md 2.2를 기준으로 구현함. 기획 Spec 자체 수정은 구현 AI 권한 밖이라 별도 진행하지 않음
-  - 검증: `npx tsc --noEmit`, `npm run lint`(기존 대비 신규 오류 없음, 9 pre-existing errors 유지), `npm run test`, `npm run build` 모두 통과. Playwright 실브라우저 검증은 미실행(도구 미가용) — 후속 세션에서 필요 시 수행
+- [ ] [버그 수정/기능 개선] 1km/5km/10km 반경 클릭 시 광역 안내 팝업이 노출되는 현상 수정
+  - 최신 원격 개정 스펙(`spec/common/search.md`) 수신을 위해 `git pull` 우선 수행
+  - `radius-selector.tsx` 내 팝업 트리거 조건 수정: 사용자가 **20km 또는 30km 버튼을 직접 클릭했을 때만** 필터 미선택 여부를 체크하여 팝업을 띄우도록 수정
+  - 1km, 5km, 10km 버튼 클릭 시에는 필터 선택 여부와 무관하게 팝업 없이 즉시 지정 반경으로 적용되도록 보장
+  - Playwright 실브라우저로 5km/10km 클릭 시 팝업 미노출 및 20km/30km 클릭 시에만 조건부 팝업 노출 동작 검증
