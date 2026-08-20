@@ -18,7 +18,8 @@
     "ingest:cultural-spaces": "node scripts/ingest/cultural-spaces.mjs",
     "ingest:public-reservation": "node scripts/ingest/seoul-public-reservation.mjs",
     "ingest:culture-events": "node scripts/ingest/seoul-culture-events.mjs",
-    "ingest:tour-festival": "node scripts/ingest/tour-api-festival.mjs"
+    "ingest:tour-festival": "node scripts/ingest/tour-api-festival.mjs",
+    "ingest:pipeline": "node scripts/ingest/run-all.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

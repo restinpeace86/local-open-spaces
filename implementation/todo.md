@@ -1,4 +1,4 @@
-- [ ] [기능 구현] 공공 API 수집 파이프라인과 AI 정제 모듈(ai-tagger) 무인 체인화 및 자동화 구축
+- [x] [기능 구현] 공공 API 수집 파이프라인과 AI 정제 모듈(ai-tagger) 무인 체인화 및 자동화 구축
   - 최신 원격 변경사항 수신을 위해 `git pull` 우선 수행
   - 수집 메인 스크립트(`scripts/ingest/run-all.mjs` 또는 개별 수집 스크립트) 종료 후, 태깅 미완료 항목(`is_kids_friendly` 등 필수 태그가 null/기본값인 레코드)을 감지하여 `scripts/ingest/ai-tagger.mjs`를 자동 연쇄 실행하도록 인프라 파이프라인 연결
   - Cron 또는 Batch 환경을 고려해 수집-정제 과정의 성공/실패 로그 및 처리 건수를 `ingest.log`에 기록하는 로깅 핸들러 보강

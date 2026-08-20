@@ -20,6 +20,9 @@
 .env
 .env*.local
 
+# ingest pipeline logs
+/ingest.log
+
 # misc
 .DS_Store
 *.pem
