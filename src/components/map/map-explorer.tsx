@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { KakaoMapView } from '@/components/map/kakao-map-view';
 import { RadiusSelector } from '@/components/map/radius-selector';
 import { LayerToggle } from '@/components/map/layer-toggle';
@@ -24,7 +23,6 @@ import { useUserLocation } from '@/hooks/use-user-location';
 const MARKER_LIMIT = 200;
 
 export function MapExplorer() {
-  const router = useRouter();
   const {
     center,
     addressName,
@@ -132,6 +130,9 @@ export function MapExplorer() {
     return result;
   }, [items, category, showSpaces, keyword, activeQuickFilters]);
 
+  // spec/common/search.md 2.2: 카테고리 또는 Quick 필터 중 1개 이상 활성화 시에만 20km/30km 광역 반경 선택을 해금한다.
+  const isWideRadiusUnlocked = category !== ALL_CATEGORY || activeQuickFilters.length > 0;
+
   const visibleItems = useMemo(() => filteredItems.slice(0, MARKER_LIMIT), [filteredItems]);
   const isOverLimit = filteredItems.length > MARKER_LIMIT;
   const isEmptyByFilter = !isLoading && !errorMessage && items.length > 0 && visibleItems.length === 0;
@@ -150,7 +151,12 @@ export function MapExplorer() {
         <div className="p-4 border-b border-gray-100 flex flex-col gap-3">
           <LocationHeader addressName={addressName} onClick={openOnboarding} />
           <SearchBar value={keyword} onChange={setKeyword} />
-          <RadiusSelector value={radius} onChange={setRadius} />
+          <RadiusSelector
+            value={radius}
+            onChange={setRadius}
+            isWideRadiusUnlocked={isWideRadiusUnlocked}
+            onBlockedWideRadiusSelect={() => setShowGridViewPrompt(true)}
+          />
           <LayerToggle showSpaces={showSpaces} onChange={setShowSpaces} />
           <CategoryFilter value={category} onChange={setCategory} />
           <QuickFilters value={activeQuickFilters} onToggle={handleToggleQuickFilter} />
@@ -193,7 +199,12 @@ export function MapExplorer() {
           <LocationHeader addressName={addressName} onClick={openOnboarding} />
           <SearchBar value={keyword} onChange={setKeyword} />
           <div className="flex items-center gap-2 overflow-x-auto">
-            <RadiusSelector value={radius} onChange={setRadius} />
+            <RadiusSelector
+              value={radius}
+              onChange={setRadius}
+              isWideRadiusUnlocked={isWideRadiusUnlocked}
+              onBlockedWideRadiusSelect={() => setShowGridViewPrompt(true)}
+            />
             <LayerToggle showSpaces={showSpaces} onChange={setShowSpaces} />
           </div>
           <CategoryFilter value={category} onChange={setCategory} />
@@ -248,7 +259,10 @@ export function MapExplorer() {
 
       {showGridViewPrompt && (
         <GridViewPrompt
-          onConfirm={() => router.push('/region')}
+          onConfirm={() => {
+            setRadius(10000);
+            setShowGridViewPrompt(false);
+          }}
           onCancel={() => setShowGridViewPrompt(false)}
         />
       )}

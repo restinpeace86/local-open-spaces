@@ -1,6 +1,7 @@
 'use client';
 
-// spec/common/search.md 2.2: 10km 초과 광역 탐색 시도 시 시/구 단위 그리드 뷰 전환 안내
+// spec/common/search.md 2.2 탐색 범위 확장 방어 정책: 필터 미선택 상태에서 20km/30km 시도 시
+// 서버 과부하 방지를 위해 노출하고, 확인 시 10km 범위로 조정을 유도한다.
 export function GridViewPrompt({
   onConfirm,
   onCancel,
@@ -12,8 +13,8 @@ export function GridViewPrompt({
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center px-4">
       <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl p-5">
         <p className="text-sm text-gray-900 leading-relaxed">
-          10km를 초과하는 광역 범위는 단일 지도 반경으로 제공되지 않으며, 시/구 단위 그리드(District
-          Grid) 뷰로 전환하시겠습니까?
+          카테고리 또는 Quick 필터를 1개 이상 선택해야 20km/30km 광역 범위를 사용할 수 있습니다.
+          10km 범위로 조정하시겠습니까?
         </p>
         <div className="mt-5 flex gap-2">
           <button

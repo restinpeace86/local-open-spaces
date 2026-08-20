@@ -41,6 +41,11 @@ export function KakaoMapView({
   onZoomExceedsMaxRadiusRef.current = onZoomExceedsMaxRadius;
   const onDragEndRef = useRef(onDragEnd);
   onDragEndRef.current = onDragEnd;
+  // spec/common/search.md 2.2: 현재 선택된 반경(1km~30km)을 초과하는 지도 축소를 방지한다.
+  const radiusRef = useRef(radius);
+  useEffect(() => {
+    radiusRef.current = radius;
+  }, [radius]);
 
   useEffect(() => {
     let cancelled = false;
