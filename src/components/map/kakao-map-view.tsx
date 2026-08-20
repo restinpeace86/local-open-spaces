@@ -37,6 +37,9 @@ export function KakaoMapView({
   const userPulseOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null);
   const lastValidLevelRef = useRef<number>(5);
   const isRevertingRef = useRef(false);
+  // spec/common/search.md 2.2: 반경 버튼 클릭 등으로 발생하는 프로그래매틱 setBounds는
+  // 실제 사용자 줌 아웃이 아니므로 다음 1회의 zoom_changed 초과 검사를 건너뛴다.
+  const suppressZoomCheckRef = useRef(false);
   const onZoomExceedsMaxRadiusRef = useRef(onZoomExceedsMaxRadius);
   onZoomExceedsMaxRadiusRef.current = onZoomExceedsMaxRadius;
   const onDragEndRef = useRef(onDragEnd);
@@ -92,6 +95,7 @@ export function KakaoMapView({
       userPulseOverlayRef.current = pulseOverlay;
 
       // spec/map/spatial-search.md 3.1, 반경 선택 시 원 전체가 한눈에 들어오도록 bounds 기준 자동 줌
+      suppressZoomCheckRef.current = true;
       map.setBounds(circle.getBounds());
 
       const handleResize = () => {
@@ -103,6 +107,12 @@ export function KakaoMapView({
 
       // spec/common/search.md 2.2: 핀치 줌/휠로 10km를 초과해 축소하면 이전 레벨로 되돌리고 광역 그리드 전환 안내를 띄운다.
       const handleZoomChanged = () => {
+        if (suppressZoomCheckRef.current) {
+          suppressZoomCheckRef.current = false;
+          lastValidLevelRef.current = map.getLevel();
+          return;
+        }
+
         if (isRevertingRef.current) {
           isRevertingRef.current = false;
           return;
@@ -158,6 +168,9 @@ export function KakaoMapView({
     userCircleRef.current.setPosition(position);
     userCircleRef.current.setRadius(radius);
     userPulseOverlayRef.current.setPosition(position);
+    // spec/common/search.md 2.2: 반경 버튼 클릭으로 인한 자동 줌은 사용자의 수동 줌 아웃이 아니므로
+    // 뒤이어 발생하는 zoom_changed의 최대 반경 초과 검사(handleZoomChanged)를 건너뛰게 한다.
+    suppressZoomCheckRef.current = true;
     mapRef.current.setBounds(userCircleRef.current.getBounds());
   }, [center.lat, center.lng, radius]);
 

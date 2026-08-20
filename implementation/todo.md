@@ -1,5 +1,8 @@
-- [ ] [버그 수정/기능 개선] 1km/5km/10km 반경 클릭 시 광역 안내 팝업이 노출되는 현상 수정
+- [x] [버그 수정/기능 개선] 1km/5km/10km 반경 클릭 시 광역 안내 팝업이 노출되는 현상 수정
   - 최신 원격 개정 스펙(`spec/common/search.md`) 수신을 위해 `git pull` 우선 수행
   - `radius-selector.tsx` 내 팝업 트리거 조건 수정: 사용자가 **20km 또는 30km 버튼을 직접 클릭했을 때만** 필터 미선택 여부를 체크하여 팝업을 띄우도록 수정
   - 1km, 5km, 10km 버튼 클릭 시에는 필터 선택 여부와 무관하게 팝업 없이 즉시 지정 반경으로 적용되도록 보장
   - Playwright 실브라우저로 5km/10km 클릭 시 팝업 미노출 및 20km/30km 클릭 시에만 조건부 팝업 노출 동작 검증
+  - **근본 원인:** `radius-selector.tsx`의 팝업 트리거 조건 자체는 이미 스펙대로 20km/30km 직접 클릭 시에만 동작하고 있었음. 실제 원인은 `kakao-map-view.tsx`에서 반경 변경 시 `map.setBounds(circle.getBounds())`를 호출하면 `zoom_changed` 이벤트가 발생하고, 뷰포트 대각선 거리가 `MAX_SINGLE_RADIUS_METERS(10km)`를 초과하는 것으로 잘못 계산되어(원의 bounding box 대각선은 반경의 약 1.414배) `onZoomExceedsMaxRadius`가 오탐 발생시켜 팝업을 띄운 것.
+  - **수정:** `suppressZoomCheckRef`를 추가하여 반경/중심 변경으로 인한 프로그래매틱 `setBounds` 호출 직후 1회의 `zoom_changed` 초과 검사를 건너뛰도록 하여, 실제 사용자의 핀치 줌/휠 축소로 인한 초과만 감지하도록 수정.
+  - Playwright 실브라우저 검증 완료: 1km/5km/10km 클릭 시 팝업 미노출, 20km(필터 미선택) 클릭 시 팝업 노출 확인.
