@@ -1,5 +1,8 @@
-- [x] [기능 구현] 공공 API 수집 파이프라인과 AI 정제 모듈(ai-tagger) 무인 체인화 및 자동화 구축
+- [ ] [테스트/CI] 핵심 사용자 시나리오 E2E 통합 테스트 스위트 작성 및 CI 연동
   - 최신 원격 변경사항 수신을 위해 `git pull` 우선 수행
-  - 수집 메인 스크립트(`scripts/ingest/run-all.mjs` 또는 개별 수집 스크립트) 종료 후, 태깅 미완료 항목(`is_kids_friendly` 등 필수 태그가 null/기본값인 레코드)을 감지하여 `scripts/ingest/ai-tagger.mjs`를 자동 연쇄 실행하도록 인프라 파이프라인 연결
-  - Cron 또는 Batch 환경을 고려해 수집-정제 과정의 성공/실패 로그 및 처리 건수를 `ingest.log`에 기록하는 로깅 핸들러 보강
-  - npm run script(예: `npm run ingest:pipeline`) 추가를 통해 단일 명령어로 수집부터 AI 정제 태깅까지 원스톱 실행 검증
+  - Playwright 통합 테스트 파일(`tests/e2e/core-scenarios.spec.ts`) 신규 작성/보강
+  - **시나리오 1 Verification**: Header 알림 설정 모달 열기/닫기 및 LocalStorage 키-값 상태 변경 검증
+  - **시나리오 2 Verification**: Quick 필터 ('👶 키즈', '🎁 무료', '⚡ 오늘/주말') 클릭 시 카드 뱃지와 스크리닝 결과 100% 일치 여부 검증
+  - **시나리오 3 Verification**: 필터 미선택 시 20km/30km 클릭 팝업 노출, 필터 선택 후 20km/30km 클릭 시 팝업 미노출 및 지도 클러스터링/자동 줌아웃 동작 검증
+  - 모바일(390px) 및 PC(1280px) 뷰포트 환경 각각 수행 검증
+  - `package.json`에 `test:e2e` 스크립트 정돈 및 GitHub Actions workflow(`.github/workflows/e2e.yml`) 연동 검토
