@@ -1,9 +1,5 @@
-- [x] [기능 구현] 최신 DB 스키마 및 ai-rule.md 반영(git pull) 후 AI 정제 파이프라인 및 Quick 필터/뱃지 구현
-  - `database_schema.md`/`ai-rule.md`가 space-card.md/event-card.md/search.md/feature-flags.md와 정합되도록 개정되어(커밋 683fdd1, ee08d16) afbd13f의 스킵 사유(상충)가 해소됨을 확인 후 착수
-  - `supabase/migrations/20260821020000_add_ai_tagging_columns.sql`(open_spaces/events AI 태깅 컬럼), `20260821030000_extend_nearby_rpc_with_ai_tags.sql`(RPC 확장), `20260821040000_add_events_is_free.sql`(문서에는 있었으나 누락되어 있던 events.is_free 보강) 작성·적용 및 타입 재생성
-  - `ai-rule.md` 5.2 Tagging Logic & Fallback Rules를 결정적 키워드/날짜 규칙으로 구현(`scripts/ingest/lib/ai-tagging.mjs`: `deriveParentalTags`, `deriveBookingStatus`) — Decision 005 가드레일에 따라 근거 불명확 시 기본값(false/'복합'/null)으로 폴백
-  - 5개 수집 스크립트(city-parks, cultural-spaces, seoul-culture-events, seoul-public-reservation, tour-api-festival)에 태깅 로직 연동
-  - `space-card.md`/`event-card.md` Parental Checkpoint Badges를 `src/lib/spaces/parental-badges.ts`로 구현, ItemListPanel/SpaceGridCard에 뱃지 노출
-  - `search.md` Quick Filters(👶 키즈, 🎁 무료, ⚡ 오늘/주말)를 `src/lib/spaces/quick-filters.ts` + `QuickFilters` 컴포넌트로 구현, MapExplorer 필터링에 AND 조건으로 연동
-  - `npx tsc --noEmit` / `npm run test` / `npm run build` 통과 확인 (기존 lint 에러 9건은 본 작업과 무관한 기존 결함으로 변경 전후 동일함을 git stash로 확인)
-  - 실 데이터로 문화공간/도시공원/문화행사/공공예약 재수집 후 Playwright 실브라우저로 PC(1280px)·모바일(390px) 양쪽에서 무료(89/89), 키즈(54/54), 무료+키즈 AND(9/9) 스크리닝이 뱃지와 100% 일치함을 검증. 검증 중 이벤트 카드의 target_age_group='초등' 케이스가 필터엔 걸리지만 뱃지가 안 뜨는 불일치를 발견해 `parental-badges.ts` 수정으로 해소
+- [ ] [기능 구현] 최신 spec/ 반영 후 광역 반경(20km/30km) 조건부 차단 제거 및 광역 클러스터링 연동
+  - 최신 원격 변경사항을 수신하기 위해 `git pull` 우선 수행
+  - Quick 필터 또는 카테고리 선택 시 광역 반경(20km, 30km) 차단 팝업 제거 및 활성화
+  - `circle.getBounds()` 기반 자동 줌아웃 및 Mapbox/Leaflet 지도 상 숫자 클러스터링(Cluster) 정상 동작 연동
+  - Playwright 실브라우저로 필터 적용 후 20km/30km 선택 시 지도 클러스터링 및 마커 스크리닝 동작 검증
