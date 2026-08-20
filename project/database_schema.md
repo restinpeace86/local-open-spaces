@@ -35,13 +35,18 @@
 | `raw_data` | JSONB | NULL | 공공 API 원본 응답 데이터 보관 |
 | `created_at` | TIMESTAMPTZ | DEFAULT `NOW()` | 레코드 생성 일시 |
 | `updated_at` | TIMESTAMPTZ | DEFAULT `NOW()` | 레코드 최종 갱신 일시 |
+| `is_kids_friendly` | BOOLEAN | DEFAULT `false` | 키즈/어린이 친화 여부 |
+| `has_parking` | BOOLEAN | DEFAULT `false` | 주차 가능 여부 |
+| `stroller_accessible` | BOOLEAN | DEFAULT `false` | 유모차 접근 가능 여부 |
+| `facility_type` | VARCHAR(20) | DEFAULT `'복합'` | 시설 유형 (`실내` \| `야외` \| `복합`) |
+| `target_age_group` | VARCHAR(50) | NULL | 대상 연령대 (예: `영유아`, `초등`, `전연령`) |
 
 - **공간 인덱스**: `CREATE INDEX idx_open_spaces_location ON public.open_spaces USING GIST(location);`
 
 ---
 
 ### 3.2. 시한성 이벤트 및 행사 (`public.events`)
-공간 내에서 열리는 축제, 전시, 팝업, 예약형 행사 등 기간 한정 정보를 저장하는 테이블이다.
+특정 기간 또는 일정에 개최되는 문화행사, 축제, 공연, 체험 프로그램 정보를 저장하는 테이블이다.
 
 | 컬럼명 | 데이터 타입 | 제약조건 / 기본값 | 설명 |
 | :--- | :--- | :--- | :--- |
@@ -56,10 +61,19 @@
 | `reservation_start_date` | TIMESTAMPTZ | NULL | 예약 접수 시작 일시 |
 | `reservation_end_date` | TIMESTAMPTZ | NULL | 예약 접수 마감 일시 (언제까지 예약해야 하는가) |
 | `reservation_url` | TEXT | NULL | 예약 신청 링크 |
-| `location` | GEOMETRY(Point, 4326) | NOT NULL | 행사장소 좌표 (Lng, Lat) |
+| `location` | GEOMETRY(Point, 4326) | NOT NULL | 행사 장소 위경도 좌표 |
 | `thumbnail_url` | TEXT | NULL | 대표 이미지 URL |
 | `is_active` | BOOLEAN | DEFAULT `true` | 활성화 상태 여부 |
 | `created_at` | TIMESTAMPTZ | DEFAULT `NOW()` | 레코드 생성 일시 |
+| `source_type` | VARCHAR(50) | NOT NULL | 수집 출처 구분 |
+| `category` | VARCHAR(50) | NOT NULL | AI 파이프라인으로 정제된 표준 카테고리 |
+| `is_free` | BOOLEAN | DEFAULT `false` | 무료 행사 여부 |
+| `is_kids_friendly` | BOOLEAN | DEFAULT `false` | 키즈/어린이 친화 여부 |
+| `has_parking` | BOOLEAN | DEFAULT `false` | 주차 가능 여부 |
+| `stroller_accessible` | BOOLEAN | DEFAULT `false` | 유모차 접근 가능 여부 |
+| `facility_type` | VARCHAR(20) | DEFAULT `'복합'` | 시설 유형 (`실내` \| `야외` \| `복합`) |
+| `target_age_group` | VARCHAR(50) | NULL | 대상 연령대 (예: `영유아`, `초등`, `전연령`) |
+| `booking_status` | VARCHAR(50) | NULL | 예약/접수 상태 (`오늘방문` \| `D-1 마감임박` \| `주말예약` \| `접수중`) |
 
 - **공간/일자 인덱스**:
   - `CREATE INDEX idx_events_location ON public.events USING GIST(location);`
