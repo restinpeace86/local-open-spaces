@@ -1,13 +1,8 @@
-- [x] [테스트/CI] 핵심 사용자 시나리오 E2E 통합 테스트 스위트 작성 및 CI 연동
+- [ ] [버그 수정 및 UI/태그 개선] 파란 반경 서클 대비 고대비 마커 적용, 휠 줌 팝업 오탐 차단, '키즈·유아' 필터명 명확화 및 내 위치 마커 PC 시인성 개선
   - 최신 원격 변경사항 수신을 위해 `git pull` 우선 수행
-  - Playwright 통합 테스트 파일(`tests/e2e/core-scenarios.spec.ts`) 신규 작성/보강
-  - **시나리오 1 Verification**: Header 알림 설정 모달 열기/닫기 및 LocalStorage 키-값 상태 변경 검증
-  - **시나리오 2 Verification**: Quick 필터 ('👶 키즈', '🎁 무료', '⚡ 오늘/주말') 클릭 시 카드 뱃지와 스크리닝 결과 100% 일치 여부 검증
-  - **시나리오 3 Verification**: 필터 미선택 시 20km/30km 클릭 팝업 노출, 필터 선택 후 20km/30km 클릭 시 팝업 미노출 및 지도 클러스터링/자동 줌아웃 동작 검증
-  - 모바일(390px) 및 PC(1280px) 뷰포트 환경 각각 수행 검증
-  - `package.json`에 `test:e2e` 스크립트 정돈 및 GitHub Actions workflow(`.github/workflows/e2e.yml`) 연동 검토
-  - 완료 메모: Zero-Cost 원칙(Decision 001)에 따라 실 Supabase RPC/Kakao Maps SDK 네트워크 호출은
-    `tests/e2e/support/mocks.ts`에서 Playwright route 가로채기로 결정론적 픽스처/스텁으로 대체(실 API 키 불필요).
-    `next dev`(Turbopack HMR)는 병렬 워커 하에서 청크 로드가 불안정(ERR_ABORTED)해 `playwright.config.ts`의
-    webServer를 `npm run build && npm run start` 프로덕션 서버로 고정. Mobile/Desktop 프로젝트 × 3개 시나리오
-    = 6개 테스트 로컬에서 2회 연속 전부 통과, CI와 동일한 플레이스홀더 env로도 재검증 완료.
+  - **마커 및 클러스터 시각성 강화**: 파란색 반경 서클 fill과 보색 대비를 이루도록 마커를 선명한 코랄-레드오렌지(`#FF3D00` / `#FF5722`) 계열 및 2px 흰색 테두리 + Drop Shadow로 교체하여 반경 원 내부에서도 명확히 눈에 띄도록 수정
+  - **내 위치(User GPS) 마커 PC 시인성 개선**: PC 뷰포트(1024px 이상)에서 내 위치 마커가 작게 묻히지 않도록 아이콘 크기를 확대하고, 펄스(Pulse) 링 및 화이트 테두리/그림자를 강조하여 시인성 극대화
+  - **마우스 휠 줌 팝업 오탐 완벽 차단**: PC 마우스 휠 및 모바일 핀치 줌으로 지도를 축소/확대할 때 `GridViewPrompt` 팝업이 절대로 트리거되지 않도록 차단 (오직 상단 반경 UI의 20km/30km 버튼을 마우스로 직접 클릭했을 때만 조건부 팝업 작동)
+  - **Quick Filter 칩 명칭 및 범위 개선**: 상단 Quick Filter 칩 텍스트를 `👶 키즈`에서 `👶 키즈·유아`로 명확히 변경하고, 클릭 시 `is_kids_friendly` true 및 `target_age_group`이 '영유아'/'유아'/'어린이'인 항목이 통합 스크리닝되도록 연동
+  - **카드 뱃지 세분화**: DB의 `target_age_group`이 '영유아'인 경우 카드 뱃지 텍스트를 `👶 영유아`로 세부 명시
+  - Playwright 실브라우저로 파란 반경 서클 내 마커 가독성, PC 환경 내 위치 마커 크기, 마우스 휠 줌 시 팝업 미노출, '키즈·유아' 필터 선택 시 영유아 데이터 정상 포함 검증
