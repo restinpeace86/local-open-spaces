@@ -1,55 +1,51 @@
-- [x] [강제 리셋 및 복구] Git 로컬 변경사항 초기화 후 E2E 테스트 및 빌드 수복
-  - `git fetch origin` 결과 로컬 `main`은 이미 `origin/main`(127f849)과 동일 커밋이었으며, `git reset --hard`는 수행하지 않음.
-    로컬에 남아있던 미커밋 변경(`kakao-map-view.tsx` 등)을 검토한 결과 "깨진 코드"가 아니라 이미 이번 작업이 요구하는
-    수정(단일 반경 pinch/wheel 줌 시 이전 레벨로 강제 복귀시키던 `MAX_SINGLE_RADIUS_METERS`/`handleZoomChanged` 로직 제거)이
-    선반영된 상태였음. 해당 로직은 `spec/common/search.md` 2.2에 정의되지 않은 임의 비즈니스 로직(제7장 제3조 위반)이었으므로
-    제거가 맞는 방향이며, `git reset --hard`로 되돌리는 것은 오히려 스펙 위반 상태로 회귀시키는 것이라 판단해 보존함.
-  - `map-explorer.tsx`에 남아있던 이제는 존재하지 않는 `KakaoMapView`의 `onZoomExceedsMaxRadius` prop 참조를 제거하여 타입 정합성 복구.
-  - `tests/e2e/core-scenarios.spec.ts` 내에는 애초에 pinch/wheel 줌 초과 팝업을 검증하는 테스트가 없었음(20km/30km 반경 버튼 잠금 팝업 테스트만 존재하며 이는 별개 기능이고 정상 통과). 별도 업데이트 불필요.
-  - 저장소 루트에 남아있던 이전 세션의 손상된 디스코드 알림 스크립트 리다이렉트 잔여물(커밋 해시 이름의 71바이트 쓰레기 파일 12개)을 정리함.
-  - 검증: `npx tsc --noEmit` 통과, `npm run test`(vitest) 2/2 통과, `npm run build` 성공, `npx playwright test` 6/6 통과.
+# 📋 [TODO] TourAPI 4.0 데이터 적합성 검토 및 매핑 분석
 
-## Decision 008 — 명세서 통합 정리 (2026-08-22)
+## 📌 배경 및 목적
+우리가 최근 공공데이터포털(data.go.kr)에서 신청한 **한국관광공사 TourAPI 4.0 관련 4개 API**(`국문 관광정보 서비스`, `무장애 여행`, `고캠핑`, `반려동물 동반여행`)가 **우리 서비스의 핵심 목적**에 얼마나 부합하는지 분석하고 사전 매핑 전략을 수립한다.
 
-- [x] `docs/spec.md`(가성비 놀거리 서비스 SSOT)와 기존 `project/`, `spec/` 문서 간 충돌 항목 매핑 및 정리
-  - `project/decision-log.md`에 Decision 008 신규 기록
-  - `project/overview.md`, `project/architecture.md`, `project/data_sources.md`: 서비스 정의/탐색흐름/데이터소스를 새 방향으로 갱신하되 기존 Zero-Cost·PostGIS·반응형 기술 세부는 유지
-  - `spec/data/ai-rule.md`: 3.3에 "DB 원본 카테고리 → 5대 UI 카테고리" 매핑 신설(코드 미반영 상태로 명시), `is_free` 오탐 방지 Fallback 규칙 추가
-  - `spec/common/search.md`: 중복된 20km/30km 안내 섹션 통합, 카테고리 목록을 5대 UI 카테고리로 갱신
-  - `spec/space/space-card.md`, `spec/event/event-card.md`: Parental Checkpoint 뱃지를 `docs/spec.md` 4대 핵심 뱃지 기준으로 재정렬(주차/유모차는 보조 뱃지로 유지)
-  - `spec/common/feature-flags.md`: 깨져있던 코드펜스 문법 오류 수정
-- [x] **[코드] DB 카테고리 → 5대 UI 카테고리 매핑 반영** (`implementation/2026-08-22-collector-adapter-architecture.md`) — `category-meta.ts`에 5대 UI 카테고리 색상/라벨 추가, `scripts/ingest/adapters/lib/schema-mapper.mjs`가 신규 수집 데이터에 실제 매핑 적용. DB 원본 `category`/`event_type` 값 컬럼 자체는 변경 없이 같은 컬럼에 신규/기존 값이 공존(RPC 실호출로 확인)
-- [x] **[코드] 수집 파이프라인 어댑터 아키텍처** (`scripts/ingest/adapters/`, `implementation/2026-08-22-collector-adapter-architecture.md`) — `BaseCollectorAdapter` 추상 클래스 + `SeoulYeyakAdapter`(기존 스크립트 이관, 2,527건 실제 upsert 검증)/`LocalDataKidsAdapter`(구조 완성, 실제 CSV URL 없어 실행 미검증) 구현
-- [~] **`LOCAL_DATA_KIDS_CSV_URL` 실제 값 확보 후 재검증** — localdata.go.kr에서 대상 업종(기타유원시설업 등)의 CSV 다운로드 URL을 사용자가 확인해 `.env.local`에 추가해야 진행 가능 → 값이 채워지면 `npm run ingest:local-data-kids -- --dry-run`으로 컬럼명 매핑 검증
-- [~] **나머지 5개 신규 소스 어댑터** (TOURA_4_0 contentTypeId 12/14/15 세분화, SEOUL_KIDS_CAFE, NONGSARO_FARM, GG_WATER_PLAY, NAVER_LOCAL_SEARCH) — `BaseCollectorAdapter` 패턴으로 후속 구현 가능. SEOUL_KIDS_CAFE는 기존 `SEOUL_OPEN_DATA_KEY` 재사용 가능해 보이나 정확한 데이터셋/서비스명 미확인, 나머지는 신규 API 키 발급 필요
+* **우리 서비스의 핵심 목적**: *"오늘/이번 주말에 아이와 뭐하고 놀지? 가성비 좋은 곳 없나? 오늘 할 만한 행사/이벤트 없나?"*
+* **주의사항**: **코드나 DB 스키마/컬럼을 직접 수정/변경하지 말고**, 오직 기존 코드베이스 분석 및 TourAPI 명세 비교 결과를 본 `todo.md` 하단에 **[분석 결과 보고서]** 형태로 업데이트할 것.
+* **주의사항**: 현재 상위 제약 문서들과 충돌이 발생하거나 미흡할 수 있는 부분에 대하여, 어느 기능명세서에 대하여 수정이 필요할지에 대하여 하단에 **[기존 기능명세서 충돌 위험]** 형태로 업데이트할 것.
 
-## 신규 데이터 소스 backlog (2026-08-22, 사용자 제공 15개+ 목록 — 상세는 `project/data_sources.md` 2.3)
+---
 
-- [x] **[코드] NationalParkEcotourAdapter** (`implementation/2026-08-22-national-park-ecotour-adapter.md`) — 국립공원공단_국립공원 생태관광정보 DB(odcloud.kr), Swagger로 스펙 확인 후 실제 호출 성공(110건). `open_spaces`(category=EXPERIENCE_CLASS) 매핑까지 구현
-- [~] **`KAKAO_REST_API_KEY` 확보 후 재검증** — 원본에 좌표가 없어 Kakao 지오코딩 필수. 이미 보유한 JS 지도 키(`NEXT_PUBLIC_KAKAO_MAP_API_KEY`, 도메인 제한)로는 REST 호출이 401로 실패함을 확인함 — Kakao Developers [앱 키] 탭의 "REST API 키"가 별도로 필요. 값이 채워지면 `npm run ingest:national-park-ecotour -- --dry-run`으로 재검증
-- [~] 1. 물놀이터·바닥분수(경기/서울) — 단일 API 부재로 보류, 수동 확인 필요 (`data_sources.md` 참고)
-- [~] 2. 서울형 키즈카페(OA-21716) — 정확한 서비스명 AJAX 렌더링으로 자동 조사 불가, 사용자 확인 대기
-- [~] 3번(수영장) 조사 완료, 4~7번(숲체험 나머지/농촌체험/스케이트장/박물관·과학관 등) 미착수 — `project/data_sources.md` 2.3 표 순서대로 진행 (2026-08-21 자율 실행 세션 갱신)
-  - **3번(수영장) 조사 결과**: 행정안전부_생활_수영장업 조회서비스(data.go.kr ID 15155038)는 REST Open API로 등재돼 있고 `LocalDataKidsAdapter`가 다루는 인허가데이터(인허가일자/영업상태/사업장명/소재지주소, EPSG:5174)와 필드 시그니처가 동일함을 확인했으나, 실제 End Point/오퍼레이션명은 Swagger UI가 JS 렌더링이라 자동 조사로 확인 불가(서울형 키즈카페 OA-21716과 동일한 한계) — **보류**, 사용자가 활용신청 후 실제 End Point를 확인해 전달하면 재개. 서울 한강사업본부 수영장/물놀이장 정보는 전용 API 자체가 없음(정적 페이지만 존재) 확인 — **보류**. 상세는 `project/data_sources.md` 2.3 표 참고.
-  - 4~7번은 이번 세션에서 착수하지 않음(3번 조사가 보류로 종료되어 순서상 다음 항목으로 이어가되, 세션당 과다한 API 탐색 시도를 방지하기 위해 다음 세션으로 넘김)
-- [x] **한국관광공사_반려동물 동반여행 서비스** (`KorPetTourService2`, B551011) — `SERVICE_KEY_IS_NOT_REGISTERED_ERROR` 원인 규명 완료. `reference/개방데이터_활용매뉴얼(반려동물동반여행)/한국관광공사_개방데이터_활용신청방법_매뉴얼_v3.3.docx`(공식 문서, docx→XML 직접 파싱으로 확인) 58행: "개발계정은 자동승인으로 활용 신청 후, 약 10분~30분 이후에 사용이 가능합니다." — 추측이 아니라 공식 매뉴얼에 명시된 활성화 지연이었음. 시간 경과 후 재호출 시 `areaCode2`(지역코드 17건 정상 응답), `areaBasedList2`(서울 관광지 55건, 좌표 포함 정상 응답) 모두 `resultCode: 0000 OK` 확인
-  - [x] **[코드] KorPetTourAdapter** (`scripts/ingest/adapters/kor-pet-tour-adapter.mjs`) — 사용자 확인(2026-08-20): `contentTypeId` 12(관광지)/14(문화시설)/28(레포츠)만 수집(숙박/음식점/쇼핑/축제공연행사는 스코프 밖으로 제외). `open_spaces` 테이블에 매핑(12→OUTDOOR_NATURE, 14→EXHIBITION_MUSEUM, 28→KIDS_ACTIVITY). 실제 호출 857건 upsert 완료 검증(`npm run ingest:kor-pet-tour`)
-- [x] **한국관광공사_무장애 여행 정보 서비스** (`KorWithService2`, B551011) — 사용자가 인증키/엔드포인트 전달, 즉시 실제 호출 검증(활성화 지연 없이 바로 `resultCode: 0000`). `KorPetTourAdapter`와 응답 스키마가 동일해 공통 베이스 `TourApiV4AreaBasedAdapter`(`scripts/ingest/adapters/lib/tour-api-v4-area-based-adapter.mjs`)로 추출 후 `KorPetTourAdapter`도 리팩터링(회귀 검증: 857건 동일하게 재확인). `KorWithTourAdapter`도 동일 스코프(contentTypeId 12/14/28) 적용, 실제 5,040건 upsert 완료 검증(`npm run ingest:kor-with-tour`)
-  - [~] (향후 확장 아이디어, 미착수) `detailWithTour2` 오퍼레이션이 휠체어/유모차 대여·수유실 등 실제 무장애 편의시설 정보를 제공해 기존 `has_parking`/`stroller_accessible` 컬럼과 정확히 매핑 가능함을 실제 호출로 확인했으나, 해당 오퍼레이션도 일일 1,000건 트래픽 제한이 있어 5,040건 전체에 대해 건별 상세 조회 시 한도 초과 — 현재는 호출하지 않음(Zero-Cost 원칙, MVP 범위 초과 방지). 필요 시 별도 배치/일부 표본 전략 설계 후 진행
-    - **스킵 (2026-08-21 자율 실행 세션)**: 이 항목 자체가 "별도 배치/일부 표본 전략 설계 후 진행"이라는 미확정 설계 홀드를 명시하고 있어(제0장 사전 준수 확인 대상), 임의로 배치/표본 전략을 결정해 구현하지 않고 스킵함. 설계가 확정되면(사용자 확인 또는 별도 Spec 반영) 다시 착수 가능.
-- [x] **한국관광공사_고캠핑 정보 서비스** (`GoCamping`, B551011) — 사용자가 인증키/엔드포인트 전달, 즉시 실제 호출 검증(`resultCode: 0000`, 총 3,097건). TourAPI 4.0 계열과 응답 필드명 체계가 달라(`contentId`/`facltNm`/`mapX` 등) 별도 어댑터(`scripts/ingest/adapters/go-camping-adapter.mjs`)로 구현. 캠핑장은 정의상 전부 야외 시설이라 별도 스코프 확인 없이 전체를 OUTDOOR_NATURE로 매핑(카테고리 분기 불필요), 실제 3,087건 upsert 완료 검증(`npm run ingest:go-camping`)
-  - [~] (향후 확장 아이디어, 미착수) 원본에 `sbrsCl`(편의시설: 전기/물놀이장/놀이터 등), `posblFcltyCl`(가능시설: 어린이놀이시설 등), `animalCmgCl`(반려동물 동반가능) 등 풍부한 정형 필드가 있어 `is_kids_friendly`/`has_parking` 등 컬럼을 규칙 기반으로 채울 여지가 있으나, 값 종류가 많고 조합이 다양해 임의로 매핑 규칙을 만들지 않음(추측 금지) — 필요 시 정확한 매핑표를 사용자/Spec으로 확정 후 진행
-    - **스킵 (2026-08-21 자율 실행 세션)**: 이 항목 자체가 "정확한 매핑표를 사용자/Spec으로 확정 후 진행"이라는 미확정 홀드를 명시(추측 금지, 제3장 제4조)하고 있어 임의로 매핑 규칙을 만들지 않고 스킵함. 매핑표가 확정되면 다시 착수 가능.
-- [x] **한국관광공사 국문 관광정보 서비스** (`KorService2`, B551011) — 사용자가 인증키/엔드포인트 전달, 즉시 실제 호출 검증(`resultCode: 0000`). 실제 호출로 이 서비스가 KorPetTourService2/KorWithService2의 **원본 마스터 DB**임을 확인(같은 contentid=2790515 "전주드림랜드"가 세 서비스 모두에 존재). 중복 처리 방식을 임의 판단하지 않고 AskUserQuestion으로 확인 → **"contentid 기준으로 통합(중복제거) 권장"** 선택
-  - `TourApiV4AreaBasedAdapter`(공통 베이스)의 `external_id`/`source_type`을 소스별 접두어(`KOR_PET_TOUR_*`/`KOR_WITH_TOUR_*`) 대신 통합 식별자 `KOR_TOUR_API_V4_{contentid}`로 변경(마이그레이션)
-  - `KorTourAdapter`(`scripts/ingest/adapters/kor-tour-adapter.mjs`) 신규 구현, 동일 스코프(contentTypeId 12/14/28) 적용
-  - 기존 KorPetTour(857)/KorWithTour(5,040) 데이터를 새 스킴으로 재수집(upsert가 자연히 동일 contentid를 병합) 후, 구 스킴 잔여 행을 `scripts/migrations/2026-08-21-cleanup-tour-api-v4-legacy-ids.sql`로 정리(DELETE, `node scripts/apply-sql.mjs`로 실행)
-  - 정리 전/후 실제 행 수 확인: 정리 전 `KOR_PET_TOUR_*`=857 / `KOR_WITH_TOUR_*`=5,040 / `KOR_TOUR_API_V4_*`=0 (open_spaces 총 10,359건) → KorService2 실제 수집·마이그레이션 후 `KOR_PET_TOUR_*`=0 / `KOR_WITH_TOUR_*`=0 / `KOR_TOUR_API_V4_*`=19,148 (open_spaces 총 23,610건, 10,359-5,897+19,148과 정확히 일치 확인)
-- [~] **[코드] 하단 5탭 내비게이션 + 홈 화면 신규 구현** — `docs/spec.md` 2 기준. 현재 상단 3탭(지도/도감/캘린더) 구조를 대체하는 것이 아니라 그 기능들을 [내주변]/[카테고리] 탭 안으로 재배치. 홈 캐러셀/서브탭(특가·핫딜/무료·공공)/큐레이션 피드는 신규 UI 컴포넌트 필요. **범위가 커서 화면 목업/우선순위를 먼저 사용자와 확정한 뒤 착수 — 확정되면 이 표시를 빈 대괄호로 바꿔 자동 루프가 집을 수 있게 할 것**
-- [~] **[코드] 커머스 핫딜 API 연동(쿠팡 파트너스/네이버 쇼핑)** — 신규 API 키/제휴 계약이 있어야 착수 가능 (Claude가 스스로 발급/체결 불가)
-- [x] **[코드] 요금 오탐 방지 Fallback 룰(비-OCR 부분) 구현** — `spec/data/ai-rule.md` 5.2-7의 "요금 미기재 국공립 시설 → `is_free: true` 기본 추정" 로직만 우선 반영 (기존 ingest 스크립트에 조건 추가 수준으로 착수 가능)
-  - `scripts/ingest/lib/ai-tagging.mjs`에 `deriveIsFreeFallback({ hasFeeInfo, isPublicProvider })` 추가. `isPublicProvider`는 호출부(어댑터)가 소스 전체가 정부/공공기관 자체 운영 데이터임을 이미 확인한 경우에만 `true`로 넘기도록 설계(추측 금지 — 5.3 Guardrail).
-  - **실제 적용은 `NationalParkEcotourAdapter` 1건에 한정**: 국립공원공단(공공기관)이 직접 운영하는 생태관광 프로그램 전체라 민간 시설 혼재가 없음이 확정적 — `isFree: deriveIsFreeFallback({ hasFeeInfo: false, isPublicProvider: true })`.
-  - `GoCampingAdapter`, `TourApiV4AreaBasedAdapter`(KorPetTour/KorWithTour/KorTour 공통 베이스)는 **적용하지 않음** — 캠핑장/관광지/문화시설/레포츠는 공공·민간 운영이 혼재하고 원본 응답에 운영주체를 판별할 필드가 없어 "국공립 확정" 조건을 만족하지 못함(임의 확대 적용 금지, 5.3 Guardrail). `isFree: null` 유지하되 이유를 코드 주석으로 명시.
-  - `NationalParkEcotourAdapter`는 여전히 `KAKAO_REST_API_KEY` 부재로 실제 재수집 실행은 보류 상태 — 코드 변경 자체는 `npx tsc --noEmit` / `npm run test` / `npm run build`로 검증 완료, 실제 DB 반영은 키 확보 후 `npm run ingest:national-park-ecotour`로 재검증 필요.
-- [~] **[코드] 요금 포스터 이미지 OCR 파싱** — 비전 API(Gemini Vision 등) 연동 및 비용/키 확인 필요
+## 🎯 검토 및 분석 요구사항 (체크리스트)
+
+### 1. 데이터 분류 및 유효성 검토 (Relevance)
+- [ ] TourAPI의 `contentTypeId`(12:관광지, 14:문화시설, 15:축제/공연/행사, 28:레포츠 등) 중 우리 서비스 목적(가성비 놀거리, 행사/축제, 박물관/체험)에 부합하는 필터링 조건 정의
+- [ ] "오늘/이번 주말 진행 중인 행사"를 추출하기 위한 일자 데이터(`eventstartdate`, `eventenddate`) 관리 및 필터링 가능 여부 확인
+
+### 2. API 연동성 및 호출 구조 검토 (Connectivity)
+- [ ] 현재 프로젝트의 수집 어댑터 구조에서 TourAPI 4.0 Endpoints(지역기반/위치기반/행사정보/상세정보 등) 연결 적합성 평가
+- [ ] 필수 상세 정보(입장료, 주차 여부, 유모차 가능 여부 등)를 얻기 위한 추가 API 호출(`detailIntro`, `detailWithSign` 등) 필요성 및 N+1 호출 최소화 방안 검토
+
+### 3. 기존 데이터 규약/컬럼 매핑 분석 (Schema Mapping)
+- [ ] 기존 프로젝트에 정의된 데이터 스키마/컬럼(5대 카테고리, 4대 뱃지, 위치, 운영시간, 요금 등)과 TourAPI 응답 필드 간 일치율 분석
+- [ ] 무료/유료 판단, Outlink URL, 좌표 데이터 등 변환이 까다롭거나 누락 가능성이 있는 항목 식별 및 처리 방안 제시
+
+---
+
+## 📝 [Claude 분석 결과 작성 구역]
+*(아래 구역에 분석 결과를 상세히 작성해 주세요)*
+
+### 1. 서비스 목적 대비 TourAPI 4.0 데이터 적합성 평가
+- 
+
+### 2. 카테고리 & 콘텐츠 필터링 전략 (`contentTypeId` ➔ 기존 5대 카테고리)
+- 
+
+### 3. 기존 DB 스키마 vs TourAPI 응답 필드 매핑 테이블
+| 기존 DB 컬럼 | TourAPI 응답 필드 | 일치/변환 여부 | 비고/주의사항 |
+| :--- | :--- | :--- | :--- |
+| `title` | `title` | 일치 | - |
+| `category` | | | |
+| `badges` | | | |
+| `isFree` | | | |
+| `latitude` / `longitude` | | | |
+
+### 4. 파이프라인 연동 시 고려사항 (호출 제한, N+1 문제, 데이터 정제)
+- 
+
+### 5. 검토 완료 후 실행할 단계별 TODO (Action Items)
+- [ ] 
+- [ ]
