@@ -25,7 +25,7 @@ for /f %%h in ('git rev-parse HEAD') do set AFTER_HASH=%%h
 
 if "%AFTER_HASH%"=="%BEFORE_HASH%" goto WAIT_SPEC
 
-echo [Success] Task completed. (%BEFORE_HASH% -> %AFTER_HASH%)
+echo [Success] Task completed. (%BEFORE_HASH% to %AFTER_HASH%)
 goto SLEEP
 
 :ERR_DB

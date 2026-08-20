@@ -28,9 +28,9 @@ export const FEATURE_FLAGS = {
 
 // 컴포넌트 내부 사용 예시
 {FEATURE_FLAGS.ENABLE_USER_BOOKMARK && <BookmarkButton/>}
+```
 
-
-## Parental UX & Scale Optimization Flags
-- PARENTAL_QUICK_FILTERS: ENABLED: true
-- AI_CARD_BADGES: ENABLED: true
-- WIDE_RADIUS_EXPANSION: ENABLED: true
+## Parental UX & Scale Optimization Flags (Decision 008)
+- `PARENTAL_QUICK_FILTERS`: ENABLED — 키즈/무료/오늘·주말 Quick 필터 (`spec/common/search.md` 2.4)
+- `AI_CARD_BADGES`: ENABLED — 공간/이벤트 카드의 Parental Checkpoint 뱃지 (`spec/space/space-card.md`, `spec/event/event-card.md`)
+- `WIDE_RADIUS_EXPANSION`: ENABLED — 20km/30km 조건부 광역 반경 (`spec/common/search.md` 2.2)

@@ -8,7 +8,7 @@
 ## 2. 카드 UI 구성 요소
 
 - **카테고리 칩 (Category Chip):** 
-  - `PARK`(공원), `SPORTS`(체육시설), `CULTURE`(문화시설) 등의 표준 카테고리를 색상별 칩으로 상단에 노출
+  - DB 원본 카테고리(`PARK`/`SPORTS`/`CULTURE` 등)를 `spec/data/ai-rule.md` 3.3 매핑을 거쳐 5대 UI 카테고리(예: 🌳 야외·자연, 🏛️ 전시·박물관) 라벨과 색상으로 상단에 노출
 - **공간 명칭 (Name):** 
   - 시설명 또는 공원명 (최대 2줄 텍스트, 말줄임표 처리)
 - **거리 및 위치 (Distance & Address):** 
@@ -25,17 +25,18 @@
 - **마커 연동:** 
   - 리스트에서 카드를 호버(Hover)하거나 터치할 경우, 지도 위 해당 마커가 강조(Active/Pulse 효과)됨.
 
-## Parental Checkpoint Badges (AI Tagging 연동)
+## Parental Checkpoint Badges (AI Tagging 연동, Decision 008)
 
-공간 카드 정면 하단/상단에 AI 정제 파이프라인(`ai-rule.md`)에서 추출된 핵심 체크포인트 뱃지를 최우선 노출한다.
+공간 카드 정면 하단/상단에 AI 정제 파이프라인(`ai-rule.md`)에서 추출된 핵심 체크포인트 뱃지를 최우선 노출한다. `docs/spec.md` 3.2가 정의하는 **4대 핵심 뱃지**(가성비/방문시점/실내외/연령)를 기본 우선순위로 하고, 아래 주차·유모차 뱃지는 공간(open_spaces) 전용 보조 뱃지로 추가 노출한다.
 
 ### 1. Badge Display Rules
-- **무료/유료**: `is_free` (true: "🎁 무료", false: "유료")
-- **주차 여부**: `has_parking` (true: "🅿️ 주차가능")
-- **키즈 친화**: `is_kids_friendly` (true: "👶 키즈")
-- **유모차 접근성**: `stroller_accessible` (true: "🛺 유모차가능")
-- **실내/야외**: `facility_type` ("실내" | "야외" | "복합")
+- **가성비(필수)**: `is_free` (true: "🎁 완전 무료", false: "유료" — 유료인 경우 1만원 이하 여부는 상세 모달에서 안내)
+- **실내/야외(필수)**: `facility_type` ("🏛️ 실내" | "☀️ 야외" | "🌦️ 실내외 겸용")
+- **연령(필수)**: `target_age_group` (예: "👶 영유아", "👦 어린이", "👨‍👩‍👧 가족 전체")
+- **주차 여부(보조)**: `has_parking` (true: "🅿️ 주차가능")
+- **키즈 친화(보조)**: `is_kids_friendly` (true: "👶 키즈")
+- **유모차 접근성(보조)**: `stroller_accessible` (true: "🛺 유모차가능")
 
 ### 2. Layout Requirements
-- 카드 정면에 최대 3~4개의 핵심 뱃지를 우선순위에 따라 칩(Chip) 형태로 컴팩트하게 노출.
+- 카드 정면에 필수 3종 뱃지를 우선 노출하고, 공간 여유가 있을 때 보조 뱃지를 추가로 최대 3~4개까지 칩(Chip) 형태로 컴팩트하게 노출.
 - 뱃지 클릭 시 관련 Quick Filter 또는 상세 검색과 연동 가능.
