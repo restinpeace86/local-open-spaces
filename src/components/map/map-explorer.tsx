@@ -183,7 +183,6 @@ export function MapExplorer() {
           items={visibleItems}
           focusPosition={focusPosition}
           onSelectItem={handleSelectItem}
-          onZoomExceedsMaxRadius={() => setShowGridViewPrompt(true)}
           onDragEnd={handleMapDragEnd}
         />
 

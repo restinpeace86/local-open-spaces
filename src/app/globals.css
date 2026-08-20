@@ -62,3 +62,24 @@ body {
     opacity: 0;
   }
 }
+
+/* implementation/todo.md: PC 뷰포트(1024px 이상)에서 내 위치 마커가 작게 묻히지 않도록
+   아이콘 크기를 확대하고 펄스 링/테두리/그림자를 강조한다. */
+@media (min-width: 1024px) {
+  .user-location-pulse {
+    width: 26px;
+    height: 26px;
+  }
+
+  .user-location-pulse::before {
+    background: rgba(37, 99, 235, 0.4);
+  }
+
+  .user-location-pulse::after {
+    margin: 5px;
+    border-width: 3px;
+    box-shadow:
+      0 0 0 1px rgba(37, 99, 235, 0.45),
+      0 2px 6px rgba(0, 0, 0, 0.35);
+  }
+}

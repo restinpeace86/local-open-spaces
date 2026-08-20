@@ -81,7 +81,13 @@ declare namespace kakao.maps {
   }
 
   class MarkerClusterer {
-    constructor(options: { map: Map; averageCenter?: boolean; minLevel?: number; markers?: Marker[] });
+    constructor(options: {
+      map: Map;
+      averageCenter?: boolean;
+      minLevel?: number;
+      markers?: Marker[];
+      styles?: Record<string, string>[];
+    });
     addMarkers(markers: Marker[]): void;
     clear(): void;
   }
