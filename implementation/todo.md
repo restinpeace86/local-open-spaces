@@ -1,11 +1,5 @@
-- [ ] [스펙 작성] spec/notification/notification-settings.md 및 user-notification.md 명세 작성
-  - project/decision-log.md (Decision 003) 및 CLAUDE.md 제5장 제1조 기반 맞춤 알림 스펙 정의
-  - LocalStorage 스키마 (`user_notification_settings`, `user_notifications`) 구조 정의
-  - 광역 반경(10/20/30km/전체), 연령대/태그, 예약 마감 D-1 알림 조건 및 데이터 추출 규칙 명세화
-  - **⏭️ 구현 스킵 (2026-08-20, awaiting-spec-confirmation):** 본 항목은 "Spec 작성"을 요구하지만, CLAUDE.md 제4장 제1조는 Spec 작성을 기획 AI의 역할로, 제2조·제5조는 구현 AI가 기획을 변경하거나 새 기능을 독자 결정하지 않도록(역할 침범 금지) 명시한다. 구현 AI가 spec/notification 문서를 직접 작성하는 것은 역할 침범에 해당하여 상충됨. 또한 `spec/notification/` 디렉토리는 여전히 존재하지 않으며, 하위 [기능 구현] 항목도 이 스펙 부재에 의존한다. 기획 AI의 spec/notification 문서 작성 및 승인 후 재시도 필요.
-
-- [ ] [기능 구현] 주말 나들이용 광역 범위 맞춤 알림 조건 설정 UI 및 알림함(LocalStorage) 구현
-  - Header 알림 아이콘(🔔) 및 알림 설정 모달 UI 구축
-  - LocalStorage 연동 및 설정된 광역 반경/연령대 기준 '예약 마감 임박' 및 '주말 가볼 만한 곳' 알림 데이터 추출 로직 작성
-  - Playwright 실브라우저로 알림 설정 모달 동작, 조건 변경, 알림함 리스트 정상 노출 검증
-  - **⏭️ 구현 스킵 (2026-08-20, awaiting-spec-confirmation):** `spec/notification/` 스펙 문서가 아직 작성/승인되지 않아 CLAUDE.md 제3장 제2조(Spec 우선)·제4조(추측 금지), 제7장 제1조(Spec 없는 기능 추가 금지)와 상충됨. 또한 `spec/common/feature-flags.md`는 Decision 003에 근거해 "맞춤 알림 구독"을 미승인 확장 기능의 예시로 명시하며 Feature Flag로 UI 노출을 차단할 것을 요구한다. 위 [스펙 작성] 항목(기획 AI 역할) 완료·승인 전까지 재시도하지 않음.
+- [ ] [기능 구현] 최신 spec/ 반영(git pull) 후 주말 나들이용 광역 범위 맞춤 알림 UI 및 LocalStorage 알림함 구현
+  - 최신 원격 추가사항(`spec/notification/notification-settings.md`)을 수신하기 위해 `git pull` 우선 수행
+  - `spec/notification/notification-settings.md` 명세 기준 Header 알림 아이콘(🔔) 및 알림 설정 모달 UI 구현
+  - `LocalStorage` 기반 (`user_notification_settings`, `user_notifications`) 연동 및 조건별 알림 추출/조회 로직 연동
+  - Playwright 실브라우저로 알림 모달 설정 변경, LocalStorage 저장, 알림함 리스트 정상 노출 검증
