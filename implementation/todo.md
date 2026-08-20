@@ -66,6 +66,8 @@
 - [ ] `deriveParentalTags()`를 `TourApiV4AreaBasedAdapter.transform()`/`GoCampingAdapter.transform()`에 연결해 `raw_data.overview` 등 원문 기반으로 `is_kids_friendly`/`has_parking`/`stroller_accessible`/`facility_type`을 재태깅할지 여부 — 기존 어댑터 로직 변경이므로 별도 승인 필요
 - [ ] `detailIntro2`(입장료 등) 상세 API 연동 필요성 재검토 — 현재는 N+1 회피를 위해 미호출 중이며, 붙일 경우 캐싱/배치 전략(예: 신규 `contentid`만 상세 호출) 설계 선행 필요
 
+> **2026-08-21 세션 스킵 로그:** 위 3개 Action Item은 자율 하네스 실행(제0조 사전 준수 확인) 결과, 항목 본문에 명시된 "승인 전까지 착수하지 않음 / 임의 구현 금지 / 별도 승인 필요" 홀드 표시와 Decision 008(개별 승인 후 별도 구현) 패턴에 상충하여 이번 세션에서 구현하지 않고 스킵함. 기획 AI 승인 및 별도 Spec 확정 후 재개할 것.
+
 ---
 
 ## 🚧 [기존 기능명세서 충돌 위험]
