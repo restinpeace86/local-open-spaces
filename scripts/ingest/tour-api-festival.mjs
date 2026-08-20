@@ -4,6 +4,7 @@ import { loadEnv } from '../lib/load-env.mjs';
 import { createAdminClient, upsertRows } from './lib/supabase-admin.mjs';
 import { toPointWKT } from './lib/geometry.mjs';
 import { classifyTourApiFestival } from './lib/category-map.mjs';
+import { deriveParentalTags, deriveBookingStatus } from './lib/ai-tagging.mjs';
 
 const env = loadEnv();
 const dryRun = process.argv.includes('--dry-run');
@@ -58,15 +59,29 @@ function mapToEventRow(item) {
   const lat = Number(item.mapy);
   if (!lng || !lat || !item.eventstartdate || !item.eventenddate) return null;
 
+  const startDate = `${item.eventstartdate.slice(0, 4)}-${item.eventstartdate.slice(4, 6)}-${item.eventstartdate.slice(6, 8)}`;
+  const endDate = `${item.eventenddate.slice(0, 4)}-${item.eventenddate.slice(4, 6)}-${item.eventenddate.slice(6, 8)}`;
+
+  // ai-rule.md 5.1: 원본 API 응답의 실제 텍스트(개요/주소 등)를 근거로만 태깅한다.
+  const tags = deriveParentalTags(JSON.stringify(item));
+  const bookingStatus = deriveBookingStatus({
+    isReservationRequired: false,
+    reservationEndDate: null,
+    startDate,
+    endDate,
+  });
+
   return {
     external_id: `TOUR_API_${item.contentid}`,
     title: item.title,
     event_type: classifyTourApiFestival(),
-    start_date: `${item.eventstartdate.slice(0, 4)}-${item.eventstartdate.slice(4, 6)}-${item.eventstartdate.slice(6, 8)}`,
-    end_date: `${item.eventenddate.slice(0, 4)}-${item.eventenddate.slice(4, 6)}-${item.eventenddate.slice(6, 8)}`,
+    start_date: startDate,
+    end_date: endDate,
     location: toPointWKT(lng, lat),
     thumbnail_url: item.firstimage || null,
     is_active: true,
+    booking_status: bookingStatus,
+    ...tags,
   };
 }
 

@@ -7,6 +7,7 @@ import { RadiusSelector } from '@/components/map/radius-selector';
 import { LayerToggle } from '@/components/map/layer-toggle';
 import { SearchBar } from '@/components/map/search-bar';
 import { CategoryFilter, ALL_CATEGORY } from '@/components/map/category-filter';
+import { QuickFilters } from '@/components/map/quick-filters';
 import { ItemListPanel } from '@/components/map/item-list-panel';
 import { EmptyState } from '@/components/map/empty-state';
 import { DetailModal } from '@/components/map/detail-modal';
@@ -16,6 +17,7 @@ import { LocationHeader } from '@/components/map/location-header';
 import { LocationOnboardingModal } from '@/components/map/location-onboarding-modal';
 import { RecenterButton } from '@/components/map/recenter-button';
 import { getNearbySpacesAndEvents, NearbyItem } from '@/lib/spaces/get-nearby';
+import { matchesQuickFilters, QuickFilterKey } from '@/lib/spaces/quick-filters';
 import { useUserLocation } from '@/hooks/use-user-location';
 
 // spec/map/spatial-search.md 3.1: 반경 내 최대 200개 마커만 우선 렌더링
@@ -35,6 +37,7 @@ export function MapExplorer() {
   const [showSpaces, setShowSpaces] = useState(false);
   const [keyword, setKeyword] = useState('');
   const [category, setCategory] = useState(ALL_CATEGORY);
+  const [activeQuickFilters, setActiveQuickFilters] = useState<QuickFilterKey[]>([]);
   const [items, setItems] = useState<NearbyItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
   const [isSheetExpanded, setIsSheetExpanded] = useState(false);
@@ -95,6 +98,14 @@ export function MapExplorer() {
   const resetFilters = useCallback(() => {
     setKeyword('');
     setCategory(ALL_CATEGORY);
+    setActiveQuickFilters([]);
+  }, []);
+
+  // spec/common/search.md 'Quick Filters': 칩은 다중 선택되며 AND 조건으로 스크리닝된다.
+  const handleToggleQuickFilter = useCallback((key: QuickFilterKey) => {
+    setActiveQuickFilters((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
   }, []);
 
   // spec/common/search.md 2.3: 카테고리 선택 시 지도 마커와 리스트가 즉시 동기화되어 렌더링
@@ -114,8 +125,12 @@ export function MapExplorer() {
       result = result.filter((item) => item.name.toLowerCase().includes(trimmedKeyword));
     }
 
+    if (activeQuickFilters.length > 0) {
+      result = result.filter((item) => matchesQuickFilters(item, activeQuickFilters));
+    }
+
     return result;
-  }, [items, category, showSpaces, keyword]);
+  }, [items, category, showSpaces, keyword, activeQuickFilters]);
 
   const visibleItems = useMemo(() => filteredItems.slice(0, MARKER_LIMIT), [filteredItems]);
   const isOverLimit = filteredItems.length > MARKER_LIMIT;
@@ -138,6 +153,7 @@ export function MapExplorer() {
           <RadiusSelector value={radius} onChange={setRadius} />
           <LayerToggle showSpaces={showSpaces} onChange={setShowSpaces} />
           <CategoryFilter value={category} onChange={setCategory} />
+          <QuickFilters value={activeQuickFilters} onToggle={handleToggleQuickFilter} />
         </div>
         <div className="flex-1 overflow-y-auto">
           {isLoading && <p className="p-4 text-sm text-gray-400">불러오는 중...</p>}
@@ -181,6 +197,7 @@ export function MapExplorer() {
             <LayerToggle showSpaces={showSpaces} onChange={setShowSpaces} />
           </div>
           <CategoryFilter value={category} onChange={setCategory} />
+          <QuickFilters value={activeQuickFilters} onToggle={handleToggleQuickFilter} />
           {/* implementation/todo.md: 지도 드래그 후 재검색 버튼 - 모바일에서는 필터 스택 하단에 노출해 겹침 방지 */}
           {pendingRecenter && (
             <div className="flex justify-center">

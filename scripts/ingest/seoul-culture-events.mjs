@@ -5,7 +5,7 @@ import { loadEnv } from '../lib/load-env.mjs';
 import { createAdminClient, upsertRows } from './lib/supabase-admin.mjs';
 import { toPointWKT } from './lib/geometry.mjs';
 import { classifySeoulCultureEvent } from './lib/category-map.mjs';
-import { cleanText } from './lib/ai-tagging.mjs';
+import { cleanText, deriveParentalTags, deriveBookingStatus } from './lib/ai-tagging.mjs';
 
 const env = loadEnv();
 const dryRun = process.argv.includes('--dry-run');
@@ -48,16 +48,29 @@ async function mapToEventRow(item, { apiKey }) {
   if (!lng || !lat || !item.STRTDATE || !item.END_DATE || !item.TITLE) return null;
 
   const title = cleanText(item.TITLE);
+  const startDate = item.STRTDATE.slice(0, 10);
+  const endDate = item.END_DATE.slice(0, 10);
+
+  // ai-rule.md 5.1: 원본 API 응답의 실제 텍스트(이용대상/이용요금/프로그램 소개 등)를 근거로만 태깅한다.
+  const tags = deriveParentalTags(JSON.stringify(item));
+  const bookingStatus = deriveBookingStatus({
+    isReservationRequired: false,
+    reservationEndDate: null,
+    startDate,
+    endDate,
+  });
 
   return {
     external_id: buildExternalId(item),
     title,
     event_type: await classifySeoulCultureEvent(item.CODENAME, { title, apiKey }),
-    start_date: item.STRTDATE.slice(0, 10),
-    end_date: item.END_DATE.slice(0, 10),
+    start_date: startDate,
+    end_date: endDate,
     location: toPointWKT(lng, lat),
     thumbnail_url: item.MAIN_IMG || null,
     is_active: true,
+    booking_status: bookingStatus,
+    ...tags,
   };
 }
 

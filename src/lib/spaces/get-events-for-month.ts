@@ -12,7 +12,7 @@ export async function getEventsForMonth(year: number, month: number): Promise<Ne
   const { data, error } = await supabase
     .from('events')
     .select(
-      'id, title, event_type, location, thumbnail_url, start_date, end_date, reservation_start_date, reservation_end_date, reservation_url, is_reservation_required'
+      'id, title, event_type, location, thumbnail_url, start_date, end_date, reservation_start_date, reservation_end_date, reservation_url, is_reservation_required, is_free, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status'
     )
     .lte('start_date', monthEnd)
     .gte('end_date', monthStart)
@@ -45,8 +45,14 @@ export async function getEventsForMonth(year: number, month: number): Promise<Ne
       reservation_url: row.reservation_url,
       is_reservation_required: row.is_reservation_required,
       operating_hours: null,
-      is_free: null,
+      is_free: row.is_free,
       info_url: null,
+      is_kids_friendly: row.is_kids_friendly,
+      has_parking: row.has_parking,
+      stroller_accessible: row.stroller_accessible,
+      facility_type: row.facility_type,
+      target_age_group: row.target_age_group,
+      booking_status: row.booking_status,
     };
   });
 }

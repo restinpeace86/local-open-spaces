@@ -3,6 +3,7 @@
 import { loadEnv } from '../lib/load-env.mjs';
 import { createAdminClient, upsertRows } from './lib/supabase-admin.mjs';
 import { toPointWKT } from './lib/geometry.mjs';
+import { deriveParentalTags } from './lib/ai-tagging.mjs';
 
 const env = loadEnv();
 const dryRun = process.argv.includes('--dry-run');
@@ -44,6 +45,9 @@ function mapToOpenSpaceRow(item) {
   const lat = Number(item.latitude);
   if (!lng || !lat || !item.parkNm || !item.manageNo) return null;
 
+  // ai-rule.md 5.1: 원본 API 응답의 실제 텍스트(주요시설/안내 등)를 근거로만 태깅한다.
+  const tags = deriveParentalTags(JSON.stringify(item));
+
   return {
     external_id: `CITY_PARK_${item.manageNo}`,
     source_type: 'PARK_API',
@@ -55,6 +59,7 @@ function mapToOpenSpaceRow(item) {
     operating_hours: null,
     info_url: null,
     raw_data: item,
+    ...tags,
   };
 }
 

@@ -4,6 +4,7 @@
 import { loadEnv } from '../lib/load-env.mjs';
 import { createAdminClient, upsertRows } from './lib/supabase-admin.mjs';
 import { toPointWKT } from './lib/geometry.mjs';
+import { deriveParentalTags } from './lib/ai-tagging.mjs';
 
 const env = loadEnv();
 const dryRun = process.argv.includes('--dry-run');
@@ -41,6 +42,9 @@ function mapToOpenSpaceRow(item) {
 
   if (!lng || !lat || !item.FAC_NAME || !item.NUM) return null;
 
+  // ai-rule.md 5.1: 원본 API 응답의 실제 텍스트(이용요금/운영시간/소개 등)를 근거로만 태깅한다.
+  const tags = deriveParentalTags(JSON.stringify(item));
+
   return {
     external_id: `CULTURE_SPACE_${item.NUM}`,
     source_type: 'CULTURE_FACILITY',
@@ -52,6 +56,7 @@ function mapToOpenSpaceRow(item) {
     operating_hours: item.OPENHOUR || null,
     info_url: item.HOMEPAGE || null,
     raw_data: item,
+    ...tags,
   };
 }
 

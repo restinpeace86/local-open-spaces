@@ -6,6 +6,7 @@
 import { loadEnv } from '../lib/load-env.mjs';
 import { createAdminClient, upsertRows } from './lib/supabase-admin.mjs';
 import { toPointWKT } from './lib/geometry.mjs';
+import { deriveParentalTags, deriveBookingStatus } from './lib/ai-tagging.mjs';
 
 const env = loadEnv();
 const dryRun = process.argv.includes('--dry-run');
@@ -51,6 +52,17 @@ function mapToEventRow(item) {
     return null;
   }
 
+  const reservationEndDate = item.RCPTENDDT || null;
+
+  // ai-rule.md 5.1: 원본 API 응답의 실제 텍스트(이용대상/이용요금/서비스 소개 등)를 근거로만 태깅한다.
+  const tags = deriveParentalTags(JSON.stringify(item));
+  const bookingStatus = deriveBookingStatus({
+    isReservationRequired: true,
+    reservationEndDate,
+    startDate: toDateOnly(item.SVCOPNBGNDT),
+    endDate: toDateOnly(item.SVCOPNENDDT),
+  });
+
   return {
     external_id: `SEOUL_RESERVATION_${item.SVCID}`,
     title: item.SVCNM,
@@ -59,11 +71,13 @@ function mapToEventRow(item) {
     end_date: toDateOnly(item.SVCOPNENDDT),
     is_reservation_required: true,
     reservation_start_date: item.RCPTBGNDT || null,
-    reservation_end_date: item.RCPTENDDT || null,
+    reservation_end_date: reservationEndDate,
     reservation_url: item.SVCURL || null,
     location: toPointWKT(lng, lat),
     thumbnail_url: item.IMGURL || null,
     is_active: isActiveStatus(item.SVCSTATNM),
+    booking_status: bookingStatus,
+    ...tags,
   };
 }
 

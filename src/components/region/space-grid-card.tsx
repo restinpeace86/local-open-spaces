@@ -2,10 +2,12 @@
 
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
+import { getParentalBadges } from '@/lib/spaces/parental-badges';
 
-// 지역별 도감 그리드 카드 (spec/space/space-card.md 준용 - 카테고리 칩, 명칭, 주소, 무료 뱃지)
+// 지역별 도감 그리드 카드 (spec/space/space-card.md 준용 - 카테고리 칩, 명칭, 주소, Parental Checkpoint 뱃지)
 export function SpaceGridCard({ item, onSelect }: { item: NearbyItem; onSelect: (item: NearbyItem) => void }) {
   const meta = getCategoryMeta(item.category);
+  const badges = getParentalBadges(item);
 
   return (
     <button
@@ -20,14 +22,21 @@ export function SpaceGridCard({ item, onSelect }: { item: NearbyItem; onSelect: 
         >
           {meta.label}
         </span>
-        {item.is_free && (
-          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">
-            무료
-          </span>
-        )}
       </div>
       <p className="text-sm font-medium text-gray-900 line-clamp-2">{item.name}</p>
       <p className="text-xs text-gray-400 line-clamp-1">{item.address || '주소 정보 없음'}</p>
+      {badges.length > 0 && (
+        <div className="flex flex-wrap gap-1">
+          {badges.map((badge) => (
+            <span
+              key={badge.key}
+              className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600"
+            >
+              {badge.label}
+            </span>
+          ))}
+        </div>
+      )}
     </button>
   );
 }

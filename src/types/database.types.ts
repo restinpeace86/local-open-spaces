@@ -41,12 +41,17 @@ export type Database = {
     Tables: {
       events: {
         Row: {
+          booking_status: string | null
           created_at: string | null
           end_date: string
           event_type: string
           external_id: string
+          facility_type: string
+          has_parking: boolean
           id: string
           is_active: boolean | null
+          is_free: boolean
+          is_kids_friendly: boolean
           is_reservation_required: boolean | null
           location: unknown
           reservation_end_date: string | null
@@ -54,16 +59,23 @@ export type Database = {
           reservation_url: string | null
           space_id: string | null
           start_date: string
+          stroller_accessible: boolean
+          target_age_group: string | null
           thumbnail_url: string | null
           title: string
         }
         Insert: {
+          booking_status?: string | null
           created_at?: string | null
           end_date: string
           event_type: string
           external_id: string
+          facility_type?: string
+          has_parking?: boolean
           id?: string
           is_active?: boolean | null
+          is_free?: boolean
+          is_kids_friendly?: boolean
           is_reservation_required?: boolean | null
           location: unknown
           reservation_end_date?: string | null
@@ -71,16 +83,23 @@ export type Database = {
           reservation_url?: string | null
           space_id?: string | null
           start_date: string
+          stroller_accessible?: boolean
+          target_age_group?: string | null
           thumbnail_url?: string | null
           title: string
         }
         Update: {
+          booking_status?: string | null
           created_at?: string | null
           end_date?: string
           event_type?: string
           external_id?: string
+          facility_type?: string
+          has_parking?: boolean
           id?: string
           is_active?: boolean | null
+          is_free?: boolean
+          is_kids_friendly?: boolean
           is_reservation_required?: boolean | null
           location?: unknown
           reservation_end_date?: string | null
@@ -88,6 +107,8 @@ export type Database = {
           reservation_url?: string | null
           space_id?: string | null
           start_date?: string
+          stroller_accessible?: boolean
+          target_age_group?: string | null
           thumbnail_url?: string | null
           title?: string
         }
@@ -107,14 +128,19 @@ export type Database = {
           category: string
           created_at: string | null
           external_id: string
+          facility_type: string
+          has_parking: boolean
           id: string
           info_url: string | null
           is_free: boolean | null
+          is_kids_friendly: boolean
           location: unknown
           name: string
           operating_hours: string | null
           raw_data: Json | null
           source_type: string
+          stroller_accessible: boolean
+          target_age_group: string | null
           updated_at: string | null
         }
         Insert: {
@@ -122,14 +148,19 @@ export type Database = {
           category: string
           created_at?: string | null
           external_id: string
+          facility_type?: string
+          has_parking?: boolean
           id?: string
           info_url?: string | null
           is_free?: boolean | null
+          is_kids_friendly?: boolean
           location: unknown
           name: string
           operating_hours?: string | null
           raw_data?: Json | null
           source_type: string
+          stroller_accessible?: boolean
+          target_age_group?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -137,14 +168,19 @@ export type Database = {
           category?: string
           created_at?: string | null
           external_id?: string
+          facility_type?: string
+          has_parking?: boolean
           id?: string
           info_url?: string | null
           is_free?: boolean | null
+          is_kids_friendly?: boolean
           location?: unknown
           name?: string
           operating_hours?: string | null
           raw_data?: Json | null
           source_type?: string
+          stroller_accessible?: boolean
+          target_age_group?: string | null
           updated_at?: string | null
         }
         Relationships: []
@@ -481,12 +517,16 @@ export type Database = {
         Args: { radius_meters?: number; user_lat: number; user_lng: number }
         Returns: {
           address: string
+          booking_status: string
           category: string
           distance_meters: number
           end_date: string
+          facility_type: string
+          has_parking: boolean
           id: string
           info_url: string
           is_free: boolean
+          is_kids_friendly: boolean
           is_reservation_required: boolean
           item_type: string
           lat: number
@@ -497,6 +537,8 @@ export type Database = {
           reservation_start_date: string
           reservation_url: string
           start_date: string
+          stroller_accessible: boolean
+          target_age_group: string
           thumbnail_url: string
         }[]
       }

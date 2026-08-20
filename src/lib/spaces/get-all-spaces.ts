@@ -9,7 +9,9 @@ export async function getAllOpenSpaces(referencePoint: { lat: number; lng: numbe
 
   const { data, error } = await supabase
     .from('open_spaces')
-    .select('id, name, category, address, location, is_free, operating_hours, info_url')
+    .select(
+      'id, name, category, address, location, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group'
+    )
     .order('name');
 
   if (error) {
@@ -41,6 +43,12 @@ export async function getAllOpenSpaces(referencePoint: { lat: number; lng: numbe
       operating_hours: row.operating_hours,
       is_free: row.is_free,
       info_url: row.info_url,
+      is_kids_friendly: row.is_kids_friendly,
+      has_parking: row.has_parking,
+      stroller_accessible: row.stroller_accessible,
+      facility_type: row.facility_type,
+      target_age_group: row.target_age_group,
+      booking_status: null,
     };
   });
 }

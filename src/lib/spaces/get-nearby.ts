@@ -19,6 +19,12 @@ export type NearbyItem = {
   operating_hours: string | null;
   is_free: boolean | null;
   info_url: string | null;
+  is_kids_friendly: boolean | null;
+  has_parking: boolean | null;
+  stroller_accessible: boolean | null;
+  facility_type: string | null;
+  target_age_group: string | null;
+  booking_status: string | null;
 };
 
 export async function getNearbySpacesAndEvents(
