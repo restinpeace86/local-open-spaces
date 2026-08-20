@@ -21,6 +21,7 @@
     "ingest:culture-events": "node scripts/ingest/seoul-culture-events.mjs",
     "ingest:tour-festival": "node scripts/ingest/tour-api-festival.mjs",
     "ingest:local-data-kids": "node scripts/ingest/local-data-kids.mjs",
+    "ingest:national-park-ecotour": "node scripts/ingest/national-park-ecotour.mjs",
     "ingest:pipeline": "node scripts/ingest/run-all.mjs"
   },
   "dependencies": {

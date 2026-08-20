@@ -22,6 +22,16 @@
 - [x] **[코드] 수집 파이프라인 어댑터 아키텍처** (`scripts/ingest/adapters/`, `implementation/2026-08-22-collector-adapter-architecture.md`) — `BaseCollectorAdapter` 추상 클래스 + `SeoulYeyakAdapter`(기존 스크립트 이관, 2,527건 실제 upsert 검증)/`LocalDataKidsAdapter`(구조 완성, 실제 CSV URL 없어 실행 미검증) 구현
 - [~] **`LOCAL_DATA_KIDS_CSV_URL` 실제 값 확보 후 재검증** — localdata.go.kr에서 대상 업종(기타유원시설업 등)의 CSV 다운로드 URL을 사용자가 확인해 `.env.local`에 추가해야 진행 가능 → 값이 채워지면 `npm run ingest:local-data-kids -- --dry-run`으로 컬럼명 매핑 검증
 - [~] **나머지 5개 신규 소스 어댑터** (TOURA_4_0 contentTypeId 12/14/15 세분화, SEOUL_KIDS_CAFE, NONGSARO_FARM, GG_WATER_PLAY, NAVER_LOCAL_SEARCH) — `BaseCollectorAdapter` 패턴으로 후속 구현 가능. SEOUL_KIDS_CAFE는 기존 `SEOUL_OPEN_DATA_KEY` 재사용 가능해 보이나 정확한 데이터셋/서비스명 미확인, 나머지는 신규 API 키 발급 필요
+
+## 신규 데이터 소스 backlog (2026-08-22, 사용자 제공 15개+ 목록 — 상세는 `project/data_sources.md` 2.3)
+
+- [x] **[코드] NationalParkEcotourAdapter** (`implementation/2026-08-22-national-park-ecotour-adapter.md`) — 국립공원공단_국립공원 생태관광정보 DB(odcloud.kr), Swagger로 스펙 확인 후 실제 호출 성공(110건). `open_spaces`(category=EXPERIENCE_CLASS) 매핑까지 구현
+- [~] **`KAKAO_REST_API_KEY` 확보 후 재검증** — 원본에 좌표가 없어 Kakao 지오코딩 필수. 이미 보유한 JS 지도 키(`NEXT_PUBLIC_KAKAO_MAP_API_KEY`, 도메인 제한)로는 REST 호출이 401로 실패함을 확인함 — Kakao Developers [앱 키] 탭의 "REST API 키"가 별도로 필요. 값이 채워지면 `npm run ingest:national-park-ecotour -- --dry-run`으로 재검증
+- [~] 1. 물놀이터·바닥분수(경기/서울) — 단일 API 부재로 보류, 수동 확인 필요 (`data_sources.md` 참고)
+- [~] 2. 서울형 키즈카페(OA-21716) — 정확한 서비스명 AJAX 렌더링으로 자동 조사 불가, 사용자 확인 대기
+- [ ] 3~7번(수영장/숲체험 나머지/농촌체험/스케이트장/박물관·과학관 등) — 아직 미착수, `project/data_sources.md` 2.3 표 순서대로 진행 예정
+- [x] **한국관광공사_반려동물 동반여행 서비스** (`KorPetTourService2`, B551011) — `SERVICE_KEY_IS_NOT_REGISTERED_ERROR` 원인 규명 완료. `reference/개방데이터_활용매뉴얼(반려동물동반여행)/한국관광공사_개방데이터_활용신청방법_매뉴얼_v3.3.docx`(공식 문서, docx→XML 직접 파싱으로 확인) 58행: "개발계정은 자동승인으로 활용 신청 후, 약 10분~30분 이후에 사용이 가능합니다." — 추측이 아니라 공식 매뉴얼에 명시된 활성화 지연이었음. 시간 경과 후 재호출 시 `areaCode2`(지역코드 17건 정상 응답), `areaBasedList2`(서울 관광지 55건, 좌표 포함 정상 응답) 모두 `resultCode: 0000 OK` 확인 — **API 자체는 정상 동작**
+  - [~] 어댑터 구현 착수 전 스코프 확인 필요: `areaBasedList2`는 `contentTypeId` 12(관광지)/14(문화시설)/15(축제공연행사)/28(레포츠)/32(숙박)/38(쇼핑)/39(음식점) 전체를 아우르는 "반려동물 동반여행" 서비스로, `docs/spec.md`의 가성비 아이·가족 놀거리 스코프와 정확히 일치하지 않음(반려동물 동반 조건이 핵심이고, 숙박/음식점/쇼핑은 서비스 스코프 밖일 가능성). 어떤 `contentTypeId` 범위를 수집 대상으로 할지, UI 카테고리는 어떻게 매핑할지 Spec 미정 — 제3장 제5조(추측 금지) 위반 방지를 위해 사용자 확인 후 착수
 - [~] **[코드] 하단 5탭 내비게이션 + 홈 화면 신규 구현** — `docs/spec.md` 2 기준. 현재 상단 3탭(지도/도감/캘린더) 구조를 대체하는 것이 아니라 그 기능들을 [내주변]/[카테고리] 탭 안으로 재배치. 홈 캐러셀/서브탭(특가·핫딜/무료·공공)/큐레이션 피드는 신규 UI 컴포넌트 필요. **범위가 커서 화면 목업/우선순위를 먼저 사용자와 확정한 뒤 착수 — 확정되면 이 표시를 빈 대괄호로 바꿔 자동 루프가 집을 수 있게 할 것**
 - [~] **[코드] 커머스 핫딜 API 연동(쿠팡 파트너스/네이버 쇼핑)** — 신규 API 키/제휴 계약이 있어야 착수 가능 (Claude가 스스로 발급/체결 불가)
 - [ ] **[코드] 요금 오탐 방지 Fallback 룰(비-OCR 부분) 구현** — `spec/data/ai-rule.md` 5.2-7의 "요금 미기재 국공립 시설 → `is_free: true` 기본 추정" 로직만 우선 반영 (기존 ingest 스크립트에 조건 추가 수준으로 착수 가능)

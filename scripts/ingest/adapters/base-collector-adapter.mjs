@@ -26,6 +26,7 @@ export class BaseCollectorAdapter {
   }
 
   // raw 데이터를 표준 스키마 행 배열로 변환한다 (schema-mapper.mjs 사용). 서브클래스 필수 구현.
+  // 지오코딩 등 네트워크 보강이 필요한 경우 async로 구현해도 된다 (run()이 await로 처리).
   // eslint-disable-next-line class-methods-use-this
   transform(_rawItems) {
     throw new Error(`${this.constructor.name}.transform()이 구현되지 않았습니다.`);
@@ -37,7 +38,7 @@ export class BaseCollectorAdapter {
     const raw = await this.fetch();
     console.log(`  raw 데이터 ${Array.isArray(raw) ? raw.length : '?'}건 수신`);
 
-    const rows = this.transform(raw).filter(Boolean);
+    const rows = (await this.transform(raw)).filter(Boolean);
     console.log(`  표준 스키마 변환 완료: ${rows.length}건 (유효성 검증 통과분만)`);
 
     if (dryRun) {
