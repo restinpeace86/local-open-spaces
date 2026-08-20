@@ -8,6 +8,12 @@ const CATEGORY_META: Record<string, { color: string; label: string }> = {
   PERFORMANCE: { color: '#3b82f6', label: '공연' },
   POPUP: { color: '#eab308', label: '팝업' },
   RESERVATION: { color: '#14b8a6', label: '예약형 행사' },
+  // Decision 008 — 5대 UI 카테고리 (spec/data/ai-rule.md 3.3, scripts/ingest/adapters/lib/schema-mapper.mjs)
+  EXPERIENCE_CLASS: { color: '#f43f5e', label: '체험·클래스' },
+  OUTDOOR_NATURE: { color: '#16a34a', label: '야외·자연' },
+  EXHIBITION_MUSEUM: { color: '#8b5cf6', label: '전시·박물관' },
+  PERFORMANCE_FESTIVAL: { color: '#0ea5e9', label: '공연·축제' },
+  KIDS_ACTIVITY: { color: '#f59e0b', label: '키즈·액티비티' },
 };
 
 const DEFAULT_META = { color: '#6b7280', label: '기타' };

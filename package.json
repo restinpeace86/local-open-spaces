@@ -20,12 +20,14 @@
     "ingest:public-reservation": "node scripts/ingest/seoul-public-reservation.mjs",
     "ingest:culture-events": "node scripts/ingest/seoul-culture-events.mjs",
     "ingest:tour-festival": "node scripts/ingest/tour-api-festival.mjs",
+    "ingest:local-data-kids": "node scripts/ingest/local-data-kids.mjs",
     "ingest:pipeline": "node scripts/ingest/run-all.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",
     "@supabase/supabase-js": "^2.112.2",
     "next": "16.3.0",
+    "proj4": "^2.21.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },

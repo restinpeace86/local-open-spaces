@@ -48,6 +48,8 @@
 ### 3.2. 시한성 이벤트 및 행사 (`public.events`)
 특정 기간 또는 일정에 개최되는 문화행사, 축제, 공연, 체험 프로그램 정보를 저장하는 테이블이다.
 
+> **정정 (2026-08-22):** 이전 버전 문서에 `source_type`/`category` 컬럼이 이 테이블에도 있는 것으로 잘못 기재되어 있었으나, 실제 라이브 DB에는 두 컬럼이 존재하지 않음을 upsert 실패로 확인해 정정함. `events`는 카테고리를 `event_type` 하나로 표현하며(Decision 008 이후로는 5대 UI 카테고리 값도 이 컬럼에 저장됨, `spec/data/ai-rule.md` 3.3), 수집 출처 구분은 `external_id` 접두어 관례(예: `SEOUL_YEYAK_...`)로 대신한다. `open_spaces`는 기존대로 `source_type`/`category` 컬럼을 모두 보유한다.
+
 | 컬럼명 | 데이터 타입 | 제약조건 / 기본값 | 설명 |
 | :--- | :--- | :--- | :--- |
 | `id` | UUID | PRIMARY KEY, DEFAULT `gen_random_uuid()` | 내부 고유 ID |
@@ -65,8 +67,6 @@
 | `thumbnail_url` | TEXT | NULL | 대표 이미지 URL |
 | `is_active` | BOOLEAN | DEFAULT `true` | 활성화 상태 여부 |
 | `created_at` | TIMESTAMPTZ | DEFAULT `NOW()` | 레코드 생성 일시 |
-| `source_type` | VARCHAR(50) | NOT NULL | 수집 출처 구분 |
-| `category` | VARCHAR(50) | NOT NULL | AI 파이프라인으로 정제된 표준 카테고리 |
 | `is_free` | BOOLEAN | DEFAULT `false` | 무료 행사 여부 |
 | `is_kids_friendly` | BOOLEAN | DEFAULT `false` | 키즈/어린이 친화 여부 |
 | `has_parking` | BOOLEAN | DEFAULT `false` | 주차 가능 여부 |
