@@ -64,7 +64,7 @@
 | :--- | :--- | :--- | :--- |
 | 국립공원공단_국립공원 생태관광정보 DB | api.odcloud.kr (data.go.kr 승인계정) | 🎨 체험·클래스 | **구현 완료**(`NationalParkEcotourAdapter`) — 실제 호출 성공(110건), `KAKAO_REST_API_KEY` 확보 후 실행 검증 대기 |
 | 한국관광공사_반려동물 동반여행 서비스 (`KorPetTourService2`) | apis.data.go.kr (B551011) | 🌳 야외·자연 / 🏛️ 전시·박물관 / 🎡 키즈·액티비티 | **구현 완료**(`KorPetTourAdapter`) — `SERVICE_KEY_IS_NOT_REGISTERED_ERROR`는 공식 매뉴얼에 명시된 개발계정 활성화 지연(10~30분)이었음을 확인, 실제 857건 upsert 검증. 사용자 지시로 contentTypeId 12(관광지)/14(문화시설)/28(레포츠)만 수집, 숙박/음식점/쇼핑/축제공연행사는 제외 |
-| 한국관광공사_무장애여행 서비스 (추정, 서비스명 미확인) | apis.data.go.kr (B551011) | 미정 | **보류**: 사용자가 참고 매뉴얼(`reference/개방데이터_활용매뉴얼(무장애여행)/`)만 확보한 상태, 인증키/서비스ID 전달 대기 |
+| 한국관광공사_무장애 여행 정보 서비스 (`KorWithService2`) | apis.data.go.kr (B551011) | 🌳 야외·자연 / 🏛️ 전시·박물관 / 🎡 키즈·액티비티 | **구현 완료**(`KorWithTourAdapter`) — `KorPetTourAdapter`와 동일한 `TourApiV4AreaBasedAdapter` 베이스 재사용, 동일 스코프(contentTypeId 12/14/28) 적용해 실제 5,040건 upsert 검증 |
 
 ---
 

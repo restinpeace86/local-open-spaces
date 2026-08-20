@@ -23,6 +23,7 @@
     "ingest:local-data-kids": "node scripts/ingest/local-data-kids.mjs",
     "ingest:national-park-ecotour": "node scripts/ingest/national-park-ecotour.mjs",
     "ingest:kor-pet-tour": "node scripts/ingest/kor-pet-tour.mjs",
+    "ingest:kor-with-tour": "node scripts/ingest/kor-with-tour.mjs",
     "ingest:pipeline": "node scripts/ingest/run-all.mjs"
   },
   "dependencies": {
