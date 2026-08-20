@@ -1,6 +1,6 @@
-- [x] [기능 구현] 최신 spec/ 반영(git pull) 후 주말 나들이용 광역 범위 맞춤 알림 UI 및 LocalStorage 알림함 구현
-  - 최신 원격 추가사항(`spec/notification/notification-settings.md`)을 수신하기 위해 `git pull` 우선 수행
-  - `spec/notification/notification-settings.md` 명세 기준 Header 알림 아이콘(🔔) 및 알림 설정 모달 UI 구현
-  - `LocalStorage` 기반 (`user_notification_settings`, `user_notifications`) 연동 및 조건별 알림 추출/조회 로직 연동
-  - Playwright 실브라우저로 알림 모달 설정 변경, LocalStorage 저장, 알림함 리스트 정상 노출 검증
-  - **✅ 구현 완료 (2026-08-20):** 상세 내용은 `implementation/2026-08-20-notification-settings.md` 참고. `target_ages`는 스펙에 예시(`infant`/`child`)만 있고 DB에 연령대 컬럼이 없어 설정 저장까지만 구현, 알림 추출은 반경+D-1 조건만 사용.
+- [ ] [기능 구현] 최신 spec/ 반영(git pull) 후 ai-rule.md 기반 AI 정제 파이프라인 및 Quick 필터/뱃지 구현
+  - 최신 원격 스펙(`spec/common/search.md`, `space-card.md`, `event-card.md`, `feature-flags.md`) 수신을 위해 `git pull` 우선 수행
+  - `ai-rule.md` 기술 규격 및 DB 스키마 기반 AI 정제 파이프라인(`scripts/ingest/ai-tagger.mjs`) 작성 및 태깅 연동
+  - UI 공간/행사 카드 정면에 AI 추출 뱃지(무료, 주차, 키즈, 실내/야외 등) 최우선 노출
+  - 지도/리스트 상단 Quick Filter 칩('👶 키즈', '🎁 무료', '⚡ 오늘/주말') 스크리닝 기능 연동
+  - Playwright 실브라우저로 '키즈' 및 '무료' 필터 선택 시 조건에 맞는 장소만 정상 스크리닝되는지 검증
