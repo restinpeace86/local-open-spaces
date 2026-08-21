@@ -9,7 +9,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const forwardedArgs = process.argv.slice(2);
 
 const INGEST_SCRIPTS = [
-  'city-parks.mjs',
+  'city-park.mjs',
   'cultural-spaces.mjs',
   'seoul-public-reservation.mjs',
   'seoul-culture-events.mjs',

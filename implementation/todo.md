@@ -11,7 +11,7 @@
 > 본 문서의 **[선행 조사 결과]** 및 **[데이터 표준화 원칙]**을 바탕으로, 아래 **[🎯 신규 진행 Task 목록]**의 **Task 1번부터 순차적으로 코드를 구현**하고 결과를 본 문서 하단 보고서에 작성하세요.
 
 ---
-- [ ] **[Task 2] 도시공원 수집 스크립트(city-parks.mjs) 최신 BaseCollectorAdapter 마이그레이션** 🔄 *(차기 진행)*
+- [x] **[Task 2] 도시공원 수집 스크립트(city-parks.mjs) 최신 BaseCollectorAdapter 마이그레이션** 🔄 *(차기 진행)*
   - **Base URL**: `https://api.data.go.kr/openapi/tn_pubr_public_cty_park_info_api`
   - **일반 인증키**: Dk9DCSP5I7NQpXu6oRMjAlvZzXbEV%2BQzpX3q%2BHENSX90w4AXExCGmOU9drYKSzEbiZdaz%2BF0htDLVj7k6gQP1A%3D%3D
   - **작업 지시**:
@@ -19,6 +19,7 @@
     - 표준 `buildOpenSpaceRow()` 및 `deriveParentalTags()` 연동 (`source_type='CITY_PARK'`).
     - CLI (`npm run ingest:city-parks`) 및 단위 테스트 (`city-park-adapter.test.mjs`) 작성 후 레거시 코드 정리.
   - **산출물**: `scripts/ingest/adapters/city-park-adapter.mjs` 및 단위 테스트
+  - **완료 (2026-08-21, 6차 세션)**: 마이그레이션 착수 전 `implementation/todo.md` 홀드 표시(보류/미결 등) 및 `project/decision-log.md` Decision 항목과의 상충 여부를 확인했으며, Task 2는 홀드 마커 없이 "차기 진행"으로만 표시돼 있어 정상 진행함. 착수 전 레거시 `city-parks.mjs --dry-run`을 재실행해 실 API 응답 필드(`manageNo`/`parkNm`/`rdnmadr`/`lnmadr`/`latitude`/`longitude` 등)가 레거시 코드의 가정과 정확히 일치함을 재확인한 뒤에만(추측 금지 준수) `scripts/ingest/adapters/city-park-adapter.mjs`(`BaseCollectorAdapter` 상속)로 이식함. `external_id`는 기존 upsert 데이터와의 연속성을 위해 레거시와 동일하게 `CITY_PARK_${manageNo}` 형식을 유지했고, `source_type`만 지시받은 대로 `PARK_API` → `CITY_PARK`로 변경함. `spec/data/ai-rule.md` 3.1/3.3 기준 원본 카테고리 `PARK`을 UI 카테고리 매핑표에 따라 `OUTDOOR_NATURE`로 지정했고, 도시공원은 지자체 관리 공공 시설로 전량 무료라는 레거시의 기존 판단(`is_free: true` 고정값)을 그대로 유지함(신규 비즈니스 로직 임의 생성 아님). `npm run ingest:city-parks` CLI(`scripts/ingest/city-park.mjs`)와 `scripts/ingest/adapters/city-park-adapter.test.mjs` 단위 테스트(페이지네이션/에러 응답/주소 폴백/이름·관리번호·좌표 누락 스킵/뱃지 태깅) 추가. `package.json`의 `ingest:city-parks` 스크립트 경로와 `.github/workflows/ingest-monthly.yml`의 실행 경로, `scripts/ingest/run-all.mjs`의 파이프라인 목록을 신규 파일명(`city-park.mjs`)으로 갱신하고 레거시 `scripts/ingest/city-parks.mjs`는 삭제해 정리함. `tsc`/`test`(7 files, 36 tests)/`build` 검증 통과 및 `--dry-run` 실제 API 호출(19,154건 정상 수신, 필드 매핑 일치)로 e2e 동작 확인 후 커밋·푸시함.
   - 
 - [x] **[Task 4] 행정안전부 문화_테마파크업(기타) API 수집 & open_spaces 표준화 어댑터 구현** (재구현) 해볼 것 
   - **Base URL**: `https://apis.data.go.kr/1741000/amusement_facilities_other/info`

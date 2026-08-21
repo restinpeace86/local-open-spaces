@@ -28,7 +28,7 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           PUBLIC_DATA_API_KEY: ${{ secrets.PUBLIC_DATA_API_KEY }}
-        run: node scripts/ingest/city-parks.mjs
+        run: node scripts/ingest/city-park.mjs
 
       - name: Source 03 - 서울시 문화공간 정보
         env:
