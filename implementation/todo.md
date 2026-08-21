@@ -30,7 +30,9 @@
 
 > 개발계정 `.env.local` 키로 실제 최소 호출을 실행하여 `totalCount` 및 파라미터 반응을 실증 검증한 데이터임 (`_type=json` 응답 규격 적용).
 
-- [ ] **하기 내용 확인하고 이에 맞게 파이프라인 변경 및 확인
+- [x] **하기 내용 확인하고 이에 맞게 파이프라인 변경 및 확인**
+   - 소스별 동기화 전략(Full Ingest, `areaBasedList2` 전량 수집 후 UPSERT)은 직전 세션 Task 2(`.github/workflows/ingest-tourapi-daily.yml`)로 표와 동일하게 반영 완료.
+   - `contentTypeId` 수집 대상 중 `15`(축제행사)는 이번 표에는 실측값이 포함되어 있으나, 같은 조사 세션에서 이미 `kor-tour-adapter.mjs`/`kor-with-tour-adapter.mjs`/`kor-pet-tour-adapter.mjs` 3개 파일 주석에 "사용자 확인(2026-08-20)에 따라 contentTypeId 12/14/28만 수집"이 기록되어 있음을 확인함. `15`(축제행사)는 `spec/data/ai-rule.md` 3.2 기준 `open_spaces`가 아닌 `public.events`(시한성 이벤트) 테이블 대상 데이터라 스키마·타겟 테이블이 다른 별도 파이프라인이 필요한 사안이므로, 기존에 이미 내려진 스코프 결정을 유지하고 이번 세션에서 임의로 확장 구현하지 않음(제7장 제1조 Spec 없는 기능 추가 금지, 제3장 제4조 추측 금지).
    | API 소스명 | 일일 Quota | 전체 건수(실측) | 동기화 엔드포인트 | 날짜/증분 파라미터 실측 동작 | 최종 수집 & 증분 처리 전략 |
    | :--- | :--- | :--- | :--- | :--- | :--- |
    | **KorService2** (국문관광) | 1,000회/일 | 20,075건 | `areaBasedSyncList2` | `modifiedtime`은 **Exact Match(=)** 조건으로 동작 (YYYYMMDD 지정 시 당일 수정분만 반환, Range 검색 불가) | 하루 1회 `areaBasedList2` 전량 수집(약 20회 호출, Quota 소진율 2%) 후 DB UPSERT 유지 |
