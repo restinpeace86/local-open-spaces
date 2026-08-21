@@ -1,19 +1,19 @@
 // Task 8-2: gg-events-adapter.mjs 단위 테스트
 // - User-Agent 헤더 포함 여부, INFO-000 성공 코드 처리, 페이지네이션
-// - 좌표 필드가 없어 Kakao 지오코딩 필수(geocode 모킹으로 검증)
+// - 좌표 필드가 없어 VWorld 지오코딩 필수(geocode 모킹으로 검증)
 // - API1(PublicSwimmingPool): INOUTDR_DIV_NM 기준 facility_type 매핑, 소스 레벨 공공 확정으로 is_free=true 고정,
 //   명칭 키워드 기반 is_kids_friendly
 // - API2(TBWTRWTRPLYHYDRDTAM): is_free/is_kids_friendly 고정 true, facility_type 고정 '야외'
 // - SHA1(이름|주소) 기반 external_id
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('./lib/kakao-geocoder.mjs', () => ({
-  hasKakaoRestApiKey: vi.fn(() => true),
+vi.mock('./lib/vworld-geocoder.mjs', () => ({
+  hasVworldApiKey: vi.fn(() => true),
   geocode: vi.fn(),
 }));
 
 const { GgEventsAdapter } = await import('./gg-events-adapter.mjs');
-const { geocode } = await import('./lib/kakao-geocoder.mjs');
+const { geocode } = await import('./lib/vworld-geocoder.mjs');
 
 function jsonResponse(body) {
   return { ok: true, text: async () => JSON.stringify(body) };
@@ -59,10 +59,10 @@ describe('GgEventsAdapter', () => {
   });
 
   describe('constructor', () => {
-    it('KAKAO_REST_API_KEY가 없으면 에러를 던진다', async () => {
-      const { hasKakaoRestApiKey } = await import('./lib/kakao-geocoder.mjs');
-      hasKakaoRestApiKey.mockReturnValueOnce(false);
-      expect(() => new GgEventsAdapter()).toThrow('KAKAO_REST_API_KEY');
+    it('VWORLD_API_KEY가 없으면 에러를 던진다', async () => {
+      const { hasVworldApiKey } = await import('./lib/vworld-geocoder.mjs');
+      hasVworldApiKey.mockReturnValueOnce(false);
+      expect(() => new GgEventsAdapter()).toThrow('VWORLD_API_KEY');
     });
   });
 

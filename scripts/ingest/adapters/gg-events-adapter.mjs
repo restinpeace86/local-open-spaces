@@ -10,9 +10,10 @@
 // `RESULT.CODE === 'INFO-000'` 정상 응답(각각 135건/1,170건)을 확인했다.
 //
 // 좌표 없음 → 지오코딩 필수: 두 API 전체 필드를 실측 확인한 결과 위경도/좌표 필드가 전혀 없다
-// (주소 텍스트만 제공). NationalParkEcotourAdapter와 동일하게 Kakao 지오코딩(KAKAO_REST_API_KEY)이
-// 반드시 필요하다 — 이 키가 아직 없어(.env.local 미설정) 실행은 대기 상태이며, 코드/테스트는
-// 완성해 값이 채워지는 즉시 재검증만 하면 되도록 한다.
+// (주소 텍스트만 제공). VWorld 지오코딩(VWORLD_API_KEY, 이미 cultural-facility-summary-adapter.mjs가
+// 쓰는 공용 lib/vworld-geocoder.mjs 재사용)으로 좌표를 보완한다. ROAD(도로명주소) 우선 시도 후
+// 실패 시 PARCEL(지번주소)로 자동 폴백함을 실제 호출로 확인했다(2026-08-21, 표본: "경기도 수원시
+// 권선구 세류동 1066-9" — ROAD는 NOT_FOUND, PARCEL은 OK).
 //
 // is_free(API1, 공공 수영장): 요금 필드가 원본에 없으나, 전체 135건의 POSESN_INST_NM(소유기관)
 // 값을 실측으로 전수 확인한 결과 35개 기관 모두 시/군청·경기도교육지원청·국민체육진흥공단·
@@ -42,7 +43,7 @@ import crypto from 'crypto';
 import { BaseCollectorAdapter } from './base-collector-adapter.mjs';
 import { buildOpenSpaceRow, UI_CATEGORY } from './lib/schema-mapper.mjs';
 import { deriveIsFreeFallback, matchesKidsKeyword } from '../lib/ai-tagging.mjs';
-import { geocode, hasKakaoRestApiKey } from './lib/kakao-geocoder.mjs';
+import { geocode, hasVworldApiKey } from './lib/vworld-geocoder.mjs';
 
 const POOL_BASE_URL = 'https://openapi.gg.go.kr/PublicSwimmingPool';
 const SPLASH_BASE_URL = 'https://openapi.gg.go.kr/TBWTRWTRPLYHYDRDTAM';
@@ -59,9 +60,9 @@ export class GgEventsAdapter extends BaseCollectorAdapter {
     if (!this.apiKey) {
       throw new Error('GG_DATA_API_KEY 환경변수가 설정되지 않았습니다.');
     }
-    if (!hasKakaoRestApiKey()) {
+    if (!hasVworldApiKey()) {
       throw new Error(
-        'KAKAO_REST_API_KEY 환경변수가 설정되지 않았습니다. 경기데이터드림 두 API 모두 좌표 필드가 없어 지오코딩이 필수입니다. Kakao Developers > 앱 키 > REST API 키를 확인해 .env.local에 추가하세요.'
+        'VWORLD_API_KEY 환경변수가 설정되지 않았습니다. 경기데이터드림 두 API 모두 좌표 필드가 없어 지오코딩이 필수입니다. Vworld 오픈API(www.vworld.kr) 신청 후 .env.local에 VWORLD_API_KEY를 추가하세요.'
       );
     }
   }
@@ -198,8 +199,8 @@ export class GgEventsAdapter extends BaseCollectorAdapter {
     });
   }
 
-  // 지오코딩은 외부 API(Kakao) 호출이라 NationalParkEcotourAdapter와 동일하게 순차 처리한다
-  // (Promise.all로 동시에 수백~천 건을 쏘면 Kakao 쪽 레이트리밋에 걸릴 위험이 있음).
+  // 지오코딩은 외부 API(VWorld) 호출이라 NationalParkEcotourAdapter와 동일하게 순차 처리한다
+  // (Promise.all로 동시에 수백~천 건을 쏘면 레이트리밋에 걸릴 위험이 있음).
   async transform({ poolItems, splashItems }) {
     const rows = [];
 
