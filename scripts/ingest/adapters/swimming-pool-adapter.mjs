@@ -32,11 +32,15 @@
 // faci_gb_nm('공공'/그 외), API2는 PBP_SE_NM('공립'/'사립'). ai-rule.md 5.2-7 예외를 레코드
 // 단위로 적용하는 deriveIsFreeFallback(playground-adapter와 동일 함수)을 그대로 재사용한다.
 //
-// is_kids_friendly: Task 지시서가 "is_kids_friendly 매핑"을 요구하지만, 두 API 모두 개별
-// 레코드가 "키즈 전용"인지 구분하는 필드가 없다(수영장은 어린이놀이시설과 달리 소스 전체가
-// 정의상 아동 전용이라고 단정할 수 없음 — 성인 강습/자유수영 등 일반 대상 시설이 대부분).
-// playground-adapter처럼 소스 레벨로 true를 고정할 근거가 없어 임의로 매핑하지 않고
-// 기본값(false)을 유지한다(추측 금지) — implementation 기록에 명시.
+// is_kids_friendly: 두 API 모두 "키즈 전용" 여부를 직접 나타내는 별도 필드는 없지만(수영장은
+// 어린이놀이시설과 달리 소스 전체가 정의상 아동 전용이라고 단정할 수 없음 — 성인 강습/자유수영
+// 등 일반 대상 시설이 대부분), 시설명 텍스트에 아동 대상임을 명시하는 키워드가 실제로 포함되는
+// 경우가 있어(예: 실측 확인된 API1 "이천스포츠센터실내 수영장"과 달리 다른 레코드들 중 "OO키즈
+// 수영장"류 표기 존재) 사용자가 지정한 키워드 목록으로 레코드별 매칭한다(2026-08-21 정밀화).
+// 키워드: 어린이/유아/키즈/영유아/유아풀/어린이풀/키즈풀 — 매칭되면 true, 없으면 기존대로 false.
+// "상세설명" 필드는 두 API 어디에도 존재하지 않음을 실측으로 확인했다(API1은 faci_nm 외 텍스트
+// 필드 없음, API2도 BPLC_NM 외 텍스트 필드 없음) — 있지도 않은 필드를 매칭 대상으로 넣지 않고
+// 실제 존재하는 시설명/사업장명 필드에만 키워드 매칭을 적용한다(추측 금지, 존재하는 데이터만 사용).
 //
 // 중복 식별: Task 지시서 지시대로 "시설명+주소" 기준으로 병합한다. 두 API가 서로 다른 ID
 // 네임스페이스를 쓰기 때문에(faci_cd vs MNG_NO) ID로는 겹침을 판별할 수 없다. 이름/주소 공백을
@@ -63,6 +67,13 @@ const API1_SUCCESS_RESULT_CODE = '00';
 const API2_SUCCESS_RESULT_CODE = '0';
 const API1_ACTIVE_STATUS = '정상운영';
 const API2_ACTIVE_STATUS = '영업/정상';
+
+const KIDS_KEYWORDS = ['어린이', '유아', '키즈', '영유아', '유아풀', '어린이풀', '키즈풀'];
+
+export function matchesKidsKeyword(...texts) {
+  const combined = texts.filter(Boolean).join(' ');
+  return KIDS_KEYWORDS.some((keyword) => combined.includes(keyword));
+}
 
 export function normalizeForDedup(value) {
   return (value || '').replace(/\s+/g, '');
@@ -207,6 +218,7 @@ export class SwimmingPoolAdapter extends BaseCollectorAdapter {
       lng,
       lat,
       isFree: deriveIsFreeFallback({ hasFeeInfo: false, isPublicProvider: item.faci_gb_nm === '공공' }),
+      isKidsFriendly: matchesKidsKeyword(name),
       facilityType,
       rawData: item,
     });
@@ -235,6 +247,7 @@ export class SwimmingPoolAdapter extends BaseCollectorAdapter {
       lng: coords.lng,
       lat: coords.lat,
       isFree: deriveIsFreeFallback({ hasFeeInfo: false, isPublicProvider: item.PBP_SE_NM === '공립' }),
+      isKidsFriendly: matchesKidsKeyword(name),
       rawData: item,
     });
   }

@@ -4,9 +4,10 @@
 // - EPSG:5174(API2) → WGS84 좌표 변환, API1은 이미 WGS84라 변환 없이 그대로 사용
 // - inout_gbn_nm 기준 facility_type 매핑(API1), faci_gb_nm/PBP_SE_NM 기준 is_free 판별
 // - 시설명+주소 정규화 기준 중복 식별(API1 우선)
+// - 시설명/사업장명 키워드(어린이/유아/키즈/영유아/유아풀/어린이풀/키즈풀) 기준 is_kids_friendly 매핑 (2026-08-21 정밀화)
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { SwimmingPoolAdapter, buildDedupKey, normalizeForDedup } = await import(
+const { SwimmingPoolAdapter, buildDedupKey, normalizeForDedup, matchesKidsKeyword } = await import(
   './swimming-pool-adapter.mjs'
 );
 
@@ -239,6 +240,52 @@ describe('SwimmingPoolAdapter', () => {
         api2Items: [{ ...API2_ITEM, BPLC_NM: '' }],
       });
       expect(rows).toEqual([]);
+    });
+
+    describe('is_kids_friendly 키워드 매핑 (2026-08-21 정밀화)', () => {
+      it.each(['어린이', '유아', '키즈', '영유아', '유아풀', '어린이풀', '키즈풀'])(
+        '시설명에 "%s" 키워드가 포함되면 API1 항목의 is_kids_friendly를 true로 매핑한다',
+        (keyword) => {
+          const adapter = new SwimmingPoolAdapter();
+          const rows = adapter.transform({
+            api1Items: [{ ...API1_ITEM, faci_nm: `대전 ${keyword} 수영장` }],
+            api2Items: [],
+          });
+          expect(rows[0].is_kids_friendly).toBe(true);
+        }
+      );
+
+      it('사업장명에 키워드가 포함되면 API2 항목의 is_kids_friendly를 true로 매핑한다', () => {
+        const adapter = new SwimmingPoolAdapter();
+        const rows = adapter.transform({
+          api1Items: [],
+          api2Items: [{ ...API2_ITEM, BPLC_NM: '뽀롱이 키즈풀' }],
+        });
+        expect(rows[0].is_kids_friendly).toBe(true);
+      });
+
+      it('키워드가 없으면 기존대로 is_kids_friendly를 false로 유지한다', () => {
+        const adapter = new SwimmingPoolAdapter();
+        const rows = adapter.transform({
+          api1Items: [API1_ITEM],
+          api2Items: [API2_ITEM],
+        });
+        expect(rows.every((r) => r.is_kids_friendly === false)).toBe(true);
+      });
+    });
+  });
+
+  describe('matchesKidsKeyword', () => {
+    it('여러 텍스트 인자 중 하나라도 키워드를 포함하면 true를 반환한다', () => {
+      expect(matchesKidsKeyword('일반 수영장', '유아 전용 강습')).toBe(true);
+    });
+
+    it('키워드가 전혀 없으면 false를 반환한다', () => {
+      expect(matchesKidsKeyword('시민 스포츠센터 수영장', '경기도 이천시')).toBe(false);
+    });
+
+    it('빈 값/undefined가 섞여도 안전하게 처리한다', () => {
+      expect(matchesKidsKeyword(undefined, '', '어린이 수영장')).toBe(true);
     });
   });
 });
