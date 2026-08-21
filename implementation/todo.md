@@ -31,6 +31,7 @@
     - `open_spaces` 테이블 표준 스키마 매핑 (`source_type='CITY_PARK_STANDARD'`).
     - `is_free = true` 고정 반영 및 편의시설 텍스트 기반 뱃지 태깅.
   - **스킵 (2026-08-21)**: 착수 전 사전 준수 확인(제0단계) 중 기존 코드베이스와의 정면 충돌을 발견함 — "전국도시공원정보표준데이터"는 `data.go.kr`의 `tn_pubr_public_cty_park_info_api` 데이터셋의 공식 명칭 그대로이며, 이는 이미 `scripts/ingest/city-parks.mjs`(`npm run ingest:city-parks`)가 동일 API(`api.data.go.kr/openapi/tn_pubr_public_cty_park_info_api`)를 대상으로 매달 `.github/workflows/ingest-monthly.yml`에서 자동 수집 중인 데이터셋과 완전히 동일함(`source_type='PARK_API'`, `external_id='CITY_PARK_{manageNo}'`, `is_free=true` 고정, `deriveParentalTags()` 태깅까지 이미 구현·운영 중). Task 2 지시대로 `source_type='CITY_PARK_STANDARD'`로 별도 어댑터를 신규 구현하면 동일한 전국 공원 데이터가 서로 다른 `external_id`/`source_type`로 이중 적재되어 지도/목록에 같은 공원이 중복 마커로 노출되는 데이터 무결성 문제가 발생함. 이는 `CLAUDE.md` 제5장 제4조(기존 구조 우선, 불필요한 중복 방지) 및 제6장 제3조(데이터 무결성)와 정면 충돌하는 사안이며, `project/decision-log.md`에 이 재구현을 승인한 Decision도 없어 임의로 강행하지 않고 스킵함(제3장 제4조 추측 금지). **필요 조치 (기획 담당)**: (a) `city-parks.mjs`를 신규 어댑터 프레임워크(`BaseCollectorAdapter`/`buildOpenSpaceRow`)로 마이그레이션하며 `source_type`을 유지할지 갱신할지 결정하거나, (b) Task 2가 실제로는 다른 데이터셋(예: 도시공원이 아닌 다른 유형)을 의도한 것이었는지 확인 후 `todo.md`를 정정해줄 것.
+  - **스킵 유지 재확인 (2026-08-21, 8차 세션)**: `project/decision-log.md`에 Task 2 재구현을 승인하는 Decision 추가 없음, `.env.local`에 `VWORLD_API_KEY` 여전히 미존재 — 두 블로커 모두 상태 변화 없어 스킵 유지. `npx tsc --noEmit` / `npm run test`(4 files, 15 tests passed) / `npm run build` 전체 재검증 통과, 코드 변경 없음.
 
 - [x] **[Task 3] 코드 검증 및 테스트 코드 수립**
   - 신규 어댑터 단위 테스트 및 `npx tsc --noEmit`, `npm run build` 검증 수행.
