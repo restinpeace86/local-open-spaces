@@ -43,3 +43,14 @@
   - **현상**: Task 9-1-1에서 venue_name 백필을 위해 재실행하며 발견 — 이 스크립트는 `fetchFestivals({ numOfRows: 20 })` 단발 호출만 하고 페이지네이션 루프가 없어 TourAPI 전체 축제 정보(수백~수천 건) 중 20건만 수집한다. `seoul-culture-events.mjs`가 Task 8-4에서 겪었던 것과 동일한 유형의 완결성 문제.
   - **대응 방안**: `fetchAllCultureEvents()`와 같은 전체 순회 로직 추가, 필요 시 `BaseCollectorAdapter` 패턴으로 마이그레이션.
   - **우선순위**: Low(현재도 정상 동작하며 소량 데이터로 서비스에 지장 없음, 완결성 개선 항목)
+
+- [x] **[Task 9-1-2] 메인 Quick 카테고리 그리드 텍스트/아이콘 ➔ 대표 이미지 UI 개편** 완료 (2026-08-22)
+  - **작업 목표**: 메인 홈 5대 Quick 카테고리 버튼을 직관적인 카테고리 대표 이미지/일러스트 에셋으로 교체
+  - **이미지 에셋 소스**: 외부 디자인 에셋을 받을 방법이 없어(작업 지시에 구체적 에셋 파일 첨부 없음), 5대 UI 카테고리 색상(`category-meta.ts` 기존 색상값 그대로 재사용, 임의 변경 없음)을 배경으로 한 경량 SVG 아이콘을 직접 제작했다 — 팔레트(체험·클래스), 나무(야외·자연), 전시대(전시·박물관), 별(공연·축제), 풍선(키즈·액티비티). SVG는 지시서가 명시한 허용 포맷(SVG/WebP/PNG) 중 하나이며, 벡터라 어떤 해상도에서도 깨지지 않고 파일 크기가 각 500바이트 내외로 최소다.
+  - **산출물**:
+    - `public/images/categories/{experience-class,outdoor-nature,exhibition-museum,performance-festival,kids-activity}.svg` (신규 디렉터리)
+    - `src/components/home/quick-category-grid.tsx`: `next/image` 기반 원형 썸네일(48×48)로 교체. `CategoryThumbnail` 서브컴포넌트가 이미지 로딩 실패(`onError`) 시 기존 단색 원 폴백으로 전환(레이아웃 깨짐 방지). 클릭 시 `/region?category=...` 연동은 기존과 동일하게 유지.
+    - `src/components/home/quick-category-grid.test.tsx`(신규 3건): 이미지/라벨 렌더링, 링크 연동, 이미지 실패 시 폴백 검증.
+  - **검증**:
+    - `npx tsc --noEmit` / `npm run test`(전체 129/129, 신규 3건 포함) / `npm run build`: 모두 통과
+    - `npm run dev` 기동 후 SSR HTML에서 5대 카테고리 이미지 `src` 경로(`/images/categories/*.svg`) 전부 확인, 각 파일 직접 요청으로 HTTP 200 + 유효한 SVG 콘텐츠 확인, 서버 로그 에러/경고 없음
