@@ -52,6 +52,7 @@ async function mapToEventRow(item, { apiKey }) {
     // 반영하되, '유료'/'무료' 둘 중 하나로 명확한 경우만 판별하고 그 외(빈 값 등)는 null(미기재)로
     // 남겨 유료로 임의 단정하지 않는다(space-card.md의 is_free null 처리 규약 준수).
     is_free: item.IS_FREE === '무료' ? true : item.IS_FREE === '유료' ? false : null,
+    venue_name: item.PLACE || null, // Task 9-1-1: 실측 확인된 실제 장소명 필드
     ...tags,
   };
 }

@@ -89,6 +89,7 @@ describe('SeoulYeyakAdapter', () => {
         is_reservation_required: true,
         is_free: true,
         is_active: true,
+        venue_name: '서울역사박물관', // Task 9-1-1: PLACENM 매핑
       });
       expect(rows[0].reservation_url).toContain('rsv_svc_id=S260722093915914461');
     });

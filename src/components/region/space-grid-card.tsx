@@ -3,15 +3,15 @@
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
 import { getParentalBadges } from '@/lib/spaces/parental-badges';
-import { formatDistance } from '@/lib/spaces/format';
+import { formatVenueLine } from '@/lib/spaces/format';
 
 // 지역별 도감 그리드 카드 (spec/space/space-card.md 준용 - 카테고리 칩, 명칭, 주소, 거리, Parental Checkpoint 뱃지)
 export function SpaceGridCard({ item, onSelect }: { item: NearbyItem; onSelect: (item: NearbyItem) => void }) {
   const meta = getCategoryMeta(item.category);
   const badges = getParentalBadges(item);
-  // Task 9-1: 반경 무관 탐색(캘린더/카테고리 없이 조회된 항목)은 distance_meters가 -1 sentinel이라
-  // 이 경우 거리 자체를 표시하지 않는다(space-card.md "현재 위치에서 1.2km" 형태의 실제 거리만 노출).
-  const hasDistance = item.distance_meters >= 0;
+  // Task 9-1-1: "[장소명] · [거리]" 형태로 통일(예: "율동공원 · 3.2km"). distance_meters가
+  // -1 sentinel(반경 무관 탐색)이면 거리 없이 장소명만 표시한다.
+  const venueLine = formatVenueLine(item.address, item.distance_meters);
 
   return (
     <button
@@ -28,10 +28,7 @@ export function SpaceGridCard({ item, onSelect }: { item: NearbyItem; onSelect: 
         </span>
       </div>
       <p className="text-sm font-medium text-gray-900 line-clamp-2">{item.name}</p>
-      <p className="text-xs text-gray-400 line-clamp-1">
-        {hasDistance ? `현재 위치에서 ${formatDistance(item.distance_meters)} · ` : ''}
-        {item.address || '주소 정보 없음'}
-      </p>
+      {venueLine && <p className="text-xs text-gray-400 line-clamp-1">{venueLine}</p>}
       {badges.length > 0 && (
         <div className="flex flex-wrap gap-1">
           {badges.map((badge) => (

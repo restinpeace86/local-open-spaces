@@ -1,12 +1,16 @@
 'use client';
 
+import { useEffect, useRef, useState } from 'react';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
-import { formatDistance } from '@/lib/spaces/format';
+import { formatVenueLine } from '@/lib/spaces/format';
+
+const AUTOPLAY_INTERVAL_MS = 5000;
 
 // docs/spec.md 2.2 ①: "메인 비주얼 카드 슬라이더 (Hero Carousel)"
 // 데이터 조건: 당일 진행 중인 행사/이벤트 중 추천 5~10개 동적 페칭
 // UI 카드 내용: 대형 썸네일 + [⚡ 오늘 당일 입장] / [🎁 무료] 뱃지 + 행사명 + 장소/거리
+// Task 9-1-1: 5초 간격 Auto-play + 터치/호버 시 일시정지.
 export function HeroCarousel({
   items,
   onSelect,
@@ -14,21 +18,45 @@ export function HeroCarousel({
   items: NearbyItem[];
   onSelect: (item: NearbyItem) => void;
 }) {
+  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+
+  useEffect(() => {
+    if (items.length <= 1 || isPaused) return undefined;
+
+    const timer = setInterval(() => {
+      setCurrentIndex((prev) => {
+        const next = (prev + 1) % items.length;
+        itemRefs.current[next]?.scrollIntoView({ behavior: 'smooth', inline: 'start', block: 'nearest' });
+        return next;
+      });
+    }, AUTOPLAY_INTERVAL_MS);
+
+    return () => clearInterval(timer);
+  }, [items.length, isPaused]);
+
   if (items.length === 0) return null;
 
   return (
-    <div className="flex gap-3 overflow-x-auto px-4 pb-1 snap-x snap-mandatory">
-      {items.map((item) => {
+    <div
+      className="flex gap-3 overflow-x-auto px-4 pb-1 snap-x snap-mandatory"
+      onMouseEnter={() => setIsPaused(true)}
+      onMouseLeave={() => setIsPaused(false)}
+      onTouchStart={() => setIsPaused(true)}
+      onTouchEnd={() => setIsPaused(false)}
+    >
+      {items.map((item, index) => {
         const meta = getCategoryMeta(item.category);
-        // Task 9-1 발견: events 테이블에 장소명 컬럼이 없어(space_id FK도 전량 미기재 상태,
-        // implementation/todo.md 참고) "장소"를 채울 데이터가 없다 — 거리라도 있으면 보여주고,
-        // 둘 다 없으면 "장소 정보 없음"으로 정직하게 표시한다(추측 금지).
-        const hasDistance = item.distance_meters >= 0;
-        const placeText = hasDistance ? `현재 위치에서 ${formatDistance(item.distance_meters)}` : '장소 정보 없음';
+        // Task 9-1-1: events.venue_name 백필 이후 "[장소명] · [거리]"로 통일 표시.
+        const venueLine = formatVenueLine(item.address, item.distance_meters);
 
         return (
           <button
             key={item.id}
+            ref={(el) => {
+              itemRefs.current[index] = el;
+            }}
             type="button"
             onClick={() => onSelect(item)}
             className="shrink-0 w-[78%] sm:w-72 snap-start text-left rounded-2xl border border-gray-200 bg-white overflow-hidden hover:shadow-md transition-shadow"
@@ -59,7 +87,7 @@ export function HeroCarousel({
             </div>
             <div className="p-3">
               <p className="text-sm font-semibold text-gray-900 line-clamp-2">{item.name}</p>
-              <p className="text-xs text-gray-400 mt-1 line-clamp-1">{placeText}</p>
+              {venueLine && <p className="text-xs text-gray-400 mt-1 line-clamp-1">{venueLine}</p>}
             </div>
           </button>
         );

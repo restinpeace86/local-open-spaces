@@ -17,9 +17,14 @@ function todayYYYYMMDD() {
 }
 
 async function fetchFestivals({ numOfRows = 20, pageNo = 1 } = {}) {
-  // data.go.kr serviceKey는 이미 URL-인코딩된 값으로 발급되는 경우가 많아
-  // URLSearchParams로 재인코딩하면 이중 인코딩되어 인증에 실패한다.
-  // serviceKey만 원본 그대로 붙이고 나머지 파라미터만 인코딩한다.
+  // Task 9-1-1에서 venue_name 백필을 위해 재실행하다 발견해 수정한 버그 2건(실측 확인):
+  // (1) env.TOUR_API_KEY는 이미 URL-인코딩된 값인데 여기에 encodeURIComponent를 한 번 더 적용해
+  //     이중 인코딩되어 SERVICE_KEY_IS_NOT_REGISTERED_ERROR(HTTP 403)가 났다 — 다른 모든 어댑터가
+  //     쓰는 것과 동일하게 원본(디코딩) 키인 env.PUBLIC_DATA_API_KEY + encodeURIComponent 한 번으로
+  //     통일한다.
+  // (2) arrangeType: 'A'는 이 오퍼레이션에서 INVALID_REQUEST_PARAMETER_ERROR(arrangeType)를
+  //     유발하는 잘못된 파라미터였다(실제 호출로 확인) — 유효한 값을 추측해 넣지 않고 파라미터
+  //     자체를 제거한다(기본 정렬로 정상 응답되는 것을 실제 호출로 확인함).
   const params = new URLSearchParams({
     MobileOS: 'ETC',
     MobileApp: 'local-open-spaces',
@@ -27,10 +32,9 @@ async function fetchFestivals({ numOfRows = 20, pageNo = 1 } = {}) {
     eventStartDate: todayYYYYMMDD(),
     numOfRows: String(numOfRows),
     pageNo: String(pageNo),
-    arrangeType: 'A',
   });
 
-  const url = `${BASE_URL}?serviceKey=${encodeURIComponent(env.TOUR_API_KEY)}&${params.toString()}`;
+  const url = `${BASE_URL}?serviceKey=${encodeURIComponent(env.PUBLIC_DATA_API_KEY)}&${params.toString()}`;
   const res = await fetch(url);
   const text = await res.text();
 
@@ -81,6 +85,9 @@ function mapToEventRow(item) {
     thumbnail_url: item.firstimage || null,
     is_active: true,
     booking_status: bookingStatus,
+    // Task 9-1-1: TourAPI searchFestival2에는 별도 장소명 필드가 없어(실측 확인) 주소(addr1)를
+    // 장소 표시 대체 텍스트로 사용한다(추측 생성이 아닌 원본 실제 필드).
+    venue_name: item.addr1 || null,
     ...tags,
   };
 }

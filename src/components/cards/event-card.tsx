@@ -4,7 +4,7 @@ import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
 import { getParentalBadges } from '@/lib/spaces/parental-badges';
 import { getEventStatus } from '@/lib/spaces/event-status';
-import { formatDateRange } from '@/lib/spaces/format';
+import { formatDateRange, formatVenueLine } from '@/lib/spaces/format';
 
 // spec/event/event-card.md 준용 신규 카드 (Task 9-1) — 기존에는 이벤트 전용 카드가 없었고
 // ItemListPanel의 리스트 행으로만 표현됐다. 썸네일/상태 뱃지/예약 마감 경고를 갖춘
@@ -14,6 +14,8 @@ export function EventCard({ item, onSelect }: { item: NearbyItem; onSelect: (ite
   const badges = getParentalBadges(item);
   const status = getEventStatus(item);
   const period = formatDateRange(item.start_date, item.end_date);
+  // Task 9-1-1: "[장소명] · [거리]" (예: "율동공원 야외무대 · 3.2km")
+  const venueLine = formatVenueLine(item.address, item.distance_meters);
 
   // event-card.md 2: 예약 마감 임박(오늘까지)이면 붉은 경고 뱃지를 최우선 노출
   const showReservationAlert = item.is_reservation_required === true && status.label === '오늘 마감';
@@ -55,6 +57,7 @@ export function EventCard({ item, onSelect }: { item: NearbyItem; onSelect: (ite
           </span>
         )}
         <p className="text-sm font-medium text-gray-900 line-clamp-2">{item.name}</p>
+        {venueLine && <p className="text-xs text-gray-400 line-clamp-1">{venueLine}</p>}
         {period && <p className="text-xs text-gray-400 line-clamp-1">{period}</p>}
         {badges.length > 0 && (
           <div className="flex flex-wrap gap-1">

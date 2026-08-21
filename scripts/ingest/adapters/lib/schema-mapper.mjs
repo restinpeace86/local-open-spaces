@@ -100,6 +100,7 @@ export function buildEventRow({
   targetAgeGroup = null,
   bookingStatus = null,
   isActive = true,
+  venueName = null,
 }) {
   if (!externalId || !title || !startDate || !endDate || !lng || !lat) return null;
 
@@ -123,5 +124,7 @@ export function buildEventRow({
     target_age_group: targetAgeGroup,
     booking_status: bookingStatus,
     is_active: isActive,
+    // Task 9-1-1: 원본 API의 실제 장소명 필드(예: PLACENM)를 그대로 저장한다(추측/생성 없음).
+    venue_name: venueName,
   };
 }

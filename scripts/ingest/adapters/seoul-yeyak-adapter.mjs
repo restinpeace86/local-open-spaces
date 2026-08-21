@@ -118,6 +118,7 @@ export class SeoulYeyakAdapter extends BaseCollectorAdapter {
         strollerAccessible: tags.stroller_accessible,
         facilityType: tags.facility_type,
         targetAgeGroup: tags.target_age_group,
+        venueName: item.PLACENM || null, // Task 9-1-1: 실측 확인된 실제 장소명 필드
       });
     });
   }

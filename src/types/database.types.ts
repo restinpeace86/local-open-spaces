@@ -50,7 +50,7 @@ export type Database = {
           has_parking: boolean
           id: string
           is_active: boolean | null
-          is_free: boolean
+          is_free: boolean | null
           is_kids_friendly: boolean
           is_reservation_required: boolean | null
           location: unknown
@@ -63,6 +63,7 @@ export type Database = {
           target_age_group: string | null
           thumbnail_url: string | null
           title: string
+          venue_name: string | null
         }
         Insert: {
           booking_status?: string | null
@@ -74,7 +75,7 @@ export type Database = {
           has_parking?: boolean
           id?: string
           is_active?: boolean | null
-          is_free?: boolean
+          is_free?: boolean | null
           is_kids_friendly?: boolean
           is_reservation_required?: boolean | null
           location: unknown
@@ -87,6 +88,7 @@ export type Database = {
           target_age_group?: string | null
           thumbnail_url?: string | null
           title: string
+          venue_name?: string | null
         }
         Update: {
           booking_status?: string | null
@@ -98,7 +100,7 @@ export type Database = {
           has_parking?: boolean
           id?: string
           is_active?: boolean | null
-          is_free?: boolean
+          is_free?: boolean | null
           is_kids_friendly?: boolean
           is_reservation_required?: boolean | null
           location?: unknown
@@ -111,6 +113,7 @@ export type Database = {
           target_age_group?: string | null
           thumbnail_url?: string | null
           title?: string
+          venue_name?: string | null
         }
         Relationships: [
           {
