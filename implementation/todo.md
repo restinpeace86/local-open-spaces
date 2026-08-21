@@ -44,3 +44,8 @@
     - `SEOUL_YEYAK`(events) 2,708건 — `is_free`: true 1,192 / false 1,516 / null 0. `is_kids_friendly`: true 1,036 / false 1,672(정정 후 실데이터). `event_type`: PERFORMANCE_FESTIVAL 1,077 / KIDS_ACTIVITY 596 / EXPERIENCE_CLASS 425 / ETC 610(시설대관·진료, 의도된 미분류).
     - `SEOUL_CULTURE`(events) 18,961건(20건 → 18,961건으로 완결성 대폭 개선) — `is_free`: true 12,242 / false 6,713 / null 6(정정됨). `event_type`: PERFORMANCE 6,291 / POPUP 6,274 / EXHIBITION 3,156 / FESTIVAL 999 / ETC 2,241(대부분 Gemini 429 잔여 한계).
   - **잔여 한계(백로그로 기록, 이번 범위에서 추가 조치 안 함)**: `SEOUL_CULTURE`의 `ETC` 2,241건 중 상당수는 Gemini 무료 티어 요청 한도로 추정되는 잔여 429 실패분이다. ai-rule.md 4.1이 "AI 불확실 시 임의 생성 대신 ETC로 낙하"를 명시적으로 허용하므로 스펙 위반은 아니나, 완전히 해소하려면 Gemini 호출 간 명시적 지연(pacing)을 추가해 전체 19,508건을 다시 순회해야 하며 이는 수 시간 단위 실행 시간이 예상돼 이번 세션 범위에서는 진행하지 않았다.
+
+- [ ] **[Backlog] SEOUL_CULTURE 카테고리 재태깅 (Gemini Pacing 적용)** ⏳
+  - **현상**: Gemini AI Free Tier Rate Limit(429)으로 인해 SEOUL_CULTURE 2,241건 중 일부가 `ai-rule.md 4.1` 규약에 따라 `ETC` 카테고리로 Fallback 처리됨.
+  - **대응 방안**: 추후 필요 시 Gemini API 호출 간 명시적 지연(Pacing: e.g. 1~2초) 및 Exponential Backoff 재시도 로직을 적용하여 전수 재태깅 백필(Backfill) 진행 예정.
+  - **우선순위**: Low (현 규약상 스펙 준수 상태이며, 서비스 동작에 지장 없음)
