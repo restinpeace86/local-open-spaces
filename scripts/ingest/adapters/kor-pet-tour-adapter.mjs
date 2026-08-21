@@ -14,11 +14,12 @@ const CONTENT_TYPE_TO_UI_CATEGORY = {
 };
 
 export class KorPetTourAdapter extends TourApiV4AreaBasedAdapter {
-  constructor() {
+  constructor({ detailContentTypeIds = [] } = {}) {
     super({
       sourceKey: 'KOR_PET_TOUR',
       serviceName: 'KorPetTourService2',
       contentTypeToCategory: CONTENT_TYPE_TO_UI_CATEGORY,
+      detailContentTypeIds,
     });
   }
 }

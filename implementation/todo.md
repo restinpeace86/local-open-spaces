@@ -14,14 +14,14 @@
 
 ## 🎯 [신규] 차기 진행 Task 목록 (우선 구현 대상)
 
-- [ ] **[Task 1] `contentTypeId=14, 28` 지연 상세 수집 어댑터 구현**
+- [x] **[Task 1] `contentTypeId=14, 28` 지연 상세 수집 어댑터 구현**
   - 문화시설(`14`), 레포츠(`28`) 카테고리의 `is_free: null` 데이터 보완을 위한 2단계 지연 연동 어댑터 로직 작성.
   - 전체 목록 수집 시에는 N+1 방지를 위해 목록 API만 호출하고, 해당 카테고리 필터 선택 시 선별적으로 `/detailIntro2` 상세 API를 호출하여 요금(`usefee` 등) 및 상세 정보 반영.
 
-- [ ] **[Task 2] 일일 1회(한국시간 새벽 4시), Full Ingest 자동화 배치 스케줄러 구축**
+- [x] **[Task 2] 일일 1회(한국시간 새벽 4시), Full Ingest 자동화 배치 스케줄러 구축**
   - 4개 공공 API 소스(KorService2, KorWithService2, KorPetTourService2, GoCamping)의 일일 전량 수집(Full Ingest) ➔ DB UPSERT (`ON CONFLICT DO UPDATE`) 실행 배치 스크립트 정립.
 
-- [ ] **[Task 3] 프론트엔드 공간 카드 UI 및 재태깅 뱃지 연동 검증**
+- [x] **[Task 3] 프론트엔드 공간 카드 UI 및 재태깅 뱃지 연동 검증**
   - DB 재태깅 마이그레이션으로 반영된 1,162건의 뱃지(`주차가능`, `유모차접근`, `아이동반추천`)가 프론트엔드 검색 필터 및 카드 UI에 정상 표출되는지 모니터링 및 테스트 코드 점검.
 
 ---
@@ -47,3 +47,33 @@
 - [x] **`parental-badges.ts` UI 보완**: `is_free === null` 시 유료 오표기 방지 및 '뱃지 미노출(null)' 삼항 연산자 예외 처리 반영 완료.
 - [x] **DB `raw_data` 기반 뱃지 재태깅 마이그레이션**: API 추가 호출 0건으로 `open_spaces` DB 내 `raw_data` 텍스트만 파싱하여 1,162건의 parental badge (`has_parking`, `stroller_accessible`, `is_kids_friendly`) 태깅 완료 (`retag-parental-badges.mjs`).
   - *PostgreSQL UPSERT 제약 회피*: Partial Payload 사용 시 `NOT NULL` 제약 위반을 방지하기 위해 `UPDATE ... WHERE external_id = ?` 구문 적용.
+
+---
+
+## 📝 [Claude 작업 진행 및 검토 결과 보고서] (2026-08-21 세션)
+
+### Task 1 — `contentTypeId=14, 28` 지연 상세 수집 어댑터
+- `scripts/ingest/adapters/lib/tour-api-v4-area-based-adapter.mjs`에 `fetchDetailIntro()`(detailIntro2 호출) 및 `transform()` 내 선택적 보완 로직 추가. 생성자에 `detailContentTypeIds`(기본 `[]` — 미지정 시 기존 동작과 100% 동일, 목록 API만 호출)와 `detailCallBudget`(기본 900) 옵션 신설.
+- **선택적 활성화**: `kor-tour.mjs` / `kor-with-tour.mjs` / `kor-pet-tour.mjs` (KorTourAdapter/KorWithTourAdapter/KorPetTourAdapter — 모두 이 베이스를 공유) CLI에 `--with-detail` 플래그 추가. 미지정 시(=Task 2 일일 배치 포함) 기존과 동일하게 목록 API만 호출해 N+1을 피한다.
+- **캐싱/배치 전략** (이전 세션 홀드 사유였던 "설계 선행 필요"를 해소): `--with-detail` 실행 시 DB(`open_spaces`, `source_type=KOR_TOUR_API_V4`)에서 대상 카테고리(`EXHIBITION_MUSEUM`/`KIDS_ACTIVITY`)이면서 `is_free IS NULL`인 기존 행만 조회해 그 `contentid`만 상세 호출 대상으로 삼는다(신규 미수집분은 이번 회차엔 건너뛰고 다음 정기 목록 수집 이후 자동으로 대상이 됨). `detailCallBudget`(기본 900)으로 1일 quota(1,000회) 내에서 안전하게 제한.
+- **요금 텍스트 판별**: `scripts/ingest/lib/ai-tagging.mjs`에 `deriveIsFreeFromFeeText()` 추가 — `usefee`(14)/`usefeeleports`(28) 원문에 "무료" 포함 시 `true`, `\d+원` 가격 패턴 포함 시 `false`, 그 외(빈 문자열 등 정보 없음)는 추측 없이 `null` 유지.
+- **실제 API/DB 검증**: 개발계정 키로 `detailIntro2` 실호출 → contentTypeId 14는 `usefee`, 28은 `usefeeleports` 필드명 확인. DB 조회 결과 대상 pending 건수 **6,515건**(EXHIBITION_MUSEUM+KIDS_ACTIVITY, is_free IS NULL) 확인 — quota(1,000/일) 대비 1회 배치로 전량 처리 불가하므로 `detailCallBudget`로 여러 회차에 걸쳐 점진 보완되는 설계가 타당함을 재확인. 예산 3건으로 축소한 검증 스크립트로 실제 3개 문화시설 detailIntro2 호출 → `usefee` 텍스트 기반 `is_free` 판별(무료/유료 혼합 케이스 포함) 정상 동작 확인 후 임시 검증 스크립트는 삭제함.
+- *알려진 한계*: "[상설전시] 무료 / [기획전시] 유료" 처럼 무료·유료가 혼재된 원문은 "무료" 키워드가 먼저 매치되어 `true`로 판별됨(기존 코드베이스의 결정적 키워드 매칭 스타일을 그대로 따름 — OCR/AI 기반 정밀 판별은 Decision 008 5번 항목 별도 승인 필요 범위).
+
+### Task 2 — 일일 Full Ingest 배치 스케줄러
+- `.github/workflows/ingest-tourapi-daily.yml` 신규 작성: KST 04:00(=UTC 19:00 전일) 크론으로 KorService2 → KorWithService2 → KorPetTourService2 → GoCamping 4개 소스를 순차 전량 수집(Full Ingest). `workflow_dispatch` 수동 실행도 지원.
+- DB UPSERT(`ON CONFLICT DO UPDATE`)는 기존 `upsertRows()`(`scripts/ingest/lib/supabase-admin.mjs`, `.upsert(rows, { onConflict: 'external_id' })`)를 그대로 재사용 — 신규 로직 불필요, 기존 구조 우선 원칙 준수.
+- Task 1의 `--with-detail` 상세 보완은 실행 시간·quota 소모가 커서 이 일일 배치에는 포함하지 않고 워크플로 주석으로 별도 수동/전용 스케줄 실행을 안내함(임의로 배치에 끼워 넣지 않음).
+- *미검증 사항*: GitHub Actions 실제 크론 트리거 동작은 이 세션에서 검증 불가(로컬 환경에 `gh` CLI 없음, 기존 `ingest-monthly.yml`/`ingest-daily.yml`과 동일한 한계) — Secrets 등록 여부는 기존 문서(`implementation/2026-08-20-github-actions-scheduling.md`) 참고.
+
+### Task 3 — 프론트엔드 뱃지 연동 검증
+- `src/components/region/space-grid-card.tsx`, `src/components/map/item-list-panel.tsx` 모두 `getParentalBadges()`를 통해 `has_parking`/`stroller_accessible`/`is_kids_friendly`를 이미 정상 렌더링하고 있음을 코드 확인(신규 구현 불필요 — 기존 결선 상태가 Spec과 일치).
+- `src/lib/spaces/quick-filters.ts`의 `KIDS` 퀵필터는 `is_kids_friendly`를 사용 중이며, `주차가능`/`유모차가능`은 `spec/space/space-card.md`상 "보조 뱃지"로 카드 전용이며 퀵필터 대상이 아니므로(스펙에 없음) 필터 추가는 임의 구현하지 않음.
+- **테스트 코드 점검 결과**: `parental-badges.ts`에 대한 테스트가 기존에 전무했음을 확인 → `src/lib/spaces/parental-badges.test.ts` 신규 작성(7개 케이스: `is_free` true/false/null 뱃지 노출·숨김, `has_parking`/`stroller_accessible`/`is_kids_friendly` true 시 뱃지 노출, false/null 시 미노출). `npm run test` 전체 통과(9/9).
+
+### 검증 절차 (harness 제1조)
+- `npx tsc --noEmit`: 통과 / `npm run test`: 통과(9/9) / `npm run build`: 통과.
+- `npm run lint`: 기존에 존재하던 무관한 파일(`notification-bell.tsx`, `region-grid-view.tsx`, `use-user-location.ts`)의 `react-hooks/set-state-in-effect` 오류 8건은 이번 세션 변경분과 무관해 범위 밖으로 판단, 손대지 않음(임의 리팩터링 금지).
+
+### 기존 기능명세서 충돌 및 스킵 로그
+- 이번 세션에서 스킵된 항목 없음. Decision 008의 "코드 마이그레이션 대기" 5개 항목과 본 Task 1~3은 서로 다른 범위(카테고리 UI 매핑, 5탭 내비, 커머스 API, 신규 데이터소스, OCR/Fallback 요금 추정)로 확인되어 상충하지 않음.

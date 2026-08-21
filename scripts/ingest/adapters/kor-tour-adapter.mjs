@@ -13,11 +13,12 @@ const CONTENT_TYPE_TO_UI_CATEGORY = {
 };
 
 export class KorTourAdapter extends TourApiV4AreaBasedAdapter {
-  constructor() {
+  constructor({ detailContentTypeIds = [] } = {}) {
     super({
       sourceKey: 'KOR_SERVICE',
       serviceName: 'KorService2',
       contentTypeToCategory: CONTENT_TYPE_TO_UI_CATEGORY,
+      detailContentTypeIds,
     });
   }
 }

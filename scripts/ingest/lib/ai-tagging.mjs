@@ -64,6 +64,16 @@ export function deriveIsFreeFallback({ hasFeeInfo, isPublicProvider }) {
   return isPublicProvider ? true : null;
 }
 
+// TourAPI 4.0 detailIntro2의 usefee/usefeeleports 등 실측 요금 원문 텍스트를 결정적 키워드로
+// 판별한다 (추측이 아닌 원문 근거 기반). 원문이 비어있으면 정보 없음이므로 null을 유지한다.
+export function deriveIsFreeFromFeeText(feeText) {
+  const text = (feeText || '').trim();
+  if (!text) return null;
+  if (text.includes('무료')) return true;
+  if (/\d[\d,]*\s*원/.test(text)) return false;
+  return null;
+}
+
 // spec/data/ai-rule.md 5.2.6 구현: booking_status는 예약 접수 정보/일정이라는
 // 객관적 구조화 데이터(날짜)만으로 판별 가능한 경우에만 값을 부여하고,
 // '주말예약'처럼 판별 기준이 Spec에 명확히 정의되지 않은 값은 임의 추측하지 않고
