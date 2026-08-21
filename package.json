@@ -27,6 +27,7 @@
     "ingest:go-camping": "node scripts/ingest/go-camping.mjs",
     "ingest:kor-tour": "node scripts/ingest/kor-tour.mjs",
     "ingest:cultural-facility-summary": "node scripts/ingest/cultural-facility-summary.mjs",
+    "ingest:public-facility-open": "node scripts/ingest/public-facility-open.mjs",
     "ingest:pipeline": "node scripts/ingest/run-all.mjs"
   },
   "dependencies": {
