@@ -62,11 +62,13 @@
 
 ### 5. 검토 완료 후 실행할 단계별 TODO (Action Items)
 *(승인 전까지 착수하지 않음 — Decision 008 패턴과 동일하게 개별 승인 후 별도 구현 작업으로 진행)*
-- [ ] `parental-badges.ts`(및 `quick-filters.ts` 등 `is_free`를 참조하는 다른 화면 로직)에서 `is_free === null`(정보 없음)과 `is_free === false`(유료 확정)를 구분해서 표시할지 기획 AI 확인 필요 — Spec 없는 UI 변경이므로 임의 구현 금지
+- [x] `parental-badges.ts`(및 `quick-filters.ts` 등 `is_free`를 참조하는 다른 화면 로직)에서 `is_free === null`(정보 없음)과 `is_free === false`(유료 확정)를 구분해서 표시할지 기획 AI 확인 필요 — Spec 없는 UI 변경이므로 임의 구현 금지
 - [ ] `deriveParentalTags()`를 `TourApiV4AreaBasedAdapter.transform()`/`GoCampingAdapter.transform()`에 연결해 `raw_data.overview` 등 원문 기반으로 `is_kids_friendly`/`has_parking`/`stroller_accessible`/`facility_type`을 재태깅할지 여부 — 기존 어댑터 로직 변경이므로 별도 승인 필요
 - [ ] `detailIntro2`(입장료 등) 상세 API 연동 필요성 재검토 — 현재는 N+1 회피를 위해 미호출 중이며, 붙일 경우 캐싱/배치 전략(예: 신규 `contentid`만 상세 호출) 설계 선행 필요
 
 > **2026-08-21 세션 스킵 로그:** 위 3개 Action Item은 자율 하네스 실행(제0조 사전 준수 확인) 결과, 항목 본문에 명시된 "승인 전까지 착수하지 않음 / 임의 구현 금지 / 별도 승인 필요" 홀드 표시와 Decision 008(개별 승인 후 별도 구현) 패턴에 상충하여 이번 세션에서 구현하지 않고 스킵함. 기획 AI 승인 및 별도 Spec 확정 후 재개할 것.
+
+> **2026-08-21 세션 재개 로그(2차):** 기획 AI가 `spec/space/space-card.md`를 직접 갱신(커밋 `a61bed4`)하여 `is_free` 뱃지의 `true`/`false`/`null` 3분기 표시 규칙(`null`은 뱃지 숨김)을 명문화함에 따라, 위 Action Item 1번의 홀드 사유("Spec 없는 UI 변경이므로 임의 구현 금지")가 해소됨. 이를 근거로 제0조 사전 준수 재확인 후 `src/lib/spaces/parental-badges.ts`의 `getSpaceBadges()`만 신규 Spec에 맞춰 구현 완료(공간 카드 한정 — `spec/event/event-card.md`는 변경되지 않았으므로 `getEventBadges()`는 기존 로직 유지). `quick-filters.ts`의 `isFree()`는 이미 `is_free === true`만 매칭하고 있어 수정 불필요함을 확인. Action Item 2/3번은 여전히 별도 승인 필요 상태로 스킵 유지.
 
 ---
 

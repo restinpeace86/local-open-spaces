@@ -10,7 +10,11 @@ const BOOKING_STATUS_ICON: Record<string, string> = {
 
 // spec/space/space-card.md 'Parental Checkpoint Badges' 구현
 function getSpaceBadges(item: NearbyItem): ParentalBadge[] {
-  const badges: ParentalBadge[] = [{ key: 'is_free', label: item.is_free ? '🎁 무료' : '유료' }];
+  const badges: ParentalBadge[] = [];
+
+  // is_free === null(정보 없음)은 요금 뱃지를 숨긴다 — null을 유료로 단정 표시하지 않는다.
+  if (item.is_free === true) badges.push({ key: 'is_free', label: '🎁 무료' });
+  else if (item.is_free === false) badges.push({ key: 'is_free', label: '💰 유료' });
 
   if (item.has_parking) badges.push({ key: 'parking', label: '🅿️ 주차가능' });
   if (item.is_kids_friendly) badges.push({ key: 'kids', label: '👶 키즈' });
