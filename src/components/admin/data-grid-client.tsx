@@ -272,10 +272,24 @@ export function AdminDataGridClient({
                     </td>
                     <td className="py-2 pr-3 text-gray-600">{row.address}</td>
                     <td className="py-2 pr-3 text-gray-600">{row.is_free ? '무료' : '유료'}</td>
-                    <td className="py-2 pr-3 text-gray-600">
-                      {row.has_parking && '🅿️'}
-                      {row.stroller_accessible && '👶'}
-                      {row.is_kids_friendly && '🛝'}
+                    <td className="py-2 pr-3">
+                      <div className="flex flex-wrap gap-1">
+                        {row.has_parking && (
+                          <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 whitespace-nowrap">
+                            🅿️ 주차
+                          </span>
+                        )}
+                        {row.stroller_accessible && (
+                          <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-600 whitespace-nowrap">
+                            👶 유모차
+                          </span>
+                        )}
+                        {row.is_kids_friendly && (
+                          <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-pink-50 text-pink-600 whitespace-nowrap">
+                            🛝 키즈친화
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-2 pr-3 text-gray-600">{row.facility_type}</td>
                     <td className="py-2 pr-3">

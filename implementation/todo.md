@@ -14,7 +14,7 @@
 
 ## 🎯 [신규] 차기 진행 Task 목록
 
-- [ ] **[Task 6] [내부 검증용] DB 적재 데이터 점검용 Admin Data Grid 구축 및 UI 버그 수정** 🔄
+- [x] **[Task 6] [내부 검증용] DB 적재 데이터 점검용 Admin Data Grid 구축 및 UI 버그 수정** 🔄
   - **라우트**: `/admin/data-grid`
   - **🚨 긴급 수정 지시**:
     - 현재 테이블 행(Row)에서 뱃지가 최대 1개만 보이는 UI 버그 수정.
@@ -30,3 +30,4 @@
 - [x] `전국공공시설개방표준데이터` 수집 어댑터 구현 및 단위 테스트 통과.
 - [x] `행정안전부 문화_테마파크업(기타)` 어댑터 구현 완료 (`amusement-park-adapter.mjs`).
 - [x] 레거시 도시공원 수집 스크립트 최신 `BaseCollectorAdapter` 구조 마이그레이션 완료 (`city-park-adapter.mjs`, 19,154건).
+- [x] `[Task 6]` Admin Data Grid 뱃지 UI 버그 수정: `has_parking`/`stroller_accessible`/`is_kids_friendly` 뱃지를 `flex-wrap gap-1` 컨테이너의 개별 칩으로 렌더링해 3개 모두 동시 노출되도록 수정 (`data-grid-client.tsx`). `source_type` 다중 필터, 검색 바(ilike, 300ms 디바운스), `raw_data` JSON 뷰어 모달/바텀시트 동작 코드 검증 완료(정상).
