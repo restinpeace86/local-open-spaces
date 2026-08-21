@@ -11,6 +11,15 @@
 > 본 문서의 **[선행 조사 결과]** 및 **[데이터 표준화 원칙]**을 바탕으로, 아래 **[🎯 신규 진행 Task 목록]**의 **Task 1번부터 순차적으로 코드를 구현**하고 결과를 본 문서 하단 보고서에 작성하세요.
 
 ---
+- [ ] **[Task 2] 도시공원 수집 스크립트(city-parks.mjs) 최신 BaseCollectorAdapter 마이그레이션** 🔄 *(차기 진행)*
+  - **Base URL**: `https://api.data.go.kr/openapi/tn_pubr_public_cty_park_info_api`
+  - **일반 인증키**: Dk9DCSP5I7NQpXu6oRMjAlvZzXbEV%2BQzpX3q%2BHENSX90w4AXExCGmOU9drYKSzEbiZdaz%2BF0htDLVj7k6gQP1A%3D%3D
+  - **작업 지시**:
+    - 레거시 `city-parks.mjs` 코드를 신규 `BaseCollectorAdapter` 상속 구조로 일원화 개편.
+    - 표준 `buildOpenSpaceRow()` 및 `deriveParentalTags()` 연동 (`source_type='CITY_PARK'`).
+    - CLI (`npm run ingest:city-parks`) 및 단위 테스트 (`city-park-adapter.test.mjs`) 작성 후 레거시 코드 정리.
+  - **산출물**: `scripts/ingest/adapters/city-park-adapter.mjs` 및 단위 테스트
+  - 
 - [x] **[Task 4] 행정안전부 문화_테마파크업(기타) API 수집 & open_spaces 표준화 어댑터 구현** (재구현) 해볼 것 
   - **Base URL**: `https://apis.data.go.kr/1741000/amusement_facilities_other/info`
   - **일반 인증키**: Dk9DCSP5I7NQpXu6oRMjAlvZzXbEV%2BQzpX3q%2BHENSX90w4AXExCGmOU9drYKSzEbiZdaz%2BF0htDLVj7k6gQP1A%3D%3D
