@@ -11,6 +11,16 @@
 > 본 문서의 **[선행 조사 결과]** 및 **[데이터 표준화 원칙]**을 바탕으로, 아래 **[🎯 신규 진행 Task 목록]**의 **Task 1번부터 순차적으로 코드를 구현**하고 결과를 본 문서 하단 보고서에 작성하세요.
 
 ---
+- [ ] **[Task 4] 행정안전부 문화_테마파크업(기타) API 수집 & open_spaces 표준화 어댑터 구현** (재구현) 해볼 것 
+  - **Base URL**: `https://apis.data.go.kr/1741000/amusement_facilities_other/info`
+  - **일반 인증키**: Dk9DCSP5I7NQpXu6oRMjAlvZzXbEV%2BQzpX3q%2BHENSX90w4AXExCGmOU9drYKSzEbiZdaz%2BF0htDLVj7k6gQP1A%3D%3D
+  - **주요 작업**:
+    - `resultType=JSON` 파라미터 적용 및 영업중 상태코드 필터링.
+    - `source_type='LOCALDATA_AMUSEMENT'` 기반 `open_spaces` 스키마 매핑.
+    - 주소 기반 Vworld 지오코더 연동 및 `deriveParentalTags()` 3대 육아 뱃지 자동 태깅.
+    - **산출물**: `scripts/ingest/adapters/amusement-park-adapter.mjs` 신규 작성 및 테스트 추가.
+   
+    - 
 - [x] **[Task 5] 전국공공시설개방표준데이터 API 수집 어댑터 구현**
   - **Base URL**: `https://api.data.go.kr/openapi/tn_pubr_public_pblfclt_opn_info_api`
   - **주요 작업**:
