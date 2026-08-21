@@ -19,9 +19,9 @@
     - `source_type='LOCALDATA_AMUSEMENT'` 기반 `open_spaces` 스키마 매핑.
     - 주소 기반 Vworld 지오코더 연동 및 `deriveParentalTags()` 3대 육아 뱃지 자동 태깅.
     - **산출물**: `scripts/ingest/adapters/amusement-park-adapter.mjs` 신규 작성 및 테스트 추가.
-  - **스킵 유지 재확인 (2026-08-21, 3차 세션)**: `git pull` 결과 원격 변경 없음(`Already up to date`). `PUBLIC_DATA_API_KEY`로 Base URL(`https://apis.data.go.kr/1741000/amusement_facilities_other/info?serviceKey=...&pageNo=1&numOfRows=5&resultType=JSON`)에 재실측한 결과 여전히 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR`(returnReasonCode 30, "등록되지 않은 서비스키") 반환 — 서비스키 활용신청 승인 상태에 변화 없음(Task 5와 달리 이 API는 별도 활용신청 승인이 필요한 것으로 보임). 실 응답을 여전히 한 번도 수신하지 못해 실제 필드명(사업장명/주소/좌표/영업상태)을 확인할 방법이 없으므로 `CLAUDE.md` 제3장 제4조(추측 금지) 및 `spec/data/ai-rule.md` 4.1 준수를 위해 어댑터 구현을 강행하지 않고 스킵을 유지함. `npx tsc --noEmit`, `npm run test`(5 files, 22 tests passed), `npm run build` 재검증 모두 통과. **필요 조치 (관리자)**: data.go.kr에서 "행정안전부_문화_테마파크업(기타) 인허가 정보" API 활용신청 승인 처리 확인 요망.
-  - **스킵 유지 재확인 (2026-08-21, 4차 세션)**: `git pull` 결과 원격 변경 없음(`Already up to date`). 동일 Base URL에 `PUBLIC_DATA_API_KEY`로 재실측한 결과 여전히 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR`(returnReasonCode 30, "등록되지 않은 서비스키") 반환 — 3차 세션 이후 서비스키 활용신청 승인 상태에 변화 없음. 실 응답 필드를 여전히 한 번도 확인하지 못했으므로 `CLAUDE.md` 제3장 제4조(추측 금지) 준수를 위해 어댑터 구현을 강행하지 않고 스킵을 유지함. `npx tsc --noEmit`, `npm run test`(5 files, 22 tests passed), `npm run build` 재검증 모두 통과. **필요 조치 (관리자)**: data.go.kr에서 "행정안전부_문화_테마파크업(기타) 인허가 정보" API 활용신청 승인 처리 확인 요망.
-- [x] **[Task 5] 전국공공시설개방표준데이터 API 수집 어댑터 구현**
+    - 재진행 요청: apis.data.go.kr/1741000/amusement_facilities_other/info?serviceKey=Dk9DCSP5I7NQpXu6oRMjAlvZzXbEV%2BQzpX3q%2BHENSX90w4AXExCGmOU9drYKSzEbiZdaz%2BF0htDLVj7k6gQP1A%3D%3D&pageNo=1&numOfRows=10&returnType=json
+    - endpoint : /info
+  - [x] **[Task 5] 전국공공시설개방표준데이터 API 수집 어댑터 구현**
   - **Base URL**: `https://api.data.go.kr/openapi/tn_pubr_public_pblfclt_opn_info_api`
   - **주요 작업**:
     - `type=json` 요청 및 `open_spaces` 스키마 매핑 (`source_type='PUBLIC_FACILITY_OPEN'`)
