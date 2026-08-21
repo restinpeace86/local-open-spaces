@@ -32,3 +32,16 @@ const SPACE_CATEGORIES = ['PARK', 'SPORTS', 'CULTURE'];
 export const SPACE_CATEGORY_FILTER_OPTIONS = CATEGORY_FILTER_OPTIONS.filter((opt) =>
   SPACE_CATEGORIES.includes(opt.category)
 );
+
+// Task 9-1(2026-08-22): 홈 화면 5대 카테고리 Quick 그리드용 — docs/spec.md 3.2에 명시된 순서 그대로.
+const UI_CATEGORIES = [
+  'EXPERIENCE_CLASS',
+  'OUTDOOR_NATURE',
+  'EXHIBITION_MUSEUM',
+  'PERFORMANCE_FESTIVAL',
+  'KIDS_ACTIVITY',
+];
+export const UI_CATEGORY_FILTER_OPTIONS = UI_CATEGORIES.map((category) => ({
+  category,
+  ...CATEGORY_META[category],
+}));

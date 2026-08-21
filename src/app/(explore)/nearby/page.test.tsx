@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import Home from './page';
+import NearbyPage from './page';
 
 vi.mock('@/lib/supabase/client', () => ({
   createClient: () => ({
@@ -15,11 +15,12 @@ vi.mock('@/lib/kakao/load-kakao-sdk', () => ({
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: () => {} }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
-describe('Home', () => {
+describe('NearbyPage', () => {
   it('renders the map explorer controls', async () => {
-    render(<Home />);
+    render(<NearbyPage />);
     expect((await screen.findAllByText('5km')).length).toBeGreaterThan(0);
     expect(screen.getAllByText('상시 시설 보기').length).toBeGreaterThan(0);
   });

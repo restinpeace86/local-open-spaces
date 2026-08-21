@@ -50,9 +50,26 @@
   - **대응 방안**: 추후 필요 시 Gemini API 호출 간 명시적 지연(Pacing: e.g. 1~2초) 및 Exponential Backoff 재시도 로직을 적용하여 전수 재태깅 백필(Backfill) 진행 예정.
   - **우선순위**: Low (현 규약상 스펙 준수 상태이며, 서비스 동작에 지장 없음)
 
-- [~] **[코드] 하단 5탭 내비게이션 + 홈 화면 신규 구현 — 큐레이션 피드 상세 스펙 추가 (2026-08-21)** ⛔ 보류
-  - `project/overview.md` "신규 확장 목표 — 미착수(Decision 008)" 항목. 범위가 커서 화면 목업/우선순위를 사용자와 먼저 확정한 뒤 착수하기로 함 — **임의로 구현 가능으로 바꾸지 말 것**.
-  - 사용자가 제공한 큐레이션 피드 카드 하나의 상세 스펙(2026-08-21, 착수 지시 아님 — AskUserQuestion으로 "기존 보류 항목의 상세 스펙"임을 확인받음):
-    - **데이터 조건**: 당일 진행 중인 행사/이벤트 중 추천 5~10개 동적 페칭
-    - **UI 카드 내용**: 대형 썸네일 + `⚡ 오늘 당일 입장` / `🎁 무료` 뱃지 + 행사명 + 장소/거리
-  - 이 스펙은 "홈 화면: ... 큐레이션 피드(0원의 행복/오늘만 이 가격)"(overview.md 115행)의 한 카드 구성 후보로 보이나, 하단 5탭/서브탭/캐러셀/Quick 그리드 등 나머지 구성요소의 화면 목업·우선순위는 아직 미확정 상태다. 착수 지시(화면 목업/우선순위 확정)가 명시적으로 오면 이 표시(⛔ 보류)를 제거하고 자동 루프가 집을 수 있게 할 것.
+- [x] **[Task 9-1] 하단 5탭 내비게이션 + 홈 화면(야놀자/여기어때 스타일) 신규 구현** 완료 (2026-08-22)
+  - **보류 해제 근거**: 사용자가 화면 목업/우선순위를 명시적으로 확정 지시(2026-08-22) — `project/overview.md` "신규 확장 목표"의 하단 5탭/홈 화면 항목을 "확정"으로 갱신함.
+  - **라우팅 재구성**: 기존 `/`(지도)를 `/nearby`로, `/region`·`/calendar`를 `(explore)` 라우트 그룹(`src/app/(explore)/`) 안으로 이동. `/`(신규 홈)이 새 디폴트가 됨. 기존 상단 3탭(`TopTabs`)은 폐기하지 않고 `(explore)/layout.tsx`로 옮겨 지도/도감/캘린더 사이의 서브 내비게이션으로 유지(Decision 008 "기존 뷰는 폐기가 아니라 재배치").
+  - **산출물**:
+    - `src/lib/home/get-home-feed.ts`(`getTodayEvents`/`getFreeFeed`/`getHomeFeed`) + `src/app/api/home/feed/route.ts` + `src/app/page.tsx`(Server Component, 같은 로직 공유)
+    - `src/components/home/{home-header,home-sub-tabs,hero-carousel,quick-category-grid,home-view}.tsx`
+    - `src/components/cards/event-card.tsx`(신규 — 기존엔 이벤트 전용 카드가 없었음), `src/components/region/space-grid-card.tsx`(거리 표시 + emphasis 뱃지 지원 추가)
+    - `src/components/nav/bottom-tabs.tsx`(신규 5탭), `src/lib/feature-flags.ts`(신규 — `spec/common/feature-flags.md` 구현체가 이전엔 스펙 문서만 있고 실제 코드가 없었음)
+    - `src/lib/spaces/category-meta.ts`에 `UI_CATEGORY_FILTER_OPTIONS`(5대 UI 카테고리, docs/spec.md 3.2 순서) 추가
+  - **[찜]/[마이] 탭 처리**: Decision 003(찜 비노출)·마이페이지 인증 시스템 부재로 `FEATURE_FLAGS.ENABLE_USER_BOOKMARK`/`ENABLE_MY_PAGE`(기본 false)로 비활성화 표시(숨김이 아니라 회색 비활성 — 탭 구조는 5개 고정 유지, spec/common/feature-flags.md 원칙)
+  - **[특가·핫딜] 서브탭**: 커머스 API(쿠팡 파트너스/네이버 쇼핑) 자체가 미착수·미보유라 실제 데이터가 전혀 없음 — 가짜 데이터로 채우지 않고 탭을 비활성화 처리(추측 금지)
+
+  - **`docs/spec.md`/DB 실제 컬럼 Mismatch 발견 (지시 #6)**:
+    1. **`booking_status` 표시 문구 불일치**: DB 실제 저장값(`scripts/ingest/lib/ai-tagging.mjs`의 `deriveBookingStatus`)은 `'오늘방문'`/`'D-1 마감임박'`/`'접수중'`/`null`인데, `event-card.md`/`docs/spec.md`가 요구하는 표시 문구는 "오늘 당일 입장 가능" 등 풀 문구다. 기존 프론트 코드(`parental-badges.ts`)는 원본값을 그대로 노출해(예: "⚡ 오늘방문") 스펙과 어긋나 있었음 — 원본값→스펙 문구 매핑(`BOOKING_STATUS_LABEL`)을 추가해 수정. `'주말예약'`은 실제 ETL이 만들지 않는 값이라 매핑에서 제거했고, 스펙의 "📅 사전 예약 필수" 상태는 ETL이 별도로 구분해 생성하지 않아(예약 필수 + D-1 아님 = 그냥 `'접수중'`) 매핑 없이 원본값을 그대로 노출.
+    2. **event 카드 `is_free` null 오탐 (실제 버그, 수정함)**: `parental-badges.ts`의 `getEventBadges()`가 `is_free === null`을 `false`(유료)와 동일하게 취급해 요금 미기재 이벤트를 "유료"로 오표시하고 있었다 — space 카드는 이미 null 숨김 처리가 돼 있었는데 event 카드만 빠져 있던 것. `is_free: null` 레코드가 실제로 존재함(SEOUL_CULTURE 6건, Task 8-4 참고)을 근거로 space와 동일하게 null 숨김으로 수정.
+    3. **`events` 테이블에 장소(venue) 컬럼이 없음**: `event-card.md`/Hero Carousel 스펙 모두 "장소" 표시를 요구하나, `events` 테이블에는 장소명 텍스트 컬럼이 아예 없고 `space_id` FK도 실측 결과 **전체 이벤트 중 0건**만 채워져 있어(실제 쿼리로 확인) 사실상 어떤 이벤트도 FK로 장소명을 끌어올 수 없다. 홈 화면은 거리 정보가 있으면 거리를, 없으면 "장소 정보 없음"을 정직하게 표시하도록 구현(가짜 장소명 생성 안 함). 장소명을 채우려면 ETL 단에서 원본 API의 장소 필드(PLACENM 등, 현재 `raw_data`에는 있지만 컬럼화 안 됨)를 새 컬럼으로 뽑아내는 별도 작업이 필요 — 이번 범위 밖으로 남김.
+    4. **`docs/spec.md` 3.2의 가성비 3단계(완전무료/1만원 이하/유료)가 구현 불가**: 스펙은 "💰 1만원 이하" 중간 단계를 요구하나 두 테이블 모두 `is_free` BOOLEAN만 있고 실제 숫자 요금(`price_krw` 등) 컬럼이 없다 — 대부분의 어댑터가 애초에 숫자 요금을 수집하지 않음(원문에 없거나 텍스트로만 존재). 현재는 무료/유료 2단계만 정확히 구현 가능. 3단계 구현은 요금 데이터 수집 자체를 확장해야 하는 별도 과제.
+    5. **`/region`(카테고리 탭) 필터 칩이 5대 UI 카테고리를 몰랐음**: `SPACE_CATEGORY_FILTER_OPTIONS`가 레거시 카테고리(`PARK`/`SPORTS`/`CULTURE`)만 나열해, 홈 Quick 그리드에서 `?category=KIDS_ACTIVITY`로 진입해도 실제 필터링(데이터 조회)은 정상 동작하지만 필터 칩 UI에는 어떤 칩도 "선택됨"으로 표시되지 않는다. `RegionGridView`가 URL의 `category` 파라미터를 초기값으로 읽도록 연동해 필터링 자체는 정상 동작하게 만들었으나(`docs/spec.md` 2.2 "클릭 시... 즉시 필터링" 충족), 칩 UI 자체를 5대 카테고리까지 넓히는 것은 더 큰 범위라 이번엔 하지 않음(추후 필요).
+
+  - **검증**:
+    - `npx tsc --noEmit` / `npm run test`(전체 112/112, 신규 20건: HomeView 5건 + parental-badges EVENT 8건 + 기존 space 6건 등) / `npm run build`: 모두 통과
+    - `npm run dev` 기동 후 `/`, `/nearby`, `/region`, `/calendar`, `/api/home/feed` 전체 HTTP 200 확인, 서버 로그에 에러/경고 없음, `/api/home/feed` 실제 DB 데이터 응답 확인, 각 페이지 SSR HTML에 기대 문구(예: "0원의 행복", "카테고리", "내주변" 등) 존재 확인
+    - **한계**: 이 세션 환경에는 Playwright 등 실제 브라우저 자동화 도구가 없어(CLAUDE.md 제5장 제8조가 요구하는) 클릭/캐러셀 스크롤/이미지 로딩 등 인터랙티브 동작의 육안 확인은 못 했다 — HTTP 상태 코드/SSR HTML 내용/서버 로그 기반 확인까지만 완료. 사용자가 직접 브라우저로 한 번 확인하는 것을 권장.

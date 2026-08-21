@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { CategoryFilter, ALL_CATEGORY } from '@/components/map/category-filter';
 import { SpaceGridCard } from '@/components/region/space-grid-card';
 import { EmptyState } from '@/components/map/empty-state';
@@ -16,10 +17,13 @@ const ALL_DISTRICT = 'ALL';
 // 지역별 도감 그리드 뷰: 자치구/카테고리별로 open_spaces 전체 카탈로그를 탐색한다.
 export function RegionGridView() {
   const { center: userLocation } = useUserLocation();
+  // Task 9-1(2026-08-22): 홈 화면 5대 카테고리 Quick 그리드에서 "/region?category=KIDS_ACTIVITY"
+  // 형태로 넘어온 카테고리를 초기 필터값으로 반영한다(docs/spec.md 2.2 "클릭 시... 즉시 필터링").
+  const searchParams = useSearchParams();
   const [items, setItems] = useState<NearbyItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [category, setCategory] = useState(ALL_CATEGORY);
+  const [category, setCategory] = useState(() => searchParams.get('category') ?? ALL_CATEGORY);
   const [district, setDistrict] = useState(ALL_DISTRICT);
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
 

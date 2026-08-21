@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { KakaoMapView } from '@/components/map/kakao-map-view';
 import { RadiusSelector } from '@/components/map/radius-selector';
 import { LayerToggle } from '@/components/map/layer-toggle';
@@ -31,9 +32,11 @@ export function MapExplorer() {
     openOnboarding,
     closeOnboarding,
   } = useUserLocation();
+  // Task 9-1(2026-08-22): 홈 화면 검색바에서 "/nearby?q=..."로 넘어온 검색어를 초기값으로 반영한다.
+  const searchParams = useSearchParams();
   const [radius, setRadius] = useState(5000);
   const [showSpaces, setShowSpaces] = useState(false);
-  const [keyword, setKeyword] = useState('');
+  const [keyword, setKeyword] = useState(() => searchParams.get('q') ?? '');
   const [category, setCategory] = useState(ALL_CATEGORY);
   const [activeQuickFilters, setActiveQuickFilters] = useState<QuickFilterKey[]>([]);
   const [items, setItems] = useState<NearbyItem[]>([]);

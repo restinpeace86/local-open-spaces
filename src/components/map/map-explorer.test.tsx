@@ -12,6 +12,7 @@ vi.mock('@/lib/supabase/client', () => ({
 // 실제 Kakao SDK 대신 onDragEnd를 즉시 호출할 수 있는 버튼을 노출하는 스텁으로 대체한다.
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: () => {} }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock('@/components/map/kakao-map-view', () => ({

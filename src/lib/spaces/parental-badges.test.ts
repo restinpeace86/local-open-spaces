@@ -73,3 +73,46 @@ describe('getParentalBadges (SPACE)', () => {
     expect(badges.some((b) => ['parking', 'stroller', 'kids'].includes(b.key))).toBe(false);
   });
 });
+
+function makeEvent(overrides: Partial<NearbyItem> = {}): NearbyItem {
+  return { ...makeSpace(), item_type: 'EVENT', ...overrides };
+}
+
+// Task 9-1(2026-08-22): event-card.md 규약과 어긋나 있던 두 가지를 바로잡은 회귀 테스트
+// (1) booking_status 원본 코드값 → 스펙 표시 문구 매핑, (2) is_free null 숨김을 event에도 동일 적용.
+describe('getParentalBadges (EVENT)', () => {
+  it('booking_status가 오늘방문이면 스펙 문구("오늘 당일 입장 가능")로 강조 표시한다', () => {
+    const badges = getParentalBadges(makeEvent({ booking_status: '오늘방문' }));
+    expect(badges).toContainEqual({ key: 'booking_status', label: '⚡ 오늘 당일 입장 가능', emphasis: true });
+  });
+
+  it('booking_status가 D-1 마감임박이면 강조 표시한다', () => {
+    const badges = getParentalBadges(makeEvent({ booking_status: 'D-1 마감임박' }));
+    expect(badges).toContainEqual({ key: 'booking_status', label: '⏳ D-1 마감임박', emphasis: true });
+  });
+
+  it('booking_status가 접수중이면 강조 없이 표시한다', () => {
+    const badges = getParentalBadges(makeEvent({ booking_status: '접수중' }));
+    expect(badges).toContainEqual({ key: 'booking_status', label: '📅 접수중', emphasis: undefined });
+  });
+
+  it('is_free === true면 완전 무료 뱃지를 노출한다', () => {
+    const badges = getParentalBadges(makeEvent({ is_free: true }));
+    expect(badges).toContainEqual({ key: 'is_free', label: '🎁 완전 무료' });
+  });
+
+  it('is_free === false면 유료 뱃지를 노출한다', () => {
+    const badges = getParentalBadges(makeEvent({ is_free: false }));
+    expect(badges).toContainEqual({ key: 'is_free', label: '💰 유료' });
+  });
+
+  it('is_free === null이면 요금 뱃지를 숨긴다 (Task 9-1에서 수정한 오탐 방지)', () => {
+    const badges = getParentalBadges(makeEvent({ is_free: null }));
+    expect(badges.some((b) => b.key === 'is_free')).toBe(false);
+  });
+
+  it('target_age_group이 영유아면 유아전용 뱃지를 노출한다', () => {
+    const badges = getParentalBadges(makeEvent({ target_age_group: '영유아' }));
+    expect(badges).toContainEqual({ key: 'kids', label: '👶 유아전용' });
+  });
+});

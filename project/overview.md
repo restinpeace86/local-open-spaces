@@ -110,12 +110,12 @@ AI 태깅(5대 카테고리 매핑 + Parental Checkpoint 뱃지, `spec/data/ai-r
 - 광역 맞춤 알림 UI + LocalStorage 알림함 (`spec/notification/notification-settings.md`)
 - Mobile / Desktop 반응형 UI, GitHub Actions 기반 제로 코스트 공공 API 동기화 파이프라인
 
-**신규 확장 목표 — 미착수 (Decision 008, `docs/spec.md` 기준):**
-- 하단 5탭 고정 내비게이션([카테고리]-[내주변]-[홈]-[찜]-[마이])으로 전면 개편 (현재는 상단 3탭: 지도/도감/캘린더)
-- 홈 화면: 위치 선택기 + 서브탭(홈/특가·핫딜/무료·공공) + 비주얼 캐러셀 + 5대 카테고리 Quick 그리드 + 큐레이션 피드
-- 쿠팡 파트너스/네이버 쇼핑 등 커머스 핫딜 API 연동
-- 요금 오탐 방지 OCR/Fallback 룰(`spec/data/ai-rule.md` 5.2-7)
-- 찜(즐겨찾기) 기능 — 현재 Decision 003에 따라 Feature Flag로 비노출 상태
+**신규 확장 목표 (Decision 008, `docs/spec.md` 기준):**
+- **[확정 — Task 9-1 구현 착수, 2026-08-22]** 하단 5탭 고정 내비게이션([카테고리]-[내주변]-[홈]-[찜]-[마이])으로 전면 개편 (기존 상단 3탭: 지도/도감/캘린더는 [내주변] 탭 내부 기능으로 재배치, 대체가 아님)
+- **[확정 — Task 9-1 구현 착수, 2026-08-22]** 홈 화면: 상단 헤더(위치 선택기 + 통합 검색바) + 서브탭(홈/특가·핫딜/무료·공공) + Hero 비주얼 캐러셀(당일 진행 중인 행사 5~10개 동적 페칭) + 5대 카테고리 Quick 그리드 + 큐레이션 피드('🎁 0원의 행복' 등, `spec/space/space-card.md`/`spec/event/event-card.md` 카드 규약 준수) — 야놀자/여기어때류 커머스 앱과 유사한 홈 피드 구조로 확정됨. 상세 스펙은 `implementation/todo.md` [Task 9-1] 참고
+- 쿠팡 파트너스/네이버 쇼핑 등 커머스 핫딜 API 연동 (미착수)
+- 요금 오탐 방지 OCR/Fallback 룰(`spec/data/ai-rule.md` 5.2-7) (미착수)
+- 찜(즐겨찾기) 기능 — 현재 Decision 003에 따라 Feature Flag로 비노출 상태 (미착수)
 
 ---
 
