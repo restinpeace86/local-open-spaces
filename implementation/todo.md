@@ -12,36 +12,17 @@
 
 ---
 
-# 📋 [TODO] 데이터 수집·표준화 ETL 구축 및 작업 지시서
-
-> 🚨 **[클로드 전용 작업 지시]** 
-> 본 문서의 **[🎯 신규 진행 Task 목록]** 중 미완료 Task를 순차적으로 구현하고 결과를 하단 보고서에 작성하세요.
-> **작업 착수 전 필수 실행**: 최신 명세(`spec/ui/space-card.md` 뱃지 규칙 및 `spec/data/ai-rule.md` 메인 히어로 규칙 등) 반영을 위해 반드시 `git pull`을 먼저 수행하세요.
-
----
-
-## 🎯 [신규] 차기 진행 Task 목록
-
-- [x] **[Task 1] `rgnCltrFcltExmnv1` (전국문화기반시설총람) 8개 시설 수집 어댑터 구현** (완료)
-- [x] **[Task 4] 행정안전부 문화_테마파크업(기타) API 수집 어댑터 구현** (완료)
-- [x] **[Task 5] 전국공공시설개방표준데이터 API 수집 어댑터 구현** (완료)
-- [x] **[Task 2] 도시공원 수집 스크립트(city-parks.mjs) 최신 BaseCollectorAdapter 마이그레이션** (완료)
-  - **산출물**: `scripts/ingest/adapters/city-park-adapter.mjs` (19,154건 실데이터 정상 수신 확인 완료)
-- [x] **[Task 6] [내부 검증용] DB 적재 데이터 점검용 Admin Data Grid 구축 및 뱃지 규약 점검** (완료)
-- [x] **[Task 7] 행정안전부 전국어린이놀이시설정보 API(`getPfctInfo3`) 수집 어댑터 구현** (완료, 2026-08-21)
-  - **목적**: 공공·마을 어린이 놀이터 전수 수집 및 `is_kids_friendly = true` 뱃지 자동화.
-  - **연결 확인**: `PUBLIC_DATA_API_KEY`(일반 인증키)로 `getPfctInfo3` 실 호출 결과 정상 연결 확인(resultCode `00` NORMAL SERVICE, 전량 85,291건 수신 → 유효 스키마 변환 82,373건).
-  - **산출물**: `scripts/ingest/adapters/playground-adapter.mjs`, `scripts/ingest/adapters/playground-adapter.test.mjs`(단위 테스트 10건 통과), `scripts/ingest/playground.mjs`(CLI), `package.json`의 `ingest:playground` 스크립트.
-  - **End Point 2 (`getRide4`, 놀이기구 정보) 미통합 사유**: `pfctSn` 단위 개별 호출은 정상 동작함을 확인했으나, `open_spaces` 스키마에 시설 1건당 놀이기구 N건을 저장할 컬럼이 없어(스키마 변경은 임의 결정 금지 대상) 8만여 시설 전체에 대한 N+1 추가 호출은 근거 없는 과잉 구현으로 판단해 미통합. 상세 판단 근거는 `playground-adapter.mjs` 파일 상단 주석 참조.
-
----
-
-## 📋 [완료 및 히스토리 Log]
-
-### 1. 완료된 작업
-- [x] `rgnCltrFcltExmnv1` 8개 시설 수집 어댑터 구현 완료.
-- [x] `전국공공시설개방표준데이터` 수집 어댑터 구현 및 단위 테스트 통과.
-- [x] `행정안전부 문화_테마파크업(기타)` 어댑터 구현 완료 (`amusement-park-adapter.mjs`).
-- [x] 레거시 도시공원 수집 스크립트 최신 `BaseCollectorAdapter` 구조 마이그레이션 완료 (`city-park-adapter.mjs`, 19,154건).
-- [x] DB 적재 데이터 점검용 Admin Data Grid 구축 및 뱃지 규약(필수 3종 + 보조 3종, `is_free===null` 숨김) 점검 완료.
-- [x] 행정안전부 전국어린이놀이시설정보(`getPfctInfo3`) 수집 어댑터 구현 및 단위 테스트 통과 (`playground-adapter.mjs`, 실데이터 85,291건 → 유효 82,373건 변환 확인).
+- [ ] **[Task 7-3] 전국 수영장(공공+민간 인허가) 통합 수집 어댑터 구현** 🔄
+  - **목적**: 체육진흥공단(공공/구립) + 행안부(인허가/민간·키즈풀) 2개 API를 통합 수집하여 전국 수영장 전수 확보 및 `is_kids_friendly` / `facility_type = '수영장'` 뱃지 자동화.
+  - **인증키 이중 검증 지시 (중요)**:
+    - 환경변수 `PUBLIC_DATA_API_KEY` (디코딩 키: `Dk9DCSP5I...`) 사용을 기본으로 하되, 403/Key 에러 발생 시 웹 명세 인코딩 키(`Dk9DCSP5I7NQpXu6oRMjAlvZzXbEV%2BQzpX3q%2BHENSX90w4AXExCGmOU9drYKSzEbiZdaz%2BF0htDLVj7k6gQP1A%3D%3D`)를 인코딩 없이 전송하는 폴백(Fallback) 방식을 모두 테스트/시도할 것.
+  - **API 1 (체육진흥공단 - 공공/체육센터)**:
+    - Endpoint: `https://apis.data.go.kr/B551014/SRVC_API_SFMS_FACI/TODZ_API_SFMS_FACI`
+    - Params: `serviceKey`, `pageNo`, `numOfRows`, `resultType=json`, `ftype_nm=수영장`
+  - **API 2 (행정안전부 - 인허가/민간/키즈풀)**:
+    - Endpoint: `https://apis.data.go.kr/1741000/swimming_pools/info`
+    - Params: `serviceKey`, `pageNo`, `numOfRows`, `returnType=json`
+  - **작업 지시**:
+    - 두 API 수집 결과를 병합하고 시설명+주소 기준 중복 식별 처리.
+    - `spec/ui/space-card.md` 뱃지 규약 준수 (`facility_type = '수영장'`, `is_kids_friendly` 매핑, `is_free = null` 오탐 방지).
+  - **산출물**: `scripts/ingest/adapters/swimming-pool-adapter.mjs` 및 `swimming-pool-adapter.test.mjs`
