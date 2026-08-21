@@ -11,33 +11,31 @@
 > 본 문서의 **[선행 조사 결과]** 및 **[데이터 표준화 원칙]**을 바탕으로, 아래 **[🎯 신규 진행 Task 목록]**의 **Task 1번부터 순차적으로 코드를 구현**하고 결과를 본 문서 하단 보고서에 작성하세요.
 
 ---
-- [x] **[Task 2] 도시공원 수집 스크립트(city-parks.mjs) 최신 BaseCollectorAdapter 마이그레이션** 🔄 *(차기 진행)*
-  - **Base URL**: `https://api.data.go.kr/openapi/tn_pubr_public_cty_park_info_api`
-  - **일반 인증키**: Dk9DCSP5I7NQpXu6oRMjAlvZzXbEV%2BQzpX3q%2BHENSX90w4AXExCGmOU9drYKSzEbiZdaz%2BF0htDLVj7k6gQP1A%3D%3D
+## 🎯 [신규] 차기 진행 Task 목록
+
+- [x] **[Task 1] `rgnCltrFcltExmnv1` (전국문화기반시설총람) 8개 시설 수집 어댑터 구현** (완료)
+- [x] **[Task 4] 행정안전부 문화_테마파크업(기타) API 수집 어댑터 구현** (완료)
+- [x] **[Task 5] 전국공공시설개방표준데이터 API 수집 어댑터 구현** (완료)
+- [x] **[Task 2] 도시공원 수집 스크립트(city-parks.mjs) 최신 BaseCollectorAdapter 마이그레이션** (완료)
+  - **구현 산출물**: `scripts/ingest/adapters/city-park-adapter.mjs` 및 단위 테스트
+  - **특징**: `CITY_PARK_${manageNo}` 연속성 유지, `OUTDOOR_NATURE` 매핑, 파이프라인 및 GitHub Actions 워크플로우 전면 갱신.
+
+- [ ] **[Task 6] [내부 검증용] DB 적재 데이터 점검용 Admin Data Grid 구축** 🔄 *(차기 진행)*
+  - **사전 실행**: `git pull` 수행으로 최신 `spec/data/ai-rule.md` 반영 확인.
+  - **라우트**: `/admin/data-grid` (개발자 전용 분리 라우트, Read-Only)
+  - **목적**: `open_spaces` 테이블 표준화 데이터 및 `raw_data` 원문 JSON을 개발자가 눈으로 직접 실시간 점검·검증하는 읽기 전용 어드민 툴.
   - **작업 지시**:
-    - 레거시 `city-parks.mjs` 코드를 신규 `BaseCollectorAdapter` 상속 구조로 일원화 개편.
-    - 표준 `buildOpenSpaceRow()` 및 `deriveParentalTags()` 연동 (`source_type='CITY_PARK'`).
-    - CLI (`npm run ingest:city-parks`) 및 단위 테스트 (`city-park-adapter.test.mjs`) 작성 후 레거시 코드 정리.
-  - **산출물**: `scripts/ingest/adapters/city-park-adapter.mjs` 및 단위 테스트
-  - **완료 (2026-08-21, 6차 세션)**: 마이그레이션 착수 전 `implementation/todo.md` 홀드 표시(보류/미결 등) 및 `project/decision-log.md` Decision 항목과의 상충 여부를 확인했으며, Task 2는 홀드 마커 없이 "차기 진행"으로만 표시돼 있어 정상 진행함. 착수 전 레거시 `city-parks.mjs --dry-run`을 재실행해 실 API 응답 필드(`manageNo`/`parkNm`/`rdnmadr`/`lnmadr`/`latitude`/`longitude` 등)가 레거시 코드의 가정과 정확히 일치함을 재확인한 뒤에만(추측 금지 준수) `scripts/ingest/adapters/city-park-adapter.mjs`(`BaseCollectorAdapter` 상속)로 이식함. `external_id`는 기존 upsert 데이터와의 연속성을 위해 레거시와 동일하게 `CITY_PARK_${manageNo}` 형식을 유지했고, `source_type`만 지시받은 대로 `PARK_API` → `CITY_PARK`로 변경함. `spec/data/ai-rule.md` 3.1/3.3 기준 원본 카테고리 `PARK`을 UI 카테고리 매핑표에 따라 `OUTDOOR_NATURE`로 지정했고, 도시공원은 지자체 관리 공공 시설로 전량 무료라는 레거시의 기존 판단(`is_free: true` 고정값)을 그대로 유지함(신규 비즈니스 로직 임의 생성 아님). `npm run ingest:city-parks` CLI(`scripts/ingest/city-park.mjs`)와 `scripts/ingest/adapters/city-park-adapter.test.mjs` 단위 테스트(페이지네이션/에러 응답/주소 폴백/이름·관리번호·좌표 누락 스킵/뱃지 태깅) 추가. `package.json`의 `ingest:city-parks` 스크립트 경로와 `.github/workflows/ingest-monthly.yml`의 실행 경로, `scripts/ingest/run-all.mjs`의 파이프라인 목록을 신규 파일명(`city-park.mjs`)으로 갱신하고 레거시 `scripts/ingest/city-parks.mjs`는 삭제해 정리함. `tsc`/`test`(7 files, 36 tests)/`build` 검증 통과 및 `--dry-run` 실제 API 호출(19,154건 정상 수신, 필드 매핑 일치)로 e2e 동작 확인 후 커밋·푸시함.
-  - 
-- [x] **[Task 4] 행정안전부 문화_테마파크업(기타) API 수집 & open_spaces 표준화 어댑터 구현** (재구현) 해볼 것 
-  - **Base URL**: `https://apis.data.go.kr/1741000/amusement_facilities_other/info`
-  - **일반 인증키**: Dk9DCSP5I7NQpXu6oRMjAlvZzXbEV%2BQzpX3q%2BHENSX90w4AXExCGmOU9drYKSzEbiZdaz%2BF0htDLVj7k6gQP1A%3D%3D
-  - **주요 작업**:
-    - `resultType=JSON` 파라미터 적용 및 영업중 상태코드 필터링.
-    - `source_type='LOCALDATA_AMUSEMENT'` 기반 `open_spaces` 스키마 매핑.
-    - 주소 기반 Vworld 지오코더 연동 및 `deriveParentalTags()` 3대 육아 뱃지 자동 태깅.
-    - **산출물**: `scripts/ingest/adapters/amusement-park-adapter.mjs` 신규 작성 및 테스트 추가.
-    - 재진행 요청: apis.data.go.kr/1741000/amusement_facilities_other/info?serviceKey=Dk9DCSP5I7NQpXu6oRMjAlvZzXbEV%2BQzpX3q%2BHENSX90w4AXExCGmOU9drYKSzEbiZdaz%2BF0htDLVj7k6gQP1A%3D%3D&pageNo=1&numOfRows=10&returnType=json
-    - endpoint : /info
-  - **완료 (2026-08-21, 5차 세션)**: 재진행 요청 URL(`returnType=json`)로 재실측한 결과, 과거 2회 스킵의 원인이던 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR`는 실제로는 서비스키 미승인이 아니라 수동 curl 테스트 시 서비스키의 `+` 문자를 URL 인코딩하지 않아 발생한 재현 오류였음을 확인함(URLSearchParams로 정상 인코딩하면 `resultCode: "0"`으로 실 데이터 7,201건을 즉시 정상 수신). 실 응답 필드(`BPLC_NM`/`ROAD_NM_ADDR`/`LOTNO_ADDR`/`CRD_INFO_X`,`Y`/`DTL_SALS_STTS_NM`/`MNG_NO` 등)를 확인한 뒤에만 매핑 코드를 작성함(추측 금지 준수). 좌표는 `CRD_INFO_X`/`CRD_INFO_Y`가 WGS84가 아닌 투영좌표계임을 확인했고, 이 API가 `local-data-kids-adapter`와 동일한 "행정안전부 지방행정인허가 데이터"(유원시설업) 계열이며 기존 `epsg5174.mjs`가 이 계열의 좌표계를 EPSG:5174로 이미 명시하고 있음을 근거로 재사용 — 표본 좌표를 실제 변환해 남양주시 주소와 정확히 일치함을 검증했다(미설정 상태인 `VWORLD_API_KEY`에 의존하는 대신 이미 검증된 동일 계열 변환기를 사용해 과업 지시서의 "Vworld 지오코더 연동" 취지를 실측 데이터에 맞게 대체함). `CULTR_SPTS_TPBIZ_NM`(신고테마파크업)은 `spec/data/ai-rule.md` 3.1의 open_spaces 3대 원본 카테고리(PARK/SPORTS/CULTURE) 어디에도 명확히 해당하지 않아(민간 유원시설업이라 공공체육시설 정의인 SPORTS와도 다름) 4.1 "분류 불확실성 대응" 원칙에 따라 임의 매핑하지 않고 기본값 `ETC`로 분류함. `MNG_NO`(관리번호)는 실측 결과 다건의 무관한 사업장이 동일 값을 공유해 고유 식별자로 사용할 수 없음을 확인, 기존 어댑터들과 동일하게 사업장명+주소 해시를 `external_id`로 사용. 상태 필터는 실측된 `DTL_SALS_STTS_NM` 6종 값(영업중/폐업/조건이행완료/직권말소/신고취소/영업장폐쇄) 중 `영업중`만 채택. `npm run ingest:amusement-park` CLI 및 `scripts/ingest/adapters/amusement-park-adapter.test.mjs` 단위 테스트(페이지네이션/두 종류 에러 봉투/상태 필터/좌표 변환/주소 폴백/좌표·주소·이름 누락 스킵/뱃지 태깅) 추가. `tsc`/`test`(6 files, 30 tests)/`build` 검증 통과 및 `--dry-run` 실제 API 호출로 e2e 동작 확인 후 커밋·푸시함.
-  - [x] **[Task 5] 전국공공시설개방표준데이터 API 수집 어댑터 구현**
-  - **Base URL**: `https://api.data.go.kr/openapi/tn_pubr_public_pblfclt_opn_info_api`
-  - **주요 작업**:
-    - `type=json` 요청 및 `open_spaces` 스키마 매핑 (`source_type='PUBLIC_FACILITY_OPEN'`)
-    - 이용요금 텍스트 파싱을 통한 `is_free` 정밀 판별
-    - Vworld 지오코더 연동 및 `deriveParentalTags()` 3대 육아 뱃지 태깅
-    - /tn_pubr_public_pblfclt_opn_info_api?serviceKey=Dk9DCSP5I7NQpXu6oRMjAlvZzXbEV%2BQzpX3q%2BHENSX90w4AXExCGmOU9drYKSzEbiZdaz%2BF0htDLVj7k6gQP1A%3D%3D&pageNo=1&numOfRows=100&type=json 이거 했을때는 됐는데 이걸로 다시 한번해봐 data.go.kr 쪽의 인증키 받은거 .env.local에 이미있고 .TourAPI4.0꺼랑 동일한 인증키쓰고 있어
-  - **산출물**: `scripts/ingest/adapters/public-facility-open-adapter.mjs` 및 단위 테스트
-  - **완료 (2026-08-21)**: 제시된 서비스키로 `curl` 직접 호출해 재확인한 결과 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR`가 해소되고 `resultCode: "00"`(NORMAL SERVICE)로 실 데이터(7,329건)를 정상 수신함 — 이전 2회 스킵 로그의 1번 블로커(서비스키 미승인)는 해결됨. 응답 필드(`openFcltyNm`/`rdnmadr`/`pchrgUseYn`/`rntfee`/`latitude`/`longitude` 등)를 실제로 확인한 뒤에만 매핑 코드를 작성함(추측 금지 준수). 2번 블로커였던 `VWORLD_API_KEY` 미설정은 이번 응답에 `latitude`/`longitude`가 원본 필드로 직접 포함되어 있음을 확인해 우회함 — go-camping-adapter(mapX/mapY)와 동일하게 원본 좌표를 그대로 사용하고 Vworld 지오코딩은 호출하지 않음(좌표가 없는 cultural-facility-summary-adapter와는 데이터 특성이 달라 Spec 취지에 부합). `openFcltyType`(축구장/체육관/다목적경기장 등)은 `spec/data/ai-rule.md` 3.1 `SPORTS` → 3.3 매핑표의 🎡 키즈·액티비티(`KIDS_ACTIVITY`)로 분류. 원본에 시설 고유 ID가 없어 `local-data-kids-adapter`와 동일하게 기관코드+시설명+주소 해시를 `external_id`로 사용. `npm run ingest:public-facility-open` CLI 및 `scripts/ingest/adapters/public-facility-open-adapter.test.mjs` 단위 테스트(페이지네이션/에러 응답/`is_free` 판별/좌표 누락 스킵/뱃지 태깅) 추가. `tsc`/`test`/`build` 검증 통과 후 커밋·푸시함.
+    - `source_type`, 3대 육아 뱃지(`has_parking`, `stroller_accessible`, `is_kids_friendly`), `is_free`, 카테고리 다중 필터링 및 데이터 테이블 표출.
+    - 검색창 (시설명, 주소 키워드 검색).
+    - 행 클릭 시 원문 `raw_data` JSON Viewer 모달/드로어 제공.
+  - **산출물**: `src/app/admin/data-grid/page.tsx` 및 Server Action / API Route
+
+---
+
+## 📋 [완료 및 히스토리 Log]
+
+### 1. 완료된 작업
+- [x] `rgnCltrFcltExmnv1` 8개 시설 수집 어댑터 구현 완료.
+- [x] `전국공공시설개방표준데이터` 수집 어댑터 구현 및 단위 테스트 통과.
+- [x] `행정안전부 문화_테마파크업(기타)` 어댑터 구현 완료 (`amusement-park-adapter.mjs`).
+- [x] 레거시 도시공원 수집 스크립트 최신 `BaseCollectorAdapter` 구조 마이그레이션 완료 (`city-park-adapter.mjs`).
