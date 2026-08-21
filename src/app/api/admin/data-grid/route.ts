@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/server';
 const PAGE_SIZE = 30;
 
 const SELECT_COLUMNS =
-  'id, external_id, source_type, name, category, address, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, raw_data, created_at, updated_at';
+  'id, external_id, source_type, name, category, address, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, location, raw_data, created_at, updated_at';
 
 function parseBoolFilter(value: string | null): boolean | null {
   if (value === 'true') return true;

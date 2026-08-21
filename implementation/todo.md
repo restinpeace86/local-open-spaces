@@ -19,17 +19,10 @@
 - [x] **[Task 5] 전국공공시설개방표준데이터 API 수집 어댑터 구현** (완료)
 - [x] **[Task 2] 도시공원 수집 스크립트(city-parks.mjs) 최신 BaseCollectorAdapter 마이그레이션** (완료)
 
-- [ ] **[Task 6] [내부 검증용] DB 적재 데이터 점검용 Admin Data Grid 구축** 🔄 *(차기 진행)*
-  - **사전 실행**: `git pull` 수행으로 최신 `spec/data/ai-rule.md` 반영 확인.
-  - **라우트**: `/admin/data-grid` (개발자 전용 분리 라우트, Read-Only)
-  - **목적**: `open_spaces` 테이블 표준화 데이터 및 `raw_data` 원문 JSON을 개발자가 눈으로 직접 실시간 점검·검증하는 읽기 전용 어드민 툴.
-  - **작업 지시**:
-    - `source_type` (TourAPI, CITY_PARK, LOCALDATA_AMUSEMENT, PUBLIC_FACILITY_OPEN 등) 다중 필터링.
-    - 3대 육아 뱃지(`has_parking`, `stroller_accessible`, `is_kids_friendly`), `is_free`, `category` 상태 필터.
-    - 시설명 및 주소 키워드 검색창 제공.
-    - 데이터 테이블 표출 (시설명, 주소, 카테고리, 뱃지 현황, 위경도 좌표 존재 여부, 수집일자).
-    - 행 클릭 시 원문 `raw_data` JSON Viewer 모달/드로어 표출.
-  - **산출물**: `src/app/admin/data-grid/page.tsx` 및 Server Action / API Route
+- [x] **[Task 6] [내부 검증용] DB 적재 데이터 점검용 Admin Data Grid 구축** (완료)
+  - **구현 산출물**: `src/app/admin/data-grid/page.tsx`, `src/app/api/admin/data-grid/route.ts`, `src/components/admin/data-grid-client.tsx`, `src/components/admin/raw-data-modal.tsx`
+  - **특징**: `source_type`/카테고리 다중 필터(DB 실값 기반, 하드코딩 없음), 3대 육아 뱃지 및 `is_free` 3단 토글 필터, 시설명/주소 검색(300ms 디바운스), 데이터 테이블에 `location` 좌표 존재 여부(존재/미존재) 컬럼 표출, 페이지네이션(30건/페이지), 행 클릭 시 `raw_data` JSON 모달.
+  - **참고**: Spec에 인증/권한 요구가 명시되지 않아 별도 로그인 게이팅은 구현하지 않음 (Decision 007의 `is_admin()` RBAC 인프라는 현재 마이그레이션에 실제로 존재하지 않아 적용 불가 — 필요 시 별도 Task로 분리 요망).
 
 ---
 

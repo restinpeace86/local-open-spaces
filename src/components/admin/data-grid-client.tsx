@@ -19,6 +19,7 @@ export type AdminSpaceRow = {
   stroller_accessible: boolean;
   facility_type: string;
   target_age_group: string | null;
+  location: unknown;
   raw_data: unknown;
   created_at: string | null;
   updated_at: string | null;
@@ -246,6 +247,7 @@ export function AdminDataGridClient({
                 <th className="py-2 pr-3">무료</th>
                 <th className="py-2 pr-3">뱃지</th>
                 <th className="py-2 pr-3">시설유형</th>
+                <th className="py-2 pr-3">좌표</th>
                 <th className="py-2 pr-3">수집일</th>
               </tr>
             </thead>
@@ -276,6 +278,13 @@ export function AdminDataGridClient({
                       {row.is_kids_friendly && '🛝'}
                     </td>
                     <td className="py-2 pr-3 text-gray-600">{row.facility_type}</td>
+                    <td className="py-2 pr-3">
+                      {row.location != null ? (
+                        <span className="text-xs font-semibold text-green-600">존재</span>
+                      ) : (
+                        <span className="text-xs font-semibold text-red-500">미존재</span>
+                      )}
+                    </td>
                     <td className="py-2 pr-3 text-gray-400 whitespace-nowrap">
                       {row.created_at ? new Date(row.created_at).toLocaleDateString('ko-KR') : '-'}
                     </td>
