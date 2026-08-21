@@ -1,10 +1,11 @@
 // Task 8-2: gg-events-adapter.mjs 단위 테스트
 // - User-Agent 헤더 포함 여부, INFO-000 성공 코드 처리, 페이지네이션
 // - 좌표 필드가 없어 VWorld 지오코딩 필수(geocode 모킹으로 검증)
-// - API1(PublicSwimmingPool): INOUTDR_DIV_NM 기준 facility_type 매핑, 소스 레벨 공공 확정으로 is_free=true 고정,
+// - API1(PublicSwimmingPool): INOUTDR_DIV_NM 기준 facility_type 매핑, 요금 정보 없어 is_free=null(Task 8-4에서 수정),
 //   명칭 키워드 기반 is_kids_friendly
 // - API2(TBWTRWTRPLYHYDRDTAM): is_free/is_kids_friendly 고정 true, facility_type 고정 '야외'
 // - SHA1(이름|주소) 기반 external_id
+// - 지오코딩 Pacing/재시도(Task 8-3): 일시 실패 시 재시도로 복구, 최대 시도 초과 시 해당 건만 건너뜀
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./lib/vworld-geocoder.mjs', () => ({
@@ -125,7 +126,7 @@ describe('GgEventsAdapter', () => {
         category: 'KIDS_ACTIVITY',
         address: '경기도 남양주시 다산지금로 91',
         facility_type: '실내',
-        is_free: true,
+        is_free: null,
         is_kids_friendly: false,
       });
       expect(poolRow.external_id).toMatch(/^GG_EVENTS_[0-9a-f]{16}$/);
@@ -149,12 +150,23 @@ describe('GgEventsAdapter', () => {
       expect(rows).toEqual([]);
     });
 
-    it('지오코딩 호출이 실패해도 전체를 중단하지 않고 해당 항목만 건너뛴다', async () => {
-      geocode.mockRejectedValueOnce(new Error('네트워크 오류'));
+    it('지오코딩 호출이 재시도 횟수만큼 계속 실패하면 전체를 중단하지 않고 해당 항목만 건너뛴다', async () => {
+      geocode.mockRejectedValueOnce(new Error('네트워크 오류 1'));
+      geocode.mockRejectedValueOnce(new Error('네트워크 오류 2'));
+      geocode.mockRejectedValueOnce(new Error('네트워크 오류 3'));
       const adapter = new GgEventsAdapter();
       const rows = await adapter.transform({ poolItems: [POOL_ITEM], splashItems: [SPLASH_ITEM] });
       expect(rows).toHaveLength(1);
       expect(rows[0].name).toBe(SPLASH_ITEM.HYDR_NM);
+    });
+
+    it('일시적으로 실패해도 재시도 중 성공하면 해당 항목을 정상 수집한다(Task 8-3 pacing/재시도)', async () => {
+      geocode.mockRejectedValueOnce(new Error('502 Bad Gateway'));
+      const adapter = new GgEventsAdapter();
+      const rows = await adapter.transform({ poolItems: [POOL_ITEM], splashItems: [] });
+      expect(rows).toHaveLength(1);
+      expect(rows[0].name).toBe(POOL_ITEM.FACLT_NM);
+      expect(geocode).toHaveBeenCalledTimes(2); // 1차 실패 + 2차 성공
     });
 
     it('INOUTDR_DIV_NM이 실외이면 API1 facility_type을 야외로 매핑한다', async () => {

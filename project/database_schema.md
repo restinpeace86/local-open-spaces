@@ -67,7 +67,7 @@
 | `thumbnail_url` | TEXT | NULL | 대표 이미지 URL |
 | `is_active` | BOOLEAN | DEFAULT `true` | 활성화 상태 여부 |
 | `created_at` | TIMESTAMPTZ | DEFAULT `NOW()` | 레코드 생성 일시 |
-| `is_free` | BOOLEAN | DEFAULT `false` | 무료 행사 여부 |
+| `is_free` | BOOLEAN | NULL 허용, DEFAULT `false` | 무료 행사 여부 (`NULL` = 요금 정보 미기재, `spec/space/space-card.md` 뱃지 숨김 규약). 2026-08-21 정정: 이전에 NOT NULL 제약이 있어 `open_spaces.is_free`와 불일치했음(스펙과 어긋난 제약이었음) — 마이그레이션으로 제거함 |
 | `is_kids_friendly` | BOOLEAN | DEFAULT `false` | 키즈/어린이 친화 여부 |
 | `has_parking` | BOOLEAN | DEFAULT `false` | 주차 가능 여부 |
 | `stroller_accessible` | BOOLEAN | DEFAULT `false` | 유모차 접근 가능 여부 |

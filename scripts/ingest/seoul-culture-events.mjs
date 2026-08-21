@@ -10,30 +10,6 @@ import { cleanText, deriveParentalTags, deriveBookingStatus } from './lib/ai-tag
 const env = loadEnv();
 const dryRun = process.argv.includes('--dry-run');
 
-async function fetchCultureEvents({ startIdx = 1, endIdx = 20 } = {}) {
-  const url = `http://openapi.seoul.go.kr:8088/${env.SEOUL_OPEN_DATA_KEY}/json/culturalEventInfo/${startIdx}/${endIdx}/`;
-  const res = await fetch(url);
-  const text = await res.text();
-
-  if (!res.ok) {
-    throw new Error(`서울 열린데이터광장 호출 실패 (HTTP ${res.status}): ${text.slice(0, 300)}`);
-  }
-
-  let json;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    throw new Error(`서울 열린데이터광장 응답이 JSON이 아닙니다: ${text.slice(0, 300)}`);
-  }
-
-  const result = json.culturalEventInfo?.RESULT ?? json.RESULT;
-  if (result && result.CODE !== 'INFO-000') {
-    throw new Error(`서울 열린데이터광장 에러 응답: ${result.CODE} ${result.MESSAGE}`);
-  }
-
-  return json.culturalEventInfo?.row ?? [];
-}
-
 // 원본 API에 안정적인 고유 ID 필드가 없어 TITLE+STRTDATE+PLACE 조합의 결정적 해시를
 // external_id로 사용한다 (project/database_schema.md의 Upsert 기준 키 요건 충족 목적).
 function buildExternalId(item) {
@@ -70,17 +46,74 @@ async function mapToEventRow(item, { apiKey }) {
     thumbnail_url: item.MAIN_IMG || null,
     is_active: true,
     booking_status: bookingStatus,
+    // Task 8-4 정밀 검증(2026-08-21)에서 발견: is_free가 어디에도 설정되지 않아 DB 컬럼 기본값으로
+    // 전량 false(유료)가 되고 있었다 — 실측 결과 원본에 IS_FREE 필드('유료'/'무료')가 실제로 있고
+    // 표본(1,000건)에서 무료 비율이 65.1%(651/1,000)에 달해 심각한 오탐이었다. 원본 필드를 그대로
+    // 반영하되, '유료'/'무료' 둘 중 하나로 명확한 경우만 판별하고 그 외(빈 값 등)는 null(미기재)로
+    // 남겨 유료로 임의 단정하지 않는다(space-card.md의 is_free null 처리 규약 준수).
+    is_free: item.IS_FREE === '무료' ? true : item.IS_FREE === '유료' ? false : null,
     ...tags,
   };
 }
 
+const PAGE_SIZE = 1000;
+
+// Task 8-4 완결성 검증(2026-08-21)에서 발견: main()이 fetchCultureEvents({ startIdx: 1, endIdx: 20 })를
+// 단발로만 호출해 list_total_count(실측 19,508건) 중 20건만 수집되고 있었다(페이지네이션 루프 부재).
+// 실제 호출로 페이지당 1,000건까지 정상 응답됨을 확인해(culturalEventInfo/1/1000/ → 1000건 수신)
+// 전체 목록을 끝까지 순회하도록 수정한다.
+async function fetchAllCultureEvents() {
+  const items = [];
+  let startIdx = 1;
+  let totalCount = Infinity;
+
+  while (startIdx <= totalCount) {
+    const endIdx = startIdx + PAGE_SIZE - 1;
+    const url = `http://openapi.seoul.go.kr:8088/${env.SEOUL_OPEN_DATA_KEY}/json/culturalEventInfo/${startIdx}/${endIdx}/`;
+    const res = await fetch(url);
+    const text = await res.text();
+
+    if (!res.ok) {
+      throw new Error(`서울 열린데이터광장 호출 실패 (HTTP ${res.status}): ${text.slice(0, 300)}`);
+    }
+
+    let json;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      throw new Error(`서울 열린데이터광장 응답이 JSON이 아닙니다: ${text.slice(0, 300)}`);
+    }
+
+    const body = json.culturalEventInfo;
+    const result = body?.RESULT ?? json.RESULT;
+    if (result && result.CODE !== 'INFO-000') {
+      throw new Error(`서울 열린데이터광장 에러 응답: ${result.CODE} ${result.MESSAGE}`);
+    }
+
+    totalCount = body?.list_total_count ?? 0;
+    items.push(...(body?.row ?? []));
+    startIdx += PAGE_SIZE;
+  }
+
+  return items;
+}
+
 async function main() {
   console.log(`▶ 서울시 문화행사 정보 수집 시작 (dry-run: ${dryRun})`);
-  const items = await fetchCultureEvents({ startIdx: 1, endIdx: 20 });
+  const items = await fetchAllCultureEvents();
   console.log(`✅ 서울 열린데이터광장 호출 성공: ${items.length}건 수신`);
 
-  const mapped = await Promise.all(items.map((item) => mapToEventRow(item, { apiKey: env.GEMINI_API_KEY })));
-  const rows = mapped.filter(Boolean);
+  // Task 8-4 완결성 검증(2026-08-21)에서 발견: Promise.all로 19,508건 전체를 동시에 처리하면
+  // SEOUL_CODENAME_MAP에 없는 CODENAME(전체의 약 8.65%, 실측 표본 2,000건 기준 173건)마다
+  // classifyEventTypeWithAI가 Gemini를 호출하는데, 이게 최대 수천 건 동시 호출로 몰려
+  // HTTP 429(rate limit)가 나고 전부 ETC로 떨어지는 원인이었다. 순차 처리로 바꿔 계속되는
+  // 동시 호출 폭주를 없앤다(ai-rule.md 4.1의 "AI 불확실 시 ETC" 자체는 정상 설계이나,
+  // 판단 불가가 아니라 요청 폭주로 인한 429는 막을 수 있는 문제라 순차 처리로 개선한다).
+  const rows = [];
+  for (const item of items) {
+    const row = await mapToEventRow(item, { apiKey: env.GEMINI_API_KEY });
+    if (row) rows.push(row);
+  }
   console.log(`  → 좌표/일자 유효 데이터: ${rows.length}건`);
 
   if (dryRun) {
