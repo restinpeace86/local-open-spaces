@@ -11,7 +11,7 @@
 > 본 문서의 **[선행 조사 결과]** 및 **[데이터 표준화 원칙]**을 바탕으로, 아래 **[🎯 신규 진행 Task 목록]**의 **Task 1번부터 순차적으로 코드를 구현**하고 결과를 본 문서 하단 보고서에 작성하세요.
 
 ---
-- [ ] **[Task 4] 행정안전부 문화_테마파크업(기타) API 수집 & open_spaces 표준화 어댑터 구현** (재구현) 해볼 것 
+- [x] **[Task 4] 행정안전부 문화_테마파크업(기타) API 수집 & open_spaces 표준화 어댑터 구현** (재구현) 해볼 것 
   - **Base URL**: `https://apis.data.go.kr/1741000/amusement_facilities_other/info`
   - **일반 인증키**: Dk9DCSP5I7NQpXu6oRMjAlvZzXbEV%2BQzpX3q%2BHENSX90w4AXExCGmOU9drYKSzEbiZdaz%2BF0htDLVj7k6gQP1A%3D%3D
   - **주요 작업**:
@@ -21,6 +21,7 @@
     - **산출물**: `scripts/ingest/adapters/amusement-park-adapter.mjs` 신규 작성 및 테스트 추가.
     - 재진행 요청: apis.data.go.kr/1741000/amusement_facilities_other/info?serviceKey=Dk9DCSP5I7NQpXu6oRMjAlvZzXbEV%2BQzpX3q%2BHENSX90w4AXExCGmOU9drYKSzEbiZdaz%2BF0htDLVj7k6gQP1A%3D%3D&pageNo=1&numOfRows=10&returnType=json
     - endpoint : /info
+  - **완료 (2026-08-21, 5차 세션)**: 재진행 요청 URL(`returnType=json`)로 재실측한 결과, 과거 2회 스킵의 원인이던 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR`는 실제로는 서비스키 미승인이 아니라 수동 curl 테스트 시 서비스키의 `+` 문자를 URL 인코딩하지 않아 발생한 재현 오류였음을 확인함(URLSearchParams로 정상 인코딩하면 `resultCode: "0"`으로 실 데이터 7,201건을 즉시 정상 수신). 실 응답 필드(`BPLC_NM`/`ROAD_NM_ADDR`/`LOTNO_ADDR`/`CRD_INFO_X`,`Y`/`DTL_SALS_STTS_NM`/`MNG_NO` 등)를 확인한 뒤에만 매핑 코드를 작성함(추측 금지 준수). 좌표는 `CRD_INFO_X`/`CRD_INFO_Y`가 WGS84가 아닌 투영좌표계임을 확인했고, 이 API가 `local-data-kids-adapter`와 동일한 "행정안전부 지방행정인허가 데이터"(유원시설업) 계열이며 기존 `epsg5174.mjs`가 이 계열의 좌표계를 EPSG:5174로 이미 명시하고 있음을 근거로 재사용 — 표본 좌표를 실제 변환해 남양주시 주소와 정확히 일치함을 검증했다(미설정 상태인 `VWORLD_API_KEY`에 의존하는 대신 이미 검증된 동일 계열 변환기를 사용해 과업 지시서의 "Vworld 지오코더 연동" 취지를 실측 데이터에 맞게 대체함). `CULTR_SPTS_TPBIZ_NM`(신고테마파크업)은 `spec/data/ai-rule.md` 3.1의 open_spaces 3대 원본 카테고리(PARK/SPORTS/CULTURE) 어디에도 명확히 해당하지 않아(민간 유원시설업이라 공공체육시설 정의인 SPORTS와도 다름) 4.1 "분류 불확실성 대응" 원칙에 따라 임의 매핑하지 않고 기본값 `ETC`로 분류함. `MNG_NO`(관리번호)는 실측 결과 다건의 무관한 사업장이 동일 값을 공유해 고유 식별자로 사용할 수 없음을 확인, 기존 어댑터들과 동일하게 사업장명+주소 해시를 `external_id`로 사용. 상태 필터는 실측된 `DTL_SALS_STTS_NM` 6종 값(영업중/폐업/조건이행완료/직권말소/신고취소/영업장폐쇄) 중 `영업중`만 채택. `npm run ingest:amusement-park` CLI 및 `scripts/ingest/adapters/amusement-park-adapter.test.mjs` 단위 테스트(페이지네이션/두 종류 에러 봉투/상태 필터/좌표 변환/주소 폴백/좌표·주소·이름 누락 스킵/뱃지 태깅) 추가. `tsc`/`test`(6 files, 30 tests)/`build` 검증 통과 및 `--dry-run` 실제 API 호출로 e2e 동작 확인 후 커밋·푸시함.
   - [x] **[Task 5] 전국공공시설개방표준데이터 API 수집 어댑터 구현**
   - **Base URL**: `https://api.data.go.kr/openapi/tn_pubr_public_pblfclt_opn_info_api`
   - **주요 작업**:
