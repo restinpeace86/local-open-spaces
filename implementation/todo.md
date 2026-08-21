@@ -70,6 +70,8 @@
 
 > **2026-08-21 세션 재개 로그(2차):** 기획 AI가 `spec/space/space-card.md`를 직접 갱신(커밋 `a61bed4`)하여 `is_free` 뱃지의 `true`/`false`/`null` 3분기 표시 규칙(`null`은 뱃지 숨김)을 명문화함에 따라, 위 Action Item 1번의 홀드 사유("Spec 없는 UI 변경이므로 임의 구현 금지")가 해소됨. 이를 근거로 제0조 사전 준수 재확인 후 `src/lib/spaces/parental-badges.ts`의 `getSpaceBadges()`만 신규 Spec에 맞춰 구현 완료(공간 카드 한정 — `spec/event/event-card.md`는 변경되지 않았으므로 `getEventBadges()`는 기존 로직 유지). `quick-filters.ts`의 `isFree()`는 이미 `is_free === true`만 매칭하고 있어 수정 불필요함을 확인. Action Item 2/3번은 여전히 별도 승인 필요 상태로 스킵 유지.
 
+> **2026-08-21 세션 재개 로그(3차):** 제0조 사전 준수 확인을 다시 수행함. 남은 미체크 항목(Action Item 2 — `deriveParentalTags()` 어댑터 연결, Action Item 3 — `detailIntro2` 상세 API 연동)은 각각 항목 본문에 "기존 어댑터 로직 변경이므로 별도 승인 필요", "캐싱/배치 전략 설계 선행 필요"라는 홀드 표시가 여전히 남아 있고, `project/decision-log.md` Decision 008의 "코드 마이그레이션 대기(미착수, 별도 승인 필요)" 항목 5(요금 오탐 방지 Fallback 룰)와도 동일한 "개별 승인 후 순차 진행" 원칙과 상충함을 재확인했다. 두 항목 모두 기획 AI 승인 및 별도 Spec 없이는 착수하지 않으며, 이번 세션에서도 구현하지 않고 스킵을 유지한다.
+
 ---
 
 ## 🚧 [기존 기능명세서 충돌 위험]
