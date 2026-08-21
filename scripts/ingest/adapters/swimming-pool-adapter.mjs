@@ -57,8 +57,12 @@
 import crypto from 'crypto';
 import { BaseCollectorAdapter } from './base-collector-adapter.mjs';
 import { buildOpenSpaceRow, UI_CATEGORY } from './lib/schema-mapper.mjs';
-import { deriveIsFreeFallback } from '../lib/ai-tagging.mjs';
+import { deriveIsFreeFallback, matchesKidsKeyword } from '../lib/ai-tagging.mjs';
 import { convertEpsg5174ToWgs84 } from './lib/epsg5174.mjs';
+
+// 하위 호환: 이전에는 이 파일에 matchesKidsKeyword가 직접 정의돼 있었으나, gg-events-adapter.mjs
+// (Task 8-2)도 동일 키워드 목록이 필요해져 lib/ai-tagging.mjs로 옮겨 공용화했다(2026-08-21).
+export { matchesKidsKeyword };
 
 const API1_BASE_URL = 'https://apis.data.go.kr/B551014/SRVC_API_SFMS_FACI/TODZ_API_SFMS_FACI';
 const API2_BASE_URL = 'https://apis.data.go.kr/1741000/swimming_pools/info';
@@ -67,13 +71,6 @@ const API1_SUCCESS_RESULT_CODE = '00';
 const API2_SUCCESS_RESULT_CODE = '0';
 const API1_ACTIVE_STATUS = '정상운영';
 const API2_ACTIVE_STATUS = '영업/정상';
-
-const KIDS_KEYWORDS = ['어린이', '유아', '키즈', '영유아', '유아풀', '어린이풀', '키즈풀'];
-
-export function matchesKidsKeyword(...texts) {
-  const combined = texts.filter(Boolean).join(' ');
-  return KIDS_KEYWORDS.some((keyword) => combined.includes(keyword));
-}
 
 export function normalizeForDedup(value) {
   return (value || '').replace(/\s+/g, '');

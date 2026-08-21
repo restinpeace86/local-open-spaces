@@ -53,6 +53,17 @@ export function deriveParentalTags(sourceText) {
   };
 }
 
+// swimming-pool-adapter.mjs(Task 7-3)에서 사용자가 지정한 고정 키워드 목록(2026-08-21).
+// deriveParentalTags의 넓은 키워드 세트('아이'/'가족' 포함)와 달리, 시설명/사업장명 등
+// "명칭"에만 적용하도록 좁게 지정된 키워드다 — 두 어댑터 이상이 동일 목록을 쓰게 되어
+// (gg-events-adapter.mjs) 여기로 옮겨 공용화한다 (제5장 제4조 기존 구조 우선, 중복 방지).
+const NAME_KIDS_KEYWORDS = ['어린이', '유아', '키즈', '영유아', '유아풀', '어린이풀', '키즈풀'];
+
+export function matchesKidsKeyword(...texts) {
+  const combined = texts.filter(Boolean).join(' ');
+  return NAME_KIDS_KEYWORDS.some((keyword) => combined.includes(keyword));
+}
+
 // spec/data/ai-rule.md 5.2-7 (OCR 이외 부분) 구현: 요금 정보가 원본에 전혀 없고
 // 제공기관이 국공립/공공기관으로 "확정"된 경우에만 is_free: true를 기본 추정한다.
 // isPublicProvider는 호출부(어댑터)가 소스 전체가 정부/공공기관 자체 운영 데이터임을
