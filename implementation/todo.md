@@ -14,20 +14,17 @@
 
 ## 🎯 [신규] 차기 진행 Task 목록
 
-- [x] **[Task 6] [내부 검증용] DB 적재 데이터 점검용 Admin Data Grid 구축 및 UI 버그 수정** 🔄
-  - **라우트**: `/admin/data-grid`
-  - **🚨 긴급 수정 지시**:
-    - 현재 테이블 행(Row)에서 뱃지가 최대 1개만 보이는 UI 버그 수정.
-    - `has_parking`, `stroller_accessible`, `is_kids_friendly` 3개 조건이 모두 `true`인 경우, `flex-wrap gap-1` 배치를 적용하여 **한 행에 복수 개의 뱃지(최대 3개)가 모두 나란히 표출**되도록 UI 렌더링 로직 수정.
+- [x] **[Task 1] `rgnCltrFcltExmnv1` 8개 시설 수집 어댑터 구현** (완료)
+- [x] **[Task 4] 행정안전부 문화_테마파크업(기타) API 수집 어댑터 구현** (완료)
+- [x] **[Task 5] 전국공공시설개방표준데이터 API 수집 어댑터 구현** (완료)
+- [x] **[Task 2] 도시공원 수집 스크립트(city-parks.mjs) 최신 BaseCollectorAdapter 마이그레이션** (완료)
+
+- [ ] **[Task 6] [내부 검증용] DB 적재 데이터 점검용 Admin Data Grid 구축** 🔄 *(차기 진행)*
+  - **사전 실행**: `git pull` 수행으로 최신 명세 반영 확인.
+  - **라우트**: `/admin/data-grid` (개발자 전용 분리 라우트, Read-Only)
   - **작업 지시**:
-    - `source_type` 다중 필터링, 검색 바, `raw_data` JSON Viewer 모달/드로어 작동 검증.
----
-
-## 📋 [완료 및 히스토리 Log]
-
-### 1. 완료된 작업
-- [x] `rgnCltrFcltExmnv1` 8개 시설 수집 어댑터 구현 완료.
-- [x] `전국공공시설개방표준데이터` 수집 어댑터 구현 및 단위 테스트 통과.
-- [x] `행정안전부 문화_테마파크업(기타)` 어댑터 구현 완료 (`amusement-park-adapter.mjs`).
-- [x] 레거시 도시공원 수집 스크립트 최신 `BaseCollectorAdapter` 구조 마이그레이션 완료 (`city-park-adapter.mjs`, 19,154건).
-- [x] `[Task 6]` Admin Data Grid 뱃지 UI 버그 수정: `has_parking`/`stroller_accessible`/`is_kids_friendly` 뱃지를 `flex-wrap gap-1` 컨테이너의 개별 칩으로 렌더링해 3개 모두 동시 노출되도록 수정 (`data-grid-client.tsx`). `source_type` 다중 필터, 검색 바(ilike, 300ms 디바운스), `raw_data` JSON 뷰어 모달/바텀시트 동작 코드 검증 완료(정상).
+    - `source_type` 다중 필터링, 키워드 검색, 원문 `raw_data` JSON Viewer 모달/드로어 제공.
+    - `spec/ui/space-card.md` 뱃지 규약 점검:
+      - 필수 뱃지(`is_free`, `facility_type`, `target_age_group`) 및 보조 뱃지(`has_parking`, `is_kids_friendly`, `stroller_accessible`) 표출 확인.
+      - `is_free === null`일 때 요금 뱃지를 미노출(숨김) 처리하는 오탐 방지 로직 적용.
+  - **산출물**: `src/app/admin/data-grid/page.tsx` 및 Server Action / API Route
