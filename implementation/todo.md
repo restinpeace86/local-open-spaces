@@ -14,16 +14,13 @@
 
 ## 🎯 [신규] 차기 진행 Task 목록
 
-- [x] **[Task 1] `rgnCltrFcltExmnv1` (전국문화기반시설총람) 8개 시설 수집 어댑터 구현** (완료)
-- [x] **[Task 4] 행정안전부 문화_테마파크업(기타) API 수집 어댑터 구현** (완료)
-- [x] **[Task 5] 전국공공시설개방표준데이터 API 수집 어댑터 구현** (완료)
-- [x] **[Task 2] 도시공원 수집 스크립트(city-parks.mjs) 최신 BaseCollectorAdapter 마이그레이션** (완료)
-
-- [x] **[Task 6] [내부 검증용] DB 적재 데이터 점검용 Admin Data Grid 구축** (완료)
-  - **구현 산출물**: `src/app/admin/data-grid/page.tsx`, `src/app/api/admin/data-grid/route.ts`, `src/components/admin/data-grid-client.tsx`, `src/components/admin/raw-data-modal.tsx`
-  - **특징**: `source_type`/카테고리 다중 필터(DB 실값 기반, 하드코딩 없음), 3대 육아 뱃지 및 `is_free` 3단 토글 필터, 시설명/주소 검색(300ms 디바운스), 데이터 테이블에 `location` 좌표 존재 여부(존재/미존재) 컬럼 표출, 페이지네이션(30건/페이지), 행 클릭 시 `raw_data` JSON 모달.
-  - **참고**: Spec에 인증/권한 요구가 명시되지 않아 별도 로그인 게이팅은 구현하지 않음 (Decision 007의 `is_admin()` RBAC 인프라는 현재 마이그레이션에 실제로 존재하지 않아 적용 불가 — 필요 시 별도 Task로 분리 요망).
-
+- [ ] **[Task 6] [내부 검증용] DB 적재 데이터 점검용 Admin Data Grid 구축 및 UI 버그 수정** 🔄
+  - **라우트**: `/admin/data-grid`
+  - **🚨 긴급 수정 지시**:
+    - 현재 테이블 행(Row)에서 뱃지가 최대 1개만 보이는 UI 버그 수정.
+    - `has_parking`, `stroller_accessible`, `is_kids_friendly` 3개 조건이 모두 `true`인 경우, `flex-wrap gap-1` 배치를 적용하여 **한 행에 복수 개의 뱃지(최대 3개)가 모두 나란히 표출**되도록 UI 렌더링 로직 수정.
+  - **작업 지시**:
+    - `source_type` 다중 필터링, 검색 바, `raw_data` JSON Viewer 모달/드로어 작동 검증.
 ---
 
 ## 📋 [완료 및 히스토리 Log]
