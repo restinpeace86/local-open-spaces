@@ -247,6 +247,7 @@ export function AdminDataGridClient({
                 <th className="py-2 pr-3">무료</th>
                 <th className="py-2 pr-3">뱃지</th>
                 <th className="py-2 pr-3">시설유형</th>
+                <th className="py-2 pr-3">연령대</th>
                 <th className="py-2 pr-3">좌표</th>
                 <th className="py-2 pr-3">수집일</th>
               </tr>
@@ -271,7 +272,19 @@ export function AdminDataGridClient({
                       </span>
                     </td>
                     <td className="py-2 pr-3 text-gray-600">{row.address}</td>
-                    <td className="py-2 pr-3 text-gray-600">{row.is_free ? '무료' : '유료'}</td>
+                    <td className="py-2 pr-3">
+                      {row.is_free === true && (
+                        <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-green-50 text-green-600 whitespace-nowrap">
+                          🎁 무료
+                        </span>
+                      )}
+                      {row.is_free === false && (
+                        <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 whitespace-nowrap">
+                          💰 유료
+                        </span>
+                      )}
+                      {row.is_free === null && <span className="text-xs text-gray-300">미기재(숨김)</span>}
+                    </td>
                     <td className="py-2 pr-3">
                       <div className="flex flex-wrap gap-1">
                         {row.has_parking && (
@@ -292,6 +305,7 @@ export function AdminDataGridClient({
                       </div>
                     </td>
                     <td className="py-2 pr-3 text-gray-600">{row.facility_type}</td>
+                    <td className="py-2 pr-3 text-gray-600">{row.target_age_group ?? '-'}</td>
                     <td className="py-2 pr-3">
                       {row.location != null ? (
                         <span className="text-xs font-semibold text-green-600">존재</span>

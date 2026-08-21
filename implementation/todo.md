@@ -19,12 +19,12 @@
 - [x] **[Task 5] 전국공공시설개방표준데이터 API 수집 어댑터 구현** (완료)
 - [x] **[Task 2] 도시공원 수집 스크립트(city-parks.mjs) 최신 BaseCollectorAdapter 마이그레이션** (완료)
 
-- [ ] **[Task 6] [내부 검증용] DB 적재 데이터 점검용 Admin Data Grid 구축** 🔄 *(차기 진행)*
-  - **사전 실행**: `git pull` 수행으로 최신 명세 반영 확인.
+- [x] **[Task 6] [내부 검증용] DB 적재 데이터 점검용 Admin Data Grid 구축** (완료)
   - **라우트**: `/admin/data-grid` (개발자 전용 분리 라우트, Read-Only)
   - **작업 지시**:
-    - `source_type` 다중 필터링, 키워드 검색, 원문 `raw_data` JSON Viewer 모달/드로어 제공.
-    - `spec/ui/space-card.md` 뱃지 규약 점검:
-      - 필수 뱃지(`is_free`, `facility_type`, `target_age_group`) 및 보조 뱃지(`has_parking`, `is_kids_friendly`, `stroller_accessible`) 표출 확인.
-      - `is_free === null`일 때 요금 뱃지를 미노출(숨김) 처리하는 오탐 방지 로직 적용.
-  - **산출물**: `src/app/admin/data-grid/page.tsx` 및 Server Action / API Route
+    - `source_type` 다중 필터링, 키워드 검색, 원문 `raw_data` JSON Viewer 모달/드로어 제공. (기존 구현 확인 완료)
+    - `spec/space/space-card.md` 뱃지 규약 점검:
+      - 필수 뱃지 3종 중 `is_free`(무료 배지)·`facility_type`(시설유형 컬럼)은 기존 컬럼으로 노출 중이었으나 `target_age_group`(연령대) 컬럼이 누락되어 있어 신규 추가.
+      - 보조 뱃지(`has_parking`, `is_kids_friendly`, `stroller_accessible`) 표출 확인 완료(기존 구현 정상).
+      - `is_free === null`일 때 기존 코드가 `유료`로 오탐 표출하던 버그를 발견해 수정: `true`→"🎁 무료", `false`→"💰 유료", `null`→미기재(숨김) 문구로 분기 처리.
+  - **산출물**: `src/app/admin/data-grid/page.tsx`, `src/components/admin/data-grid-client.tsx`, `src/app/api/admin/data-grid/route.ts`
