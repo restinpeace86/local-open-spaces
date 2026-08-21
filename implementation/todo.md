@@ -68,6 +68,7 @@
   3. 위 두 경로가 모두 막혀, 8개 엔드포인트(`clifMsmv1`/`clifArglv1`/`clifLbrryv1`/`clifLvclCntrv1`/`clifClhsv1`/`clifLtrm1`/`clifClcnv1`/`clifNtnLbrryv1`) 응답 필드 구조를 임의로 추측해 매핑 코드를 작성할 수밖에 없는 상황이므로 착수하지 않고 즉시 스킵함.
   4. 참고로 Vworld Geocoder(`api.vworld.kr/req/address`) 연동에 필요한 `VWORLD_API_KEY`도 `.env.local`에 없어 좌표 변환 단계 역시 현재는 실제 호출 검증이 불가함(코드 자체는 Kakao 지오코더 선례처럼 키 부재 시 명시적 에러를 던지는 형태로 작성 가능하나, 상위 블로커인 필드 스키마 미확인으로 Task 1 전체를 보류함).
 - **필요 조치 (관리자/기획 담당)**: data.go.kr에서 "한국문화정보원_전국문화기반시설총람 정보 조회서비스"(`publicDataPk=15125097`) 활용신청을 승인받은 뒤, (a) 승인된 서비스키를 `.env.local`의 `PUBLIC_DATA_API_KEY`(또는 신규 키)에 반영하거나 (b) 8개 엔드포인트 각 1건의 실 호출 응답(JSON 원문)을 제공해줄 것. `VWORLD_API_KEY` 발급 및 `.env.local` 반영도 함께 필요. 위 조치 완료 후 다음 세션에서 실측 스키마 기반으로 즉시 재개 가능.
+- **재확인 (2026-08-21 후속 세션)**: 신규 세션 착수 전 사전 준수 확인(제0단계) 절차에 따라 `clifMsmv1` 엔드포인트를 동일 서비스키로 재호출 → 동일하게 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR`(returnReasonCode 30) 수신, `.env.local`에 `VWORLD_API_KEY` 여전히 미설정 확인. 관리자 조치 전까지 상태 변화 없음을 재확인하고 Task 1/2 스킵 유지.
 
 ---
 
