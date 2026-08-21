@@ -12,19 +12,51 @@
 
 ---
 
+# 📋 [TODO] 데이터 수집·표준화 ETL 구축 및 작업 지시서
+
+> 🚨 **[클로드 전용 작업 지시]** 
+> 본 문서의 **[🎯 신규 진행 Task 목록]** 중 미완료 Task를 순차적으로 구현하고 결과를 하단 보고서에 작성하세요.
+> **작업 착수 전 필수 실행**: 최신 명세(`spec/ui/space-card.md` 뱃지 규칙 및 `spec/data/ai-rule.md` 메인 히어로 규칙 등) 반영을 위해 반드시 `git pull`을 먼저 수행하세요.
+
+---
+
 ## 🎯 [신규] 차기 진행 Task 목록
 
-- [x] **[Task 1] `rgnCltrFcltExmnv1` 8개 시설 수집 어댑터 구현** (완료)
+- [x] **[Task 1] `rgnCltrFcltExmnv1` (전국문화기반시설총람) 8개 시설 수집 어댑터 구현** (완료)
 - [x] **[Task 4] 행정안전부 문화_테마파크업(기타) API 수집 어댑터 구현** (완료)
 - [x] **[Task 5] 전국공공시설개방표준데이터 API 수집 어댑터 구현** (완료)
 - [x] **[Task 2] 도시공원 수집 스크립트(city-parks.mjs) 최신 BaseCollectorAdapter 마이그레이션** (완료)
+  - **산출물**: `scripts/ingest/adapters/city-park-adapter.mjs` (19,154건 실데이터 정상 수신 확인 완료)
 
-- [x] **[Task 6] [내부 검증용] DB 적재 데이터 점검용 Admin Data Grid 구축** (완료)
+- [ ] **[Task 6] [내부 검증용] DB 적재 데이터 점검용 Admin Data Grid 구축 및 뱃지 규약 점검** 🔄 *(차기 진행 1순위)*
+  - **사전 실행**: `git pull` 수행으로 최신 명세 반영 확인.
   - **라우트**: `/admin/data-grid` (개발자 전용 분리 라우트, Read-Only)
   - **작업 지시**:
-    - `source_type` 다중 필터링, 키워드 검색, 원문 `raw_data` JSON Viewer 모달/드로어 제공. (기존 구현 확인 완료)
-    - `spec/space/space-card.md` 뱃지 규약 점검:
-      - 필수 뱃지 3종 중 `is_free`(무료 배지)·`facility_type`(시설유형 컬럼)은 기존 컬럼으로 노출 중이었으나 `target_age_group`(연령대) 컬럼이 누락되어 있어 신규 추가.
-      - 보조 뱃지(`has_parking`, `is_kids_friendly`, `stroller_accessible`) 표출 확인 완료(기존 구현 정상).
-      - `is_free === null`일 때 기존 코드가 `유료`로 오탐 표출하던 버그를 발견해 수정: `true`→"🎁 무료", `false`→"💰 유료", `null`→미기재(숨김) 문구로 분기 처리.
-  - **산출물**: `src/app/admin/data-grid/page.tsx`, `src/components/admin/data-grid-client.tsx`, `src/app/api/admin/data-grid/route.ts`
+    - `source_type` 다중 필터링, 키워드 검색, 원문 `raw_data` JSON Viewer 모달/드로어 제공.
+    - `spec/ui/space-card.md` 뱃지 규약 점검:
+      - 필수 뱃지(`is_free`, `facility_type`, `target_age_group`) 및 보조 뱃지(`has_parking`, `is_kids_friendly`, `stroller_accessible`) 표출 및 복수 표시 확인.
+      - `is_free === null`일 때 요금 뱃지를 미노출(숨김) 처리하는 오탐 방지 로직 준수 여부 검증.
+  - **산출물**: `src/app/admin/data-grid/page.tsx` 및 Server Action / API Route
+
+- [ ] **[Task 7] data.go.kr 키즈 특화 공공 API 2종 추가 수집 어댑터 구현** 🔄 *(Task 6 완료 후 진행)*
+  - **1) 행정안전부 전국어린이놀이시설정보 API**:
+    - **목적**: 공공·마을 어린이 놀이터 전수 수집 및 `is_kids_friendly = true` 뱃지 자동화.
+    - **API 명세 및 샘플 요청**:
+      - **End Point 1 (시설 기본정보)**: `https://apis.data.go.kr/1741000/pfc3/getPfctInfo3`
+        - 샘플: `apis.data.go.kr/1741000/pfc3/getPfctInfo3?serviceKey={인증키}&pageIndex=1&recordCountPerPage=10&pfctSn=999`
+      - **End Point 2 (놀이기구 정보)**: `https://apis.data.go.kr/1741000/ride4/getRide4`
+        - 샘플: `apis.data.go.kr/1741000/ride4/getRide4?serviceKey={인증키}&pageIndex=1&recordCountPerPage=10&pfctNm=만월어린이공원%20놀이터&instlPlaceCd=A003&operYnCd=B001&prvtPblcYnCd=C002&rideStylCd=D001&dutyCd=Q002&idrodrCd=O002&rideInstlBgngYmd=20241007&rideInstlEndYmd=20241007&rgnNm=인천광역시%20남동구%20구월동&pfctSn=999`
+    - **산출물**: `scripts/ingest/adapters/playground-adapter.mjs` 및 단위 테스트
+  - **2) 전국장난감도서관표준데이터 API**:
+    - **목적**: 지자체 영유아 실내 놀이실 및 장난감 대여소 스팟 확보.
+    - **산출물**: `scripts/ingest/adapters/toy-library-adapter.mjs` 및 단위 테스트
+
+---
+
+## 📋 [완료 및 히스토리 Log]
+
+### 1. 완료된 작업
+- [x] `rgnCltrFcltExmnv1` 8개 시설 수집 어댑터 구현 완료.
+- [x] `전국공공시설개방표준데이터` 수집 어댑터 구현 및 단위 테스트 통과.
+- [x] `행정안전부 문화_테마파크업(기타)` 어댑터 구현 완료 (`amusement-park-adapter.mjs`).
+- [x] 레거시 도시공원 수집 스크립트 최신 `BaseCollectorAdapter` 구조 마이그레이션 완료 (`city-park-adapter.mjs`, 19,154건).
