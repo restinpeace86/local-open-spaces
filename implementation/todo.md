@@ -59,6 +59,18 @@
 
 ---
 
+## 🚫 [Claude 작업 진행 및 검토 결과 보고서] — 기존 기능명세서 충돌 및 스킵 로그 (2026-08-21 세션)
+
+- **스킵 대상**: `[Task 1] rgnCltrFcltExmnv1(전국문화기반시설총람) 8개 시설 수집 & 데이터 표준화 어댑터 구현`, `[Task 2] 추가 데이터 소스 전량 수집(Full Ingest) 배치 스케줄러 점검 및 연동`(Task 1 산출물에 종속되어 동시 스킵)
+- **스킵 사유**: CLAUDE.md 제3장 제4조(추측 금지) — "Spec이 명확하지 않은 경우 임의로 판단하여 구현하지 않는다" — 및 본 프로젝트 기존 어댑터 전원이 지켜온 "실 API 호출로 필드 스키마를 실측 확인한 뒤에만 `transform()` 매핑을 작성한다"는 확립된 관행과 정면 충돌하는 사안을 착수 전 발견함:
+  1. **실측 시도 결과**: `.env.local`의 `PUBLIC_DATA_API_KEY`로 `B553457/rgnCltrFcltExmnv1/clifMsmv1`(박물관) 엔드포인트를 실제 호출 → `SERVICE_KEY_IS_NOT_REGISTERED_ERROR`(returnReasonCode 30, "등록되지 않은 서비스키") 응답 수신. 즉 현재 보유 서비스키가 이 API 상품에 대해 data.go.kr에서 별도 활용신청/승인이 되어 있지 않음 — 코드 구현으로는 해결 불가한 계정 승인 이슈.
+  2. **대체 조사 결과**: data.go.kr 공식 API 상세 페이지(`data.go.kr/data/15125097/openapi.do` 등)를 웹 조회했으나 요청/응답 필드 명세가 Swagger(JS 렌더링) 화면 안에 있어 정적으로 노출되지 않음 — 시설명/주소/좌표 등 실제 영문 필드명을 확인할 수 없음.
+  3. 위 두 경로가 모두 막혀, 8개 엔드포인트(`clifMsmv1`/`clifArglv1`/`clifLbrryv1`/`clifLvclCntrv1`/`clifClhsv1`/`clifLtrm1`/`clifClcnv1`/`clifNtnLbrryv1`) 응답 필드 구조를 임의로 추측해 매핑 코드를 작성할 수밖에 없는 상황이므로 착수하지 않고 즉시 스킵함.
+  4. 참고로 Vworld Geocoder(`api.vworld.kr/req/address`) 연동에 필요한 `VWORLD_API_KEY`도 `.env.local`에 없어 좌표 변환 단계 역시 현재는 실제 호출 검증이 불가함(코드 자체는 Kakao 지오코더 선례처럼 키 부재 시 명시적 에러를 던지는 형태로 작성 가능하나, 상위 블로커인 필드 스키마 미확인으로 Task 1 전체를 보류함).
+- **필요 조치 (관리자/기획 담당)**: data.go.kr에서 "한국문화정보원_전국문화기반시설총람 정보 조회서비스"(`publicDataPk=15125097`) 활용신청을 승인받은 뒤, (a) 승인된 서비스키를 `.env.local`의 `PUBLIC_DATA_API_KEY`(또는 신규 키)에 반영하거나 (b) 8개 엔드포인트 각 1건의 실 호출 응답(JSON 원문)을 제공해줄 것. `VWORLD_API_KEY` 발급 및 `.env.local` 반영도 함께 필요. 위 조치 완료 후 다음 세션에서 실측 스키마 기반으로 즉시 재개 가능.
+
+---
+
 ## 📋 [완료] 완료된 Task 히스토리 & 실행 결과 보고 요약 (2026-08-21 세션)
 
 - [x] **`parental-badges.ts` UI 보완**: `is_free === null` 시 유료 오표기 방지 및 '뱃지 미노출(null)' 삼항 연산자 예외 처리 반영 완료.
