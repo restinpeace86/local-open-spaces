@@ -28,23 +28,11 @@
 - [x] **[Task 2] 도시공원 수집 스크립트(city-parks.mjs) 최신 BaseCollectorAdapter 마이그레이션** (완료)
   - **산출물**: `scripts/ingest/adapters/city-park-adapter.mjs` (19,154건 실데이터 정상 수신 확인 완료)
 - [x] **[Task 6] [내부 검증용] DB 적재 데이터 점검용 Admin Data Grid 구축 및 뱃지 규약 점검** (완료)
-- [ ] **[Task 7] data.go.kr 키즈 특화 공공 API 2종 추가 수집 어댑터 구현** 🔄 *(Task 6 완료 - 진행)*
-  - **1) 행정안전부 전국어린이놀이시설정보 API**:
-    - **목적**: 공공·마을 어린이 놀이터 전수 수집 및 `is_kids_friendly = true` 뱃지 자동화.
-    - **API 명세 및 샘플 요청**:
-      - **End Point 1 (시설 기본정보)**: `https://apis.data.go.kr/1741000/pfc3/getPfctInfo3`
-        - 샘플: `apis.data.go.kr/1741000/pfc3/getPfctInfo3?serviceKey={인증키}&pageIndex=1&recordCountPerPage=10&pfctSn=999`
-        - 일반 인증키: Dk9DCSP5I7NQpXu6oRMjAlvZzXbEV%2BQzpX3q%2BHENSX90w4AXExCGmOU9drYKSzEbiZdaz%2BF0htDLVj7k6gQP1A%3D%3D
-      - **End Point 2 (놀이기구 정보)**: `https://apis.data.go.kr/1741000/ride4/getRide4`
-        - 샘플: `apis.data.go.kr/1741000/ride4/getRide4?serviceKey={인증키}&pageIndex=1&recordCountPerPage=10&pfctNm=만월어린이공원%20놀이터&instlPlaceCd=A003&operYnCd=B001&prvtPblcYnCd=C002&rideStylCd=D001&dutyCd=Q002&idrodrCd=O002&rideInstlBgngYmd=20241007&rideInstlEndYmd=20241007&rgnNm=인천광역시%20남동구%20구월동&pfctSn=999`
-        - 일반 인증키: Dk9DCSP5I7NQpXu6oRMjAlvZzXbEV%2BQzpX3q%2BHENSX90w4AXExCGmOU9drYKSzEbiZdaz%2BF0htDLVj7k6gQP1A%3D%3D
-        - PUBLIC_DATA_API_KEY라는건 위의 일반 인증키를 의미하는것으로 보임.. 해당 키를 통하여 연결되는지 확인해라
-    - **산출물**: `scripts/ingest/adapters/playground-adapter.mjs` 및 단위 테스트
-
-
----
-
-
+- [x] **[Task 7] 행정안전부 전국어린이놀이시설정보 API(`getPfctInfo3`) 수집 어댑터 구현** (완료, 2026-08-21)
+  - **목적**: 공공·마을 어린이 놀이터 전수 수집 및 `is_kids_friendly = true` 뱃지 자동화.
+  - **연결 확인**: `PUBLIC_DATA_API_KEY`(일반 인증키)로 `getPfctInfo3` 실 호출 결과 정상 연결 확인(resultCode `00` NORMAL SERVICE, 전량 85,291건 수신 → 유효 스키마 변환 82,373건).
+  - **산출물**: `scripts/ingest/adapters/playground-adapter.mjs`, `scripts/ingest/adapters/playground-adapter.test.mjs`(단위 테스트 10건 통과), `scripts/ingest/playground.mjs`(CLI), `package.json`의 `ingest:playground` 스크립트.
+  - **End Point 2 (`getRide4`, 놀이기구 정보) 미통합 사유**: `pfctSn` 단위 개별 호출은 정상 동작함을 확인했으나, `open_spaces` 스키마에 시설 1건당 놀이기구 N건을 저장할 컬럼이 없어(스키마 변경은 임의 결정 금지 대상) 8만여 시설 전체에 대한 N+1 추가 호출은 근거 없는 과잉 구현으로 판단해 미통합. 상세 판단 근거는 `playground-adapter.mjs` 파일 상단 주석 참조.
 
 ---
 
@@ -56,3 +44,4 @@
 - [x] `행정안전부 문화_테마파크업(기타)` 어댑터 구현 완료 (`amusement-park-adapter.mjs`).
 - [x] 레거시 도시공원 수집 스크립트 최신 `BaseCollectorAdapter` 구조 마이그레이션 완료 (`city-park-adapter.mjs`, 19,154건).
 - [x] DB 적재 데이터 점검용 Admin Data Grid 구축 및 뱃지 규약(필수 3종 + 보조 3종, `is_free===null` 숨김) 점검 완료.
+- [x] 행정안전부 전국어린이놀이시설정보(`getPfctInfo3`) 수집 어댑터 구현 및 단위 테스트 통과 (`playground-adapter.mjs`, 실데이터 85,291건 → 유효 82,373건 변환 확인).

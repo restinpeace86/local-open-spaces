@@ -29,6 +29,7 @@
     "ingest:cultural-facility-summary": "node scripts/ingest/cultural-facility-summary.mjs",
     "ingest:public-facility-open": "node scripts/ingest/public-facility-open.mjs",
     "ingest:amusement-park": "node scripts/ingest/amusement-park.mjs",
+    "ingest:playground": "node scripts/ingest/playground.mjs",
     "ingest:pipeline": "node scripts/ingest/run-all.mjs"
   },
   "dependencies": {
