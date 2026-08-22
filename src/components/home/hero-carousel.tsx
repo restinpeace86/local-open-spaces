@@ -88,8 +88,19 @@ export function HeroCarousel({
           >
             <div className="relative aspect-[4/3] bg-gray-100">
               {item.thumbnail_url ? (
+                // Task 9-3-1(2026-08-22): 썸네일이 Supabase Storage 외 다양한 공공 API 도메인에서
+                // 오기 때문에(next.config.ts remotePatterns가 *.supabase.co만 허용) next/image로
+                // 바꾸면 대부분 깨진다 — 기존처럼 <img>를 유지하되, 첫 슬라이드(index===0)만
+                // fetchPriority="high"로 즉시 로드하고(next/image의 priority와 동등한 네이티브
+                // 속성) 나머지는 loading="lazy"로 모바일 트래픽을 줄인다.
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={item.thumbnail_url} alt="" className="w-full h-full object-cover" />
+                <img
+                  src={item.thumbnail_url}
+                  alt=""
+                  className="w-full h-full object-cover"
+                  loading={index === 0 ? 'eager' : 'lazy'}
+                  fetchPriority={index === 0 ? 'high' : 'auto'}
+                />
               ) : (
                 <div
                   className="w-full h-full flex items-center justify-center text-4xl"

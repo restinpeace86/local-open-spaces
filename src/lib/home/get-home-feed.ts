@@ -422,7 +422,9 @@ export type HomeFeed = {
 // 실제로 노출하는 개수), 같은 조건(Strict Location-First)으로 더 있는 항목을 "+더보기"로
 // 마저 볼 수 있어야 한다. 그러려면 서버가 애초에 10개보다 더 많이 내려줘야 하므로, 여기서는
 // 넉넉히(HERO_FETCH_LIMIT) 가져오고 실제 몇 개까지 보여줄지는 화면(HomeView)이 결정한다.
-const HERO_FETCH_LIMIT = 30;
+// Task 9-3-1(2026-08-22): 페이지(Server Component)가 초기 진입 시 Hero만 단독으로 페칭할 때도
+// 같은 값을 쓰도록 export한다(하단 "가성비 행복" 피드는 더 이상 초기 페칭에 포함하지 않음).
+export const HERO_FETCH_LIMIT = 30;
 
 export async function getHomeFeed(region: HomeRegion = DEFAULT_HOME_REGION): Promise<HomeFeed> {
   const [heroEvents, freeFeed] = await Promise.all([

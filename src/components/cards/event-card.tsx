@@ -28,8 +28,10 @@ export function EventCard({ item, onSelect }: { item: NearbyItem; onSelect: (ite
     >
       <div className="relative aspect-[16/9] bg-gray-100">
         {item.thumbnail_url ? (
+          // Task 9-3-1(2026-08-22): 이 카드는 항상 하단 피드(가성비 행복/무료·공공)에서만 쓰여
+          // 뷰포트 아래에 있으므로 항상 지연 로드한다.
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={item.thumbnail_url} alt="" className="w-full h-full object-cover" />
+          <img src={item.thumbnail_url} alt="" className="w-full h-full object-cover" loading="lazy" />
         ) : (
           <div
             className="w-full h-full flex items-center justify-center text-3xl"
