@@ -49,6 +49,8 @@
 특정 기간 또는 일정에 개최되는 문화행사, 축제, 공연, 체험 프로그램 정보를 저장하는 테이블이다.
 
 > **정정 (2026-08-22):** 이전 버전 문서에 `source_type`/`category` 컬럼이 이 테이블에도 있는 것으로 잘못 기재되어 있었으나, 실제 라이브 DB에는 두 컬럼이 존재하지 않음을 upsert 실패로 확인해 정정함. `events`는 카테고리를 `event_type` 하나로 표현하며(Decision 008 이후로는 5대 UI 카테고리 값도 이 컬럼에 저장됨, `spec/data/ai-rule.md` 3.3), 수집 출처 구분은 `external_id` 접두어 관례(예: `SEOUL_YEYAK_...`)로 대신한다. `open_spaces`는 기존대로 `source_type`/`category` 컬럼을 모두 보유한다.
+>
+> **정정 (2026-08-23, Decision 009):** `location`이 `NOT NULL`이라고 기재되어 있었으나, 경기데이터드림 API1(`GGCULTUREVENTSTUS`)처럼 원본에 위치 정보 자체가 없는 소스가 실측으로 확인되어 `NULL 허용`으로 변경하고 `location_precision` 컬럼을 신설했다(Decision 009 참고). 아울러 이 문서에 누락돼 있던 `venue_name`/`sigungu_name`(`scripts/migrations/2026-08-22-*.sql`로 이미 라이브 DB에 추가돼 있던 컬럼)도 함께 반영한다.
 
 | 컬럼명 | 데이터 타입 | 제약조건 / 기본값 | 설명 |
 | :--- | :--- | :--- | :--- |
@@ -63,7 +65,8 @@
 | `reservation_start_date` | TIMESTAMPTZ | NULL | 예약 접수 시작 일시 |
 | `reservation_end_date` | TIMESTAMPTZ | NULL | 예약 접수 마감 일시 (언제까지 예약해야 하는가) |
 | `reservation_url` | TEXT | NULL | 예약 신청 링크 |
-| `location` | GEOMETRY(Point, 4326) | NOT NULL | 행사 장소 위경도 좌표 |
+| `location` | GEOMETRY(Point, 4326) | NULL 허용 (2026-08-23 변경, Decision 009) | 행사 장소 위경도 좌표. `location_precision = 'UNKNOWN'`일 때만 NULL(CHECK 제약으로 강제) |
+| `location_precision` | VARCHAR(20) | NOT NULL, DEFAULT `'EXACT'`, CHECK IN (`EXACT`,`CITY_APPROX`,`UNKNOWN`) | 위치 정밀도. `EXACT`=실제 주소 지오코딩, `CITY_APPROX`=원본에 좌표가 없어 텍스트에서 매칭된 시/군 중심좌표로 근사, `UNKNOWN`=시/군명조차 매칭 안 돼 좌표 없음(메인 피드 "경기도권 기타"에서만 노출, 지도/주변 RPC에서는 항상 제외) |
 | `thumbnail_url` | TEXT | NULL | 대표 이미지 URL |
 | `is_active` | BOOLEAN | DEFAULT `true` | 활성화 상태 여부 |
 | `created_at` | TIMESTAMPTZ | DEFAULT `NOW()` | 레코드 생성 일시 |
@@ -74,11 +77,14 @@
 | `facility_type` | VARCHAR(20) | DEFAULT `'복합'` | 시설 유형 (`실내` \| `야외` \| `복합`) |
 | `target_age_group` | VARCHAR(50) | NULL | 대상 연령대 (예: `영유아`, `초등`, `전연령`) |
 | `booking_status` | VARCHAR(50) | NULL | 예약/접수 상태 (`오늘방문` \| `D-1 마감임박` \| `주말예약` \| `접수중`) |
+| `venue_name` | TEXT | NULL | 원본 API의 실제 장소명(예: PLACENM). 2026-08-22 추가(`scripts/migrations/2026-08-22-events-add-venue-name.sql`), 문서 누락 정정 |
+| `sigungu_name` | TEXT | NULL | "{시} {구}"(`성남시 분당구`) 또는 구 없는 "{시}" 단독 형태의 시/군/구명. 2026-08-22 추가(`scripts/migrations/2026-08-22-sigungu-name-and-indexes.sql`), 문서 누락 정정 |
 
 - **공간/일자 인덱스**:
   - `CREATE INDEX idx_events_location ON public.events USING GIST(location);`
   - `CREATE INDEX idx_events_dates ON public.events(start_date, end_date);`
   - `CREATE INDEX idx_events_reservation ON public.events(reservation_end_date);`
+  - `CREATE INDEX idx_events_location_precision ON public.events(location_precision);` (2026-08-23, Decision 009)
 
 ---
 

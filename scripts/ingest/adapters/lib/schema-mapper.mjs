@@ -133,6 +133,12 @@ export function buildOpenSpaceRow({
 // `category`/`source_type` 컬럼이 events에도 있는 것처럼 기재돼 있었으나 실제로는 존재하지
 // 않음을 upsert 실패로 확인함(2026-08-22). events는 `event_type` 하나로 카테고리를 표현하며,
 // 소스 구분은 external_id 접두어 관례(예: SEOUL_YEYAK_...)로 대신한다. 문서도 함께 정정함.
+// Task 9-6-2(2026-08-23, Decision 009): 원본 API에 좌표가 전혀 없는 소스(경기데이터드림
+// GGCULTUREVENTSTUS 등)를 위해 locationPrecision을 추가했다. 'EXACT'(기본값, 기존 모든
+// 호출부와 동일하게 lng/lat 필수)만 쓰던 기존 어댑터는 동작이 전혀 바뀌지 않는다.
+// 'CITY_APPROX'는 lng/lat이 필요(텍스트에서 매칭된 시/군 중심좌표), 'UNKNOWN'은 반대로
+// lng/lat이 없어야 하며 location을 null로 저장한다(events.location_precision 정합성 CHECK와
+// 동일한 규칙 — DB 제약을 애플리케이션에서 미리 어기지 않도록 방어).
 export function buildEventRow({
   externalId,
   title,
@@ -141,6 +147,7 @@ export function buildEventRow({
   endDate,
   lng,
   lat,
+  locationPrecision = 'EXACT',
   isReservationRequired = false,
   reservationUrl = null,
   reservationStartDate = null,
@@ -157,7 +164,12 @@ export function buildEventRow({
   venueName = null,
   sigunguName = null,
 }) {
-  if (!externalId || !title || !startDate || !endDate || !lng || !lat) return null;
+  if (!externalId || !title || !startDate || !endDate) return null;
+  if (locationPrecision === 'UNKNOWN') {
+    if (lng || lat) return null;
+  } else if (!lng || !lat) {
+    return null;
+  }
 
   return {
     external_id: externalId,
@@ -165,7 +177,8 @@ export function buildEventRow({
     event_type: resolveUiCategory(uiCategory) ?? 'ETC',
     start_date: startDate,
     end_date: endDate,
-    location: `SRID=4326;POINT(${lng} ${lat})`,
+    location: locationPrecision === 'UNKNOWN' ? null : `SRID=4326;POINT(${lng} ${lat})`,
+    location_precision: locationPrecision,
     is_reservation_required: isReservationRequired,
     reservation_start_date: reservationStartDate,
     reservation_end_date: reservationEndDate,

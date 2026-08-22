@@ -54,6 +54,7 @@ export type Database = {
           is_kids_friendly: boolean
           is_reservation_required: boolean | null
           location: unknown
+          location_precision: string
           reservation_end_date: string | null
           reservation_start_date: string | null
           reservation_url: string | null
@@ -79,7 +80,8 @@ export type Database = {
           is_free?: boolean | null
           is_kids_friendly?: boolean
           is_reservation_required?: boolean | null
-          location: unknown
+          location?: unknown
+          location_precision?: string
           reservation_end_date?: string | null
           reservation_start_date?: string | null
           reservation_url?: string | null
@@ -106,6 +108,7 @@ export type Database = {
           is_kids_friendly?: boolean
           is_reservation_required?: boolean | null
           location?: unknown
+          location_precision?: string
           reservation_end_date?: string | null
           reservation_start_date?: string | null
           reservation_url?: string | null

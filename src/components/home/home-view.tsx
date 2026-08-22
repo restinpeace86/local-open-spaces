@@ -94,6 +94,31 @@ function useFreeFeed(region: { sigunguName: string | null; lat?: number; lng?: n
   return { freeFeed, ensureLoaded };
 }
 
+// Task 9-6-2(2026-08-23, Decision 009): "🗺️ 경기도권 기타" 섹션 — 위치 정보가 전혀 없는
+// (location_precision='UNKNOWN') 행사는 특정 지역과 무관해 region이 바뀌어도 결과가 달라지지
+// 않으므로, useFreeFeed와 달리 region을 받지 않고 화면에 처음 들어올 때 한 번만 페칭한다.
+function useProvinceWideEvents() {
+  const [items, setItems] = useState<NearbyItem[] | null>(null);
+  const loadedRef = useRef(false);
+
+  const ensureLoaded = useCallback(() => {
+    if (loadedRef.current) return;
+    loadedRef.current = true;
+
+    fetch('/api/home/province-feed')
+      .then((res) => res.json())
+      .then((data: { provinceWideEvents?: NearbyItem[] }) => {
+        if (Array.isArray(data.provinceWideEvents)) setItems(data.provinceWideEvents);
+        else loadedRef.current = false;
+      })
+      .catch(() => {
+        loadedRef.current = false;
+      });
+  }, []);
+
+  return { items, ensureLoaded };
+}
+
 // Task 9-5-1(2026-08-22): "🏞️ 목적별 추천 스팟" 칩 — 가성비 행복과 달리 기본으로 선택된 테마가
 // 없어(6개 중 임의로 하나를 고를 근거가 없음) 스크롤 진입이 아니라 칩을 직접 눌렀을 때만
 // /api/home/theme-feed를 호출한다. 테마를 바꿔 누르면 그 즉시 새로 페칭한다.
@@ -137,6 +162,11 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
   const [freeFeedFilter, setFreeFeedFilter] = useState<FreeFeedFilterKey>('ALL');
 
   const region = { sigunguName, lat: addressName ? center.lat : undefined, lng: addressName ? center.lng : undefined };
+  // 순서 주의: home-view.test.tsx의 FakeIntersectionObserver.instances.at(-1) 관례(가장 최근
+  // 생성된 옵저버 = 화면상 가장 마지막(아래) 섹션)를 유지하기 위해, "경기도권 기타"(가성비 행복보다
+  // 아래 섹션)의 useInView를 먼저 선언해 인스턴스 배열에서 가성비 행복보다 앞에 오도록 한다.
+  const { items: provinceWideEvents, ensureLoaded: ensureProvinceWideLoaded } = useProvinceWideEvents();
+  const { ref: provinceWideSectionRef, isInView: isProvinceWideSectionInView } = useInView<HTMLDivElement>();
   const { freeFeed, ensureLoaded } = useFreeFeed(region);
   const { ref: freeFeedSectionRef, isInView: isFreeFeedSectionInView } = useInView<HTMLDivElement>();
   const {
@@ -183,6 +213,11 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
   useEffect(() => {
     if (isFreeFeedSectionInView || activeTab === 'free') ensureLoaded();
   }, [isFreeFeedSectionInView, activeTab, ensureLoaded]);
+
+  // Task 9-6-2: "경기도권 기타" 섹션이 화면에 들어오면 지연 페칭한다(가성비 행복과 동일한 패턴).
+  useEffect(() => {
+    if (isProvinceWideSectionInView) ensureProvinceWideLoaded();
+  }, [isProvinceWideSectionInView, ensureProvinceWideLoaded]);
 
   const visibleHeroEvents = heroEvents.slice(0, HERO_VISIBLE_COUNT);
   // Task 9-1-9: 10개 초과 시 지도 화면(오늘/주말 즉시 이용 가능 Quick 필터 활성 상태)으로
@@ -286,6 +321,25 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
                 <p className="text-sm text-gray-400 mt-3">조건에 맞는 공간/행사를 찾는 중입니다.</p>
               )}
             </section>
+
+            {/* Task 9-6-2(2026-08-23, Decision 009): 위치 정보가 전혀 없는(location_precision=
+                'UNKNOWN') 경기도권 행사 — 지도/주변에는 노출되지 않고 메인 페이지에서만 볼 수 있다.
+                항목이 없으면 섹션 자체를 숨긴다(다른 섹션과 달리 "찾는 중" 안내를 굳이 보여줄
+                핵심 콘텐츠가 아님). */}
+            {provinceWideEvents === null || provinceWideEvents.length > 0 ? (
+              <section aria-label="경기도권 기타" className="px-4" ref={provinceWideSectionRef}>
+                <h2 className="text-base font-bold text-gray-900 mb-3">🗺️ 경기도권 기타</h2>
+                {provinceWideEvents === null ? (
+                  <FreeFeedSkeleton label="경기도권 기타 피드 불러오는 중" />
+                ) : (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-3">
+                    {provinceWideEvents.map((item) => (
+                      <FeedCard key={item.id} item={item} onSelect={setSelectedItem} />
+                    ))}
+                  </div>
+                )}
+              </section>
+            ) : null}
           </>
         )}
 

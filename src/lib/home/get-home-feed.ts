@@ -36,13 +36,14 @@ function extractCoords(location: unknown): { lng: number; lat: number } {
 }
 
 const EVENT_COLUMNS =
-  'id, title, event_type, location, thumbnail_url, start_date, end_date, reservation_start_date, reservation_end_date, reservation_url, is_reservation_required, is_free, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, venue_name, sigungu_name';
+  'id, title, event_type, location, location_precision, thumbnail_url, start_date, end_date, reservation_start_date, reservation_end_date, reservation_url, is_reservation_required, is_free, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, venue_name, sigungu_name';
 
 type EventRow = {
   id: string;
   title: string;
   event_type: string;
   location: unknown;
+  location_precision: string | null;
   thumbnail_url: string | null;
   start_date: string;
   end_date: string;
@@ -73,6 +74,11 @@ function toEventItem(row: EventRow): NearbyItem {
     item_type: 'EVENT',
     lng,
     lat,
+    // Task 9-6-2(2026-08-23, Decision 009): location_precision이 'EXACT'가 아니면(근사/미상)
+    // DetailModal이 지도/길찾기 UI를 숨긴다 — 정확한 위치가 아닌데 지도에 정확한 핀처럼
+    // 보이면 사용자를 오도하므로. open_spaces는 이 컬럼이 아예 없어(항상 정확한 주소) toSpaceItem이
+    // 이 필드를 채우지 않고, NearbyItem 타입에서 undefined이면 EXACT로 간주하도록 소비 측이 처리한다.
+    location_precision: row.location_precision as NearbyItem['location_precision'],
     // Task 9-1-1: events.venue_name 컬럼(원본 API의 실제 장소명 필드 백필)을 NearbyItem.address에
     // 담아 SpaceGridCard/EventCard가 같은 필드로 "장소"를 표시하도록 한다(타입 변경 없이 재사용).
     address: row.venue_name,
@@ -465,6 +471,29 @@ function toSpaceItem(row: SpaceRow): NearbyItem {
     booking_status: null,
     source_type: row.source_type,
   };
+}
+
+// Task 9-6-2(2026-08-23, Decision 009): 원본에 위치 정보가 전혀 없는 행사(예: 경기데이터드림
+// API1 중 시/군명조차 매칭 안 된 건)를 지도/주변에는 노출하지 않되, 메인 페이지 "경기도권 기타"
+// 섹션에서는 볼 수 있게 한다(사용자 요구사항: "지도에는 정확한 위치의 이벤트만 나오면 되지만
+// 메인화면에는 경기도권 모든 이벤트에 대하여 어떤 형태로든 볼 수 있어야 함"). location이 없어
+// 특정 지역(sigungu_name)과 무관하므로 지역 우선순위 정렬 없이 종료 임박순으로만 노출한다.
+export async function getProvinceWideEvents(limit = 12): Promise<NearbyItem[]> {
+  const supabase = await createClient();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const { data, error } = await supabase
+    .from('events')
+    .select(EVENT_COLUMNS)
+    .eq('location_precision', 'UNKNOWN')
+    .eq('is_active', true)
+    .gte('end_date', today)
+    .order('start_date', { ascending: true })
+    .limit(limit);
+
+  if (error) throw new Error(error.message);
+
+  return ((data ?? []) as EventRow[]).map(toEventItem);
 }
 
 // docs/spec.md 2.2 ③: "🎁 0원의 행복 — 지출 부담 없는 완전 무료 공공장소/행사 카드"

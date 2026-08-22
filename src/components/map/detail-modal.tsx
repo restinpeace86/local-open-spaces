@@ -23,6 +23,10 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
   const { center: userLocation } = useUserLocation();
   const meta = getCategoryMeta(item.category);
   const isEvent = item.item_type === 'EVENT';
+  // Task 9-6-2(2026-08-23, Decision 009): location_precision이 없으면(SPACE, 기존 EXACT 전용
+  // 경로) EXACT로 간주한다. CITY_APPROX/UNKNOWN은 정확한 행사장 위치가 아니므로 지도/길찾기를
+  // 보여주면 사용자를 오도한다 — 근사·미상 좌표를 정확한 핀처럼 그리지 않는다.
+  const hasExactLocation = (item.location_precision ?? 'EXACT') === 'EXACT';
 
   const dDay = isEvent ? formatDDay(item.reservation_end_date ?? item.end_date) : null;
   const period = isEvent ? formatDateRange(item.start_date, item.end_date) : null;
@@ -143,27 +147,37 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
           </dl>
 
           {/* Task 9-5-1: 콤팩트 인앱 미니맵 — 상세 화면을 벗어나지 않고 위치를 바로 확인하고,
-              "🔍 크게보기"로 풀스크린 지도 모달을 띄운다. */}
-          <div className="mt-4 relative rounded-xl overflow-hidden border border-gray-200">
-            <MiniMap lat={item.lat} lng={item.lng} name={item.name} className="w-full h-40" />
-            <button
-              type="button"
-              onClick={() => setIsMapPreviewOpen(true)}
-              className="absolute bottom-2 right-2 text-xs font-semibold px-2.5 py-1 rounded-full bg-white/90 text-gray-700 shadow hover:bg-white"
-            >
-              🔍 크게보기
-            </button>
-          </div>
+              "🔍 크게보기"로 풀스크린 지도 모달을 띄운다.
+              Task 9-6-2: 근사/미상 좌표(CITY_APPROX/UNKNOWN)는 정확한 위치가 아니므로 지도 대신
+              안내 문구만 보여준다(정확한 핀처럼 오인시키지 않기 위함). */}
+          {hasExactLocation ? (
+            <div className="mt-4 relative rounded-xl overflow-hidden border border-gray-200">
+              <MiniMap lat={item.lat} lng={item.lng} name={item.name} className="w-full h-40" />
+              <button
+                type="button"
+                onClick={() => setIsMapPreviewOpen(true)}
+                className="absolute bottom-2 right-2 text-xs font-semibold px-2.5 py-1 rounded-full bg-white/90 text-gray-700 shadow hover:bg-white"
+              >
+                🔍 크게보기
+              </button>
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-gray-400">
+              📍 {item.sigungu_name ? `${item.sigungu_name} 일대 (정확한 위치 정보 없음)` : '정확한 위치 정보가 없는 행사입니다'}
+            </p>
+          )}
 
           <div className="mt-5 flex gap-2">
-            <a
-              href={directionsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex-1 text-center rounded-lg bg-gray-900 text-white text-sm font-medium py-2.5 hover:bg-gray-800"
-            >
-              🚗 네이버 지도로 길안내
-            </a>
+            {hasExactLocation && (
+              <a
+                href={directionsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 text-center rounded-lg bg-gray-900 text-white text-sm font-medium py-2.5 hover:bg-gray-800"
+              >
+                🚗 네이버 지도로 길안내
+              </a>
+            )}
             {externalUrl && (
               <a
                 href={externalUrl}

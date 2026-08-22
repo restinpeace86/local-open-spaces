@@ -158,3 +158,29 @@ Supabase Auth 계정 권한 관리는 `user_metadata.role` 기반의 RBAC(Role-B
   4. 산림청, 네이버 Local API 등 신규 데이터 소스 수집 스크립트 — 현재 미착수
   5. 요금 오탐 방지 OCR/Fallback 룰(`is_free: true` 기본 추정) — 현재 미구현
 - 위 코드 마이그레이션 항목은 범위가 커서 `implementation/todo.md`에 개별 항목으로 분리해 다음 단계에서 순차 진행한다.
+
+---
+
+# Decision 009
+
+## 제목
+`public.events.location`의 `NOT NULL` 제약(Decision 002 연동)을 해제하고, `location_precision` 컬럼(`EXACT`/`CITY_APPROX`/`UNKNOWN`)으로 위치 정밀도를 구분한다.
+
+## 결정 내용
+- Task 9-6-1에서 경기데이터드림 API1(`GGCULTUREVENTSTUS`, 3067건)을 실측한 결과, 원본 API 자체에 주소/좌표 필드가 전혀 없어 기존 스키마(`location NOT NULL`)로는 전량 스킵될 수밖에 없었다.
+- 사용자가 TITLE/HOST_INST_NM 텍스트에 경기도 시/군명이 일부 포함돼 있음을 직접 확인·제시하며, 다음 방식의 도입을 채팅으로 명시적으로 승인했다(2026-08-23):
+  1. 시/군명이 텍스트에서 매칭되는 행은 해당 시/군 중심좌표(근사값)로 `location_precision = 'CITY_APPROX'`를 부여해 노출한다.
+  2. 시/군명이 전혀 매칭되지 않는 행도 버리지 않고 `location = NULL`, `location_precision = 'UNKNOWN'`으로 저장해 메인 페이지의 "경기도권 기타" 섹션에서만 노출한다.
+  3. 지도/주변 검색(반경 기반 RPC `get_nearby_spaces_and_events`)에는 `location_precision = 'EXACT'`(실제 주소 지오코딩) 행만 노출한다 — 근사/미상 좌표가 지도에 정확한 위치처럼 표시되어 사용자를 오도하지 않도록 한다.
+- `events.location`은 `geometry(Point, 4326) NOT NULL`에서 `NULL 허용`으로 변경하고, `location_precision VARCHAR(20) NOT NULL DEFAULT 'EXACT'`(CHECK: 3개 값만 허용, `UNKNOWN`이면 `location`도 반드시 NULL이어야 하는 정합성 CHECK 제약 포함)를 신설한다.
+- 기존 `open_spaces`, `events`의 다른 모든 소스(정확한 주소로 지오코딩된 기존 어댑터들)는 영향 없이 `EXACT`로 남는다 — 이 정책은 API1처럼 원본에 위치 정보 자체가 없는 극히 일부 소스에만 적용되는 예외다.
+
+## 결정 이유
+- 원본 데이터에 없는 좌표를 지어내는 것(추측)보다는, 정밀도를 명시적으로 구분해 "덜 정확한 데이터도 버리지 않고 노출하되 정직하게 표시"하는 쪽이 제3장 제5조(추측 금지)와 콘텐츠 최대 활용(제2장 제3·4조) 원칙에 더 부합한다.
+- Decision 002(PostGIS 공간 연산 DB 처리)가 전제했던 "모든 이벤트는 정확한 좌표를 가진다"는 가정이 실측으로 깨졌음이 확인됐고, 이를 스펙에 정직하게 반영하지 않으면 향후 수집 스크립트가 계속 같은 한계에 부딪힌다.
+
+## 영향
+- **Spec 변경:** `project/database_schema.md` 3.2(`events` 테이블) 갱신 필요.
+- **마이그레이션:** `scripts/migrations/2026-08-23-*.sql`로 `location` NOT NULL 해제, `location_precision` 컬럼/CHECK 제약 추가, `get_nearby_spaces_and_events` RPC에 `location_precision = 'EXACT'` 필터 추가.
+- **코드 영향 범위:** `scripts/ingest/adapters/lib/schema-mapper.mjs`(`buildEventRow` 가드 완화), `scripts/ingest/adapters/gg-culture-events-adapter.mjs`(API1 시/군명 매칭 로직), `src/lib/home/get-home-feed.ts`(위치 미상 이벤트 조회 함수 신설), `src/components/home/home-view.tsx`(신규 섹션), `src/components/map/detail-modal.tsx`(비-EXACT 항목 지도 UI 숨김), `src/types/database.types.ts`.
+- 다른 기존 어댑터(seoul-culture-events.mjs, tour-api-festival.mjs 등)는 이미 실제 주소로 좌표를 확보하므로 변경 불필요 — `location_precision` 컬럼 기본값(`EXACT`)이 그대로 적용된다.

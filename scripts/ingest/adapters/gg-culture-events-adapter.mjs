@@ -9,9 +9,21 @@
 // API1 실제 필드: INST_NM, TITLE, CATEGORY_NM(행사/공연/교육/전시 4종), URL, EVENT_TM_INFO,
 //   PARTCPT_EXPN_INFO, TELNO_INFO, HOST_INST_NM, HMPG_URL, IMAGE_URL, BEGIN_DE, END_DE, WRITNG_DE.
 //   **주소/시군구/위경도 필드가 전혀 없음**(20건 표본 전수 확인) — INST_NM/HOST_INST_NM은 주최
-//   "기관명"이지 행사 장소가 아니라 지오코딩 근거로 쓸 수 없다(추측 금지). 따라서 이 API의 행은
-//   좌표를 만들어낼 방법이 없어 buildEventRow의 필수 필드 검증(lng/lat 없으면 null 반환)에 의해
-//   전량 스킵된다 — 코드 결함이 아니라 원본 API 자체에 위치 정보가 없는 실측 확인된 한계다.
+//   "기관명"이지 행사 장소가 아니라 지오코딩 근거로 쓸 수 없다(추측 금지).
+//
+// Task 9-6-2(2026-08-23, Decision 009): 사용자가 TITLE/HOST_INST_NM 텍스트에 경기도 시/군명이
+// 일부 포함돼 있음을 직접 확인·제시하며 아래 방식 도입을 채팅으로 명시적으로 승인했다.
+//   1) TITLE(우선) 또는 HOST_INST_NM에서 경기도 31개 시/군명이 매칭되면, 원본 좌표가 없어도
+//      해당 시/군 중심좌표("경기도 {시/군}청" 지오코딩 결과, GYEONGGI_BOUNDS로 오매칭 방지)로
+//      location_precision='CITY_APPROX'를 부여해 노출한다(정확한 행사장 위치가 아니라 시/군 단위
+//      근사값이라는 한계가 있음 — 지도/주변 RPC에는 노출되지 않고 메인 피드에서만 노출됨).
+//   2) 시/군명이 전혀 매칭되지 않으면 location=null, location_precision='UNKNOWN'으로 저장해
+//      "경기도권 기타" 섹션에서만 노출한다(좌표를 지어내지 않음 — 추측 금지 원칙 유지).
+//   동음이의어 오탐 방지: '화성'(행성 Mars), '구리'(금속), '이천'(숫자 2000), '오산'(오판/착오),
+//   '여주'(채소), '광주'(경기도 밖 광주광역시)는 일반 명사/타 지역과 겹칠 위험이 있어 반드시
+//   "시/군" 접미사가 붙은 전체 명칭으로만 매칭한다(예: "화성" 단독은 무시, "화성시"만 인정).
+//   단 '광주'는 사용자가 실측으로 제시한 "경기 광주"(접미사 없는) 표기 패턴을 예외로 인정한다
+//   ("경기"가 바로 앞에 붙은 경우만 — 광주광역시와 구분).
 // API2 실제 필드: DIV_NM(안정적 숫자 ID), TITLE_NM, BGNG_NM/END_NM("YYYY-MM-DD HH:MM:SS"),
 //   LOC_NM(장소/주소 텍스트 — 있음), TRGT_NM, MNGT_NM, LANG_NM, ORIGIN_CONT(URL), DTCONT(설명),
 //   CLASS_NM(콤마 구분 태그), GOODS_NM, GOODS_DIV. LOC_NM은 형식이 제각각이라("경기도 안산시
@@ -24,8 +36,8 @@
 //   지역의 동명 도로로 잘못 매칭해 "성공"을 반환하는 경우가 있었다 — 이 소스는 경기도 전용이므로
 //   반환 좌표가 경기도 대략 범위(GYEONGGI_BOUNDS)를 벗어나면 오매칭으로 간주해 건너뛴다.
 //
-// CATEGORY_NM(API1)은 1,000건 표본에서 4개 값만 확인됨(행사/공연/교육/전시)을 참고로 남겨두나,
-// API1은 위 이유로 어차피 행 자체가 만들어지지 않아 이 값을 실제로 분류에 쓰지는 않는다.
+// CATEGORY_NM(API1)은 1,000건 표본에서 4개 값만 확인됨(행사/공연/교육/전시) — 값이 고정적이라
+// API2와 달리 AI 폴백 없이 고정 규칙표(API1_CATEGORY_MAP)로 직접 매핑한다.
 // CLASS_NM(API2)은 자유 태그 나열이라(예: "경기도 예술인,예술인 기회소득,예술인 축제,경기도미술관")
 // 규칙표를 만들 수 없어 seoul-culture-events.mjs와 동일한 AI 폴백(classifyEventTypeWithAI)을 쓴다.
 //
@@ -69,6 +81,52 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// 대한민국 공식 행정구역 명칭 그대로라 추측이 아니다(제3장 제5조와 무관, schema-mapper.mjs의
+// METRO_CITY_SHORT_NAME과 동일한 성격의 고정 사실 표).
+const GYEONGGI_SIGUN_NAMES = [
+  '수원시', '성남시', '의정부시', '안양시', '부천시', '광명시', '평택시', '동두천시', '안산시', '고양시',
+  '과천시', '구리시', '남양주시', '오산시', '시흥시', '군포시', '의왕시', '하남시', '용인시', '파주시',
+  '이천시', '안성시', '김포시', '화성시', '광주시', '양주시', '포천시', '여주시', '연천군', '가평군', '양평군',
+];
+
+// 위 헤더 주석의 "동음이의어 오탐 방지" 설명 참고: 이 이름들은 "시/군" 접미사 없이는 매칭하지 않는다.
+const SUFFIX_ONLY_SIGUN_NAMES = new Set(['화성시', '구리시', '이천시', '오산시', '여주시', '광주시']);
+
+function matchGyeonggiSigunName(text) {
+  if (!text) return null;
+
+  // "경기 광주"/"경기광주"(접미사 없는 표기, 사용자가 실측으로 제시한 패턴)는 광주광역시와
+  // 구분되는 경기도 광주시로 특별히 인정한다.
+  if (/경기\s*광주/.test(text)) return '광주시';
+
+  for (const name of GYEONGGI_SIGUN_NAMES) {
+    if (text.includes(name)) return name;
+  }
+
+  for (const name of GYEONGGI_SIGUN_NAMES) {
+    if (SUFFIX_ONLY_SIGUN_NAMES.has(name)) continue;
+    const stem = name.replace(/(시|군)$/, '');
+    if (stem && text.includes(stem)) return name;
+  }
+
+  return null;
+}
+
+// API1(GGCULTUREVENTSTUS)의 BEGIN_DE/END_DE는 "20260911"(YYYYMMDD, 구분자 없음) 형식이다
+// (실측 확인) — events.start_date/end_date(DATE)에 맞게 "2026-09-11"로 변환한다.
+function formatYyyymmdd(raw) {
+  if (!raw || raw.length !== 8) return null;
+  return `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
+}
+
+// API1의 CATEGORY_NM은 1,000건 표본에서 4개 값만 확인됐다(위 헤더 주석 참고) — 고정 규칙표로 매핑.
+const API1_CATEGORY_MAP = {
+  공연: 'PERFORMANCE_FESTIVAL',
+  전시: 'EXHIBITION_MUSEUM',
+  교육: 'EXPERIENCE_CLASS',
+  행사: 'PERFORMANCE_FESTIVAL',
+};
+
 export class GgCultureEventsAdapter extends BaseCollectorAdapter {
   constructor() {
     super({ sourceKey: 'GG_CULTURE_EVENTS', targetTable: 'events' });
@@ -85,6 +143,9 @@ export class GgCultureEventsAdapter extends BaseCollectorAdapter {
     // GEMINI_API_KEY는 필수가 아니다 — classifyEventTypeWithAI가 미설정 시 ETC로 폴백하며
     // 경고만 남긴다(seoul-culture-events.mjs와 동일한 정책).
     this.geminiApiKey = process.env.GEMINI_API_KEY;
+
+    // Task 9-6-2: 같은 시/군이 API1 여러 행에서 반복 매칭되므로, 시/군당 한 번만 지오코딩한다.
+    this.cityCenterCache = new Map();
   }
 
   async fetchPage(baseUrl, rootKey, pIndex) {
@@ -189,16 +250,58 @@ export class GgCultureEventsAdapter extends BaseCollectorAdapter {
     return null;
   }
 
-  // API1(GGCULTUREVENTSTUS)은 주소/좌표 필드가 원본에 없어(위 헤더 주석 참고) 지오코딩 자체를
-  // 시도하지 않는다 — buildEventRow가 lng/lat 없이는 null을 반환하므로 항상 스킵되지만, 그래도
-  // 명시적으로 한 번만 경고를 남기고 개별 행마다 반복 경고하지 않는다(3,000여 건 로그 스팸 방지).
+  // Task 9-6-2: 시/군명이 매칭되면 그 시/군 중심좌표(근사)로 지오코딩, 캐시로 중복 호출 방지.
+  // 실측 확인(2026-08-23): "경기도 {시/군}청"(시청/군청 건물명)으로 질의하면 수원시청·경기도청
+  // 등 일부만 성공하고 하남시청/파주시청 등은 VWorld 주소 DB에 건물명으로 등록돼 있지 않아
+  // NOT_FOUND였다. 반면 "청"을 뺀 행정구역명 자체("경기도 하남시" 등)는 31개 전부 성공했다 —
+  // VWorld가 행정구역 경계의 대표 좌표를 반환하는 것으로 보이며, 오히려 "시/군 중심좌표
+  // 근사"라는 의도에 더 부합한다(특정 건물이 아니라 그 지역 자체를 대표하는 좌표이므로).
+  async geocodeCityCenterOrNull(sigunName) {
+    if (this.cityCenterCache.has(sigunName)) return this.cityCenterCache.get(sigunName);
+    const coords = await this.geocodeOrSkip(sigunName, `경기도 ${sigunName}`);
+    this.cityCenterCache.set(sigunName, coords);
+    return coords;
+  }
+
+  // API1(GGCULTUREVENTSTUS)은 원본에 주소/좌표 필드가 없다(위 헤더 주석 참고). TITLE/HOST_INST_NM
+  // 텍스트에서 경기도 시/군명이 매칭되면 CITY_APPROX(시/군 중심좌표 근사)로, 매칭 안 되면
+  // UNKNOWN(location=null, "경기도권 기타" 전용)으로 행을 만든다 — 어느 경우든 좌표를 지어내지
+  // 않는다(추측 금지 원칙 유지).
   async transformCultureEvents(items) {
-    if (items.length > 0) {
-      console.warn(
-        `⚠️ GGCULTUREVENTSTUS(경기도 문화 행사 현황) ${items.length}건은 원본에 주소/좌표 필드가 없어 전량 스킵합니다(실측 확인된 API 한계 — 추측 좌표 생성 안 함).`
-      );
+    const rows = [];
+
+    for (const item of items) {
+      const title = cleanText(item.TITLE);
+      const startDate = formatYyyymmdd(item.BEGIN_DE);
+      const endDate = formatYyyymmdd(item.END_DE);
+      if (!title || !startDate || !endDate) continue;
+
+      const matchedSigun = matchGyeonggiSigunName(title) ?? matchGyeonggiSigunName(item.HOST_INST_NM);
+      const coords = matchedSigun ? await this.geocodeCityCenterOrNull(matchedSigun) : null;
+
+      const uiCategory = API1_CATEGORY_MAP[item.CATEGORY_NM]
+        ?? (await classifyEventTypeWithAI({ title, rawLabel: item.CATEGORY_NM, apiKey: this.geminiApiKey }));
+
+      const row = buildEventRow({
+        externalId: this.buildExternalId('GG_CULTURE_EVENT', item.URL || `${title}|${startDate}`),
+        title,
+        uiCategory,
+        startDate,
+        endDate,
+        lng: coords?.lng,
+        lat: coords?.lat,
+        locationPrecision: coords ? 'CITY_APPROX' : 'UNKNOWN',
+        thumbnailUrl: item.IMAGE_URL || null,
+        venueName: item.INST_NM || null,
+        // 좌표 지오코딩에 실패해도(coords===null) 매칭된 시/군명 자체는 알고 있으므로 남겨둔다
+        // (좌표 없이도 "어느 시/군"인지는 표시 가능 — 추측이 아니라 이미 매칭된 사실).
+        sigunguName: matchedSigun,
+      });
+
+      if (row) rows.push(row);
     }
-    return [];
+
+    return rows;
   }
 
   async transformFoundationEvents(items) {

@@ -126,13 +126,74 @@ describe('GgCultureEventsAdapter', () => {
   });
 
   describe('transform', () => {
-    // 실측 확인(2026-08-22): API1(GGCULTUREVENTSTUS)에는 주소/좌표 필드가 전혀 없어 항상
-    // 스킵된다 — 이는 어댑터 버그가 아니라 원본 API 자체의 한계다.
-    it('API1(GGCULTUREVENTSTUS) 항목은 좌표를 만들 수 없어 전량 스킵한다', async () => {
+    // Task 9-6-2(2026-08-23, Decision 009): API1(GGCULTUREVENTSTUS)에는 주소/좌표 필드가 전혀
+    // 없지만, 이제는 버리지 않고 TITLE/HOST_INST_NM에서 경기도 시/군명이 매칭되는지에 따라
+    // CITY_APPROX(시/군 중심좌표 근사) 또는 UNKNOWN(location=null)으로 행을 만든다.
+    it('API1 항목 중 시/군명이 전혀 매칭되지 않으면 UNKNOWN 정밀도로 좌표 없이 행을 만든다', async () => {
       const adapter = new GgCultureEventsAdapter();
       const rows = await adapter.transform({ cultureEventItems: [CULTURE_EVENT_ITEM], foundationEventItems: [] });
-      expect(rows).toEqual([]);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        title: '2026 업사이클 빌리지 페스티벌',
+        start_date: '2026-09-11',
+        end_date: '2026-09-12',
+        location: null,
+        location_precision: 'UNKNOWN',
+        sigungu_name: null,
+        event_type: 'PERFORMANCE_FESTIVAL',
+      });
       expect(geocode).not.toHaveBeenCalled();
+    });
+
+    it('API1 TITLE에 경기도 시/군명이 매칭되면 CITY_APPROX로 시/군 중심좌표를 지오코딩한다', async () => {
+      const adapter = new GgCultureEventsAdapter();
+      const rows = await adapter.transform({
+        cultureEventItems: [{ ...CULTURE_EVENT_ITEM, TITLE: '2026 화성시 업사이클 빌리지 페스티벌' }],
+        foundationEventItems: [],
+      });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ location_precision: 'CITY_APPROX', sigungu_name: '화성시' });
+      expect(geocode).toHaveBeenCalledWith('경기도 화성시');
+    });
+
+    it('동일한 시/군이 여러 API1 행에서 매칭돼도 지오코딩은 한 번만 호출한다(캐시)', async () => {
+      const adapter = new GgCultureEventsAdapter();
+      await adapter.transform({
+        cultureEventItems: [
+          { ...CULTURE_EVENT_ITEM, URL: 'https://a', TITLE: '2026 화성시 축제 A' },
+          { ...CULTURE_EVENT_ITEM, URL: 'https://b', TITLE: '2026 화성시 축제 B' },
+        ],
+        foundationEventItems: [],
+      });
+      expect(geocode).toHaveBeenCalledTimes(1);
+    });
+
+    it('동음이의어(화성=Mars 등)는 "시/군" 접미사 없이는 매칭하지 않는다', async () => {
+      const adapter = new GgCultureEventsAdapter();
+      const rows = await adapter.transform({
+        cultureEventItems: [{ ...CULTURE_EVENT_ITEM, TITLE: '화성에서 온 이야기: 우주 특별전' }],
+        foundationEventItems: [],
+      });
+      expect(rows[0]).toMatchObject({ location_precision: 'UNKNOWN', sigungu_name: null });
+      expect(geocode).not.toHaveBeenCalled();
+    });
+
+    it('"경기 광주"(접미사 없음)는 광주광역시와 구분해 경기도 광주시로 인정한다', async () => {
+      const adapter = new GgCultureEventsAdapter();
+      const rows = await adapter.transform({
+        cultureEventItems: [{ ...CULTURE_EVENT_ITEM, TITLE: '2026 경기 광주 도자기 축제' }],
+        foundationEventItems: [],
+      });
+      expect(rows[0]).toMatchObject({ location_precision: 'CITY_APPROX', sigungu_name: '광주시' });
+    });
+
+    it('API1 CATEGORY_NM이 알 수 없는 값이면 AI 분류로 폴백한다', async () => {
+      const adapter = new GgCultureEventsAdapter();
+      await adapter.transform({
+        cultureEventItems: [{ ...CULTURE_EVENT_ITEM, CATEGORY_NM: '알수없음' }],
+        foundationEventItems: [],
+      });
+      expect(classifyEventTypeWithAI).toHaveBeenCalledWith(expect.objectContaining({ rawLabel: '알수없음' }));
     });
 
     it('API2(GGCULFOUEVENSTM) 항목을 events 표준 스키마 행으로 변환한다', async () => {
