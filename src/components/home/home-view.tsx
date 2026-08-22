@@ -28,7 +28,7 @@ function FeedCard({ item, onSelect }: { item: NearbyItem; onSelect: (item: Nearb
 const HERO_VISIBLE_COUNT = 10;
 
 export function HomeView({ initialFeed }: { initialFeed: HomeFeed }) {
-  const { addressName, sigunguName, isOnboardingOpen, confirmLocation, openOnboarding, closeOnboarding } =
+  const { center, addressName, sigunguName, isOnboardingOpen, confirmLocation, openOnboarding, closeOnboarding } =
     useUserLocation();
   const [activeTab, setActiveTab] = useState<HomeSubTab>('home');
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
@@ -40,11 +40,15 @@ export function HomeView({ initialFeed }: { initialFeed: HomeFeed }) {
   // 위치 미설정 상태(온보딩 대기 중, addressName === null)에서는 기본값 렌더링을 그대로 둔다.
   // Task 9-1-3: 위치 온보딩 확정 시 한 번만 계산해 저장해 둔 sigunguName을 그대로 넘긴다 —
   // 피드를 불러올 때마다(요청마다) 주소 문자열을 다시 파싱하지 않는다.
+  // 사용자 피드백(2026-08-22): 위치가 설정/재설정되면(addressName 변경) 실제 좌표(center)도
+  // 함께 넘겨, 서버가 이미 걸러둔 후보군 안에서 가까운 순서로 재정렬하도록 한다.
   useEffect(() => {
     if (!addressName) return;
 
     let cancelled = false;
-    fetch(`/api/home/feed?sigungu=${encodeURIComponent(sigunguName ?? '')}`)
+    fetch(
+      `/api/home/feed?sigungu=${encodeURIComponent(sigunguName ?? '')}&lat=${center.lat}&lng=${center.lng}`
+    )
       .then((res) => res.json())
       .then((data: HomeFeed) => {
         if (!cancelled) {
@@ -59,7 +63,7 @@ export function HomeView({ initialFeed }: { initialFeed: HomeFeed }) {
     return () => {
       cancelled = true;
     };
-  }, [addressName, sigunguName]);
+  }, [addressName, sigunguName, center.lat, center.lng]);
 
   const { heroEvents, freeFeed } = feed;
   const visibleHeroEvents = heroEvents.slice(0, HERO_VISIBLE_COUNT);

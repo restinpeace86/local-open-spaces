@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
+import { haversineDistanceMeters } from '@/lib/geo/haversine';
 
 // Task 9-1(2026-08-22): 홈 화면 Hero Carousel/큐레이션 피드용 서버 사이드 조회 로직.
 // /api/home/feed 라우트와 홈 페이지 Server Component가 이 함수들을 공유해서 쓴다
@@ -10,11 +11,17 @@ import { NearbyItem } from '@/lib/spaces/get-nearby';
 // 방식(Task 9-1-1)을 완전히 제거했다. 대신 인덱싱된 sigungu_name 컬럼 값으로 "유저가 선택한
 // 지역"을 1순위로, 그 외 지역을 2순위로 재정렬한다(제외하지 않음 — 지역 데이터가 적은 사용자도
 // 피드가 텅 비지 않도록). 이 방식은 애플리케이션 레벨의 삼각함수 계산이 전혀 없어 응답이 더 빠르다.
+//
+// 사용자 피드백(2026-08-22): 위치가 "설정/재설정"되어 실제 좌표(lat/lng)를 알게 된 경우에는,
+// 이미 뽑아둔(Strict Location-First로 걸러진) 소규모 후보군 안에서만 실제 거리순으로 재정렬한다.
+// 이는 Task 9-1-3에서 없앤 "매 요청마다 전체 후보를 Haversine으로 필터링"하는 것과는 다르다 —
+// 위치 미설정 상태(기본값)의 익명 요청에는 전혀 적용되지 않고, 좌표를 아는 소수의 요청에서만
+// 이미 축소된 배열(최대 수십 건)에 대해서만 도는 가벼운 정렬이라 성능에 영향이 없다.
 
-export type HomeRegion = { sigunguName: string | null };
+export type HomeRegion = { sigunguName: string | null; lat?: number; lng?: number };
 
 // Task 9-1-1에서 정한 기본값(성남시 분당구 — 실제 지오코딩된 자사 DB 좌표 기준)의 지역명을
-// 그대로 계승한다(추측 없음).
+// 그대로 계승한다(추측 없음). 위치 미설정 상태를 나타내므로 lat/lng는 일부러 넣지 않는다.
 export const DEFAULT_HOME_REGION: HomeRegion = { sigunguName: '성남시 분당구' };
 
 function extractCoords(location: unknown): { lng: number; lat: number } {
@@ -168,6 +175,22 @@ function byRegionPriority(region: HomeRegion) {
   };
 }
 
+// 사용자 피드백(2026-08-22): 유저가 위치를 설정/재설정해 실제 좌표(region.lat/lng)를 알게 되면
+// 그 좌표에서 가까운 순서대로 노출한다. 좌표를 모르는 상태(기본값)에서는 아무 것도 하지 않고
+// 기존 순서(최신순 등)를 그대로 둔다 — 안정 정렬이므로 이후 selectRegionFirst/byRegionPriority가
+// 지역 우선순위로 다시 나눠도 각 그룹 내부의 "가까운 순"은 그대로 유지된다.
+function sortByDistanceIfKnown(items: NearbyItem[], region: HomeRegion): NearbyItem[] {
+  if (typeof region.lat !== 'number' || typeof region.lng !== 'number') return items;
+
+  const origin = { lat: region.lat, lng: region.lng };
+  return items
+    .map((item) => ({
+      ...item,
+      distance_meters: haversineDistanceMeters(origin, { lat: item.lat, lng: item.lng }),
+    }))
+    .sort((a, b) => a.distance_meters - b.distance_meters);
+}
+
 // Task 9-1-6: Hero Carousel 전용 "Strict Location-First" 선택. byRegionPriority(정렬만 하고
 // 배제하지 않음)와 달리, 선택 지역 항목만으로 limit이 충족되면 다른 지역 항목은 최종 결과에서
 // 완전히 배제한다. 선택 지역 데이터가 부족할 때만 다른 지역 데이터로 남은 자리를 채운다.
@@ -207,7 +230,8 @@ export async function getTodayEvents(
   if (error) throw new Error(`오늘의 행사 조회 실패: ${error.message}`);
 
   const items = dedupeAndMergeFree((data ?? []).map(toEventItem));
-  return selectRegionFirst(items, region, limit);
+  const ordered = sortByDistanceIfKnown(items, region);
+  return selectRegionFirst(ordered, region, limit);
 }
 
 // docs/spec.md 2.2 ③: "🎁 0원의 행복 — 지출 부담 없는 완전 무료 공공장소/행사 카드"
@@ -272,7 +296,8 @@ export async function getFreeFeed(
   const eventItems: NearbyItem[] = (eventsResult.data ?? []).map(toEventItem);
 
   const merged = dedupeAndMergeFree([...spaceItems, ...eventItems]);
-  return merged.sort(byRegionPriority(region)).slice(0, limit);
+  const ordered = sortByDistanceIfKnown(merged, region);
+  return ordered.sort(byRegionPriority(region)).slice(0, limit);
 }
 
 export type HomeFeed = {

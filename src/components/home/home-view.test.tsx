@@ -136,8 +136,9 @@ describe('HomeView', () => {
   });
 
   // Task 9-1-3: 유저가 실제 위치를 설정하면(온보딩 확정 시 이미 계산돼 저장된 sigungu_name)
-  // 그 값을 그대로 넘겨 홈 피드를 즉시 재조회한다(재계산 없음)
-  it('유저 위치가 설정돼 있으면 저장된 sigungu_name으로 /api/home/feed를 재조회한다', async () => {
+  // 그 값을 그대로 넘겨 홈 피드를 즉시 재조회한다(재계산 없음).
+  // 사용자 피드백(2026-08-22): 실제 좌표(lat/lng)도 함께 넘겨 서버가 가까운 순으로 재정렬하도록 한다.
+  it('유저 위치가 설정돼 있으면 저장된 sigungu_name과 좌표로 /api/home/feed를 재조회한다', async () => {
     localStorage.setItem(
       'user_location',
       JSON.stringify({
@@ -162,7 +163,7 @@ describe('HomeView', () => {
 
     expect(await screen.findByText('재조회된 행사')).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledWith(
-      `/api/home/feed?sigungu=${encodeURIComponent('성남시 분당구')}`
+      `/api/home/feed?sigungu=${encodeURIComponent('성남시 분당구')}&lat=37.4&lng=127.2`
     );
 
     vi.unstubAllGlobals();

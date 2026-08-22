@@ -224,3 +224,89 @@ describe('getFreeFeed (Task 9-1-3: open_spaces+events 지역 우선 정렬)', ()
     expect(items[0].id).toBe('s1');
   });
 });
+
+// 사용자 피드백(2026-08-22): 위치가 초기에 없다가 설정/재설정되면(좌표를 알게 되면) 실제
+// 거리순으로 노출되어야 한다. 좌표를 모르는(기본값) 상태에서는 이 정렬이 적용되지 않는다.
+describe('위치 설정/재설정 시 가까운 순 정렬', () => {
+  afterEach(() => {
+    vi.doUnmock('@/lib/supabase/server');
+    vi.resetModules();
+  });
+
+  it('getTodayEvents: region에 좌표가 있으면 같은 지역 안에서도 가까운 순서로 정렬한다', async () => {
+    const origin = { lat: 37.5, lng: 127.0 };
+    const far = eventRow({
+      id: 'far',
+      title: '먼 행사',
+      location: { coordinates: [127.5, 37.9] }, // origin에서 상당히 먼 좌표
+    });
+    const near = eventRow({
+      id: 'near',
+      title: '가까운 행사',
+      location: { coordinates: [127.001, 37.501] }, // origin 바로 근처
+    });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeChainable({ data: [far, near], error: null }) }),
+    }));
+
+    const { getTodayEvents } = await import('./get-home-feed');
+    const items = await getTodayEvents(10, { sigunguName: '성남시 분당구', ...origin });
+
+    expect(items[0].id).toBe('near');
+    expect(items[1].id).toBe('far');
+    expect(items[0].distance_meters).toBeLessThan(items[1].distance_meters);
+  });
+
+  it('getTodayEvents: region에 좌표가 없으면(기본값) 거리 정렬을 적용하지 않는다(distance_meters는 -1 유지)', async () => {
+    const row = eventRow();
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeChainable({ data: [row], error: null }) }),
+    }));
+
+    const { getTodayEvents } = await import('./get-home-feed');
+    const items = await getTodayEvents(10, { sigunguName: '성남시 분당구' });
+
+    expect(items[0].distance_meters).toBe(-1);
+  });
+
+  it('getFreeFeed: region에 좌표가 있으면 open_spaces/events를 합쳐 가까운 순서로 정렬한다', async () => {
+    const origin = { lat: 37.5, lng: 127.0 };
+    const spaceRow = {
+      id: 'space-far',
+      name: '먼 공원',
+      category: 'OUTDOOR_NATURE',
+      address: '경기도 성남시 분당구 어딘가',
+      location: { coordinates: [127.5, 37.9] },
+      is_free: true,
+      operating_hours: null,
+      info_url: null,
+      is_kids_friendly: false,
+      has_parking: false,
+      stroller_accessible: false,
+      facility_type: '복합',
+      target_age_group: null,
+      sigungu_name: '성남시 분당구',
+    };
+    const nearEvent = eventRow({
+      id: 'event-near',
+      title: '가까운 무료 행사',
+      location: { coordinates: [127.001, 37.501] },
+    });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () =>
+        Promise.resolve({
+          from: (table: string) =>
+            makeChainable({ data: table === 'open_spaces' ? [spaceRow] : [nearEvent], error: null }),
+        }),
+    }));
+
+    const { getFreeFeed } = await import('./get-home-feed');
+    const items = await getFreeFeed(10, { sigunguName: '성남시 분당구', ...origin });
+
+    expect(items[0].id).toBe('event-near');
+    expect(items[1].id).toBe('space-far');
+  });
+});

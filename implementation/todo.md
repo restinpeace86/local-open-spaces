@@ -160,3 +160,20 @@
   - **검증**:
     - `npx tsc --noEmit` / `npm run test`(전체 143/143, 신규 2건 포함) / `npm run build`: 모두 통과.
     - `npm run dev` 기동 후 실측: `/api/home/feed` 응답 `heroEvents`가 30건까지 내려옴을 확인, 홈 SSR HTML에서 "+ 더보기 (20건)" 버튼 실제 렌더링 확인, 위치 미설정 상태의 헤더가 "내 동네 설정하기" 짧은 문구만 보여줌을 확인(상세 주소 없음).
+
+- [x] **[사용자 피드백] 위치 설정/재설정 시 메인 카드(Hero Carousel) 가까운 순 정렬** 완료 (2026-08-22)
+  - **작업 목표**: 위치가 초기에 없다가 설정되거나 재설정되면, 이미 당일 이벤트/가성비 조건으로 걸러진 메인 카드가 실제 사용자 위치에서 가까운 순서로 노출되도록 보완.
+
+  - **핵심 설계(Task 9-1-3의 "요청마다 전체 Haversine 필터링 제거"와 상충하지 않는 이유)**:
+    - `get-home-feed.ts`에 `sortByDistanceIfKnown(items, region)` 신설 — `HomeRegion`에 `lat`/`lng`가 있을 때만(즉, 유저가 실제로 위치를 설정/재설정해 좌표를 아는 경우에만) 동작한다. **이미 Strict Location-First/중복제거로 축소된 소규모 후보군(최대 수십 건)** 안에서만 도는 가벼운 정렬이라, Task 9-1-3에서 없앤 "매 요청마다 수백 건 전체를 Haversine으로 훑는" 방식과는 근본적으로 다르다. 위치 미설정(기본값, `DEFAULT_HOME_REGION`)인 익명 요청에는 이 로직이 전혀 실행되지 않아 기존 성능 개선은 그대로 유지된다.
+    - `getTodayEvents`(Hero Carousel)는 `sortByDistanceIfKnown` → `selectRegionFirst`(Task 9-1-6) 순으로 적용 — 가까운 순으로 미리 정렬해 둔 상태에서 지역 우선/배제를 적용하므로, 선택 지역 안에서도 가까운 것부터, 부족해서 채워지는 다른 지역도 가까운 것부터 채워진다.
+    - `getFreeFeed`(0원의 행복)도 동일하게 `sortByDistanceIfKnown` → `byRegionPriority`(Task 9-1-3) 순으로 적용해 일관성 있게 확장했다("메인카드라던가 이런게 전부 어느정도" 요청 반영).
+    - 좌표를 알게 되면 `distance_meters`도 실제 값으로 채워진다(기존 -1 sentinel은 좌표 모를 때만 유지).
+
+  - **연동**:
+    - `/api/home/feed`가 `?lat=&lng=`를 다시 선택적으로 받는다(Task 9-1-3에서 제거했던 파라미터를 다른 목적—반경 필터링이 아니라 후보군 내 정렬—으로 재도입).
+    - `home-view.tsx`: 위치가 설정/재설정될 때(`addressName` 변경) `useUserLocation()`의 실제 좌표(`center`)를 `?lat=&lng=`로 함께 넘긴다.
+
+  - **검증**:
+    - `npx tsc --noEmit` / `npm run test`(전체 146/146, 신규 3건 포함) / `npm run build`: 모두 통과.
+    - `npm run dev` 기동 후 실측: 좌표 없이 `?sigungu=강남구`만 요청하면 기존처럼 `distance_meters: -1`(정렬 미적용) 유지 확인. 좌표를 함께(`?sigungu=강남구&lat=37.5275&lng=127.0459`) 보내면 실제 응답이 2m → 2,280m → 2,889m → 3,658m → 3,894m 순으로 정확히 가까운 순 정렬됨을 확인.
