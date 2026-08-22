@@ -83,35 +83,78 @@ function toEventItem(row: EventRow): NearbyItem {
   };
 }
 
+// Task 9-1-8: "용산ZINE: 맛있는 용산 이야기 8월~10월 예약 안내 (4~6학년 대상)"처럼 회차/대상별로
+// 제목 뒷부분만 다른 시리즈물, "(주말가족) 8월 대모산유아숲"/"(주말가족)대모산유아숲"처럼 앞에
+// 붙는 회차 라벨만 다른 반복 프로그램을 같은 항목으로 묶기 위한 제목 핵심 키 추출.
+// 1) 맨 앞의 "(라벨)"/"[라벨]" 형태 접두 라벨 제거 — 예: "(주말가족) " 제거
+// 2) 남은 문자열 맨 앞의 "숫자+월" 토큰 제거 — 예: "8월 " 제거
+// 3) 첫 ':' 또는 '(' 이후는 회차/주제/대상 정보로 간주해 버림 — 예: "용산ZINE: ..." → "용산ZINE"
+// 잘라낸 결과가 비면(제목 전체가 괄호였던 경우 등) 원본 제목을 그대로 쓴다.
+function normalizeTitleKey(name: string): string {
+  const withoutLeadingLabel = name.trim().replace(/^[([][^)\]]*[)\]]\s*/, '');
+  const withoutMonthPrefix = withoutLeadingLabel.replace(/^\d+월\s*/, '');
+  const cut = withoutMonthPrefix.split(/[:(]/)[0].trim();
+  const core = cut || withoutMonthPrefix || name.trim();
+  return core.toLowerCase().replace(/\s+/g, '');
+}
+
 // docs/spec.md 2.2 ③ / Task 9-1-3: "정규화된 (행사명/공간명 + 시군구)" 기준 중복 제거.
-// 공백 제거 + 대소문자 무시로 이름을 정규화하고, 시군구가 없으면 빈 문자열로 묶는다
-// (같은 이름 + 같은 지역이면 같은 항목으로 취급). 동일 키에 is_free: true가 하나라도 있으면
-// 최종 카드를 is_free: true로 병합해 1건만 남긴다.
-function normalizeDedupKey(item: NearbyItem): string {
-  const normalizedName = item.name.trim().toLowerCase().replace(/\s+/g, '');
-  return `${normalizedName}|${item.sigungu_name ?? ''}`;
+// Task 9-1-8: 제목을 정확히 일치가 아니라 위 핵심 키로 느슨하게 묶어(Fuzzy) 시리즈물/유사
+// 반복 프로그램까지 대표 1건으로 통합한다. 동일 핵심 키 안에서 실제 지역(sigungu_name)이
+// 서로 다른 값으로 2개 이상 섞여 있으면(진짜 다른 지역의 동명 이벤트일 수 있으므로) 지역별로
+// 나눠서만 병합하고, sigungu_name이 없는(null) 항목만 있거나 지역이 하나로만 모이면 1건으로
+// 합친다. 병합 시 가장 정보가 많은(주소/지역/썸네일이 채워진) 항목을 대표로 삼고, 하나라도
+// is_free: true면 최종 카드를 is_free: true로 승격한다.
+function completenessScore(item: NearbyItem): number {
+  let score = 0;
+  if (item.address) score += 1;
+  if (item.sigungu_name) score += 1;
+  if (item.thumbnail_url) score += 1;
+  return score;
+}
+
+function mergeGroup(group: NearbyItem[]): NearbyItem {
+  const base = group.reduce((best, cur) => (completenessScore(cur) > completenessScore(best) ? cur : best));
+  const sigunguName = base.sigungu_name ?? group.find((i) => i.sigungu_name)?.sigungu_name ?? null;
+  const isFree = group.some((i) => i.is_free === true);
+  return { ...base, sigungu_name: sigunguName, is_free: isFree ? true : base.is_free };
 }
 
 function dedupeAndMergeFree(items: NearbyItem[]): NearbyItem[] {
-  const merged = new Map<string, NearbyItem>();
-
+  const byTitleKey = new Map<string, NearbyItem[]>();
   for (const item of items) {
-    const key = normalizeDedupKey(item);
-    const existing = merged.get(key);
+    const key = normalizeTitleKey(item.name);
+    const group = byTitleKey.get(key);
+    if (group) group.push(item);
+    else byTitleKey.set(key, [item]);
+  }
 
-    if (!existing) {
-      merged.set(key, item);
+  const result: NearbyItem[] = [];
+
+  for (const group of byTitleKey.values()) {
+    const distinctRegions = new Set(group.filter((i) => i.sigungu_name).map((i) => i.sigungu_name));
+
+    if (distinctRegions.size <= 1) {
+      result.push(mergeGroup(group));
       continue;
     }
 
-    if (item.is_free === true && existing.is_free !== true) {
-      merged.set(key, { ...item, is_free: true });
-    } else if (existing.is_free === true) {
-      merged.set(key, { ...existing, is_free: true });
+    // 같은 제목 핵심 키에 서로 다른 실제 지역이 섞여 있으면(동명이지만 다른 지역의 별개
+    // 행사/장소일 수 있음) 지역별로 나눠서만 병합한다 — sigungu_name이 없는 항목은 어느
+    // 지역에 속하는지 알 수 없으므로 별도로 남긴다(임의 배정하지 않음).
+    const byRegion = new Map<string, NearbyItem[]>();
+    for (const item of group) {
+      const regionKey = item.sigungu_name ?? '';
+      const sub = byRegion.get(regionKey);
+      if (sub) sub.push(item);
+      else byRegion.set(regionKey, [item]);
+    }
+    for (const sub of byRegion.values()) {
+      result.push(mergeGroup(sub));
     }
   }
 
-  return Array.from(merged.values());
+  return result;
 }
 
 // Task 9-1-3: 유저가 선택한 지역(region.sigunguName)과 일치하는 항목을 1순위로, 그 외 지역을

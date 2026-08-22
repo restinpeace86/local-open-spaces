@@ -131,6 +131,57 @@ describe('getTodayEvents (Task 9-1-3: 거리 계산 없음 / Task 9-1-6: Strict 
     expect(items).toHaveLength(1);
     expect(items[0].is_free).toBe(true);
   });
+
+  it('Task 9-1-8: 앞에 붙는 회차 라벨만 다른 반복 프로그램을 대표 1건으로 묶는다', async () => {
+    const withMonth = eventRow({ id: 'a', title: '(주말가족) 8월 대모산유아숲', sigungu_name: '강남구' });
+    const withoutMonth = eventRow({ id: 'b', title: '(주말가족)대모산유아숲', sigungu_name: '강남구' });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeChainable({ data: [withMonth, withoutMonth], error: null }) }),
+    }));
+
+    const { getTodayEvents } = await import('./get-home-feed');
+    const items = await getTodayEvents(10);
+
+    expect(items).toHaveLength(1);
+  });
+
+  it('Task 9-1-8: 뒤에 붙는 회차/대상 정보만 다른 시리즈물을 대표 1건으로 묶고, 결측 sigungu_name은 실제 값으로 채운다', async () => {
+    const noRegion = eventRow({
+      id: 'zine-noregion',
+      title: '용산ZINE: 맛있는 용산 이야기 8월 ~ 10월 예약 안내 (4~6학년 대상)',
+      sigungu_name: null,
+    });
+    const withRegion = eventRow({
+      id: 'zine-region',
+      title: '용산ZINE: 맛있는 용산 이야기 8월 ~ 10월 예약 안내 (1~3학년 대상)',
+      sigungu_name: '용산구',
+    });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeChainable({ data: [noRegion, withRegion], error: null }) }),
+    }));
+
+    const { getTodayEvents } = await import('./get-home-feed');
+    const items = await getTodayEvents(10);
+
+    expect(items).toHaveLength(1);
+    expect(items[0].sigungu_name).toBe('용산구');
+  });
+
+  it('Task 9-1-8: 같은 제목 핵심 키라도 실제 지역이 서로 다르면(동명 이벤트) 병합하지 않는다', async () => {
+    const gangnam = eventRow({ id: 'series-gangnam', title: '서울숲, 휴휴산방(9월, 섬유가 된 식물)', sigungu_name: '강남구' });
+    const seongdong = eventRow({ id: 'series-seongdong', title: '서울숲, 휴휴산방(8월, 리스DIY)', sigungu_name: '성동구' });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeChainable({ data: [gangnam, seongdong], error: null }) }),
+    }));
+
+    const { getTodayEvents } = await import('./get-home-feed');
+    const items = await getTodayEvents(10);
+
+    expect(items).toHaveLength(2);
+  });
 });
 
 describe('getFreeFeed (Task 9-1-3: open_spaces+events 지역 우선 정렬)', () => {

@@ -551,6 +551,14 @@ export type Database = {
           thumbnail_url: string
         }[]
       }
+      get_sigungu_options: {
+        Args: never
+        Returns: {
+          lat: number
+          lng: number
+          sigungu_name: string
+        }[]
+      }
       gettransactionid: { Args: never; Returns: unknown }
       longtransactionsenabled: { Args: never; Returns: boolean }
       populate_geometry_columns:

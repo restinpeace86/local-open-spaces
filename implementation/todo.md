@@ -113,3 +113,33 @@
     - `?sigungu=성남시 분당구`(기본 지역)는 오늘 진행 중인 이벤트가 0건이라 자연스럽게 전량 다른 지역으로 대체되는 것도 확인(버그 아님 — 실제 데이터 상황).
 
   - **특이 사항**: `getFreeFeed`(0원의 행복 그리드)는 이번 지시서 범위(HeroCarousel 한정)에 포함되지 않아 손대지 않았다 — 필요 시 별도 지시로 진행.
+
+- [x] **[Task 9-1-7] 하단 5탭 앱 공통 Layout 고정** 완료 (2026-08-22)
+  - **작업 목표**: 지도(/nearby), 카테고리(/region), 홈(/) 등 전 화면에서 하단 5탭바가 항시 고정 노출되도록 수정
+
+  - **실측 확인(임의 이동 없이 기존 구조 우선)**: `src/app/layout.tsx`(RootLayout)를 확인한 결과, `BottomTabs`는 **이미** `{children}` 바로 다음에 렌더링돼 모든 라우트에 공통 적용되는 앱 루트 레이아웃 구조였다(라우트 그룹 `(explore)`의 자체 레이아웃은 `<TopTabs>`만 추가할 뿐 `<html>/<body>`를 새로 열지 않아 RootLayout을 그대로 상속). `usePathname()` 기반 활성 탭 동기화(`bottom-tabs.tsx`)도 이미 구현돼 있어 "공통 Layout으로 이동"은 추가 변경이 필요하지 않았다(제5장 제4조 기존 구조 우선 — 이미 있는 구조를 임의로 다시 만들지 않음).
+  - **실제 발견한 결함(수정 완료)**: `MapExplorer`(`/nearby`)의 모바일 바텀시트가 `fixed left-0 right-0 bottom-0`으로 뷰포트 최하단에 고정돼 있어, 화면 최하단의 BottomTabs를 시각적으로 가리고 있었다. `bottom-0` → `bottom-16`으로 수정해 탭바 높이만큼 띄워 겹치지 않게 했다(지시서의 "지도/목록 하단 safe padding(pb-16 등) 추가"에 해당하는 실제 결함).
+  - **검증**: 다른 화면(홈 `/`, 카테고리 `/region`, 캘린더 `/calendar`)은 `flex-1 overflow-y-auto` 스크롤 영역이라 겹침 문제가 없음을 코드로 확인(모든 `fixed` 포지셔닝 사용처를 전수 검색 — 모달성 오버레이(`fixed inset-0`)뿐, 상시 노출 요소 중 겹침 위험은 `/nearby` 바텀시트 1건뿐이었음).
+  - `npm run dev` 기동 후 실측: `/nearby` SSR HTML에 `bottom-16` 클래스 반영 확인, 홈 SSR HTML에 `<nav>` 하단 탭바(`pb-[env(safe-area-inset-bottom)]`) 존재 확인.
+
+- [x] **[Task 9-1-8] GPS 2단계 Fallback·수동 선택 시트, 모바일 카드 중앙 정렬, 중복 제거 강화** 완료 (2026-08-22)
+  - **작업 목표**: GPS 실패 시 수동 지역 선택으로 즉시 이어지는 Fallback, Hero Carousel 카드 정중앙 정렬, 시리즈물/유사 카드 Fuzzy 중복 제거
+
+  - **GPS 2단계 Fallback & 수동 선택 시트**:
+    - `get_sigungu_options()` PostgreSQL RPC 함수 신설(`scripts/migrations/2026-08-22-get-sigungu-options-rpc.sql`) — open_spaces/events 양쪽에서 sigungu_name이 채워진 행을 모아 지역별 대표 좌표(실제 저장된 좌표, `ST_X`/`ST_Y`) 1건씩 반환. 하드코딩된 전국 행정구역 목록 대신 실제 데이터가 있는 지역만 노출(현재 242개 지역, 실측 확인).
+    - `src/lib/spaces/get-sigungu-options.ts` 신설(브라우저 Supabase 클라이언트로 RPC 호출).
+    - `location-onboarding-modal.tsx`: GPS 미지원/권한 거부/역지오코딩 실패 각 경로 모두에서 에러 메시지 노출과 동시에 `openManualPicker()`를 호출해 수동 시/군/구 선택 시트를 자동으로 연다. 지역 선택 시 해당 지역의 대표 좌표로 `onConfirm`(기존 위치 확정 흐름과 동일 — 위치 확정 시점에 sigungu_name도 함께 저장하는 Task 9-1-3 후속 설계를 그대로 재사용).
+    - `location-onboarding-modal.test.tsx`(신규 3건): GPS 거부 시 에러+시트 동시 노출, 지역 선택 시 좌표 확정, 브라우저 미지원 시 즉시 시트 노출.
+
+  - **모바일 Hero Carousel 카드 정중앙 정렬**:
+    - `hero-carousel.tsx`: 카드 폭/스냅을 `w-full sm:w-72 snap-start`(Task 9-1-3)에서 `w-[calc(100vw-32px)] sm:w-72 snap-center`로 변경 — 컨테이너 좌우 여백(px-4=32px)만큼만 뺀 폭으로 모바일 화면 정중앙에 카드 1장이 온다.
+
+  - **유사 콘텐츠 중복 제거(Fuzzy Deduplication) 강화**:
+    - `get-home-feed.ts`에 `normalizeTitleKey(name)` 신설 — ①맨 앞 "(라벨)" 접두 제거(예: "(주말가족) "), ②남은 문자열 맨 앞 "숫자+월" 토큰 제거(예: "8월 "), ③첫 ':' 또는 '(' 이후는 회차/대상 정보로 간주해 절삭(예: "용산ZINE: ..." → "용산ZINE"). 이 핵심 키로 시리즈물/반복 프로그램을 묶는다.
+    - 같은 핵심 키 안에서 실제 지역(sigungu_name)이 서로 다른 값으로 2개 이상 섞여 있으면(동명이지만 다른 지역의 별개 이벤트일 수 있음) 지역별로만 나눠 병합하고, 하나의 지역으로만 모이거나 sigungu_name이 없는 항목뿐이면 1건으로 합친다 — 실측으로 확인된 "용산ZINE"(sigungu_name 결측 중복)과 "서울숲, 휴휴산방"(월별 시리즈) 사례 둘 다 대표 1건으로 정제됨을 확인.
+    - 병합 시 주소/지역/썸네일이 가장 많이 채워진 항목을 대표로 선택(`completenessScore`)하고, 하나라도 `is_free: true`면 병합 결과를 `is_free: true`로 승격(Task 9-1-3 유지).
+    - `get-home-feed.test.ts` 신규 3건: 앞 회차 라벨 제거 병합, 뒤 회차/대상 정보 제거 병합 + sigungu_name 결측 보완, 동일 핵심 키라도 실제 지역이 다르면 병합하지 않음(오탐 방지) 검증.
+
+  - **검증**:
+    - `npx tsc --noEmit`(gen:types 재실행 후) / `npm run test`(전체 141/141, 신규 6건 포함) / `npm run build`: 모두 통과.
+    - `npm run dev` 기동 후 실측: HeroCarousel 카드 DOM class에 `w-[calc(100vw-32px)] sm:w-72 snap-center` 반영 확인. 실제 API 응답으로 "용산ZINE" 관련 카드가 기존 2건 → 1건으로 정제됨을 확인. `/nearby` SSR HTML에 `bottom-16` 클래스 반영 확인.

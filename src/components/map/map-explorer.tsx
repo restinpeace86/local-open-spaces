@@ -221,8 +221,10 @@ export function MapExplorer() {
       </div>
 
       {/* 모바일 바텀시트 (spec/common/responsive.md 2.1) */}
+      {/* Task 9-1-7: 하단 5탭(BottomTabs)이 화면 최하단에 항상 고정 노출되므로, 바텀시트를
+          bottom-0으로 두면 탭바를 가려버린다. 탭바 높이만큼(bottom-16) 띄워 겹치지 않게 한다. */}
       <div
-        className={`md:hidden fixed left-0 right-0 bottom-0 bg-white rounded-t-2xl shadow-[0_-4px_16px_rgba(0,0,0,0.08)] transition-[height] duration-200 z-10 ${
+        className={`md:hidden fixed left-0 right-0 bottom-16 bg-white rounded-t-2xl shadow-[0_-4px_16px_rgba(0,0,0,0.08)] transition-[height] duration-200 z-10 ${
           isSheetExpanded ? 'h-[70vh]' : 'h-[112px]'
         }`}
       >

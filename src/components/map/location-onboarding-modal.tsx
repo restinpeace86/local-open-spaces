@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { reverseGeocodeAddress, searchPlaceKeyword, PlaceSearchResult } from '@/lib/kakao/geocode';
 import { UserLocation } from '@/lib/location/user-location-storage';
 import { extractSigunguName } from '@/lib/spaces/extract-district';
+import { getSigunguOptions, SigunguOption } from '@/lib/spaces/get-sigungu-options';
 
 // spec/common/search.md 2.1: 입력 즉시(Debounce 300ms) 검색
 const DEBOUNCE_MS = 300;
@@ -21,6 +22,23 @@ export function LocationOnboardingModal({
   const [results, setResults] = useState<PlaceSearchResult[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // Task 9-1-8: GPS 실패/권한 거부 시 2단계 Fallback으로 자동 노출하는 수동 시/군/구 선택 시트.
+  const [showManualPicker, setShowManualPicker] = useState(false);
+  const [sigunguOptions, setSigunguOptions] = useState<SigunguOption[]>([]);
+  const [isLoadingOptions, setIsLoadingOptions] = useState(false);
+
+  function openManualPicker() {
+    setShowManualPicker(true);
+    if (sigunguOptions.length > 0 || isLoadingOptions) return;
+
+    setIsLoadingOptions(true);
+    getSigunguOptions()
+      .then(setSigunguOptions)
+      .catch(() => {
+        // 목록 조회 실패해도 GPS/검색 경로는 그대로 살아있으므로 화면을 막지 않는다.
+      })
+      .finally(() => setIsLoadingOptions(false));
+  }
 
   useEffect(() => {
     const keyword = draft.trim();
@@ -45,9 +63,13 @@ export function LocationOnboardingModal({
     return () => clearTimeout(timer);
   }, [draft]);
 
+  // Task 9-1-8: GPS 2단계 Fallback — 실패/권한 거부 시 에러 메시지와 동시에 수동 시/군/구
+  // 선택 시트를 자동으로 연다(사용자가 다시 시도하거나 텍스트 검색을 직접 할 필요 없이
+  // 바로 다음 행동을 이어갈 수 있도록).
   function handleUseCurrentLocation() {
     if (!navigator.geolocation) {
       setErrorMessage('이 브라우저에서는 위치 확인을 지원하지 않습니다.');
+      openManualPicker();
       return;
     }
 
@@ -63,6 +85,7 @@ export function LocationOnboardingModal({
           onConfirm({ lat, lng, address_name: addressName, sigungu_name: extractSigunguName(addressName) });
         } catch (err) {
           setErrorMessage(err instanceof Error ? err.message : '주소 확인에 실패했습니다.');
+          openManualPicker();
         } finally {
           setIsLocating(false);
         }
@@ -70,6 +93,7 @@ export function LocationOnboardingModal({
       () => {
         setErrorMessage('위치 권한이 거부되었거나 확인할 수 없습니다.');
         setIsLocating(false);
+        openManualPicker();
       },
       { timeout: 5000 }
     );
@@ -118,6 +142,38 @@ export function LocationOnboardingModal({
 
           {isSearching && <p className="mt-2 text-sm text-gray-400">검색 중...</p>}
           {errorMessage && <p className="mt-2 text-sm text-red-500">{errorMessage}</p>}
+
+          {/* Task 9-1-8: GPS 실패 시 2단계 Fallback — 시/군/구를 직접 선택하는 수동 선택 시트 */}
+          {showManualPicker && (
+            <div className="mt-3 rounded-lg border border-gray-100 overflow-hidden">
+              <p className="px-3 py-2 text-xs font-medium text-gray-500 bg-gray-50">
+                지역을 직접 선택해주세요
+              </p>
+              {isLoadingOptions && <p className="px-3 py-2.5 text-sm text-gray-400">목록 불러오는 중...</p>}
+              {!isLoadingOptions && sigunguOptions.length > 0 && (
+                <ul className="max-h-56 overflow-y-auto flex flex-col divide-y divide-gray-100">
+                  {sigunguOptions.map((option) => (
+                    <li key={option.sigungu_name}>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onConfirm({
+                            lat: option.lat,
+                            lng: option.lng,
+                            address_name: option.sigungu_name,
+                            sigungu_name: option.sigungu_name,
+                          })
+                        }
+                        className="w-full text-left px-3 py-2.5 text-sm text-gray-800 hover:bg-gray-50"
+                      >
+                        {option.sigungu_name}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
 
           {results.length > 0 && (
             <ul className="mt-2 flex flex-col divide-y divide-gray-100 border border-gray-100 rounded-lg overflow-hidden">

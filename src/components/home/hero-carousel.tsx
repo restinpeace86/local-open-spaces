@@ -52,6 +52,8 @@ export function HeroCarousel({
         const venueLine = formatVenueLine(item.address, item.sigungu_name);
 
         return (
+          // Task 9-1-8: 모바일에서 카드 1장이 화면 좌우 여백(컨테이너 px-4=32px)만큼만 뺀 폭으로
+          // 정중앙에 오도록 snap-center로 전환(이전 9-1-3의 snap-start는 좌측 정렬이었다).
           <button
             key={item.id}
             ref={(el) => {
@@ -59,7 +61,7 @@ export function HeroCarousel({
             }}
             type="button"
             onClick={() => onSelect(item)}
-            className="shrink-0 w-full sm:w-72 snap-start text-left rounded-2xl border border-gray-200 bg-white overflow-hidden hover:shadow-md transition-shadow"
+            className="shrink-0 w-[calc(100vw-32px)] sm:w-72 snap-center text-left rounded-2xl border border-gray-200 bg-white overflow-hidden hover:shadow-md transition-shadow"
           >
             <div className="relative aspect-[4/3] bg-gray-100">
               {item.thumbnail_url ? (
