@@ -280,9 +280,15 @@ export type HomeFeed = {
   freeFeed: NearbyItem[];
 };
 
+// 사용자 피드백(2026-08-22): 메인 Hero Carousel은 처음엔 10개만 보여주되(HomeView가 화면에
+// 실제로 노출하는 개수), 같은 조건(Strict Location-First)으로 더 있는 항목을 "+더보기"로
+// 마저 볼 수 있어야 한다. 그러려면 서버가 애초에 10개보다 더 많이 내려줘야 하므로, 여기서는
+// 넉넉히(HERO_FETCH_LIMIT) 가져오고 실제 몇 개까지 보여줄지는 화면(HomeView)이 결정한다.
+const HERO_FETCH_LIMIT = 30;
+
 export async function getHomeFeed(region: HomeRegion = DEFAULT_HOME_REGION): Promise<HomeFeed> {
   const [heroEvents, freeFeed] = await Promise.all([
-    getTodayEvents(10, region),
+    getTodayEvents(HERO_FETCH_LIMIT, region),
     getFreeFeed(12, region),
   ]);
   return { heroEvents, freeFeed };

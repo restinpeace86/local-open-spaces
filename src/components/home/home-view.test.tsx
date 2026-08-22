@@ -167,4 +167,57 @@ describe('HomeView', () => {
 
     vi.unstubAllGlobals();
   });
+
+  // 사용자 피드백(2026-08-22): 헤더 위치 표기가 상세 도로명주소라서 검색바를 가릴 정도였다 —
+  // 짧은 sigunguName을 우선 보여줘야 한다.
+  it('헤더 위치 표기는 상세 주소가 아니라 짧은 sigunguName을 보여준다', () => {
+    localStorage.setItem(
+      'user_location',
+      JSON.stringify({
+        lat: 37.4,
+        lng: 127.2,
+        address_name: '경기도 성남시 분당구 판교로 546번길 15 (판교동, 코너스퀘어)',
+        sigungu_name: '성남시 분당구',
+      })
+    );
+    // addressName이 채워지면 재조회 useEffect가 fetch를 호출하므로(이 테스트의 관심사가
+    // 아니어도) 실제 네트워크 요청이 나가지 않도록 스텁해 둔다.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve({ json: () => Promise.resolve({ heroEvents: [], freeFeed: [] }) } as Response))
+    );
+
+    const feed: HomeFeed = { heroEvents: [], freeFeed: [] };
+    render(<HomeView initialFeed={feed} />);
+
+    expect(screen.getByText('성남시 분당구')).toBeInTheDocument();
+    expect(
+      screen.queryByText('경기도 성남시 분당구 판교로 546번길 15 (판교동, 코너스퀘어)')
+    ).not.toBeInTheDocument();
+
+    vi.unstubAllGlobals();
+  });
+
+  // 사용자 피드백(2026-08-22): 메인 카드(Hero Carousel)와 같은 조건인데 개수 제한(10개) 때문에
+  // 잘린 항목을 "+더보기"로 이어서 볼 수 있어야 한다.
+  it('Hero Carousel 항목이 10개를 넘으면 "+더보기" 버튼으로 나머지를 펼쳐 보여준다', () => {
+    const heroEvents = Array.from({ length: 12 }, (_, i) =>
+      makeEventItem({ id: `hero-${i}`, name: `오늘의 행사 ${i}` })
+    );
+    const feed: HomeFeed = { heroEvents, freeFeed: [] };
+    render(<HomeView initialFeed={feed} />);
+
+    // 처음엔 10개까지만 보이고, 11/12번째는 아직 없다.
+    expect(screen.getByText('오늘의 행사 0')).toBeInTheDocument();
+    expect(screen.getByText('오늘의 행사 9')).toBeInTheDocument();
+    expect(screen.queryByText('오늘의 행사 10')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('+ 더보기 (2건)'));
+
+    expect(screen.getByText('오늘의 행사 10')).toBeInTheDocument();
+    expect(screen.getByText('오늘의 행사 11')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('접기'));
+    expect(screen.queryByText('오늘의 행사 10')).not.toBeInTheDocument();
+  });
 });

@@ -23,12 +23,17 @@ function FeedCard({ item, onSelect }: { item: NearbyItem; onSelect: (item: Nearb
   );
 }
 
+// 사용자 피드백(2026-08-22): Hero Carousel은 처음엔 이만큼만 보여주고, 같은 조건(Strict
+// Location-First)으로 개수 때문에 잘린 나머지는 "+더보기"로 펼쳐서 보여준다.
+const HERO_VISIBLE_COUNT = 10;
+
 export function HomeView({ initialFeed }: { initialFeed: HomeFeed }) {
   const { addressName, sigunguName, isOnboardingOpen, confirmLocation, openOnboarding, closeOnboarding } =
     useUserLocation();
   const [activeTab, setActiveTab] = useState<HomeSubTab>('home');
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
   const [feed, setFeed] = useState<HomeFeed>(initialFeed);
+  const [isHeroExpanded, setIsHeroExpanded] = useState(false);
 
   // Task 9-1-1: Server Component는 기본 지역(성남시 분당구)으로만 렌더링할 수 있으므로,
   // 유저가 실제로 위치를 설정한 경우(addressName이 채워짐)에만 그 지역으로 재조회한다.
@@ -42,7 +47,10 @@ export function HomeView({ initialFeed }: { initialFeed: HomeFeed }) {
     fetch(`/api/home/feed?sigungu=${encodeURIComponent(sigunguName ?? '')}`)
       .then((res) => res.json())
       .then((data: HomeFeed) => {
-        if (!cancelled) setFeed(data);
+        if (!cancelled) {
+          setFeed(data);
+          setIsHeroExpanded(false);
+        }
       })
       .catch(() => {
         // 재조회 실패 시 기존 피드를 그대로 유지한다(Fail-Safe — 화면이 깨지지 않게).
@@ -54,10 +62,14 @@ export function HomeView({ initialFeed }: { initialFeed: HomeFeed }) {
   }, [addressName, sigunguName]);
 
   const { heroEvents, freeFeed } = feed;
+  const visibleHeroEvents = heroEvents.slice(0, HERO_VISIBLE_COUNT);
+  const extraHeroEvents = heroEvents.slice(HERO_VISIBLE_COUNT);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      <HomeHeader addressName={addressName} onLocationClick={openOnboarding} />
+      {/* 사용자 피드백(2026-08-22): 헤더에 상세 도로명주소가 그대로 나오면 검색바가 가려질
+          정도로 좁아진다 — 시/군/구 단위 짧은 이름(sigunguName)을 우선 보여준다. */}
+      <HomeHeader locationLabel={sigunguName ?? addressName} onLocationClick={openOnboarding} />
       <HomeSubTabs active={activeTab} onChange={setActiveTab} />
 
       <div className="flex-1 overflow-y-auto py-4 flex flex-col gap-5">
@@ -65,7 +77,29 @@ export function HomeView({ initialFeed }: { initialFeed: HomeFeed }) {
           <>
             <section aria-label="오늘의 추천 행사">
               {heroEvents.length > 0 ? (
-                <HeroCarousel items={heroEvents} onSelect={setSelectedItem} />
+                <>
+                  <HeroCarousel items={visibleHeroEvents} onSelect={setSelectedItem} />
+                  {/* 사용자 피드백(2026-08-22): 메인 카드와 같은 조건(Strict Location-First)인데
+                      개수 제한 때문에 잘린 항목을 바로 아래 "+더보기"로 이어서 볼 수 있게 한다. */}
+                  {extraHeroEvents.length > 0 && (
+                    <div className="px-4 mt-3">
+                      <button
+                        type="button"
+                        onClick={() => setIsHeroExpanded((v) => !v)}
+                        className="w-full rounded-lg border border-gray-200 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+                      >
+                        {isHeroExpanded ? '접기' : `+ 더보기 (${extraHeroEvents.length}건)`}
+                      </button>
+                    </div>
+                  )}
+                  {isHeroExpanded && extraHeroEvents.length > 0 && (
+                    <div className="px-4 mt-3 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                      {extraHeroEvents.map((item) => (
+                        <FeedCard key={item.id} item={item} onSelect={setSelectedItem} />
+                      ))}
+                    </div>
+                  )}
+                </>
               ) : (
                 <p className="px-4 text-sm text-gray-400">오늘 진행 중인 추천 행사가 아직 없습니다.</p>
               )}

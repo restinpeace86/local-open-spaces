@@ -143,3 +143,20 @@
   - **검증**:
     - `npx tsc --noEmit`(gen:types 재실행 후) / `npm run test`(전체 141/141, 신규 6건 포함) / `npm run build`: 모두 통과.
     - `npm run dev` 기동 후 실측: HeroCarousel 카드 DOM class에 `w-[calc(100vw-32px)] sm:w-72 snap-center` 반영 확인. 실제 API 응답으로 "용산ZINE" 관련 카드가 기존 2건 → 1건으로 정제됨을 확인. `/nearby` SSR HTML에 `bottom-16` 클래스 반영 확인.
+
+- [x] **[사용자 피드백] Hero Carousel "+더보기" 및 헤더 위치 표기 축약** 완료 (2026-08-22)
+  - **작업 목표**: (1) 메인 카드(Hero Carousel) 바로 아래에 "+더보기" 버튼을 만들어 같은 조건인데 개수 제한으로 잘린 항목을 마저 볼 수 있게 함. (2) 상단 검색바 옆 위치 표기가 상세 도로명주소까지 나와 검색바를 가릴 정도였던 것을 시/군/구 단위로 축약.
+
+  - **Hero Carousel "+더보기"**:
+    - `get-home-feed.ts`: `getHomeFeed`가 `getTodayEvents`를 호출할 때 limit을 10 → `HERO_FETCH_LIMIT`(30)으로 올려, 화면에 실제로 더 보여줄 수 있는 여분 데이터를 서버가 미리 내려주도록 했다(Task 9-1-6의 Strict Location-First 로직은 그대로 재사용 — 조건 자체는 바뀌지 않고 개수만 늘림).
+    - `home-view.tsx`: `heroEvents`를 `HERO_VISIBLE_COUNT`(10)만큼만 Carousel에 넘기고, 나머지(`extraHeroEvents`)가 있으면 Carousel 바로 아래에 "+더보기 (N건)" 버튼을 노출. 클릭 시 나머지 항목을 기존 "0원의 행복"과 동일한 그리드 레이아웃(`FeedCard` 재사용)으로 펼쳐 보여주고, 다시 누르면 "접기". 위치가 바뀌어 피드가 재조회되면 펼침 상태를 자동으로 초기화.
+    - `home-view.test.tsx` 신규 1건: 12건 중 10건만 먼저 보이고, "+더보기" 클릭 시 11/12번째가 나타나며 "접기"로 다시 숨겨짐을 검증.
+
+  - **헤더 위치 표기 축약**:
+    - `home-header.tsx`: prop을 `addressName`(상세 주소)에서 `locationLabel`(짧은 이름)로 변경. `home-view.tsx`가 이미 위치 확정 시 1회 계산해 저장해 둔 `sigunguName`(예: "성남시 분당구")을 우선 넘기고, 추출 실패 등으로 없을 때만 `addressName` 전체로 대체.
+    - `location-header.tsx`: 방어적으로 `max-w-[45vw] truncate`를 추가해, 혹시 긴 문자열이 들어오더라도 검색바를 다시 밀어내지 않도록 했다(지도 화면의 세로 스택 배치에는 영향 없음 — 겹치는 배치는 홈 헤더뿐이었음).
+    - `home-view.test.tsx` 신규 1건: 상세 도로명주소가 아니라 `sigungu_name`만 헤더에 표시됨을 검증.
+
+  - **검증**:
+    - `npx tsc --noEmit` / `npm run test`(전체 143/143, 신규 2건 포함) / `npm run build`: 모두 통과.
+    - `npm run dev` 기동 후 실측: `/api/home/feed` 응답 `heroEvents`가 30건까지 내려옴을 확인, 홈 SSR HTML에서 "+ 더보기 (20건)" 버튼 실제 렌더링 확인, 위치 미설정 상태의 헤더가 "내 동네 설정하기" 짧은 문구만 보여줌을 확인(상세 주소 없음).
