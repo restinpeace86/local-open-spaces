@@ -15,6 +15,8 @@ const AUTOPLAY_INTERVAL_MS = 5000;
 // Task 9-1-1: 5초 간격 Auto-play + 터치/호버 시 일시정지.
 // Task 9-1-9: 당일 진행 중이 아니라 "이번 주 시작 예정 마감임박"으로 채워진 항목은
 // [⚡ 오늘 당일 입장] 대신 [🔥 D-DAY 마감임박] 뱃지로 구분 표시한다.
+// Task 9-1-8(2026-08-22 후속): snap-center만으로는 빠르게 스와이프할 때 두 장 이상 건너뛰기도
+// 해서, 카드마다 [scroll-snap-stop:always]를 추가해 한 번 드래그에 정확히 1장씩만 멈추게 한다.
 function isTodayActive(item: NearbyItem, todayStr: string): boolean {
   return !!item.start_date && !!item.end_date && item.start_date <= todayStr && todayStr <= item.end_date;
 }
@@ -82,7 +84,7 @@ export function HeroCarousel({
             }}
             type="button"
             onClick={() => onSelect(item)}
-            className="shrink-0 w-[calc(100vw-32px)] sm:w-72 snap-center text-left rounded-2xl border border-gray-200 bg-white overflow-hidden hover:shadow-md transition-shadow"
+            className="shrink-0 w-[calc(100vw-32px)] sm:w-72 snap-center [scroll-snap-stop:always] text-left rounded-2xl border border-gray-200 bg-white overflow-hidden hover:shadow-md transition-shadow"
           >
             <div className="relative aspect-[4/3] bg-gray-100">
               {item.thumbnail_url ? (
@@ -137,7 +139,7 @@ export function HeroCarousel({
       {moreHref && (
         <Link
           href={moreHref}
-          className="shrink-0 w-[calc(100vw-32px)] sm:w-72 snap-center rounded-2xl border border-dashed border-gray-300 bg-gray-50 flex flex-col items-center justify-center gap-2 text-center p-4 hover:bg-gray-100 transition-colors"
+          className="shrink-0 w-[calc(100vw-32px)] sm:w-72 snap-center [scroll-snap-stop:always] rounded-2xl border border-dashed border-gray-300 bg-gray-50 flex flex-col items-center justify-center gap-2 text-center p-4 hover:bg-gray-100 transition-colors"
         >
           <span className="text-3xl" aria-hidden>
             🗺️

@@ -15,9 +15,28 @@ import { useUserLocation } from '@/hooks/use-user-location';
 
 const ALL_DISTRICT = 'ALL';
 
+// Task 9-1-10(2026-08-22): 5대 UI 카테고리와 동급으로 노출하는 특화 필터.
+// "🐶 반려동물 동반"은 실측 확인 결과 DB에 이를 뒷받침할 실제 필드(is_pet_friendly 등)가
+// 전혀 없어(open_spaces 컬럼: address/category/facility_type/has_parking/is_free/
+// is_kids_friendly/stroller_accessible 등) 임의로 만들어내지 않고 제외했다 — 근거로 삼을 만한
+// 유일한 단서(KorPetTourService2 전용 소스 여부)도 2026-08-21 사용자 확인에 따라 contentid
+// 기준으로 다른 TourAPI 소스와 source_type/external_id를 통합해 구분이 불가능하다(스킵 로그 참고).
+// "♿ 무장애/유모차"는 실제 존재하는 stroller_accessible 컬럼(기존 "🛺 유모차가능" 뱃지와 동일
+// 필드, deriveParentalTags의 실측 텍스트 분석으로 채워짐)을 그대로 재사용해 구현했다.
+type SpecialFilterKey = 'FREE' | 'ACCESSIBLE';
+const SPECIAL_FILTERS: { key: SpecialFilterKey; label: string; emoji: string }[] = [
+  { key: 'FREE', label: '완전무료', emoji: '🎁' },
+  { key: 'ACCESSIBLE', label: '무장애/유모차', emoji: '♿' },
+];
+
+function isSpecialFilterKey(value: string): value is SpecialFilterKey {
+  return SPECIAL_FILTERS.some((f) => f.key === value);
+}
+
 // Task 9-1-4: 카테고리 탭 1단계 — 5대 UI 카테고리 선택 화면을 먼저 깔끔하게 보여준다(리스트 없음).
 // 홈 Quick 그리드와 같은 이미지 자산을 재사용하되, 여기서는 탭 진입 시의 단독 화면이라 더 크게 보여준다.
-function CategoryPickerScreen({ onSelect }: { onSelect: (category: string) => void }) {
+// Task 9-1-10: 5대 카테고리와 동급으로 "완전무료"/"무장애·유모차" 특화 필터 타일을 추가로 노출한다.
+function CategoryPickerScreen({ onSelect }: { onSelect: (selection: string) => void }) {
   return (
     <div className="flex-1 overflow-y-auto p-4">
       <h2 className="text-lg font-bold text-gray-900">카테고리를 선택해주세요</h2>
@@ -44,6 +63,22 @@ function CategoryPickerScreen({ onSelect }: { onSelect: (category: string) => vo
             <span className="text-sm font-semibold text-gray-900">{opt.label}</span>
           </button>
         ))}
+        {SPECIAL_FILTERS.map((filter) => (
+          <button
+            key={filter.key}
+            type="button"
+            onClick={() => onSelect(filter.key)}
+            className="flex flex-col items-center gap-2 rounded-2xl border border-gray-200 bg-white p-5 hover:shadow-md hover:border-gray-300 transition-shadow"
+          >
+            <span
+              aria-hidden
+              className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center text-3xl shrink-0"
+            >
+              {filter.emoji}
+            </span>
+            <span className="text-sm font-semibold text-gray-900">{filter.label}</span>
+          </button>
+        ))}
       </div>
     </div>
   );
@@ -60,7 +95,8 @@ export function RegionGridView() {
   const [items, setItems] = useState<NearbyItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [category, setCategory] = useState<string | null>(() => searchParams.get('category') ?? null);
+  // Task 9-1-10: 5대 UI 카테고리 값 또는 특화 필터 키('FREE'/'ACCESSIBLE') 중 하나를 담는다.
+  const [selection, setSelection] = useState<string | null>(() => searchParams.get('category') ?? null);
   const [district, setDistrict] = useState(ALL_DISTRICT);
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
 
@@ -87,18 +123,22 @@ export function RegionGridView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const categoryItems = useMemo(() => {
-    if (!category) return [];
-    return items.filter((item) => item.category === category);
-  }, [items, category]);
+  // Task 9-1-10: selection이 5대 UI 카테고리 값이면 category로, 'FREE'/'ACCESSIBLE'이면
+  // 실제 존재하는 is_free/stroller_accessible 필드로 걸러낸다(카테고리와 동급 취급).
+  const selectionItems = useMemo(() => {
+    if (!selection) return [];
+    if (selection === 'FREE') return items.filter((item) => item.is_free === true);
+    if (selection === 'ACCESSIBLE') return items.filter((item) => item.stroller_accessible === true);
+    return items.filter((item) => item.category === selection);
+  }, [items, selection]);
 
   const districtOptions = useMemo(() => {
-    const set = new Set(categoryItems.map((item) => extractDistrict(item.address)));
+    const set = new Set(selectionItems.map((item) => extractDistrict(item.address)));
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'ko'));
-  }, [categoryItems]);
+  }, [selectionItems]);
 
   const filteredItems = useMemo(() => {
-    let result = categoryItems;
+    let result = selectionItems;
     if (district !== ALL_DISTRICT) {
       result = result.filter((item) => extractDistrict(item.address) === district);
     }
@@ -114,19 +154,23 @@ export function RegionGridView() {
     }
 
     return result;
-  }, [categoryItems, district, sigunguName]);
+  }, [selectionItems, district, sigunguName]);
 
   const resetFilters = () => setDistrict(ALL_DISTRICT);
 
   const isEmptyByFilter =
-    !isLoading && !errorMessage && categoryItems.length > 0 && filteredItems.length === 0;
+    !isLoading && !errorMessage && selectionItems.length > 0 && filteredItems.length === 0;
 
-  // 1단계: 카테고리를 아직 고르지 않았으면 선택 화면만 보여준다.
-  if (!category) {
-    return <CategoryPickerScreen onSelect={setCategory} />;
+  // 1단계: 아직 아무 것도 고르지 않았으면 선택 화면만 보여준다.
+  if (!selection) {
+    return <CategoryPickerScreen onSelect={setSelection} />;
   }
 
-  const categoryMeta = UI_CATEGORY_FILTER_OPTIONS.find((opt) => opt.category === category);
+  const categoryMeta = UI_CATEGORY_FILTER_OPTIONS.find((opt) => opt.category === selection);
+  const specialFilterMeta = isSpecialFilterKey(selection)
+    ? SPECIAL_FILTERS.find((f) => f.key === selection)
+    : undefined;
+  const selectionLabel = categoryMeta?.label ?? specialFilterMeta?.label ?? selection;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -134,12 +178,12 @@ export function RegionGridView() {
         <div className="flex items-center justify-between">
           <button
             type="button"
-            onClick={() => setCategory(null)}
+            onClick={() => setSelection(null)}
             className="text-sm text-gray-500 hover:text-gray-800"
           >
             ← 다른 카테고리
           </button>
-          <span className="text-base font-bold text-gray-900">{categoryMeta?.label ?? category}</span>
+          <span className="text-base font-bold text-gray-900">{selectionLabel}</span>
         </div>
         <div className="flex items-center gap-2">
           <label htmlFor="district-select" className="text-sm text-gray-500 shrink-0">

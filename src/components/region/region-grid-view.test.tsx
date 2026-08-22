@@ -151,3 +151,62 @@ describe('RegionGridView 2단계 탐색 UX (Task 9-1-4)', () => {
     expect(cardTexts[0]).toBe('분당 키즈 공간');
   });
 });
+
+// Task 9-1-10: 5대 카테고리와 동급으로 노출되는 특화 필터("완전무료"/"무장애·유모차")가 실제
+// DB 필드(is_free/stroller_accessible)로 정확히 걸러지는지 검증한다. "반려동물 동반"은 이를
+// 뒷받침할 실제 필드가 DB에 없어(스킵 로그 참고) 타일 자체를 노출하지 않는다.
+describe('RegionGridView 특화 필터 (Task 9-1-10)', () => {
+  afterEach(() => {
+    mockSearchParams = new URLSearchParams();
+    mockSigunguName = null;
+    vi.doUnmock('@/lib/spaces/get-all-spaces');
+    vi.resetModules();
+  });
+
+  it('1단계 화면에 "완전무료"/"무장애·유모차" 타일이 5대 카테고리와 함께 노출된다(반려동물 타일은 없음)', async () => {
+    vi.doMock('@/lib/spaces/get-all-spaces', () => ({
+      getAllOpenSpaces: () => Promise.resolve([]),
+    }));
+
+    const { RegionGridView: FreshView } = await import('./region-grid-view');
+    render(<FreshView />);
+
+    expect(screen.getByRole('button', { name: '완전무료' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '무장애/유모차' })).toBeInTheDocument();
+    expect(screen.queryByText(/반려동물/)).not.toBeInTheDocument();
+  });
+
+  it('"완전무료" 타일을 누르면 is_free===true인 항목만 보여준다', async () => {
+    const free = makeSpaceItem({ id: 'free', name: '무료 시설', is_free: true });
+    const paid = makeSpaceItem({ id: 'paid', name: '유료 시설', is_free: false });
+
+    vi.doMock('@/lib/spaces/get-all-spaces', () => ({
+      getAllOpenSpaces: () => Promise.resolve([free, paid]),
+    }));
+
+    const { RegionGridView: FreshView } = await import('./region-grid-view');
+    render(<FreshView />);
+
+    fireEvent.click(screen.getByRole('button', { name: '완전무료' }));
+
+    await waitFor(() => expect(screen.getByText('무료 시설')).toBeInTheDocument());
+    expect(screen.queryByText('유료 시설')).not.toBeInTheDocument();
+  });
+
+  it('"무장애/유모차" 타일을 누르면 stroller_accessible===true인 항목만 보여준다', async () => {
+    const accessible = makeSpaceItem({ id: 'ok', name: '유모차 가능 시설', stroller_accessible: true });
+    const notAccessible = makeSpaceItem({ id: 'no', name: '일반 시설', stroller_accessible: false });
+
+    vi.doMock('@/lib/spaces/get-all-spaces', () => ({
+      getAllOpenSpaces: () => Promise.resolve([accessible, notAccessible]),
+    }));
+
+    const { RegionGridView: FreshView } = await import('./region-grid-view');
+    render(<FreshView />);
+
+    fireEvent.click(screen.getByRole('button', { name: '무장애/유모차' }));
+
+    await waitFor(() => expect(screen.getByText('유모차 가능 시설')).toBeInTheDocument());
+    expect(screen.queryByText('일반 시설')).not.toBeInTheDocument();
+  });
+});

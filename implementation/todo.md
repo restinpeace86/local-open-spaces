@@ -92,3 +92,30 @@
   - **[기존 기능명세서 충돌 및 스킵 로그]**
     - `national-park-ecotour.mjs`: `KAKAO_REST_API_KEY` 미설정으로 스킵. `.env.local`에 Kakao Developers REST API 키 추가 필요.
     - `local-data-kids.mjs`: `LOCAL_DATA_KIDS_CSV_URL` 미설정으로 스킵. localdata.go.kr에서 실제 CSV 다운로드 URL 확인 후 `.env.local`에 추가 필요.
+
+- [x] **[Task 9-1-7~9-1-11 통합] 하단 탭/GPS Fallback/Strict Snap/중복제거 재확인 + 당일 TOP10 + 카테고리 특화 필터 + 가성비 행복 서브탭** 완료 (2026-08-22)
+
+  - **Task 9-1-7/9-1-9 재확인**: `git pull` 후 코드를 직접 확인한 결과 하단 5탭 공통 고정, GPS 2단계 Fallback, 당일 TOP10+D-Day 뱃지+더보기 CTA 전부 이전 세션에서 이미 구현·커밋된 상태임을 재검증(중복 재구현 없음).
+
+  - **[Task 9-1-8] 후속 보정**:
+    - **1카드 Strict Snap**: `hero-carousel.tsx`의 카드(및 CTA 슬라이드)에 `[scroll-snap-stop:always]`를 추가 — `snap-center`만으로는 빠르게 스와이프할 때 카드를 2장 이상 건너뛸 수 있어, 드래그 한 번에 정확히 1장씩만 멈추도록 보정했다.
+    - **유사 중복 제거**: `get-home-feed.ts`의 `normalizeTitleKey`/`dedupeAndMergeFree`가 이미 이전 세션에서 구현돼 있어 재검증만 하고 코드 변경은 하지 않았다.
+
+  - **[Task 9-1-10] 카테고리 탭 항목 확장 — 실측 확인 결과 원안 그대로는 구현 불가능한 부분 발견**:
+    - **DB 실측 확인(추측 없음)**: `open_spaces` 실제 컬럼(`database.types.ts` 생성 타입 기준)은 address/category/facility_type/has_parking/is_free/is_kids_friendly/location/name/sigungu_name/source_type/stroller_accessible/target_age_group 등이며, 지시서가 전제한 `is_pet_friendly`/`accessibility` 컬럼은 **DB에 전혀 존재하지 않음**을 확인했다.
+    - **"🐶 반려동물 동반" 스킵(추측 금지)**: 유일한 대안 신호는 "KorPetTourService2(반려동물 동반여행 전용 API) 소스인지 여부"였으나, `tour-api-v4-area-based-adapter.mjs` 코드 주석에 **2026-08-21 사용자 확인**("contentid 기준으로 통합(중복제거) 권장")에 따라 `kor-tour`/`kor-with-tour`/`kor-pet-tour` 3개 어댑터가 `source_type`/`external_id`를 의도적으로 통합해 쓰고 있음을 발견했다 — 이는 실수가 아니라 기존에 승인된 결정이라 이번 지시서를 위해 되돌리지 않았다(제7장 제7조 기획 변경 금지). 따라서 "반려동물 동반" 여부를 구분할 근거가 전혀 없어 이 항목만 스킵했다(임의로 필드를 만들거나 값을 추측하지 않음).
+    - **"♿ 무장애/유모차"는 실제 구현**: `stroller_accessible` 컬럼이 실제로 존재하고(기존 "🛺 유모차가능" 뱃지와 동일 필드, `deriveParentalTags`의 실측 텍스트 분석으로 채워짐) 이미 검증된 데이터이므로 그대로 재사용해 구현했다.
+    - **"🎁 완전무료"**: `is_free` 필드로 정상 구현.
+    - `region-grid-view.tsx`: 1단계 선택 화면에 5대 UI 카테고리와 동급으로 "완전무료"/"무장애·유모차" 타일 2개를 추가. `selection` 상태가 카테고리 값이면 `item.category` 매칭, 특화 필터 키('FREE'/'ACCESSIBLE')면 각각 `is_free`/`stroller_accessible` 필드로 직접 걸러 2단계 리스트에 피딩한다.
+    - `region-grid-view.test.tsx` 신규 3건: 특화 필터 타일 노출(반려동물 타일 없음 포함), "완전무료" 클릭 시 `is_free` 필터링, "무장애/유모차" 클릭 시 `stroller_accessible` 필터링 검증.
+
+  - **[Task 9-1-11] "0원의 행복" → "가성비 행복" 서브탭 개편**:
+    - `home-view.tsx`: 섹션 헤더를 "💰 가성비 행복"으로 변경하고, "🎁 완전무료"/"⚡ 당일 바로입장"/"👶 키즈특화"/"🎟️ 전체" 4개 서브탭 칩을 추가. 각 탭은 `freeFeed`(이미 `is_free:true`로 걸러진 데이터)를 실제 존재하는 필드로 재분류한다 — 완전무료(`is_free===true`), 당일 바로입장(SPACE는 상시 개방이라 항상 통과, EVENT는 `start_date~end_date`에 오늘이 포함될 때만), 키즈특화(`is_kids_friendly===true`), 전체(필터 없음). 가격 등급 데이터가 없어 "완전무료"와 "전체"는 현재 데이터 모델상 동일한 결과를 보여준다(임의로 가격 등급을 만들어내지 않음, 특이사항으로 기록).
+    - `home-view.test.tsx` 신규 4건: 기본 "전체" 탭 노출, 키즈특화/완전무료/당일바로입장 각 탭 필터링 검증.
+
+  - **검증**:
+    - `npx tsc --noEmit` / `npm run test`(전체 171/171, 신규 다수 포함) / `npm run build`: 모두 통과.
+    - `npm run dev` 기동 후 실측: 홈 화면에 "💰 가성비 행복" + 4개 서브탭 칩 렌더링 확인, HeroCarousel 카드 DOM에 `scroll-snap-stop` 스타일 반영 확인, `/region` 1단계 화면에 "완전무료"/"무장애/유모차" 타일이 5대 카테고리와 함께 노출되고 "반려동물" 문구는 전혀 없음을 확인. 서버 로그 에러/경고 없음.
+
+  - **[기존 기능명세서 충돌 및 스킵 로그]**
+    - "🐶 반려동물 동반" 카테고리 항목: `open_spaces`에 이를 뒷받침할 실제 필드가 없고, 유일한 대안(소스별 구분)은 2026-08-21 사용자 확인으로 이미 통합하기로 결정된 사항이라 되돌리지 않고 스킵했다. 반려동물 동반 여부를 구분해 노출하려면 스키마 변경(신규 컬럼) 또는 소스 통합 정책 재검토가 선행돼야 하며, 이는 이번 구현 범위를 넘어서는 별도 Spec 논의가 필요하다.

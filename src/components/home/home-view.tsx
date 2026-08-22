@@ -27,12 +27,39 @@ function FeedCard({ item, onSelect }: { item: NearbyItem; onSelect: (item: Nearb
 // "전체 보기" CTA 카드(지도 화면 연동)로 대체한다.
 const HERO_VISIBLE_COUNT = 10;
 
+// Task 9-1-11(2026-08-22): "0원의 행복" → "가성비 행복" 서브탭 개편.
+// freeFeed(is_free:true로 이미 걸러진 데이터)를 실제 존재하는 필드로 다시 세분화한다 — 가격
+// 등급(price tier) 데이터가 없어 "가성비"의 유일한 데이터 근거는 여전히 is_free이므로
+// "완전무료"와 "전체"는 현재로선 같은 결과를 보여준다(추측으로 임의 등급을 만들지 않음).
+type FreeFeedFilterKey = 'COMPLETELY_FREE' | 'TODAY_ENTRY' | 'KIDS_SPECIAL' | 'ALL';
+const FREE_FEED_FILTERS: { key: FreeFeedFilterKey; label: string }[] = [
+  { key: 'COMPLETELY_FREE', label: '🎁 완전무료' },
+  { key: 'TODAY_ENTRY', label: '⚡ 당일 바로입장' },
+  { key: 'KIDS_SPECIAL', label: '👶 키즈특화' },
+  { key: 'ALL', label: '🎟️ 전체' },
+];
+
+// SPACE(상시 개방 공간)는 예약/기간 개념이 없어 항상 "바로입장" 가능으로 취급하고,
+// EVENT는 오늘이 진행 기간(start_date~end_date)에 포함될 때만 통과시킨다.
+function isTodayEntryPossible(item: NearbyItem, todayStr: string): boolean {
+  if (item.item_type === 'SPACE') return true;
+  return !!item.start_date && !!item.end_date && item.start_date <= todayStr && todayStr <= item.end_date;
+}
+
+const FREE_FEED_PREDICATES: Record<FreeFeedFilterKey, (item: NearbyItem, todayStr: string) => boolean> = {
+  COMPLETELY_FREE: (item) => item.is_free === true,
+  TODAY_ENTRY: (item, todayStr) => isTodayEntryPossible(item, todayStr),
+  KIDS_SPECIAL: (item) => item.is_kids_friendly === true,
+  ALL: () => true,
+};
+
 export function HomeView({ initialFeed }: { initialFeed: HomeFeed }) {
   const { center, addressName, sigunguName, isOnboardingOpen, confirmLocation, openOnboarding, closeOnboarding } =
     useUserLocation();
   const [activeTab, setActiveTab] = useState<HomeSubTab>('home');
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
   const [feed, setFeed] = useState<HomeFeed>(initialFeed);
+  const [freeFeedFilter, setFreeFeedFilter] = useState<FreeFeedFilterKey>('ALL');
 
   // Task 9-1-1: Server Component는 기본 지역(성남시 분당구)으로만 렌더링할 수 있으므로,
   // 유저가 실제로 위치를 설정한 경우(addressName이 채워짐)에만 그 지역으로 재조회한다.
@@ -67,6 +94,10 @@ export function HomeView({ initialFeed }: { initialFeed: HomeFeed }) {
   // 연동되는 "전체 보기" CTA 카드를 마지막 슬라이드에 노출한다.
   const heroMoreHref = heroEvents.length > HERO_VISIBLE_COUNT ? '/nearby?filter=TODAY_WEEKEND' : undefined;
 
+  // Task 9-1-11: "가성비 행복" 서브탭 선택에 따라 freeFeed를 다시 걸러낸다.
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const filteredFreeFeed = freeFeed.filter((item) => FREE_FEED_PREDICATES[freeFeedFilter](item, todayStr));
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* 사용자 피드백(2026-08-22): 헤더에 상세 도로명주소가 그대로 나오면 검색바가 가려질
@@ -87,16 +118,35 @@ export function HomeView({ initialFeed }: { initialFeed: HomeFeed }) {
 
             <QuickCategoryGrid />
 
-            <section aria-label="0원의 행복" className="px-4">
-              <h2 className="text-base font-bold text-gray-900 mb-3">🎁 0원의 행복</h2>
-              {freeFeed.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                  {freeFeed.map((item) => (
+            <section aria-label="가성비 행복" className="px-4">
+              <h2 className="text-base font-bold text-gray-900 mb-3">💰 가성비 행복</h2>
+              <div className="flex gap-1.5 overflow-x-auto pb-2">
+                {FREE_FEED_FILTERS.map((f) => {
+                  const isActive = freeFeedFilter === f.key;
+                  return (
+                    <button
+                      key={f.key}
+                      type="button"
+                      onClick={() => setFreeFeedFilter(f.key)}
+                      className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                        isActive
+                          ? 'bg-gray-900 text-white'
+                          : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {filteredFreeFeed.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-3">
+                  {filteredFreeFeed.map((item) => (
                     <FeedCard key={item.id} item={item} onSelect={setSelectedItem} />
                   ))}
                 </div>
               ) : (
-                <p className="text-sm text-gray-400">완전 무료 공간/행사를 찾는 중입니다.</p>
+                <p className="text-sm text-gray-400 mt-3">조건에 맞는 공간/행사를 찾는 중입니다.</p>
               )}
             </section>
           </>

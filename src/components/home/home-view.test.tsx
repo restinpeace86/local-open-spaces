@@ -77,12 +77,12 @@ describe('HomeView', () => {
     localStorage.clear();
   });
 
-  it('Hero Carousel/Quick 그리드/0원의 행복 피드를 홈 탭에서 렌더링한다', () => {
+  it('Hero Carousel/Quick 그리드/가성비 행복 피드를 홈 탭에서 렌더링한다', () => {
     const feed: HomeFeed = { heroEvents: [makeEventItem()], freeFeed: [makeSpaceItem()] };
     render(<HomeView initialFeed={feed} />);
 
     expect(screen.getByText('오늘의 추천 행사')).toBeInTheDocument();
-    expect(screen.getByText('🎁 0원의 행복')).toBeInTheDocument();
+    expect(screen.getByText('💰 가성비 행복')).toBeInTheDocument();
     expect(screen.getByText('무료 공공 공원')).toBeInTheDocument();
     // 5대 카테고리 Quick 그리드
     expect(screen.getByText('키즈·액티비티')).toBeInTheDocument();
@@ -110,8 +110,8 @@ describe('HomeView', () => {
 
     fireEvent.click(screen.getByText('🎁 무료·공공'));
 
-    // 홈 탭 전용 섹션(0원의 행복 헤더, 퀵그리드)은 사라지고 피드 항목만 남는다
-    expect(screen.queryByText('🎁 0원의 행복')).not.toBeInTheDocument();
+    // 홈 탭 전용 섹션(가성비 행복 헤더, 퀵그리드)은 사라지고 피드 항목만 남는다
+    expect(screen.queryByText('💰 가성비 행복')).not.toBeInTheDocument();
     expect(screen.getByText('무료 공공 공원')).toBeInTheDocument();
   });
 
@@ -226,5 +226,73 @@ describe('HomeView', () => {
     render(<HomeView initialFeed={feed} />);
 
     expect(screen.queryByText('오늘 진행 중인 전체 행사 보기')).not.toBeInTheDocument();
+  });
+
+  // Task 9-1-11: "0원의 행복" → "가성비 행복" 서브탭 개편 검증
+  describe('가성비 행복 서브탭 (Task 9-1-11)', () => {
+    it('기본으로 "전체" 탭이 선택돼 있어 모든 항목을 보여준다', () => {
+      const feed: HomeFeed = {
+        heroEvents: [],
+        freeFeed: [
+          makeSpaceItem({ id: 'a', name: '무료 공원', is_free: true, is_kids_friendly: false }),
+          makeSpaceItem({ id: 'b', name: '유료지만 무료피드에 있는 곳', is_free: false }),
+        ],
+      };
+      render(<HomeView initialFeed={feed} />);
+
+      expect(screen.getByText('무료 공원')).toBeInTheDocument();
+      expect(screen.getByText('유료지만 무료피드에 있는 곳')).toBeInTheDocument();
+    });
+
+    it('"👶 키즈특화" 탭을 누르면 is_kids_friendly인 항목만 보여준다', () => {
+      const feed: HomeFeed = {
+        heroEvents: [],
+        freeFeed: [
+          makeSpaceItem({ id: 'kids', name: '키즈 전용 공간', is_kids_friendly: true }),
+          makeSpaceItem({ id: 'general', name: '일반 공간', is_kids_friendly: false }),
+        ],
+      };
+      render(<HomeView initialFeed={feed} />);
+
+      fireEvent.click(screen.getByText('👶 키즈특화'));
+
+      expect(screen.getByText('키즈 전용 공간')).toBeInTheDocument();
+      expect(screen.queryByText('일반 공간')).not.toBeInTheDocument();
+    });
+
+    it('"🎁 완전무료" 탭을 누르면 is_free===true인 항목만 보여준다', () => {
+      const feed: HomeFeed = {
+        heroEvents: [],
+        freeFeed: [
+          makeSpaceItem({ id: 'free', name: '완전 무료 공간', is_free: true }),
+          makeSpaceItem({ id: 'paid', name: '유료 공간', is_free: false }),
+        ],
+      };
+      render(<HomeView initialFeed={feed} />);
+
+      fireEvent.click(screen.getByText('🎁 완전무료'));
+
+      expect(screen.getByText('완전 무료 공간')).toBeInTheDocument();
+      expect(screen.queryByText('유료 공간')).not.toBeInTheDocument();
+    });
+
+    it('"⚡ 당일 바로입장" 탭을 누르면 SPACE는 항상 통과하고 EVENT는 오늘 기간에 포함될 때만 통과한다', () => {
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const feed: HomeFeed = {
+        heroEvents: [],
+        freeFeed: [
+          makeSpaceItem({ id: 'space', name: '상시 개방 공간' }),
+          makeEventItem({ id: 'today-event', name: '오늘 진행 행사', start_date: todayStr, end_date: todayStr }),
+          makeEventItem({ id: 'future-event', name: '다음 주 행사', start_date: '2099-01-01', end_date: '2099-01-02' }),
+        ],
+      };
+      render(<HomeView initialFeed={feed} />);
+
+      fireEvent.click(screen.getByText('⚡ 당일 바로입장'));
+
+      expect(screen.getByText('상시 개방 공간')).toBeInTheDocument();
+      expect(screen.getByText('오늘 진행 행사')).toBeInTheDocument();
+      expect(screen.queryByText('다음 주 행사')).not.toBeInTheDocument();
+    });
   });
 });
