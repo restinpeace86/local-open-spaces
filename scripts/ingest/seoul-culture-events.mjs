@@ -53,7 +53,10 @@ async function mapToEventRow(item, { apiKey }) {
     // 남겨 유료로 임의 단정하지 않는다(space-card.md의 is_free null 처리 규약 준수).
     is_free: item.IS_FREE === '무료' ? true : item.IS_FREE === '유료' ? false : null,
     venue_name: item.PLACE || null, // Task 9-1-1: 실측 확인된 실제 장소명 필드
-    sigungu_name: item.GUNAME || null, // Task 9-1-3: 실측 확인된 실제 구 단위 지역명 필드
+    // Task 9-1-3: 실측 확인된 실제 구 단위 지역명 필드(GUNAME). Task 9-1-12: 이 API는 서울만
+    // 다루므로("서울시 문화행사 정보") 항상 "서울시 " 접두를 붙인다 — "동구"/"중구" 등 다른
+    // 도시와 겹치는 구 이름의 단독 표기를 방지한다(사용자 지적, 추측 아닌 소스 자체 범위 확정).
+    sigungu_name: item.GUNAME ? `서울시 ${item.GUNAME}` : null,
     ...tags,
   };
 }

@@ -33,6 +33,12 @@ function isSpecialFilterKey(value: string): value is SpecialFilterKey {
   return SPECIAL_FILTERS.some((f) => f.key === value);
 }
 
+// Task 9-1-10: "🎈 기타" — 실측 확인 결과 open_spaces.category='ETC'(2,500여 건)가 5대 UI
+// 카테고리 어디에도 속하지 않아 이 탭이 생기기 전에는 발견할 방법이 아예 없던 실제 데이터다
+// (임의로 만든 카테고리가 아니라, 이미 DB에 있는데 도달 경로가 없었던 데이터를 노출하는 것).
+const ETC_CATEGORY = 'ETC';
+const ETC_META = { label: '🎈 기타', emoji: '🎈' };
+
 // Task 9-1-4: 카테고리 탭 1단계 — 5대 UI 카테고리 선택 화면을 먼저 깔끔하게 보여준다(리스트 없음).
 // 홈 Quick 그리드와 같은 이미지 자산을 재사용하되, 여기서는 탭 진입 시의 단독 화면이라 더 크게 보여준다.
 // Task 9-1-10: 5대 카테고리와 동급으로 "완전무료"/"무장애·유모차" 특화 필터 타일을 추가로 노출한다.
@@ -79,6 +85,19 @@ function CategoryPickerScreen({ onSelect }: { onSelect: (selection: string) => v
             <span className="text-sm font-semibold text-gray-900">{filter.label}</span>
           </button>
         ))}
+        <button
+          type="button"
+          onClick={() => onSelect(ETC_CATEGORY)}
+          className="flex flex-col items-center gap-2 rounded-2xl border border-gray-200 bg-white p-5 hover:shadow-md hover:border-gray-300 transition-shadow"
+        >
+          <span
+            aria-hidden
+            className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center text-3xl shrink-0"
+          >
+            {ETC_META.emoji}
+          </span>
+          <span className="text-sm font-semibold text-gray-900">{ETC_META.label.replace(/^🎈\s*/, '')}</span>
+        </button>
       </div>
     </div>
   );
@@ -158,8 +177,11 @@ export function RegionGridView() {
 
   const resetFilters = () => setDistrict(ALL_DISTRICT);
 
-  const isEmptyByFilter =
-    !isLoading && !errorMessage && selectionItems.length > 0 && filteredItems.length === 0;
+  // Task 9-1-10: 실측으로 발견한 버그 수정 — 이 카테고리 자체에 데이터가 아예 없을 때
+  // (selectionItems.length === 0, 지역 필터와 무관) EmptyState 조건이 `selectionItems.length
+  // > 0`을 요구해 아무 안내 없이 빈 화면만 보였다. 원인이 무엇이든(지역 필터로 0건이 됐든,
+  // 카테고리 자체가 비었든) filteredItems가 0건이면 항상 안내를 보여주도록 통일한다.
+  const isEmptyByFilter = !isLoading && !errorMessage && filteredItems.length === 0;
 
   // 1단계: 아직 아무 것도 고르지 않았으면 선택 화면만 보여준다.
   if (!selection) {
@@ -170,7 +192,8 @@ export function RegionGridView() {
   const specialFilterMeta = isSpecialFilterKey(selection)
     ? SPECIAL_FILTERS.find((f) => f.key === selection)
     : undefined;
-  const selectionLabel = categoryMeta?.label ?? specialFilterMeta?.label ?? selection;
+  const selectionLabel =
+    categoryMeta?.label ?? specialFilterMeta?.label ?? (selection === ETC_CATEGORY ? ETC_META.label : selection);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
