@@ -117,6 +117,10 @@ export function RegionGridView() {
   // Task 9-1-10: 5대 UI 카테고리 값 또는 특화 필터 키('FREE'/'ACCESSIBLE') 중 하나를 담는다.
   const [selection, setSelection] = useState<string | null>(() => searchParams.get('category') ?? null);
   const [district, setDistrict] = useState(ALL_DISTRICT);
+  // Task 9-4-4(2026-08-22): 사용자가 드롭다운을 직접 조작하면 더 이상 전역 위치로 강제
+  // 되돌리지 않기 위한 플래그. 카테고리를 새로 선택하면(selection 변경) 그 카테고리에
+  // 대해서는 다시 전역 위치 기본값을 적용해야 하므로 초기화한다.
+  const [districtManuallyChanged, setDistrictManuallyChanged] = useState(false);
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
 
   useEffect(() => {
@@ -155,6 +159,26 @@ export function RegionGridView() {
     const set = new Set(selectionItems.map((item) => extractDistrict(item.address)));
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'ko'));
   }, [selectionItems]);
+
+  // Task 9-4-4: '전체 지역'이 기본값이면 홈에서 이미 설정해 둔 위치(예: "성남시 분당구")가
+  // 카테고리 탭에서는 반영되지 않아 매번 "전체 지역"부터 다시 보게 된다는 지적(실측 확인)에
+  // 따라, 실제 데이터 기반 지역 옵션(districtOptions)이 준비되면 설정 위치와 실제로 일치하는
+  // 옵션을 찾아 자동 선택한다. sigunguName은 "성남시 분당구"(2단 시/도)/"울산시 동구"(광역시
+  // 축약형)처럼 형태에 따라 extractDistrict()가 실제로 뽑아내는 토큰 위치가 다르므로(2단
+  // 시/도는 도시 토큰만, 광역시는 구 토큰만) 특정 위치를 추측 고정하지 않고, 두 토큰 중
+  // districtOptions에 실제로 존재하는 쪽을 찾아 사용한다. 사용자가 드롭다운을 직접 조작한
+  // 뒤에는(districtManuallyChanged) 더 이상 강제로 되돌리지 않는다.
+  useEffect(() => {
+    if (districtManuallyChanged || !sigunguName) return;
+    const tokens = sigunguName.split(' ');
+    const matched = tokens.find((t) => districtOptions.includes(t));
+    if (matched) setDistrict(matched);
+  }, [sigunguName, districtOptions, districtManuallyChanged]);
+
+  // 카테고리를 새로 선택하면 그 카테고리에 대해서도 전역 위치 기본값이 다시 적용되도록 초기화한다.
+  useEffect(() => {
+    setDistrictManuallyChanged(false);
+  }, [selection]);
 
   const filteredItems = useMemo(() => {
     let result = selectionItems;
@@ -215,7 +239,10 @@ export function RegionGridView() {
           <select
             id="district-select"
             value={district}
-            onChange={(e) => setDistrict(e.target.value)}
+            onChange={(e) => {
+              setDistrict(e.target.value);
+              setDistrictManuallyChanged(true);
+            }}
             className="flex-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
           >
             <option value={ALL_DISTRICT}>전체 지역</option>

@@ -29,24 +29,44 @@ function makeSequentialFrom(dataSequence: unknown[][]) {
   };
 }
 
-// Task 9-1-4: fetchRegionFirstRows가 실제로 sigungu_name을 SQL 단에서 필터링해 후보군을
-// 확보하는지(단순히 최신순 500건을 한 번 가져와 뒤섞이는 게 아닌지) 검증하려면, .eq()에 넘어온
-// 조건을 실제로 반영해 데이터를 걸러주는 좀 더 정교한 스텁이 필요하다.
+// Task 9-1-4/9-4-4: fetchRegionFirstRows가 실제로 지역 조건을 SQL 단에서 필터링해 후보군을
+// 확보하는지(단순히 최신순 500건을 한 번 가져와 뒤섞이는 게 아닌지) 검증하려면, .eq()/.or()에
+// 넘어온 조건을 실제로 반영해 데이터를 걸러주는 좀 더 정교한 스텁이 필요하다.
+// Task 9-4-4: get-home-feed.ts가 이제 sigungu_name 정확 일치(.eq) 대신 sigungu_name/주소
+// 텍스트에 대한 ILIKE 퍼지 매칭(.or('col.ilike.%token%,col2.ilike.%token%'))을 쓰므로,
+// PostgREST의 `column.ilike.%value%` 필터 문자열을 파싱해 실제로 부분 문자열 매칭하듯 걸러준다.
 function makeFilteringChainable(rows: Array<Record<string, unknown>>) {
-  const filters: Record<string, unknown> = {};
+  const eqFilters: Record<string, unknown> = {};
+  let orFilterExpr: string | null = null;
   const builder: Record<string, unknown> = {};
   builder.select = () => builder;
   builder.lte = () => builder;
   builder.gte = () => builder;
   builder.gt = () => builder;
-  builder.or = () => builder;
   builder.order = () => builder;
   builder.eq = (column: string, value: unknown) => {
-    filters[column] = value;
+    eqFilters[column] = value;
+    return builder;
+  };
+  builder.or = (expr: string) => {
+    orFilterExpr = expr;
     return builder;
   };
   builder.limit = (n: number) => {
-    const filtered = rows.filter((row) => Object.entries(filters).every(([col, val]) => row[col] === val));
+    let filtered = rows;
+    if (Object.keys(eqFilters).length > 0) {
+      filtered = filtered.filter((row) => Object.entries(eqFilters).every(([col, val]) => row[col] === val));
+    }
+    if (orFilterExpr) {
+      const conditions = orFilterExpr.split(',').map((cond) => {
+        const [column, , ...rest] = cond.split('.');
+        const value = rest.join('.').replace(/^%|%$/g, '');
+        return { column, value };
+      });
+      filtered = filtered.filter((row) =>
+        conditions.some(({ column, value }) => typeof row[column] === 'string' && (row[column] as string).includes(value))
+      );
+    }
     return Promise.resolve({ data: filtered.slice(0, n), error: null });
   };
   return builder;
@@ -128,6 +148,29 @@ describe('getTodayEvents (Task 9-1-3: 거리 계산 없음 / Task 9-1-6: Strict 
     expect(items).toHaveLength(2);
     expect(items[0].id).toBe('selected');
     expect(items[1].id).toBe('other');
+  });
+
+  // Task 9-4-4(2026-08-22) 실측에서 발견한 버그 재현: sigungu_name이 VWorld 백필 전이라
+  // NULL이어도(Task 9-2-1/9-3-2에서 API 키 일시 차단으로 미완료된 실제 상황), venue_name
+  // 텍스트에 지역명이 들어있으면 정확 일치(.eq) 대신 ILIKE 퍼지 매칭으로 찾아내 0건이 되지
+  // 않아야 한다.
+  it('Task 9-4-4: sigungu_name이 NULL이어도 venue_name에 지역명이 있으면 ILIKE로 찾아낸다', async () => {
+    const backfillPending = eventRow({
+      id: 'no-sigungu',
+      venue_name: '분당구 율동공원',
+      sigungu_name: null,
+      is_active: true,
+    });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeFilteringChainable([backfillPending]) }),
+    }));
+
+    const { getTodayEvents } = await import('./get-home-feed');
+    const items = await getTodayEvents(10, { sigunguName: '성남시 분당구' });
+
+    expect(items).toHaveLength(1);
+    expect(items[0].id).toBe('no-sigungu');
   });
 
   it('Task 9-1-6: Strict Location-First — 선택 지역만으로 limit이 충족되면 다른 지역은 완전히 배제한다', async () => {

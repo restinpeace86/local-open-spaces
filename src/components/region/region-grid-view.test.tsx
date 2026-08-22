@@ -117,7 +117,10 @@ describe('RegionGridView 2단계 탐색 UX (Task 9-1-4)', () => {
     expect(screen.getByText('카테고리를 선택해주세요')).toBeInTheDocument();
   });
 
-  it('전역 고정 위치(sigunguName)와 일치하는 항목을 우선 노출한다(다른 지역도 배제하지 않음)', async () => {
+  // Task 9-4-4(2026-08-22): '전체 지역'이 기본값이면 홈에서 이미 설정한 위치가 카테고리 탭에는
+  // 반영되지 않는다는 지적에 따라, 이제 지역 드롭다운 자체가 설정 위치로 기본 필터링된다
+  // (이전에는 정렬만 하고 배제하지 않았으나, 이 Task부터는 명시적으로 "디폴트 필터"로 동작).
+  it('카테고리 진입 시 전역 위치(성남시 분당구)가 지역 드롭다운 기본값으로 적용되어 다른 지역은 숨겨진다', async () => {
     mockSearchParams = new URLSearchParams('category=KIDS_ACTIVITY');
     mockSigunguName = '성남시 분당구';
 
@@ -144,11 +147,15 @@ describe('RegionGridView 2단계 탐색 UX (Task 9-1-4)', () => {
     render(<FreshView />);
 
     await waitFor(() => expect(screen.getByText('분당 키즈 공간')).toBeInTheDocument());
-    // 다른 지역도 여전히 노출된다(배제하지 않음).
-    expect(screen.getByText('강남 키즈 공간')).toBeInTheDocument();
+    // 지역 옵션이 계산된 뒤 전역 위치 기본값이 적용되는 건 items 로딩 이후의 또 다른 렌더
+    // 사이클이라, 드롭다운 값이 실제로 "성남시"로 바뀔 때까지 먼저 기다린다.
+    await waitFor(() => expect(screen.getByRole('combobox', { name: '지역' })).toHaveValue('성남시'));
+    // 기본 상태에서는 설정 위치(성남시)로 필터링돼 다른 지역(강남구)은 숨겨진다.
+    expect(screen.queryByText('강남 키즈 공간')).not.toBeInTheDocument();
 
-    const cardTexts = screen.getAllByText(/키즈 공간$/).map((el) => el.textContent);
-    expect(cardTexts[0]).toBe('분당 키즈 공간');
+    // 사용자가 드롭다운에서 '전체 지역'을 직접 선택하면 배제 없이 전부 보여준다.
+    fireEvent.change(screen.getByRole('combobox', { name: '지역' }), { target: { value: 'ALL' } });
+    expect(screen.getByText('강남 키즈 공간')).toBeInTheDocument();
   });
 });
 

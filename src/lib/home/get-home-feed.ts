@@ -164,15 +164,13 @@ function dedupeAndMergeFree(items: NearbyItem[]): NearbyItem[] {
   return result;
 }
 
-// Task 9-1-3: 유저가 선택한 지역(region.sigunguName)과 일치하는 항목을 1순위로, 그 외 지역을
-// 2순위로 정렬한다(제외하지 않음). Array.sort는 안정 정렬이므로 각 순위 그룹 내부의 기존
-// 정렬(최신순 등)은 그대로 유지된다.
+// Task 9-1-3/9-4-4: 유저가 선택한 지역(region.sigunguName)과 일치하는 항목을 우선 정렬한다
+// (제외하지 않음). regionTier와 동일한 퍼지 토큰 매칭 규칙을 그대로 재사용해, "가성비 행복"
+// 피드도 Hero Carousel과 같은 기준으로 sigungu_name 표기가 제각각이어도 정확히 우선순위가
+// 매겨지도록 일관성을 맞춘다. Array.sort는 안정 정렬이므로 각 순위 그룹 내부의 기존 정렬
+// (최신순 등)은 그대로 유지된다.
 function byRegionPriority(region: HomeRegion) {
-  return (a: NearbyItem, b: NearbyItem): number => {
-    const aRank = region.sigunguName && a.sigungu_name === region.sigunguName ? 0 : 1;
-    const bRank = region.sigunguName && b.sigungu_name === region.sigunguName ? 0 : 1;
-    return aRank - bRank;
-  };
+  return (a: NearbyItem, b: NearbyItem): number => regionTier(a, region) - regionTier(b, region);
 }
 
 // 사용자 피드백(2026-08-22): 유저가 위치를 설정/재설정해 실제 좌표(region.lat/lng)를 알게 되면
@@ -191,24 +189,39 @@ function sortByDistanceIfKnown(items: NearbyItem[], region: HomeRegion): NearbyI
     .sort((a, b) => a.distance_meters - b.distance_meters);
 }
 
-// Task 9-4-3(2026-08-22): sigungu_name은 "{시} {구}"(예: "성남시 분당구") 또는 구 없는 "{시}"
-// 단독(예: "춘천시") 형태다(schema-mapper.mjs의 extractSigunguName과 동일 규칙). 공백 앞부분을
-// "상위 시"로 본다 — DB에 시/도(province) 컬럼이 별도로 없어(추측으로 새 컬럼/전국 매핑표를
-// 만들지 않음, 제3장 제3조 데이터 구조 변경 금지) "성남시 전체"까지만 상위 지역으로 판별하고,
-// "경기도" 같은 시/도 단위까지는 이 데이터만으로 구분할 수 없다.
-function parentCityOf(sigunguName: string): string {
-  const spaceIndex = sigunguName.indexOf(' ');
-  return spaceIndex === -1 ? sigunguName : sigunguName.slice(0, spaceIndex);
+// Task 9-4-4(2026-08-22) 실측에서 발견한 버그: sigungu_name이 지역에 따라 "성남시 분당구"/
+// "성남시"만/(VWorld 역지오코딩 백필 전이라 NULL — Task 9-2-1/9-3-2에서 VWorld API 키가
+// 일시 차단돼 아직 완료되지 못한 ~1,500건)처럼 제각각으로 적재돼 있어, 선택 지역과 문자열이
+// "정확히" 일치하는 sigungu_name만 찾던 예전 방식(.eq())으로는 실제로 있는 당일 데이터도
+// 0건으로 보일 수 있었다. sigungu_name은 "{시} {구}"(예: "성남시 분당구") 또는 구 없는 "{시}"
+// 단독(예: "춘천시") 형태다(schema-mapper.mjs의 extractSigunguName과 동일 규칙) — 공백 뒤
+// 마지막 토큰을 가장 구체적인("분당구") 토큰으로, 공백 앞 첫 토큰을 상위 시("성남시")로 본다
+// (토큰이 하나뿐이면 그 자체가 이미 가장 구체적인 값이라 상위 토큰은 없음).
+function tokensOf(sigunguName: string): { specific: string; broad: string | null } {
+  const tokens = sigunguName.trim().split(/\s+/);
+  const specific = tokens[tokens.length - 1];
+  const broad = tokens.length > 1 ? tokens[0] : null;
+  return { specific, broad };
 }
 
-// Task 9-4-3: 메인 카드(Hero Carousel) 2단계 지역 큐레이션 우선순위.
-// 0(1순위)=선택 시/군/구와 정확히 일치, 1(2순위)=같은 상위 시의 다른 구, 2(3순위)=그 외 전체.
+// Task 9-4-4: sigungu_name뿐 아니라 주소 텍스트(NearbyItem.address — events는 venue_name,
+// open_spaces는 address 컬럼이 매핑됨)에도 토큰이 부분 문자열로 포함돼 있으면 매칭으로 본다.
+// sigungu_name이 비어있거나("NULL") 다른 표기라도, 원본 주소에 지역명이 들어있으면 찾아낸다.
+function matchesToken(item: NearbyItem, token: string): boolean {
+  return Boolean(item.sigungu_name?.includes(token)) || Boolean(item.address?.includes(token));
+}
+
+// Task 9-4-3/9-4-4: 메인 카드(Hero Carousel) 2단계 지역 큐레이션 우선순위.
+// 0(1순위)=가장 구체적인 토큰(분당구) 매칭, 1(2순위)=상위 시 토큰(성남시)만 매칭, 2(3순위)=그 외.
+// DB에 시/도(province) 컬럼이 별도로 없어(추측으로 새 컬럼/전국 매핑표를 만들지 않음, 제3장
+// 제3조 데이터 구조 변경 금지) "성남시 전체"까지만 상위 지역으로 판별하고, "경기도" 같은
+// 시/도 단위까지는 이 데이터만으로 구분할 수 없다.
 function regionTier(item: NearbyItem, region: HomeRegion): 0 | 1 | 2 {
   if (!region.sigunguName) return 0;
-  if (item.sigungu_name === region.sigunguName) return 0;
 
-  const parentCity = parentCityOf(region.sigunguName);
-  if (item.sigungu_name && item.sigungu_name.startsWith(`${parentCity} `)) return 1;
+  const { specific, broad } = tokensOf(region.sigunguName);
+  if (matchesToken(item, specific)) return 0;
+  if (broad && matchesToken(item, broad)) return 1;
 
   return 2;
 }
@@ -227,20 +240,30 @@ function selectRegionFirst(items: NearbyItem[], region: HomeRegion, limit: numbe
   return ranked.slice(0, limit);
 }
 
+// Task 9-4-4: sigungu_name과 주소 텍스트(events는 venue_name, open_spaces는 address) 양쪽에
+// ILIKE 부분 문자열 매칭을 거는 OR 필터 문자열을 만든다(PostgREST `.or()` 문법).
+function regionOrFilter(token: string, textColumn: string): string {
+  return `sigungu_name.ilike.%${token}%,${textColumn}.ilike.%${token}%`;
+}
+
 // Task 9-1-4(2026-08-22) 실측에서 발견한 버그: open_spaces/events 후보군을 "최신순 500건"으로만
 // 뽑으면, 한 소스가 다른 소스보다 더 최근에 대량 수집됐을 때(예: GG_EVENTS 1,199건이 가장 최근
 // 수집돼 is_free=true 500건 후보 전량을 GG_EVENTS가 차지) 다른 지역 데이터가 후보군에서 통째로
 // 밀려나 selectRegionFirst/byRegionPriority가 아무리 잘 짜여 있어도 무용지물이 된다(실측 확인:
 // 성남시 분당구 기준 요청인데도 500건 후보가 전부 GG_EVENTS 소속 지역이었음).
-// 그래서 "최신순으로 넉넉히 가져온 뒤 애플리케이션에서 지역별로 나눈다"가 아니라, 인덱싱된
-// sigungu_name 컬럼으로 선택 지역을 SQL 단에서 먼저 조회해(해당 지역 데이터가 얼마든 있든 후보군
-// 을 우선 확보) 다른 지역에 밀려나지 않게 하고, 그래도 실제 필요한 개수(minRequired, 호출부의
-// 최종 limit)에 못 미치면만 지역 제한 없는 2차 조회로 채운다 — 지역 데이터가 이미 충분하면
-// 불필요한 2차 조회를 하지 않는다. buildQuery(sigunguFilter)는 sigunguFilter가 있으면 그
-// 지역으로 SQL에서 걸러 조회하고, null이면 지역 제한 없이 조회한다(정렬·개별 .limit()은 호출부가
-// buildQuery 안에 이미 포함해 둔다) — 두 번 호출될 수 있으므로 매번 새 쿼리 체인을 반환해야 한다.
+// 그래서 "최신순으로 넉넉히 가져온 뒤 애플리케이션에서 지역별로 나눈다"가 아니라, 선택 지역을
+// SQL 단에서 먼저 조회해(해당 지역 데이터가 얼마든 있든 후보군을 우선 확보) 다른 지역에 밀려나지
+// 않게 한다.
+// Task 9-4-4: 1단계로 정확히 일치(.eq())만 찾던 방식은 sigungu_name 표기가 제각각이면 0건을
+// 반환할 수 있어(위 tokensOf/regionOrFilter 설명 참고), 이제 3단계로 점점 넓혀가며 조회한다.
+// 1) 가장 구체적인 토큰(분당구) ILIKE, 2) 그래도 부족하면 상위 시 토큰(성남시) ILIKE,
+// 3) 그래도 부족하면 지역 제한 없는 전체 조회. 각 단계는 실제 필요한 개수(minRequired, 호출부의
+// 최종 limit)를 채우면 즉시 반환해 불필요한 다음 단계 조회를 하지 않는다. buildQuery(token)은
+// token이 있으면 그 토큰으로 SQL에서 ILIKE 필터링해 조회하고, null이면 지역 제한 없이 조회한다
+// (정렬·개별 .limit()은 호출부가 buildQuery 안에 이미 포함해 둔다) — 여러 번 호출될 수 있으므로
+// 매번 새 쿼리 체인을 반환해야 한다.
 async function fetchRegionFirstRows<T extends { id: string }>(
-  buildQuery: (sigunguFilter: string | null) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+  buildQuery: (token: string | null) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
   region: HomeRegion,
   minRequired: number
 ): Promise<T[]> {
@@ -250,18 +273,27 @@ async function fetchRegionFirstRows<T extends { id: string }>(
     return all.data ?? [];
   }
 
-  const regional = await buildQuery(region.sigunguName);
-  if (regional.error) throw new Error(regional.error.message);
-  const regionalRows = regional.data ?? [];
+  const { specific, broad } = tokensOf(region.sigunguName);
 
-  if (regionalRows.length >= minRequired) return regionalRows;
+  const specificResult = await buildQuery(specific);
+  if (specificResult.error) throw new Error(specificResult.error.message);
+  let rows = specificResult.data ?? [];
+  if (rows.length >= minRequired) return rows;
 
-  const broad = await buildQuery(null);
-  if (broad.error) throw new Error(broad.error.message);
-  const regionalIds = new Set(regionalRows.map((row) => row.id));
-  const others = (broad.data ?? []).filter((row) => !regionalIds.has(row.id));
+  if (broad) {
+    const broadResult = await buildQuery(broad);
+    if (broadResult.error) throw new Error(broadResult.error.message);
+    const seenIds = new Set(rows.map((row) => row.id));
+    rows = [...rows, ...(broadResult.data ?? []).filter((row) => !seenIds.has(row.id))];
+    if (rows.length >= minRequired) return rows;
+  }
 
-  return [...regionalRows, ...others];
+  const openResult = await buildQuery(null);
+  if (openResult.error) throw new Error(openResult.error.message);
+  const seenIds = new Set(rows.map((row) => row.id));
+  const others = (openResult.data ?? []).filter((row) => !seenIds.has(row.id));
+
+  return [...rows, ...others];
 }
 
 // Task 9-1-9: "이번 주 시작 예정" 범위 계산 — 한국 주간(일~토) 관례로 오늘부터 이번 주 토요일까지.
@@ -290,7 +322,7 @@ async function getUpcomingDeadlineFill(
   const weekEnd = endOfThisWeek(now);
   const nowIso = now.toISOString();
 
-  const buildQuery = (sigunguFilter: string | null) => {
+  const buildQuery = (token: string | null) => {
     let query = supabase
       .from('events')
       .select(EVENT_COLUMNS)
@@ -298,7 +330,7 @@ async function getUpcomingDeadlineFill(
       .lte('start_date', weekEnd)
       .eq('is_active', true)
       .or(`is_reservation_required.eq.false,reservation_end_date.gte.${nowIso},reservation_end_date.is.null`);
-    if (sigunguFilter) query = query.eq('sigungu_name', sigunguFilter);
+    if (token) query = query.or(regionOrFilter(token, 'venue_name'));
     return query
       .order('reservation_end_date', { ascending: true, nullsFirst: false })
       .order('start_date', { ascending: true })
@@ -327,7 +359,7 @@ export async function getTodayEvents(
   const today = new Date().toISOString().slice(0, 10);
   const nowIso = new Date().toISOString();
 
-  const buildQuery = (sigunguFilter: string | null) => {
+  const buildQuery = (token: string | null) => {
     let query = supabase
       .from('events')
       .select(EVENT_COLUMNS)
@@ -336,7 +368,7 @@ export async function getTodayEvents(
       .eq('is_active', true)
       // 예약 필수이면서 이미 마감된 건은 DB 단에서 제외(마감 안 지난 것 OR 예약 불필요)
       .or(`is_reservation_required.eq.false,reservation_end_date.gte.${nowIso},reservation_end_date.is.null`);
-    if (sigunguFilter) query = query.eq('sigungu_name', sigunguFilter);
+    if (token) query = query.or(regionOrFilter(token, 'venue_name'));
     return query.order('start_date', { ascending: false }).limit(500);
   };
 
@@ -381,15 +413,15 @@ export async function getFreeFeed(
 ): Promise<NearbyItem[]> {
   const supabase = await createClient();
 
-  const buildSpacesQuery = (sigunguFilter: string | null) => {
+  const buildSpacesQuery = (token: string | null) => {
     let query = supabase.from('open_spaces').select(SPACE_COLUMNS).eq('is_free', true);
-    if (sigunguFilter) query = query.eq('sigungu_name', sigunguFilter);
+    if (token) query = query.or(regionOrFilter(token, 'address'));
     return query.order('created_at', { ascending: false }).limit(500);
   };
 
-  const buildEventsQuery = (sigunguFilter: string | null) => {
+  const buildEventsQuery = (token: string | null) => {
     let query = supabase.from('events').select(EVENT_COLUMNS).eq('is_free', true).eq('is_active', true);
-    if (sigunguFilter) query = query.eq('sigungu_name', sigunguFilter);
+    if (token) query = query.or(regionOrFilter(token, 'venue_name'));
     return query.order('start_date', { ascending: false }).limit(500);
   };
 
