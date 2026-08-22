@@ -1,8 +1,11 @@
-- [x] **[Task 9-4-1 ~ 9-4-3] 나드리픽 브랜드 스플래시, 탭 전환 로딩 UX, Floating `+더보기` 및 메인카드 2단계 지역 큐레이션 통합 구현** 🚀 (2026-08-22 완료)
-  - **완료 내역**:
-    1. **[Task 9-4-1] 브랜드 스플래시 & 로딩 컴포넌트**: 신규 `src/components/common/brand-splash.tsx`에 스피너 + "나드리픽 (NadriPick)" 타이틀 + "오늘 어디 가지?" 서브 문구 + "LOADING..." 텍스트를 배치. 신규 `src/app/loading.tsx`가 이를 감싸 App Router 표준 로딩 Suspense 경계로 연동됨.
-    2. **[Task 9-4-1] 하단 탭 반응성 로딩 오버레이**: `bottom-tabs.tsx`를 `<Link>` 대신 `router.push` + `useTransition`으로 전환해, 탭 클릭 즉시 `isPending` 동안 화면 전체를 덮는 반투명 오버레이(`BrandSplash` 포함)를 노출하도록 변경. 같은 탭 재클릭(이미 활성) 시에는 이동을 요청하지 않음.
-    3. **[Task 9-4-2] 메인 카드 Floating `+더보기` 버튼**: `hero-carousel.tsx`의 슬라이드 스크롤 컨테이너를 `relative` 래퍼로 감싸고, `absolute bottom-4 right-4 z-20` 글래스모피즘(`bg-white/70 backdrop-blur-md`) 버튼을 카드 개수/스와이프 상태와 무관하게 항상 노출. **보정 사항**: 지시된 링크값 `/nearby?filter=today`는 실제 `map-explorer.tsx`가 읽는 `QuickFilterKey`(`'KIDS'|'FREE'|'TODAY_WEEKEND'`)에 없는 값이라 필터가 걸리지 않는 것을 코드 확인 후, 바로 위 기존 "전체 보기" CTA 슬라이드와 동일하게 이미 검증된 `TODAY_WEEKEND`를 그대로 사용함(임의 판단이 아니라 실제 동작하도록 하는 사실 정정).
-    4. **[Task 9-4-3] 메인 카드 2단계 지역 큐레이션**: `get-home-feed.ts`에 `parentCityOf()`/`regionTier()`를 추가해 `selectRegionFirst`가 안정 정렬(1순위=선택 시/군/구 정확히 일치, 2순위=같은 상위 시의 다른 구, 3순위=그 외 전체)로 동작하도록 개편. 기존 "1순위만으로 limit 충족 시 나머지 완전 배제"(Task 9-1-6 Strict Location-First) 동작은 그대로 보존됨. **범위 한정**: DB에 시/도(province) 컬럼이 별도로 없어(`sigungu_name`은 "시 구" 형태만 저장) "경기도" 같은 시/도 단위 3순위는 전국 시/군/구→시/도 매핑표를 새로 만들어야 하는데, 이는 스키마/데이터 구조 변경에 해당해 임의로 추가하지 않음(제3장 제3조) — 현재는 "같은 상위 시(성남시 전체)"까지만 2순위로 구현함.
-  - **실측 검증**: `npm run dev` 기동 후 `curl localhost:3000/`로 Floating 버튼(`⚡ 오늘 전체보기 +`, `href=/nearby?filter=TODAY_WEEKEND`)과 브랜드 스플래시 마크업("나드리픽 (NadriPick)", "오늘 어디 가지?")이 정상 포함됨을 확인. 하단 탭이 `<button>`으로 전환되어 렌더링됨을 확인.
-  - **검증 기준 결과**: `npx tsc --noEmit`, `npm run test`(21 files/189 tests 전체 통과 — `bottom-tabs.test.tsx` 신규 작성, `hero-carousel.test.tsx`/`get-home-feed.test.ts`에 Task 9-4-2/9-4-3 케이스 추가), `npm run build`(정상 라우트 생성 확인) 모두 통과.
+- [ ] **[Task 9-4-4] 설정 지역 LIKE 검색 파싱 수리 & 카테고리 탭 전역 위치 디폴트 강제 고정** 📍
+  - **작업 목표**: "성남시 분당구" 등 설정 지역의 당일 이벤트가 0건 없이 확실하게 피딩되도록 DB 쿼리 파싱을 보완하고, 카테고리 탭 진입 시 설정 위치를 디폴트로 강제 동기화
+  - **세부 작업 지시**:
+    1. **`get-home-feed.ts` 쿼리 파싱 정교화 (분당구 당일 이벤트 0건 문제 수리)**:
+       - 설정 지역(예: 성남시 분당구)을 토큰 단위로 파싱하여 **`sigungu_name LIKE '%분당구%' OR address LIKE '%분당구%'`** (및 2순위 `LIKE '%성남시%'`) 퍼지 쿼리 적용.
+       - '성남시', '분당구', '성남시 분당구' 등 다양하게 적재된 당일 데이터가 0건 없이 1순위로 피딩되도록 완전 수리.
+    2. **카테고리 탭(`/region`) 진입 시 전역 위치 디폴트 강제 적용**:
+       - `region-grid-view.tsx` 진입 시 유저 전역 위치(`useUserLocation` / `user_address` 쿠키)를 기본 State로 강제 로드하여 '전체지역' 대신 **설정된 위치('성남시 분당구')**가 디폴트로 필터링되어 노출되도록 보완.
+  - **검증 기준**:
+    - `npx tsc --noEmit`, `npm run test`, `npm run build` 통과.
+    - '성남시 분당구' 설정 상태에서 분당구/성남시 당일 데이터 정상 노출 및 카테고리 탭 진입 시 '성남시 분당구' 디폴트 선택 실측 검증.
