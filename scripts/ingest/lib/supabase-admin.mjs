@@ -27,14 +27,22 @@ function dedupeByExternalId(rows) {
   return [...byId.values()];
 }
 
+// 사용자 지시(2026-08-22) 전체 어댑터 정책 점검에서 발견한 버그: playground.mjs(놀이시설,
+// 82,373건)처럼 대량 소스는 전체 행을 단일 upsert 호출 하나에 담아 보내면 요청이 지나치게
+// 커져 응답 없이 멈춰버렸다(실측 확인 — 0건 적재 상태로 무한 대기). 배치로 나눠 순차 upsert한다.
+const UPSERT_BATCH_SIZE = 500;
+
 // project/database_schema.md: external_id 기준 Upsert
 export async function upsertRows(client, table, rows) {
   if (rows.length === 0) return { count: 0 };
 
   const dedupedRows = dedupeByExternalId(rows);
 
-  const { error } = await client.from(table).upsert(dedupedRows, { onConflict: 'external_id' });
-  if (error) throw new Error(`${table} upsert 실패: ${error.message}`);
+  for (let i = 0; i < dedupedRows.length; i += UPSERT_BATCH_SIZE) {
+    const batch = dedupedRows.slice(i, i + UPSERT_BATCH_SIZE);
+    const { error } = await client.from(table).upsert(batch, { onConflict: 'external_id' });
+    if (error) throw new Error(`${table} upsert 실패: ${error.message}`);
+  }
 
   return { count: dedupedRows.length };
 }

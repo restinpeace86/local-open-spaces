@@ -68,4 +68,19 @@ describe('upsertRows', () => {
       'open_spaces upsert 실패: boom'
     );
   });
+
+  // 사용자 지시(2026-08-22) 전체 어댑터 정책 점검에서 발견: 82,373건짜리 소스(playground.mjs)를
+  // 단일 upsert 호출로 보내면 요청이 멈춰버렸다. 500건씩 배치로 나눠 호출하는지 검증한다.
+  it('행이 500건을 넘으면 배치로 나눠 여러 번 upsert를 호출한다', async () => {
+    const { client, upsert } = makeMockClient();
+    const rows = Array.from({ length: 1200 }, (_, i) => ({ external_id: `id-${i}` }));
+
+    const result = await upsertRows(client, 'open_spaces', rows);
+
+    expect(upsert).toHaveBeenCalledTimes(3); // 500 + 500 + 200
+    expect(upsert.mock.calls[0][0]).toHaveLength(500);
+    expect(upsert.mock.calls[1][0]).toHaveLength(500);
+    expect(upsert.mock.calls[2][0]).toHaveLength(200);
+    expect(result).toEqual({ count: 1200 });
+  });
 });

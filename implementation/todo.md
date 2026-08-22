@@ -66,3 +66,29 @@
 
   ### [기존 기능명세서 충돌 및 스킵 로그]
   - 없음 — 모든 세부 지시를 그대로 구현했다.
+
+- [x] **[사용자 지시 후속] "1(전수 수집) 관련" 전체 어댑터 일반 정책 점검 — 최초 전체 적재 완료** 완료 (2026-08-22)
+  - **작업 배경**: Task 9-1-4 완료 보고 후 사용자가 "초기엔 전체 데이터를 다 가져오고, 이후엔 변경일자 지원되는 소스만 변경일자 기반으로 업데이트한다는 정책이었다 — 일단 데이터부터 다 가져와야 한다"고 재확인. 어느 소스를 특정하지 않아 **전체 어댑터 일반 정책 점검**으로 범위를 잡고 실측 감사를 수행했다.
+
+  - **감사 결과(실측, 추측 없음)**:
+    - **증분(변경일자) 지원 여부**: 현재 활성 소스 중 서버 측 "변경일자" 기반 증분 조회를 지원하는 API는 하나도 없음을 확인했다 — 서울 열린데이터광장(`culturalEventInfo`/`tvYeyakCOllect`)은 단순 인덱스 범위 페이지네이션만 지원(날짜 파라미터 자체가 없음), data.go.kr 표준데이터류(도시공원/문화공간/문화시설 등)도 동일. TourAPI v4 계열(`KorService2` 등)의 `modifiedtime` 파라미터는 이미 이전 작업(Task 2)에서 "Exact Match(=)로만 동작해 Range 증분이 불가능"함이 실측 확인돼 매일 전량 재수집(Full Ingest)으로 대체돼 있었다. **결론: "변경일자 기반 업데이트"는 현재 어떤 소스에도 적용할 수 없고, 전량 재수집이 정책상 유일하게 유효한 방식 — 이는 이미 스케줄된 8개 어댑터 전부에 이미 반영돼 있었다.**
+    - **최초 전체 적재 여부 점검 중 발견한 진짜 문제**: `open_spaces`를 `source_type`별로 전수 집계한 결과, 코드는 이미 완성돼 있고(페이지네이션 포함) 실제 라이브 API 호출도 정상인 **5개 어댑터가 DB에 단 한 건도 적재되지 않은 상태**였다 — `kor-with-tour.mjs`(무장애 여행, 실측 5,041건), `kor-pet-tour.mjs`(반려동반 여행, 857건), `amusement-park.mjs`(유원시설, 2,516건), `public-facility-open.mjs`(공공시설 개방, 7,329건), `playground.mjs`(어린이놀이시설, **82,373건**). 원인: 어떤 GitHub Actions 워크플로에도 연결돼 있지 않아 "최초 전체 수집" 자체가 한 번도 실행된 적이 없었다.
+      - 참고로 `kor-tour`/`kor-with-tour`/`kor-pet-tour` 3개 어댑터가 `source_type`/`external_id` 네임스페이스(`KOR_TOUR_API_V4_<contentid>`)를 공유한다는 것도 확인했다 — 실제로 `kor-with-tour`가 반환한 contentid 하나(2656733)가 이미 `kor-tour` 수집분으로 DB에 존재함을 실측으로 확인, 즉 두 서비스는 동일 관광 콘텐츠 데이터베이스를 서로 다른 필터(일반/무장애)로 조회하는 관계라 upsert 시 정상적으로 병합된다(데이터 유실이 아님).
+    - **적재 과정에서 발견한 두 번째 버그(스케일 문제)**: `playground.mjs`(82,373건)를 실행하니 `upsertRows()`가 전체 행을 **단일 upsert 호출 하나**로 보내도록 돼 있어 요청이 무한정 멈췄다(실측: 수 분간 DB에 0건 반영). `scripts/ingest/lib/supabase-admin.mjs`에 500건 단위 배치 upsert를 추가해 해결 — 재실행 결과 82,373건 전량 정상 적재됨을 확인. `supabase-admin.test.mjs`에 1,200건 입력 시 500/500/200 배치로 3회 나뉘어 호출되는지 검증하는 회귀 테스트 추가.
+    - **실행 불가(진짜 블로커, 임의 값 추측 없이 스킵)**: `national-park-ecotour.mjs`는 `KAKAO_REST_API_KEY` 미설정(원본에 좌표가 없어 지오코딩 필수), `local-data-kids.mjs`는 `LOCAL_DATA_KIDS_CSV_URL` 미설정(localdata.go.kr 실제 CSV 다운로드 URL 필요) — 둘 다 사용자가 직접 발급/확인해야 하는 값이라 임의로 채우지 않고 스킵했다.
+
+  - **조치**:
+    1. `kor-with-tour.mjs`(5,041건)/`kor-pet-tour.mjs`(857건)/`amusement-park.mjs`(2,507건)/`public-facility-open.mjs`(7,113건)/`playground.mjs`(82,373건) 전부 **실제로 재실행해 최초 전체 적재 완료**.
+    2. `scripts/ingest/lib/supabase-admin.mjs`: `upsertRows()`에 500건 배치 처리 추가(대량 소스의 스케일 버그 수정).
+    3. `.github/workflows/ingest-monthly.yml`: `amusement-park.mjs`/`playground.mjs`/`public-facility-open.mjs`(신규)와 `swimming-pool.mjs`/`gg-events.mjs`(기존 데이터는 있었으나 마찬가지로 스케줄 미연결 상태였음)를 월 1회 스케줄에 편입 — 앞으로는 매달 자동으로 전량 재수집돼 정책이 지속 유지된다.
+    4. `national-park-ecotour.mjs`/`local-data-kids.mjs`는 필수 환경변수 미설정으로 이번에도 스킵(위 로그 참고, 향후 사용자가 값을 제공하면 즉시 진행 가능).
+
+  - **결과**: `open_spaces` 전체 건수 26,346건 → **118,339건**(약 4.5배 증가). 신규 적재된 데이터도 `sigungu_name`/5대 UI 카테고리가 정상 자동 태깅됨을 표본 확인(예: `LOCALDATA_PLAYGROUND_580379` → 주소 "전라남도 광양시 마동" → `sigungu_name: "광양시"`, `category: "KIDS_ACTIVITY"`).
+
+  - **검증**:
+    - `npx tsc --noEmit` / `npm run test`(전체 164/164, 신규 1건 포함) / `npm run build`: 모두 통과.
+    - `npm run dev` 기동 후 재검증: 118,339건으로 늘어난 상태에서도 `?sigungu=성남시 분당구` 무료 피드가 여전히 12건 전부 분당구로 정상 노출됨을 확인(대량 데이터 증가가 지역 우선 노출 로직에 영향 없음).
+
+  - **[기존 기능명세서 충돌 및 스킵 로그]**
+    - `national-park-ecotour.mjs`: `KAKAO_REST_API_KEY` 미설정으로 스킵. `.env.local`에 Kakao Developers REST API 키 추가 필요.
+    - `local-data-kids.mjs`: `LOCAL_DATA_KIDS_CSV_URL` 미설정으로 스킵. localdata.go.kr에서 실제 CSV 다운로드 URL 확인 후 `.env.local`에 추가 필요.
