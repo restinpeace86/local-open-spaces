@@ -35,6 +35,34 @@ export function normalizeFacilityType(raw) {
   return '복합';
 }
 
+// Task 9-1-3(2026-08-22): 주소 문자열에서 "시/군/구" 단위를 추출한다.
+// 한국 행정구역 주소는 "{시/도} {시/군/구} {상세...}" 순서이나, 경기도 등 일부 지역은
+// 시(市) 아래에 또 구(區)가 있는 2단 구조(예: "경기도 성남시 분당구")를 가진다.
+// 실측 확인(2026-08-22): 서울/광역시는 2번째 토큰이 바로 구/군("서울특별시 강남구"),
+// 도 지역 중 구가 있는 시는 2·3번째 토큰을 합쳐야 함("경기도 성남시 분당구").
+// 판별 불가(예: 세종시처럼 구/군 단위가 아예 없는 주소)면 임의로 만들어내지 않고 null 반환.
+export function extractSigunguName(address) {
+  if (!address) return null;
+
+  const tokens = address.trim().split(/\s+/);
+  const first = tokens[1];
+  if (!first) return null;
+
+  if (/(시|군)$/.test(first)) {
+    const second = tokens[2];
+    if (second && /구$/.test(second)) {
+      return `${first} ${second}`;
+    }
+    return first;
+  }
+
+  if (/구$/.test(first)) {
+    return first;
+  }
+
+  return null;
+}
+
 // open_spaces 스키마 행 빌더 (project/database_schema.md 3.1 + Parental 컬럼)
 export function buildOpenSpaceRow({
   externalId,
@@ -53,6 +81,7 @@ export function buildOpenSpaceRow({
   facilityType = '복합',
   targetAgeGroup = null,
   rawData = null,
+  sigunguName = undefined,
 }) {
   if (!externalId || !sourceType || !name || !lng || !lat) return null;
 
@@ -72,6 +101,9 @@ export function buildOpenSpaceRow({
     facility_type: normalizeFacilityType(facilityType),
     target_age_group: targetAgeGroup,
     raw_data: rawData,
+    // Task 9-1-3: 명시적으로 넘어온 값이 없으면 address에서 자동 추출한다(모든 open_spaces
+    // 어댑터가 address를 이미 갖고 있으므로 각 어댑터를 개별 수정할 필요가 없다).
+    sigungu_name: sigunguName !== undefined ? sigunguName : extractSigunguName(address),
   };
 }
 
@@ -101,6 +133,7 @@ export function buildEventRow({
   bookingStatus = null,
   isActive = true,
   venueName = null,
+  sigunguName = null,
 }) {
   if (!externalId || !title || !startDate || !endDate || !lng || !lat) return null;
 
@@ -126,5 +159,8 @@ export function buildEventRow({
     is_active: isActive,
     // Task 9-1-1: 원본 API의 실제 장소명 필드(예: PLACENM)를 그대로 저장한다(추측/생성 없음).
     venue_name: venueName,
+    // Task 9-1-3: events는 공통 address 컬럼이 없어 자동 추출이 불가능하므로, 호출부가
+    // 원본 API의 실제 구/지역명 필드(예: GUNAME/AREANM)나 주소(addr1)에서 뽑아 명시적으로 넘긴다.
+    sigungu_name: sigunguName,
   };
 }

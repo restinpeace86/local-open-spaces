@@ -124,19 +124,19 @@ describe('HomeView', () => {
     expect(screen.getAllByText('무료 공공 공원').length).toBeGreaterThan(1);
   });
 
-  // Task 9-1-1: "[장소명] · [거리]" 카드 표기 검증
-  it('venue_name과 거리가 있으면 "[장소명] · [거리]" 형태로 카드에 표시한다', () => {
+  // Task 9-1-3: "[장소명] · [시/군/구]" 카드 표기 검증(거리 계산 제거)
+  it('venue_name과 sigungu_name이 있으면 "[장소명] · [시/군/구]" 형태로 카드에 표시한다', () => {
     const feed: HomeFeed = {
-      heroEvents: [makeEventItem({ address: '율동공원 야외무대', distance_meters: 3200 })],
+      heroEvents: [makeEventItem({ address: '율동공원 야외무대', sigungu_name: '성남시 분당구' })],
       freeFeed: [],
     };
     render(<HomeView initialFeed={feed} />);
 
-    expect(screen.getByText('율동공원 야외무대 · 3.2km')).toBeInTheDocument();
+    expect(screen.getByText('율동공원 야외무대 · 성남시 분당구')).toBeInTheDocument();
   });
 
-  // Task 9-1-1: 유저가 실제 위치를 설정하면 그 좌표로 홈 피드를 재조회한다
-  it('유저 위치가 설정돼 있으면 그 좌표로 /api/home/feed를 재조회한다', async () => {
+  // Task 9-1-3: 유저가 실제 위치를 설정하면 그 주소명으로 홈 피드를 즉시 재조회한다
+  it('유저 위치가 설정돼 있으면 그 주소명으로 /api/home/feed를 재조회한다', async () => {
     localStorage.setItem(
       'user_location',
       JSON.stringify({ lat: 37.4, lng: 127.2, address_name: '경기도 성남시 분당구' })
@@ -155,7 +155,9 @@ describe('HomeView', () => {
     render(<HomeView initialFeed={initialFeed} />);
 
     expect(await screen.findByText('재조회된 행사')).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith('/api/home/feed?lat=37.4&lng=127.2');
+    expect(fetchMock).toHaveBeenCalledWith(
+      `/api/home/feed?address=${encodeURIComponent('경기도 성남시 분당구')}`
+    );
 
     vi.unstubAllGlobals();
   });

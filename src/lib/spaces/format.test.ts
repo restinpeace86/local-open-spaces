@@ -11,21 +11,29 @@ describe('formatDistance', () => {
   });
 });
 
-// Task 9-1-1: "[장소명] · [거리]" 형태 통일 표기 검증
+// Task 9-1-3: "[장소명] · [시/군/구]" 형태 통일 표기 검증(거리 계산 제거)
 describe('formatVenueLine', () => {
-  it('장소명과 거리가 모두 있으면 "장소명 · 거리" 형태로 합친다', () => {
-    expect(formatVenueLine('율동공원 야외무대', 3200)).toBe('율동공원 야외무대 · 3.2km');
+  it('장소명과 시/군/구가 모두 있으면 "장소명 · 시/군/구" 형태로 합친다', () => {
+    expect(formatVenueLine('율동공원 야외무대', '성남시 분당구')).toBe('율동공원 야외무대 · 성남시 분당구');
   });
 
-  it('거리 정보가 없으면(distance_meters < 0) 장소명만 표시한다', () => {
-    expect(formatVenueLine('율동공원 야외무대', -1)).toBe('율동공원 야외무대');
+  it('시/군/구 정보가 없으면 장소명만 표시한다', () => {
+    expect(formatVenueLine('율동공원 야외무대', null)).toBe('율동공원 야외무대');
   });
 
-  it('장소명이 없으면 거리만 표시한다', () => {
-    expect(formatVenueLine(null, 500)).toBe('500m');
+  it('장소명이 없으면 시/군/구만 표시한다', () => {
+    expect(formatVenueLine(null, '성남시 분당구')).toBe('성남시 분당구');
   });
 
   it('둘 다 없으면 빈 문자열을 반환한다(플레이스홀더 문구 없음)', () => {
-    expect(formatVenueLine(null, -1)).toBe('');
+    expect(formatVenueLine(null, null)).toBe('');
+  });
+
+  it('시/군/구가 없고 거리(distanceMeters)가 주어지면 거리로 대체한다(지역 도감 페이지 호환)', () => {
+    expect(formatVenueLine('율동공원 야외무대', null, 3200)).toBe('율동공원 야외무대 · 3.2km');
+  });
+
+  it('시/군/구가 있으면 거리보다 우선한다', () => {
+    expect(formatVenueLine('율동공원 야외무대', '성남시 분당구', 3200)).toBe('율동공원 야외무대 · 성남시 분당구');
   });
 });

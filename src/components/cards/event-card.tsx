@@ -14,8 +14,8 @@ export function EventCard({ item, onSelect }: { item: NearbyItem; onSelect: (ite
   const badges = getParentalBadges(item);
   const status = getEventStatus(item);
   const period = formatDateRange(item.start_date, item.end_date);
-  // Task 9-1-1: "[장소명] · [거리]" (예: "율동공원 야외무대 · 3.2km")
-  const venueLine = formatVenueLine(item.address, item.distance_meters);
+  // Task 9-1-3: "[장소명] · [시/군/구]" (예: "율동공원 야외무대 · 성남시 분당구")
+  const venueLine = formatVenueLine(item.address, item.sigungu_name);
 
   // event-card.md 2: 예약 마감 임박(오늘까지)이면 붉은 경고 뱃지를 최우선 노출
   const showReservationAlert = item.is_reservation_required === true && status.label === '오늘 마감';

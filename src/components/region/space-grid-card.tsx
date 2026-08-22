@@ -9,9 +9,10 @@ import { formatVenueLine } from '@/lib/spaces/format';
 export function SpaceGridCard({ item, onSelect }: { item: NearbyItem; onSelect: (item: NearbyItem) => void }) {
   const meta = getCategoryMeta(item.category);
   const badges = getParentalBadges(item);
-  // Task 9-1-1: "[장소명] · [거리]" 형태로 통일(예: "율동공원 · 3.2km"). distance_meters가
-  // -1 sentinel(반경 무관 탐색)이면 거리 없이 장소명만 표시한다.
-  const venueLine = formatVenueLine(item.address, item.distance_meters);
+  // Task 9-1-3: 홈 피드 항목은 sigungu_name으로 "[장소명] · [시/군/구]"(예: "율동공원 · 성남시
+  // 분당구")를 보여준다. 지역 도감 페이지(get_nearby RPC 기반)처럼 sigungu_name이 없는 경우엔
+  // 기존처럼 실측 거리(distance_meters)로 대체한다(-1 sentinel이면 장소명만).
+  const venueLine = formatVenueLine(item.address, item.sigungu_name, item.distance_meters);
 
   return (
     <button

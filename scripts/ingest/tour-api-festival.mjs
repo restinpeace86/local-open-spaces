@@ -5,6 +5,7 @@ import { createAdminClient, upsertRows } from './lib/supabase-admin.mjs';
 import { toPointWKT } from './lib/geometry.mjs';
 import { classifyTourApiFestival } from './lib/category-map.mjs';
 import { deriveParentalTags, deriveBookingStatus } from './lib/ai-tagging.mjs';
+import { extractSigunguName } from './adapters/lib/schema-mapper.mjs';
 
 const env = loadEnv();
 const dryRun = process.argv.includes('--dry-run');
@@ -88,6 +89,8 @@ function mapToEventRow(item) {
     // Task 9-1-1: TourAPI searchFestival2에는 별도 장소명 필드가 없어(실측 확인) 주소(addr1)를
     // 장소 표시 대체 텍스트로 사용한다(추측 생성이 아닌 원본 실제 필드).
     venue_name: item.addr1 || null,
+    // Task 9-1-3: 별도 구/지역명 필드가 없어(실측 확인) 주소(addr1)에서 시/군/구를 파싱한다.
+    sigungu_name: extractSigunguName(item.addr1) ?? null,
     ...tags,
   };
 }

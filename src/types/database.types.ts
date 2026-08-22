@@ -57,6 +57,7 @@ export type Database = {
           reservation_end_date: string | null
           reservation_start_date: string | null
           reservation_url: string | null
+          sigungu_name: string | null
           space_id: string | null
           start_date: string
           stroller_accessible: boolean
@@ -82,6 +83,7 @@ export type Database = {
           reservation_end_date?: string | null
           reservation_start_date?: string | null
           reservation_url?: string | null
+          sigungu_name?: string | null
           space_id?: string | null
           start_date: string
           stroller_accessible?: boolean
@@ -107,6 +109,7 @@ export type Database = {
           reservation_end_date?: string | null
           reservation_start_date?: string | null
           reservation_url?: string | null
+          sigungu_name?: string | null
           space_id?: string | null
           start_date?: string
           stroller_accessible?: boolean
@@ -141,6 +144,7 @@ export type Database = {
           name: string
           operating_hours: string | null
           raw_data: Json | null
+          sigungu_name: string | null
           source_type: string
           stroller_accessible: boolean
           target_age_group: string | null
@@ -161,6 +165,7 @@ export type Database = {
           name: string
           operating_hours?: string | null
           raw_data?: Json | null
+          sigungu_name?: string | null
           source_type: string
           stroller_accessible?: boolean
           target_age_group?: string | null
@@ -181,6 +186,7 @@ export type Database = {
           name?: string
           operating_hours?: string | null
           raw_data?: Json | null
+          sigungu_name?: string | null
           source_type?: string
           stroller_accessible?: boolean
           target_age_group?: string | null

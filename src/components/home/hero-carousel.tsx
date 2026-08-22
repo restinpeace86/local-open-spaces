@@ -48,8 +48,8 @@ export function HeroCarousel({
     >
       {items.map((item, index) => {
         const meta = getCategoryMeta(item.category);
-        // Task 9-1-1: events.venue_name 백필 이후 "[장소명] · [거리]"로 통일 표시.
-        const venueLine = formatVenueLine(item.address, item.distance_meters);
+        // Task 9-1-3: "[장소명] · [시/군/구]"로 통일 표시(거리 계산 제거).
+        const venueLine = formatVenueLine(item.address, item.sigungu_name);
 
         return (
           <button
@@ -59,7 +59,7 @@ export function HeroCarousel({
             }}
             type="button"
             onClick={() => onSelect(item)}
-            className="shrink-0 w-[78%] sm:w-72 snap-start text-left rounded-2xl border border-gray-200 bg-white overflow-hidden hover:shadow-md transition-shadow"
+            className="shrink-0 w-full sm:w-72 snap-start text-left rounded-2xl border border-gray-200 bg-white overflow-hidden hover:shadow-md transition-shadow"
           >
             <div className="relative aspect-[4/3] bg-gray-100">
               {item.thumbnail_url ? (

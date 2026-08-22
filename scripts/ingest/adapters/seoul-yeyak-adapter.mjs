@@ -119,6 +119,7 @@ export class SeoulYeyakAdapter extends BaseCollectorAdapter {
         facilityType: tags.facility_type,
         targetAgeGroup: tags.target_age_group,
         venueName: item.PLACENM || null, // Task 9-1-1: 실측 확인된 실제 장소명 필드
+        sigunguName: item.AREANM || null, // Task 9-1-3: 실측 확인된 실제 구 단위 지역명 필드
       });
     });
   }

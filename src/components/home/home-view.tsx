@@ -24,20 +24,22 @@ function FeedCard({ item, onSelect }: { item: NearbyItem; onSelect: (item: Nearb
 }
 
 export function HomeView({ initialFeed }: { initialFeed: HomeFeed }) {
-  const { center, addressName, isOnboardingOpen, confirmLocation, openOnboarding, closeOnboarding } =
+  const { addressName, isOnboardingOpen, confirmLocation, openOnboarding, closeOnboarding } =
     useUserLocation();
   const [activeTab, setActiveTab] = useState<HomeSubTab>('home');
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
   const [feed, setFeed] = useState<HomeFeed>(initialFeed);
 
-  // Task 9-1-1: Server Component는 기본값(성남시 분당구)으로만 렌더링할 수 있으므로,
-  // 유저가 실제로 위치를 설정한 경우(addressName이 채워짐)에만 그 좌표로 재조회한다.
+  // Task 9-1-1: Server Component는 기본 지역(성남시 분당구)으로만 렌더링할 수 있으므로,
+  // 유저가 실제로 위치를 설정한 경우(addressName이 채워짐)에만 그 지역으로 재조회한다.
   // 위치 미설정 상태(온보딩 대기 중, addressName === null)에서는 기본값 렌더링을 그대로 둔다.
+  // Task 9-1-3: 헤더에서 위치가 바뀔 때마다(addressName 변경) 즉시 재동기화되도록
+  // ?lat=&lng= 좌표 대신 주소명을 그대로 넘겨 서버가 시/군/구 우선 정렬에 반영하게 한다.
   useEffect(() => {
     if (!addressName) return;
 
     let cancelled = false;
-    fetch(`/api/home/feed?lat=${center.lat}&lng=${center.lng}`)
+    fetch(`/api/home/feed?address=${encodeURIComponent(addressName)}`)
       .then((res) => res.json())
       .then((data: HomeFeed) => {
         if (!cancelled) setFeed(data);
@@ -49,7 +51,7 @@ export function HomeView({ initialFeed }: { initialFeed: HomeFeed }) {
     return () => {
       cancelled = true;
     };
-  }, [addressName, center.lat, center.lng]);
+  }, [addressName]);
 
   const { heroEvents, freeFeed } = feed;
 

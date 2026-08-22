@@ -44,6 +44,43 @@
   - **대응 방안**: `fetchAllCultureEvents()`와 같은 전체 순회 로직 추가, 필요 시 `BaseCollectorAdapter` 패턴으로 마이그레이션.
   - **우선순위**: Low(현재도 정상 동작하며 소량 데이터로 서비스에 지장 없음, 완결성 개선 항목)
 
+- [x] **[Task 9-1-3] 실시간 거리 계산 제거·DB 인덱싱, 피드 중복 제거·행정구역 우선 정렬, 모바일 카드 UX** 완료 (2026-08-22)
+  - **작업 목표**: 매 요청마다 수행되던 Haversine 거리 계산을 제거해 응답 속도를 높이고, sigungu_name(시/군/구) 인덱스 기반 조회·정렬로 전환. 피드 중복 제거(무료 뱃지 병합), 행정구역 우선 정렬, 모바일 Hero Carousel 1장 꽉 채우기, 위치 변경 즉시 동기화.
+
+  - **DB sigungu_name 컬럼 신설 및 인덱싱**:
+    - `scripts/migrations/2026-08-22-sigungu-name-and-indexes.sql`: `open_spaces.sigungu_name`/`events.sigungu_name` TEXT 컬럼 추가 + `is_free`/`category`(open_spaces)·`is_free`/`event_type`(events)·양쪽 `sigungu_name`에 인덱스 생성. 적용 완료.
+    - `schema-mapper.mjs`에 `extractSigunguName(address)` 신설 — 실측 확인한 한국 행정구역 주소 구조("서울특별시 강남구"처럼 2번째 토큰이 바로 구인 경우 / "경기도 성남시 분당구"처럼 시 아래 구가 또 있는 2단 구조인 경우)를 판별해 정확한 시/군/구 문자열을 뽑는다. 판별 불가 시 임의 생성 없이 null.
+    - `buildOpenSpaceRow`는 address로부터 sigungu_name을 자동 계산(어댑터별 수정 불필요). `buildEventRow`는 events에 공통 address 컬럼이 없어 호출부가 명시적으로 넘기도록 파라미터만 추가.
+    - 이벤트 3개 소스는 실측으로 확인된 실제 원본 필드를 매핑(추측 없음): `seoul-culture-events.mjs`→`GUNAME`(구 이름 필드, 라이브 API 응답으로 실측: "강동구"/"영등포구"/"마포구" 등 확인), `seoul-yeyak-adapter.mjs`→`AREANM`(동일하게 실측: "종로구" 확인), `tour-api-festival.mjs`→`addr1`을 `extractSigunguName`으로 파싱(전국 대상이라 시/군 아래 구 2단 구조 처리 필요).
+    - **백필**: `open_spaces`(26,346건)는 이미 저장된 address 컬럼에서 계산 가능해 `scripts/migrations/2026-08-22-backfill-open-spaces-sigungu-name.sql`로 DB 단에서 즉시 일괄 계산(API 재호출 없음) — 실측 샘플 확인 결과 "경기도 성남시 분당구 ..." → "성남시 분당구", "서울특별시 종로구 ..." → "종로구"로 정확히 파싱됨(전체 26,346건 중 26,169건 값 채워짐, 나머지 177건은 시/군/구 판별 불가한 주소 형식으로 null 유지 — 임의 추정하지 않음). `events`는 GUNAME/AREANM이 신규 매핑 필드라 재수집 외 백필 경로가 없어(Task 9-1-1 venue_name과 동일한 사정) 3개 어댑터 재실행: TOUR_API 20/20건, SEOUL_YEYAK 2,674건, SEOUL_CULTURE 18,961/18,979건 — 재실행 결과 `events` 전체 24,253건 중 21,473건(88.6%, Task 9-1-1 venue_name 백필 커버리지 89.4%와 동일 수준)에 sigungu_name 반영. 나머지는 이번 재수집 시점에 라이브 API 응답에 없던(종료·삭제) 구행 항목으로, 재수집 방식의 자연스러운 한계(Task 9-1-1과 동일).
+
+  - **실시간 Haversine 거리 계산 완전 제거**:
+    - `src/lib/home/get-home-feed.ts` 전면 재작성: `haversineDistanceMeters` import 및 `Origin`/`RADIUS_METERS`/`withinRadius`/`byDistance` 전부 삭제. `distance_meters`는 더 이상 계산하지 않고 기존 관례값 -1(정보 없음)로 고정 — 애플리케이션 레벨의 삼각함수 연산이 요청마다 발생하던 구조를 없앴다.
+    - `Origin { lat, lng }` → `HomeRegion { sigunguName }`로 개념 전환. `DEFAULT_HOME_REGION`은 Task 9-1-1의 기본 좌표(성남시 분당구)와 동일 지역명을 계승(추측 없음).
+
+  - **피드 중복 제거 & 뱃지 병합**:
+    - `dedupeAndMergeFree()`: 이름을 공백 제거+소문자 정규화하고 sigungu_name과 묶은 키로 중복을 판별, 동일 키 항목 중 하나라도 `is_free: true`이면 병합 결과를 `is_free: true`로 승격해 1건만 남긴다. `getTodayEvents`/`getFreeFeed` 양쪽에 공통 적용.
+
+  - **행정구역 우선 정렬**:
+    - `byRegionPriority(region)`: 유저가 선택한 sigunguName과 일치하는 항목을 0순위, 그 외를 1순위로 매기는 안정 정렬(Array.sort는 stable이라 기존 최신순 정렬은 순위 그룹 내에서 유지됨). 반경 필터처럼 다른 지역 데이터를 제외하지 않고 "먼저 보여주되 다 보여준다"로 설계 — 지시서의 "1순위/2순위 노출"과 일치.
+    - `/api/home/feed`: `?lat=&lng=` 좌표 파라미터를 제거하고 `?address=<유저 선택 위치명>`으로 전환, 서버에서 `extractSigunguName`으로 시/군/구를 뽑아 지역 우선 정렬에 반영.
+
+  - **UI 위치 표기 간소화**: `formatVenueLine(address, sigunguName, distanceMeters?)` — "[장소명] · [시/군/구]"(예: "판교신미주아파트 110동 앞 바닥분수대 · 성남시 분당구", 실제 API 응답으로 확인)로 통일. `EventCard`/`HeroCarousel`은 sigunguName만 사용(홈 피드 전용). `SpaceGridCard`는 지역 도감 페이지(`/region`, `get_nearby` RPC 기반이라 sigungu_name이 없음)와 공유되므로 sigunguName이 없으면 기존 실측 거리(distance_meters)로 자연스럽게 대체해 회귀 없이 하위호환 유지.
+
+  - **모바일 카드 UX & 위치 동기화**:
+    - `HeroCarousel`: 카드 폭을 `w-[78%] sm:w-72`에서 `w-full sm:w-72`로 변경 — 모바일에서 카드 1장이 화면 폭에 꽉 차는 snap-x 스와이프로 개편(기존 5초 Auto-play/호버·터치 일시정지는 그대로 유지). sm 이상(태블릿/데스크톱)은 기존 고정폭 유지.
+    - `HomeView`: 헤더에서 위치 변경 시(`addressName` 변경) `/api/home/feed?address=...`를 즉시 재호출하는 기존 useEffect 메커니즘을 좌표 기반에서 주소명 기반으로 전환 — 재조회 즉시 지역 우선 정렬이 반영된 새 피드로 화면이 재렌더링된다(실측 확인: `?address=서울특별시%20강남구`로 재조회 시 강남구 항목이 최상단으로 재정렬됨).
+
+  - **검증**:
+    - `npx tsc --noEmit`: 통과(신규 sigungu_name 컬럼 반영을 위해 `npm run gen:types` 재실행 후 통과).
+    - `npm run test`: 전체 134/134 통과 — `format.test.ts`(신규 시그니처 6건), `get-home-feed.test.ts`(지역 우선 정렬 2건, 중복 제거 병합 1건 포함 전면 재작성), `home-view.test.tsx`(2건 갱신: 표기 포맷, `?address=` 재조회).
+    - `npm run build`: 통과.
+    - `npm run dev` 기동 후 실측: `/api/home/feed` 기본 응답 상위 항목이 모두 성남시 분당구(기본 지역)로 확인, `?address=서울특별시 강남구`로 재조회 시 강남구 항목이 최상단으로 재정렬됨을 확인. SSR 홈 페이지 HTML에서 "· 용산구"/"· 성동구"/"· 강동구" 등 실제 "[장소명] · [시/군/구]" 표기 확인. Hero Carousel 카드 DOM class에 `w-full sm:w-72` 적용 확인. 서버 로그 에러 없음.
+
+  - **특이 사항**:
+    - `formatVenueLine`은 하위호환을 위해 3번째 인자(distanceMeters)를 옵션으로 남겨뒀다 — sigunguName이 있으면 항상 우선하고, 없을 때만(지역 도감 페이지처럼 sigungu_name을 아직 채우지 않은 화면) 거리로 대체한다. 홈 피드 전용 화면(EventCard/HeroCarousel)은 2번째 인자까지만 사용한다.
+    - `/region`·`/nearby` 페이지가 쓰는 `get_nearby_spaces_and_events` RPC와 `getAllOpenSpaces`는 이번 작업 범위(지시서에 명시된 get-home-feed.ts/모바일 홈 UX)에 포함되지 않아 그대로 두었다 — 해당 RPC에도 sigungu_name을 노출하려면 별도 마이그레이션/Spec 검토가 필요해 임의로 확장하지 않았다(CLAUDE.md 제7장 제4조 미래 기능 구현 금지).
+
 - [x] **[Task 9-1-2] 메인 Quick 카테고리 그리드 텍스트/아이콘 ➔ 대표 이미지 UI 개편** 완료 (2026-08-22)
   - **작업 목표**: 메인 홈 5대 Quick 카테고리 버튼을 직관적인 카테고리 대표 이미지/일러스트 에셋으로 교체
   - **이미지 에셋 소스**: 외부 디자인 에셋을 받을 방법이 없어(작업 지시에 구체적 에셋 파일 첨부 없음), 5대 UI 카테고리 색상(`category-meta.ts` 기존 색상값 그대로 재사용, 임의 변경 없음)을 배경으로 한 경량 SVG 아이콘을 직접 제작했다 — 팔레트(체험·클래스), 나무(야외·자연), 전시대(전시·박물관), 별(공연·축제), 풍선(키즈·액티비티). SVG는 지시서가 명시한 허용 포맷(SVG/WebP/PNG) 중 하나이며, 벡터라 어떤 해상도에서도 깨지지 않고 파일 크기가 각 500바이트 내외로 최소다.
