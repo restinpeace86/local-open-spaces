@@ -31,6 +31,7 @@
     "ingest:playground": "node scripts/ingest/playground.mjs",
     "ingest:swimming-pool": "node scripts/ingest/swimming-pool.mjs",
     "ingest:gg-events": "node scripts/ingest/gg-events.mjs",
+    "ingest:gg-culture-events": "node scripts/ingest/gg-culture-events.mjs",
     "ingest:pipeline": "node scripts/ingest/run-all.mjs"
   },
   "dependencies": {
