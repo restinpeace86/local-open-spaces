@@ -81,6 +81,8 @@ jobs:
 
       # Source 02(전국 공공체육시설 현황)는 서울시 서버 측 장애(ERROR-500)로 보류 중.
       # implementation/todo.md 참고. 서버 정상화 확인 후 이 워크플로에 스텝 추가 예정.
-      # national-park-ecotour.mjs(KAKAO_REST_API_KEY 미설정)와 local-data-kids.mjs
-      # (LOCAL_DATA_KIDS_CSV_URL 미설정)는 필수 환경변수가 없어 이번 점검에서 스킵함
-      # (todo.md 스킵 로그 참고, 임의로 값을 추측해 넣지 않음).
+      # national-park-ecotour.mjs(KAKAO_REST_API_KEY 미설정)는 필수 환경변수가 없어
+      # 이번 점검에서 스킵함(todo.md 스킵 로그 참고, 임의로 값을 추측해 넣지 않음).
+      # Task 9-6-1(2026-08-22): local-data-kids.mjs/LocalDataKidsAdapter는 원본 소스인
+      # localdata.go.kr 자체가 서비스 폐기(접속 불가, 실측 확인 — ECONNREFUSED)돼 완전히
+      # 폐기했다(어댑터 파일 삭제, ingest:local-data-kids 스크립트 제거).

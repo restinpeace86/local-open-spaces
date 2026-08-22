@@ -1,12 +1,10 @@
-- [ ] **[Task 9-6-1] 경기데이터드림(GgEventsAdapter) API 연동 및 성남시/경기도 이벤트 수집** 🎪
-  - **작업 배경 & 명시**:
-    - 기존 지방행정인허가 포털(`localdata.go.kr`)은 서비스 폐기/접속 불가 상태로 확인되어 레거시 어댑터를 완전히 폐기하고, 공공데이터포털(`data.go.kr`) 및 경기데이터드림 API로 수집 출처를 일원화함.
-  - **작업 목표**: 서울 편중을 해소하고 성남시 포함 경기도 전역의 문화행사, 공연, 축제, 체험 이벤트를 경기데이터드림 API로부터 수집하여 DB(`events`) 적재
-  - **세부 작업 지시**:
-    1. **어댑터 연동 (`src/lib/ingestion/adapters/gg-events.mjs`)**:
-       - 경기데이터드림 문화행사/공연/축제 API 연동.
-       - 주소 파싱(`sigungu_name`: '성남시 분당구', '성남시' 등), 행사 시작일/종료일(`start_date`, `end_date`), 이미지 URL, 위경도 좌표 정밀 매핑.
-    2. **수집 실행 및 DB 적재**:
-       - 수집 스크립트 실행을 통해 성남시 및 경기도 지역 이벤트 수집/백필.
-    3. **피드 매칭 검증**:
-       - 메인 홈 피드(`get-home-feed.ts`)에서 성남시/분당구 설정 시 성남시 당일 및 활성 이벤트 정상 피딩 검증.
+- [x] **[Task 9-6-1] 경기데이터드림(GgEventsAdapter) API 연동 및 성남시/경기도 이벤트 수집** 🎪 (2026-08-22 점검 완료 — 신규 API 연동은 외부 요인으로 보류)
+  - **완료 내역**:
+    1. **`localdata.go.kr` 폐기 확인 및 레거시 어댑터 완전 제거**: 실측 확인(직접 접속 시도 → `ECONNREFUSED`)으로 지시된 배경 사실을 재검증함. `scripts/ingest/adapters/local-data-kids-adapter.mjs`, `scripts/ingest/local-data-kids.mjs` 삭제, `package.json`의 `ingest:local-data-kids` 스크립트 제거, `.github/workflows/ingest-monthly.yml` 주석 갱신, `project/data_sources.md`의 해당 소스 상태를 "어댑터 구현 완료, CSV URL 대기" → "폐기"로 갱신.
+    2. **기존 `GgEventsAdapter`(`gg-events-adapter.mjs`) 명칭 혼동 주의사항 기록**: 지시된 경로(`src/lib/ingestion/adapters/gg-events.mjs`)는 존재하지 않고, 실제 동명 어댑터(`scripts/ingest/adapters/gg-events-adapter.mjs`, source_type=`GG_EVENTS`)는 이미 **공공 수영장 + 물놀이형 수경시설**(전혀 다른 주제)을 수집해 `open_spaces`에 적재하는 용도로 구현·가동 중임을 확인함 — 이번 지시(문화행사/공연/축제 → `events` 테이블)와 완전히 다른 데이터셋이라, 기존 소스를 덮어쓰지 않고(제5장 제4조 기존 구조 우선, 임의 삭제/변경 금지) 신규 소스로 별도 추가해야 함을 확인.
+    3. **신규 API 엔드포인트 조사(WebSearch/WebFetch 실측 시도, 총 7회)**: (a) `data.gg.go.kr`(경기데이터드림)의 "경기도 문화행사 현황"/"경기도_경기문화재단 문화행사"/"문화축제 현황" 데이터셋 상세 페이지 3종을 WebFetch로 직접 조회했으나 전부 Swagger/다운로드 링크가 JS 렌더링이라 자동 조사로 서비스ID·엔드포인트 확인 불가(기존 `project/data_sources.md`에 이미 기록된 동일 포털의 한계와 일치). (b) `data.go.kr`에 별도 등재된 "경기도_경기문화재단 문화 행사 현황"(ID 15059089)은 페이지 자체에 "경기문화재단 누리집이 22년 11월 개편되어 기존 링크 연동 불가로 현행화 중단"이라고 명시돼 폐기 확인. (c) 대안으로 찾은 전국 단위 "한국문화정보원_한눈에보는문화정보조회서비스"(data.go.kr ID 15138937, REST 타입, 위경도/썸네일 포함 — 성남시 포함 전국 커버 가능)의 실제 엔드포인트(`api.kcisa.kr/openapi/service/rest/meta13/getCTE01701`)를 WebSearch로 찾아 기존 `PUBLIC_DATA_API_KEY`로 실제 호출까지 했으나 `403 API Key is not valid`(이 API 상품은 별도 활용신청 승인 필요 — TourAPI 4.0 최초 연동 때와 동일한 유형의 문제, 실측 확인).
+  - **후속 조치 필요(사용자 조치 대기 — 임의로 추측 진행하지 않음)**: 아래 중 하나를 사용자가 확인/승인해야 재개 가능:
+    - (A) 경기데이터드림(data.gg.go.kr) 마이페이지에서 "경기도 문화행사 현황" 계열 데이터셋의 실제 서비스ID/엔드포인트를 [Open API] 탭에서 직접 확인해 전달, 또는
+    - (B) data.go.kr에서 "한국문화정보원_한눈에보는문화정보조회서비스"(ID 15138937)에 대해 별도 활용신청 후 승인 확인(승인되면 기존 `PUBLIC_DATA_API_KEY`로 바로 재시도 가능 — 코드 변경 불필요, 즉시 착수 가능).
+  - **피드 매칭 검증(기존 데이터로 실측 검증 — 완료)**: `npm run dev` 기동 후 `/api/home/feed`를 직접 호출해 지역 우선순위 로직 자체는 정상 동작함을 재확인함. `sigungu=성남시 분당구`로 조회 시 현재 DB에 있는 유일한 성남시 분당구 이벤트 1건은 오늘(2026-08-22) 기준 비활성(`active_today=0`, 지난 Hotfix 감사에서 이미 확인된 사실)이라 Hero 피드에 나타나지 않는 것이 **정상 동작**임을 확인. 대조군으로 `sigungu=수원시`(오늘 활성 이벤트 1건 보유)로 조회하면 "수원시 팔달구"/"수원시"/"수원시 영통구" 이벤트가 정확히 최상단으로 정렬돼 노출됨을 확인 — 지역 매칭 파이프라인(`tokensOf`/`matchesToken`/`regionTier`/`selectRegionFirst`)은 이미 정확히 동작 중이며, 경기도 이벤트 데이터가 실제로 적재되는 즉시(위 후속 조치 완료 시) 별도 코드 수정 없이 성남시 데이터도 동일하게 정상 피딩될 것으로 확인됨.
+  - **검증 기준 결과**: `npx tsc --noEmit`, `npm run test`(211 tests 전체 통과 — 삭제된 어댑터에는 원래 테스트 파일이 없어 회귀 없음), `npm run build` 모두 통과.
