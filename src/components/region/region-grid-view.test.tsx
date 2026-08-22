@@ -7,8 +7,9 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => mockSearchParams,
 }));
 
+let mockSigunguName: string | null = null;
 vi.mock('@/hooks/use-user-location', () => ({
-  useUserLocation: () => ({ center: { lat: 37.5665, lng: 126.978 } }),
+  useUserLocation: () => ({ center: { lat: 37.5665, lng: 126.978 }, sigunguName: mockSigunguName }),
 }));
 
 function makeSpaceItem(overrides: Partial<NearbyItem> = {}): NearbyItem {
@@ -21,6 +22,7 @@ function makeSpaceItem(overrides: Partial<NearbyItem> = {}): NearbyItem {
     lng: 127,
     lat: 37.5,
     address: '서울특별시 강남구 어딘가',
+    sigungu_name: '강남구',
     thumbnail_url: null,
     start_date: null,
     end_date: null,
@@ -41,16 +43,17 @@ function makeSpaceItem(overrides: Partial<NearbyItem> = {}): NearbyItem {
   };
 }
 
-// Task 9-1-10: /region 상단 필터 칩을 레거시(공원/체육시설/문화기반시설) 대신 5대 UI
-// 카테고리(체험·클래스/야외·자연/전시·박물관/공연·축제/키즈·액티비티)로 교체한 것을 검증한다.
-describe('RegionGridView 카테고리 칩 (Task 9-1-10)', () => {
+// Task 9-1-4: /region 탭 진입 시 5대 카테고리 선택 화면(1단계)을 먼저 보여주고, 선택해야만
+// 해당 카테고리 리스트(2단계)가 노출되는지, 그리고 전역 고정 위치가 우선 노출에 반영되는지 검증한다.
+describe('RegionGridView 2단계 탐색 UX (Task 9-1-4)', () => {
   afterEach(() => {
     mockSearchParams = new URLSearchParams();
+    mockSigunguName = null;
     vi.doUnmock('@/lib/spaces/get-all-spaces');
     vi.resetModules();
   });
 
-  it('레거시 카테고리(공원/체육시설) 대신 5대 UI 카테고리 칩을 노출한다', async () => {
+  it('카테고리 없이 진입하면 1단계(카테고리 선택 화면)만 보이고 리스트는 아직 없다', async () => {
     vi.doMock('@/lib/spaces/get-all-spaces', () => ({
       getAllOpenSpaces: () => Promise.resolve([makeSpaceItem()]),
     }));
@@ -58,15 +61,12 @@ describe('RegionGridView 카테고리 칩 (Task 9-1-10)', () => {
     const { RegionGridView: FreshView } = await import('./region-grid-view');
     render(<FreshView />);
 
-    await waitFor(() => expect(screen.getByText('테스트 공간')).toBeInTheDocument());
-
-    expect(screen.getByRole('button', { name: '야외·자연' })).toBeInTheDocument();
+    expect(screen.getByText('카테고리를 선택해주세요')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '키즈·액티비티' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '공원' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '체육시설' })).not.toBeInTheDocument();
+    expect(screen.queryByText('테스트 공간')).not.toBeInTheDocument();
   });
 
-  it('카테고리 칩 클릭 시 즉시 해당 카테고리로 데이터가 필터링된다', async () => {
+  it('카테고리 타일을 클릭하면 2단계로 넘어가 해당 카테고리 리스트만 보여준다', async () => {
     const nature = makeSpaceItem({ id: 'nature-1', name: '야외 공간', category: 'OUTDOOR_NATURE' });
     const kids = makeSpaceItem({ id: 'kids-1', name: '키즈 공간', category: 'KIDS_ACTIVITY' });
 
@@ -77,16 +77,14 @@ describe('RegionGridView 카테고리 칩 (Task 9-1-10)', () => {
     const { RegionGridView: FreshView } = await import('./region-grid-view');
     render(<FreshView />);
 
-    await waitFor(() => expect(screen.getByText('야외 공간')).toBeInTheDocument());
-    expect(screen.getByText('키즈 공간')).toBeInTheDocument();
-
     fireEvent.click(screen.getByRole('button', { name: '키즈·액티비티' }));
 
+    await waitFor(() => expect(screen.getByText('키즈 공간')).toBeInTheDocument());
     expect(screen.queryByText('야외 공간')).not.toBeInTheDocument();
-    expect(screen.getByText('키즈 공간')).toBeInTheDocument();
+    expect(screen.queryByText('카테고리를 선택해주세요')).not.toBeInTheDocument();
   });
 
-  it('?category= URL 파라미터로 진입하면 해당 칩이 처음부터 활성화되고 데이터도 그 카테고리로 필터링된다', async () => {
+  it('?category= URL로 진입하면 1단계를 건너뛰고 바로 2단계 리스트를 보여준다', async () => {
     mockSearchParams = new URLSearchParams('category=KIDS_ACTIVITY');
     const nature = makeSpaceItem({ id: 'nature-1', name: '야외 공간', category: 'OUTDOOR_NATURE' });
     const kids = makeSpaceItem({ id: 'kids-1', name: '키즈 공간', category: 'KIDS_ACTIVITY' });
@@ -98,10 +96,58 @@ describe('RegionGridView 카테고리 칩 (Task 9-1-10)', () => {
     const { RegionGridView: FreshView } = await import('./region-grid-view');
     render(<FreshView />);
 
+    expect(screen.queryByText('카테고리를 선택해주세요')).not.toBeInTheDocument();
     await waitFor(() => expect(screen.getByText('키즈 공간')).toBeInTheDocument());
     expect(screen.queryByText('야외 공간')).not.toBeInTheDocument();
+  });
 
-    const activeChip = screen.getByRole('button', { name: '키즈·액티비티' });
-    expect(activeChip).toHaveStyle({ color: 'rgb(255, 255, 255)' });
+  it('"← 다른 카테고리"를 누르면 다시 1단계 선택 화면으로 돌아간다', async () => {
+    mockSearchParams = new URLSearchParams('category=KIDS_ACTIVITY');
+    vi.doMock('@/lib/spaces/get-all-spaces', () => ({
+      getAllOpenSpaces: () => Promise.resolve([makeSpaceItem({ category: 'KIDS_ACTIVITY' })]),
+    }));
+
+    const { RegionGridView: FreshView } = await import('./region-grid-view');
+    render(<FreshView />);
+
+    await waitFor(() => expect(screen.getByText('테스트 공간')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('← 다른 카테고리'));
+
+    expect(screen.getByText('카테고리를 선택해주세요')).toBeInTheDocument();
+  });
+
+  it('전역 고정 위치(sigunguName)와 일치하는 항목을 우선 노출한다(다른 지역도 배제하지 않음)', async () => {
+    mockSearchParams = new URLSearchParams('category=KIDS_ACTIVITY');
+    mockSigunguName = '성남시 분당구';
+
+    const other = makeSpaceItem({
+      id: 'other',
+      name: '강남 키즈 공간',
+      category: 'KIDS_ACTIVITY',
+      address: '서울특별시 강남구 어딘가',
+      sigungu_name: '강남구',
+    });
+    const matching = makeSpaceItem({
+      id: 'matching',
+      name: '분당 키즈 공간',
+      category: 'KIDS_ACTIVITY',
+      address: '경기도 성남시 분당구 어딘가',
+      sigungu_name: '성남시 분당구',
+    });
+
+    vi.doMock('@/lib/spaces/get-all-spaces', () => ({
+      getAllOpenSpaces: () => Promise.resolve([other, matching]),
+    }));
+
+    const { RegionGridView: FreshView } = await import('./region-grid-view');
+    render(<FreshView />);
+
+    await waitFor(() => expect(screen.getByText('분당 키즈 공간')).toBeInTheDocument());
+    // 다른 지역도 여전히 노출된다(배제하지 않음).
+    expect(screen.getByText('강남 키즈 공간')).toBeInTheDocument();
+
+    const cardTexts = screen.getAllByText(/키즈 공간$/).map((el) => el.textContent);
+    expect(cardTexts[0]).toBe('분당 키즈 공간');
   });
 });

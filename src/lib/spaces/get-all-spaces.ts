@@ -10,7 +10,7 @@ export async function getAllOpenSpaces(referencePoint: { lat: number; lng: numbe
   const { data, error } = await supabase
     .from('open_spaces')
     .select(
-      'id, name, category, address, location, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group'
+      'id, name, category, address, location, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, sigungu_name'
     )
     .order('name');
 
@@ -33,6 +33,8 @@ export async function getAllOpenSpaces(referencePoint: { lat: number; lng: numbe
       lng,
       lat,
       address: row.address,
+      // Task 9-1-4: 전역 고정 위치 기준 우선 노출(카테고리 탭 2단계 리스트)을 위해 필요하다.
+      sigungu_name: row.sigungu_name,
       thumbnail_url: null,
       start_date: null,
       end_date: null,

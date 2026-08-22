@@ -29,6 +29,29 @@ function makeSequentialFrom(dataSequence: unknown[][]) {
   };
 }
 
+// Task 9-1-4: fetchRegionFirstRows가 실제로 sigungu_name을 SQL 단에서 필터링해 후보군을
+// 확보하는지(단순히 최신순 500건을 한 번 가져와 뒤섞이는 게 아닌지) 검증하려면, .eq()에 넘어온
+// 조건을 실제로 반영해 데이터를 걸러주는 좀 더 정교한 스텁이 필요하다.
+function makeFilteringChainable(rows: Array<Record<string, unknown>>) {
+  const filters: Record<string, unknown> = {};
+  const builder: Record<string, unknown> = {};
+  builder.select = () => builder;
+  builder.lte = () => builder;
+  builder.gte = () => builder;
+  builder.gt = () => builder;
+  builder.or = () => builder;
+  builder.order = () => builder;
+  builder.eq = (column: string, value: unknown) => {
+    filters[column] = value;
+    return builder;
+  };
+  builder.limit = (n: number) => {
+    const filtered = rows.filter((row) => Object.entries(filters).every(([col, val]) => row[col] === val));
+    return Promise.resolve({ data: filtered.slice(0, n), error: null });
+  };
+  return builder;
+}
+
 function eventRow(overrides: Record<string, unknown> = {}) {
   return {
     id: 'e1',
@@ -374,5 +397,67 @@ describe('getTodayEvents: 당일 데이터 부족 시 이번 주 마감임박으
     expect(items).toHaveLength(10);
     // events 테이블은 "당일" 조회 1번만 호출되고, 마감임박 보충 조회는 발생하지 않는다.
     expect(fromSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Task 9-1-4: 실측으로 발견한 버그 재현 — 한 소스(예: GG_EVENTS)가 다른 지역 데이터보다 압도적으로
+// 최근에 대량 수집돼 "최신순 500건" 후보군을 통째로 차지하면, 선택 지역(성남시 분당구) 데이터가
+// 실제로 있어도 후보군에서 완전히 밀려나 피드에 노출되지 않는다. sigungu_name을 SQL 단에서 먼저
+// 필터링(인덱스 활용)해 이 문제를 막았는지 검증한다.
+describe('getFreeFeed: 대량 단일 소스가 후보군을 독점해도 선택 지역 데이터가 밀려나지 않는다 (Task 9-1-4)', () => {
+  afterEach(() => {
+    vi.doUnmock('@/lib/supabase/server');
+    vi.resetModules();
+  });
+
+  it('다른 지역(GG_EVENTS류) 500건이 더 최신이어도 선택 지역(성남시 분당구) 무료 공간이 노출된다', async () => {
+    // 실제 버그 재현: "다른 지역" 대량 데이터 500건 + 선택 지역 데이터 1건, 최신순 정렬이면
+    // 선택 지역 데이터가 500건 밖으로 밀려난다.
+    const dominantOtherRegionRows = Array.from({ length: 500 }, (_, i) => ({
+      id: `gg-${i}`,
+      name: `오산시 시설 ${i}`,
+      category: 'OUTDOOR_NATURE',
+      address: '경기도 오산시 어딘가',
+      location: { coordinates: [127.07, 37.15] },
+      is_free: true,
+      operating_hours: null,
+      info_url: null,
+      is_kids_friendly: false,
+      has_parking: false,
+      stroller_accessible: false,
+      facility_type: '복합',
+      target_age_group: null,
+      sigungu_name: '오산시',
+    }));
+    const selectedRegionRow = {
+      id: 'bundang-1',
+      name: '분당 무료 공원',
+      category: 'OUTDOOR_NATURE',
+      address: '경기도 성남시 분당구 어딘가',
+      location: { coordinates: [127.12, 37.38] },
+      is_free: true,
+      operating_hours: null,
+      info_url: null,
+      is_kids_friendly: false,
+      has_parking: false,
+      stroller_accessible: false,
+      facility_type: '복합',
+      target_age_group: null,
+      sigungu_name: '성남시 분당구',
+    };
+    const allSpaceRows = [...dominantOtherRegionRows, selectedRegionRow];
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () =>
+        Promise.resolve({
+          from: (table: string) =>
+            table === 'open_spaces' ? makeFilteringChainable(allSpaceRows) : makeChainable({ data: [], error: null }),
+        }),
+    }));
+
+    const { getFreeFeed } = await import('./get-home-feed');
+    const items = await getFreeFeed(12, { sigunguName: '성남시 분당구' });
+
+    expect(items.some((item) => item.id === 'bundang-1')).toBe(true);
   });
 });

@@ -155,3 +155,27 @@ describe('HeroCarousel "전체 보기" CTA (Task 9-1-9)', () => {
     expect(screen.queryByText('오늘 진행 중인 전체 행사 보기')).not.toBeInTheDocument();
   });
 });
+
+// Task 9-1-4: 4대 핵심 뱃지(가성비/실내외/아이동반/방문시점) 중 실내외·아이동반이 HeroCarousel에
+// 아예 노출되지 않던 것을 보완했는지 검증한다(가성비·방문시점은 기존 오버레이로 이미 노출됨).
+describe('HeroCarousel 4대 뱃지 보완 (Task 9-1-4)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('실내외(facility_type)와 아이동반(kids) 뱃지를 오버레이와 중복 없이 카드 본문에 보완 노출한다', () => {
+    const item = makeItem('1', '실내 체험 행사');
+    item.facility_type = '실내';
+    item.is_kids_friendly = true;
+
+    render(<HeroCarousel items={[item]} onSelect={() => {}} />);
+
+    expect(screen.getByText('실내')).toBeInTheDocument();
+    expect(screen.getByText('👶 키즈/어린이')).toBeInTheDocument();
+  });
+});

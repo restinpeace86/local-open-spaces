@@ -106,8 +106,11 @@ export function deriveBookingStatus({ isReservationRequired, reservationEndDate,
   return null;
 }
 
-// spec/data/ai-rule.md 3.2 표준 이벤트 유형 중 하나로만 응답하도록 강제한다.
-const EVENT_TYPES = ['FESTIVAL', 'EXHIBITION', 'PERFORMANCE', 'POPUP', 'ETC'];
+// Task 9-1-4(2026-08-22): spec/data/ai-rule.md 3.3(Decision 008)의 5대 UI 카테고리로 직접
+// 분류하도록 전환했다 — 레거시 4종(FESTIVAL/EXHIBITION/PERFORMANCE/POPUP)으로 응답받은 뒤 화면
+// 표시 시점에 다시 매핑하던 간접 방식(제안됐으나 미반영 상태였음)을 없애고, AI 분류 결과이
+// 곧바로 DB event_type이자 UI 카테고리가 되도록 일원화한다.
+const EVENT_TYPES = ['EXPERIENCE_CLASS', 'OUTDOOR_NATURE', 'EXHIBITION_MUSEUM', 'PERFORMANCE_FESTIVAL', 'KIDS_ACTIVITY', 'ETC'];
 
 export async function classifyEventTypeWithAI({ title, rawLabel, apiKey }) {
   if (!apiKey) {
@@ -116,12 +119,13 @@ export async function classifyEventTypeWithAI({ title, rawLabel, apiKey }) {
   }
 
   const prompt = `당신은 지역 행사 정보를 표준 카테고리로 분류하는 데이터 정제 도구입니다.
-아래 행사의 원본 분류명과 제목을 보고, 반드시 다음 5개 값 중 하나만 선택하세요: ${EVENT_TYPES.join(', ')}.
-- FESTIVAL: 지역 축제, 문화 제전
-- EXHIBITION: 미술 전시, 박람회, 역사 전시
-- PERFORMANCE: 야외 공연, 음악회, 연극
-- POPUP: 단기 팝업스토어, 체험 행사
-- ETC: 위 4개 중 명확히 판단할 수 없는 경우
+아래 행사의 원본 분류명과 제목을 보고, 반드시 다음 6개 값 중 하나만 선택하세요: ${EVENT_TYPES.join(', ')}.
+- EXPERIENCE_CLASS: 체험 프로그램, 교육/강좌, 워크숍
+- OUTDOOR_NATURE: 야외 활동, 자연 탐방, 공원 프로그램
+- EXHIBITION_MUSEUM: 미술 전시, 박람회, 역사 전시, 박물관 프로그램
+- PERFORMANCE_FESTIVAL: 지역 축제, 공연, 콘서트, 연극, 뮤지컬
+- KIDS_ACTIVITY: 체육시설 이용, 단기 팝업/체험 행사, 예약형 프로그램, 아동 대상 활동
+- ETC: 위 5개 중 명확히 판단할 수 없는 경우
 
 원본 분류명: ${rawLabel || '(없음)'}
 제목: ${title || '(없음)'}`;

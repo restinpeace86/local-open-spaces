@@ -49,7 +49,9 @@ function mapToOpenSpaceRow(item) {
     external_id: `CULTURE_SPACE_${item.NUM}`,
     source_type: 'CULTURE_FACILITY',
     name: item.FAC_NAME,
-    category: 'CULTURE',
+    // Task 9-1-4: ai-rule.md 3.3(Decision 008) 공식 매핑표에 따라 레거시 'CULTURE' 대신
+    // 5대 UI 카테고리 EXHIBITION_MUSEUM(전시·박물관)으로 직접 태깅한다.
+    category: 'EXHIBITION_MUSEUM',
     address: item.ADDR || '',
     location: toPointWKT(lng, lat),
     is_free: item.ENTRFREE === '무료',

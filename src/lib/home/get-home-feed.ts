@@ -204,6 +204,43 @@ function selectRegionFirst(items: NearbyItem[], region: HomeRegion, limit: numbe
   return [...matching, ...others].slice(0, limit);
 }
 
+// Task 9-1-4(2026-08-22) 실측에서 발견한 버그: open_spaces/events 후보군을 "최신순 500건"으로만
+// 뽑으면, 한 소스가 다른 소스보다 더 최근에 대량 수집됐을 때(예: GG_EVENTS 1,199건이 가장 최근
+// 수집돼 is_free=true 500건 후보 전량을 GG_EVENTS가 차지) 다른 지역 데이터가 후보군에서 통째로
+// 밀려나 selectRegionFirst/byRegionPriority가 아무리 잘 짜여 있어도 무용지물이 된다(실측 확인:
+// 성남시 분당구 기준 요청인데도 500건 후보가 전부 GG_EVENTS 소속 지역이었음).
+// 그래서 "최신순으로 넉넉히 가져온 뒤 애플리케이션에서 지역별로 나눈다"가 아니라, 인덱싱된
+// sigungu_name 컬럼으로 선택 지역을 SQL 단에서 먼저 조회해(해당 지역 데이터가 얼마든 있든 후보군
+// 을 우선 확보) 다른 지역에 밀려나지 않게 하고, 그래도 실제 필요한 개수(minRequired, 호출부의
+// 최종 limit)에 못 미치면만 지역 제한 없는 2차 조회로 채운다 — 지역 데이터가 이미 충분하면
+// 불필요한 2차 조회를 하지 않는다. buildQuery(sigunguFilter)는 sigunguFilter가 있으면 그
+// 지역으로 SQL에서 걸러 조회하고, null이면 지역 제한 없이 조회한다(정렬·개별 .limit()은 호출부가
+// buildQuery 안에 이미 포함해 둔다) — 두 번 호출될 수 있으므로 매번 새 쿼리 체인을 반환해야 한다.
+async function fetchRegionFirstRows<T extends { id: string }>(
+  buildQuery: (sigunguFilter: string | null) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+  region: HomeRegion,
+  minRequired: number
+): Promise<T[]> {
+  if (!region.sigunguName) {
+    const all = await buildQuery(null);
+    if (all.error) throw new Error(all.error.message);
+    return all.data ?? [];
+  }
+
+  const regional = await buildQuery(region.sigunguName);
+  if (regional.error) throw new Error(regional.error.message);
+  const regionalRows = regional.data ?? [];
+
+  if (regionalRows.length >= minRequired) return regionalRows;
+
+  const broad = await buildQuery(null);
+  if (broad.error) throw new Error(broad.error.message);
+  const regionalIds = new Set(regionalRows.map((row) => row.id));
+  const others = (broad.data ?? []).filter((row) => !regionalIds.has(row.id));
+
+  return [...regionalRows, ...others];
+}
+
 // Task 9-1-9: "이번 주 시작 예정" 범위 계산 — 한국 주간(일~토) 관례로 오늘부터 이번 주 토요일까지.
 function endOfThisWeek(reference: Date): string {
   const day = reference.getDay(); // 0=일 ... 6=토
@@ -230,20 +267,24 @@ async function getUpcomingDeadlineFill(
   const weekEnd = endOfThisWeek(now);
   const nowIso = now.toISOString();
 
-  const { data, error } = await supabase
-    .from('events')
-    .select(EVENT_COLUMNS)
-    .gt('start_date', today)
-    .lte('start_date', weekEnd)
-    .eq('is_active', true)
-    .or(`is_reservation_required.eq.false,reservation_end_date.gte.${nowIso},reservation_end_date.is.null`)
-    .order('reservation_end_date', { ascending: true, nullsFirst: false })
-    .order('start_date', { ascending: true })
-    .limit(200);
+  const buildQuery = (sigunguFilter: string | null) => {
+    let query = supabase
+      .from('events')
+      .select(EVENT_COLUMNS)
+      .gt('start_date', today)
+      .lte('start_date', weekEnd)
+      .eq('is_active', true)
+      .or(`is_reservation_required.eq.false,reservation_end_date.gte.${nowIso},reservation_end_date.is.null`);
+    if (sigunguFilter) query = query.eq('sigungu_name', sigunguFilter);
+    return query
+      .order('reservation_end_date', { ascending: true, nullsFirst: false })
+      .order('start_date', { ascending: true })
+      .limit(200);
+  };
 
-  if (error) throw new Error(`이번 주 마감임박 행사 조회 실패: ${error.message}`);
+  const data = await fetchRegionFirstRows<EventRow>(buildQuery, region, count);
 
-  const items = dedupeAndMergeFree((data ?? []).map(toEventItem)).filter((item) => !excludeIds.has(item.id));
+  const items = dedupeAndMergeFree(data.map(toEventItem)).filter((item) => !excludeIds.has(item.id));
   return selectRegionFirst(items, region, count);
 }
 
@@ -263,20 +304,22 @@ export async function getTodayEvents(
   const today = new Date().toISOString().slice(0, 10);
   const nowIso = new Date().toISOString();
 
-  const { data, error } = await supabase
-    .from('events')
-    .select(EVENT_COLUMNS)
-    .lte('start_date', today)
-    .gte('end_date', today)
-    .eq('is_active', true)
-    // 예약 필수이면서 이미 마감된 건은 DB 단에서 제외(마감 안 지난 것 OR 예약 불필요)
-    .or(`is_reservation_required.eq.false,reservation_end_date.gte.${nowIso},reservation_end_date.is.null`)
-    .order('start_date', { ascending: false })
-    .limit(500);
+  const buildQuery = (sigunguFilter: string | null) => {
+    let query = supabase
+      .from('events')
+      .select(EVENT_COLUMNS)
+      .lte('start_date', today)
+      .gte('end_date', today)
+      .eq('is_active', true)
+      // 예약 필수이면서 이미 마감된 건은 DB 단에서 제외(마감 안 지난 것 OR 예약 불필요)
+      .or(`is_reservation_required.eq.false,reservation_end_date.gte.${nowIso},reservation_end_date.is.null`);
+    if (sigunguFilter) query = query.eq('sigungu_name', sigunguFilter);
+    return query.order('start_date', { ascending: false }).limit(500);
+  };
 
-  if (error) throw new Error(`오늘의 행사 조회 실패: ${error.message}`);
+  const data = await fetchRegionFirstRows<EventRow>(buildQuery, region, limit);
 
-  const items = dedupeAndMergeFree((data ?? []).map(toEventItem));
+  const items = dedupeAndMergeFree(data.map(toEventItem));
   const ordered = sortByDistanceIfKnown(items, region);
   const primary = selectRegionFirst(ordered, region, limit);
 
@@ -288,6 +331,26 @@ export async function getTodayEvents(
   return [...primary, ...fill];
 }
 
+const SPACE_COLUMNS =
+  'id, name, category, address, location, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, sigungu_name';
+
+type SpaceRow = {
+  id: string;
+  name: string;
+  category: string;
+  address: string | null;
+  location: unknown;
+  is_free: boolean | null;
+  operating_hours: string | null;
+  info_url: string | null;
+  is_kids_friendly: boolean | null;
+  has_parking: boolean | null;
+  stroller_accessible: boolean | null;
+  facility_type: string | null;
+  target_age_group: string | null;
+  sigungu_name: string | null;
+};
+
 // docs/spec.md 2.2 ③: "🎁 0원의 행복 — 지출 부담 없는 완전 무료 공공장소/행사 카드"
 export async function getFreeFeed(
   limit = 12,
@@ -295,28 +358,24 @@ export async function getFreeFeed(
 ): Promise<NearbyItem[]> {
   const supabase = await createClient();
 
-  const [spacesResult, eventsResult] = await Promise.all([
-    supabase
-      .from('open_spaces')
-      .select(
-        'id, name, category, address, location, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, sigungu_name'
-      )
-      .eq('is_free', true)
-      .order('created_at', { ascending: false })
-      .limit(500),
-    supabase
-      .from('events')
-      .select(EVENT_COLUMNS)
-      .eq('is_free', true)
-      .eq('is_active', true)
-      .order('start_date', { ascending: false })
-      .limit(500),
+  const buildSpacesQuery = (sigunguFilter: string | null) => {
+    let query = supabase.from('open_spaces').select(SPACE_COLUMNS).eq('is_free', true);
+    if (sigunguFilter) query = query.eq('sigungu_name', sigunguFilter);
+    return query.order('created_at', { ascending: false }).limit(500);
+  };
+
+  const buildEventsQuery = (sigunguFilter: string | null) => {
+    let query = supabase.from('events').select(EVENT_COLUMNS).eq('is_free', true).eq('is_active', true);
+    if (sigunguFilter) query = query.eq('sigungu_name', sigunguFilter);
+    return query.order('start_date', { ascending: false }).limit(500);
+  };
+
+  const [spaceRows, eventRows] = await Promise.all([
+    fetchRegionFirstRows<SpaceRow>(buildSpacesQuery, region, limit),
+    fetchRegionFirstRows<EventRow>(buildEventsQuery, region, limit),
   ]);
 
-  if (spacesResult.error) throw new Error(`무료 공간 조회 실패: ${spacesResult.error.message}`);
-  if (eventsResult.error) throw new Error(`무료 행사 조회 실패: ${eventsResult.error.message}`);
-
-  const spaceItems: NearbyItem[] = (spacesResult.data ?? []).map((row) => {
+  const spaceItems: NearbyItem[] = spaceRows.map((row) => {
     const { lng, lat } = extractCoords(row.location);
     return {
       id: row.id,
@@ -347,7 +406,7 @@ export async function getFreeFeed(
     };
   });
 
-  const eventItems: NearbyItem[] = (eventsResult.data ?? []).map(toEventItem);
+  const eventItems: NearbyItem[] = eventRows.map(toEventItem);
 
   const merged = dedupeAndMergeFree([...spaceItems, ...eventItems]);
   const ordered = sortByDistanceIfKnown(merged, region);

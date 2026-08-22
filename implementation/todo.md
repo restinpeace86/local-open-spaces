@@ -11,7 +11,7 @@
 > 본 문서의 **[선행 조사 결과]** 및 **[데이터 표준화 원칙]**을 바탕으로, 아래 **[🎯 신규 진행 Task 목록]**의 **Task 1번부터 순차적으로 코드를 구현**하고 결과를 본 문서 하단 보고서에 작성하세요.
 
 ---
-- [ ] **[Task 9-1-4] 수집 파이프라인 당일 이벤트 전수(100%) 수집 보완 및 전역 위치/카테고리 UX 개편** 🚀
+- [x] **[Task 9-1-4] 수집 파이프라인 당일 이벤트 전수(100%) 수집 보완 및 전역 위치/카테고리 UX 개편** 완료 (2026-08-22)
   - **핵심 원칙**: 수집 레이어의 모든 제한(건수/지역 제한) 완전 해제 ➔ 당일 및 향후 이벤트 전수 DB 적재 후 유저 기준 큐레이션
   - **세부 작업 지시**:
     1. **TourAPI 및 공공 API 어댑터 전수 수집 (누락 Zero화)**:
@@ -28,3 +28,41 @@
   - **검증 기준**:
     - `npx tsc --noEmit`, `npm run test`, `npm run build` 통과.
     - TourAPI 및 수집 파이프라인 전수 재실행 후 DB 내 당일 진행 이벤트 누락 없이 대량 적재 확인.
+
+  ---
+
+  ## [구현 결과 보고]
+
+  ### 1. 수집 파이프라인 전수 수집 (누락 Zero화)
+  - **실측 확인(추측 없음)**: 모든 수집 어댑터(`scripts/ingest/*.mjs`, `scripts/ingest/adapters/*.mjs`)를 전수 검토한 결과, 페이지네이션 루프가 없는 곳은 `tour-api-festival.mjs` 단 하나였다(나머지는 city-park/amusement-park/cultural-facility-summary/gg-events/go-camping/national-park-ecotour/playground/public-facility-open/seoul-yeyak/swimming-pool/cultural-spaces/seoul-culture-events/kor-tour 계열 전부 이미 `while` 루프로 전량 수집 중이었음).
+  - `tour-api-festival.mjs`: `fetchFestivals({numOfRows:20})` 단발 호출 → `fetchAllFestivals()`(다른 어댑터와 동일한 `while ((pageNo-1)*PAGE_SIZE < totalCount)` 패턴) 전면 재작성. 실측 확인한 실제 `totalCount`(244건, `eventStartDate=오늘` 기준)까지 전량 수집하도록 수정하고 실제로 재실행해 20건 → 244건으로 DB에 반영 완료.
+  - **`open_spaces`(경기도 GG_EVENTS 1,199건 포함) 및 `events` 전수 데이터를 `get-home-feed.ts`에 통합**하는 과정에서 **실측으로 심각한 버그를 발견**: `getFreeFeed`/`getTodayEvents`가 "최신순 500건"만 후보군으로 뽑던 기존 방식(Task 9-1-3)은, 한 소스가 다른 소스보다 압도적으로 최근에 대량 수집되면(실측: GG_EVENTS 1,199건이 가장 최근에 수집돼 `is_free=true` 후보 500건 전체를 GG_EVENTS 혼자 차지) **다른 지역 데이터가 후보군에서 통째로 밀려나는 문제**가 있었다(성남시 분당구로 요청해도 응답이 전부 오산시 등 GG_EVENTS 소속 지역이었음, 실측 확인).
+    - **수정**: `get-home-feed.ts`에 `fetchRegionFirstRows()` 신설 — 인덱싱된 `sigungu_name` 컬럼으로 **선택 지역을 SQL 단에서 먼저 조회**해(해당 지역 데이터가 얼마든 있든 우선 확보) 후보군에서 밀려나지 않게 하고, 실제 필요한 개수(`limit`)에 못 미칠 때만 지역 제한 없는 2차 조회로 채운다. `getTodayEvents`, `getFreeFeed`의 `open_spaces`/`events` 조회, `getUpcomingDeadlineFill` 전부에 동일하게 적용.
+    - 실측 재검증: `?sigungu=성남시 분당구`로 무료 피드 12건 요청 시 12건 전부 성남시 분당구로 정상 노출됨을 확인(수정 전에는 크게 다른 지역 데이터로 오염됐을 상황).
+    - `get-home-feed.test.ts` 신규 회귀 테스트 1건: 다른 지역 500건(GG_EVENTS류 재현)이 더 최신이어도 선택 지역 데이터가 밀려나지 않음을 검증.
+
+  ### 2. 카테고리 탭 2단계 탐색 UX 구현
+  - `region-grid-view.tsx` 전면 재구성: `category` 상태가 `null`(URL에 `?category=` 없이 진입)이면 **1단계 — `CategoryPickerScreen`**(5대 카테고리 타일 그리드, 홈 Quick 그리드와 동일한 이미지 자산 재사용)만 보여주고 리스트는 아예 렌더링하지 않는다. 타일 클릭 또는 `?category=` 딥링크로 카테고리가 정해지면 **2단계 — 필터링된 리스트 화면**으로 전환되며, "← 다른 카테고리" 버튼으로 1단계로 복귀 가능.
+  - `region-grid-view.test.tsx` 전면 재작성(5건): 카테고리 미지정 시 1단계만 노출, 타일 클릭 시 2단계 전환, `?category=` 딥링크 시 1단계 스킵, 뒤로가기 동작, 전역 위치 우선 정렬.
+
+  ### 3. 앱 전역 위치 고정 (쿠키/전역 상태)
+  - **실측 확인**: `useUserLocation()`(LocalStorage 기반)이 이미 홈/`/nearby` 양쪽에서 공유돼 "전역 고정"은 이미 동작 중이었다(다른 저장 방식으로 바꿀 필요 없음 — 제5장 제4조 기존 구조 우선). 실제 공백은 **`/region`(카테고리 탭)이 이 전역 위치를 전혀 참조하지 않고 있던 것**이었다.
+  - `region-grid-view.tsx`가 `useUserLocation()`의 `sigunguName`을 받아, 2단계 리스트를 **선택 지역 데이터 우선 정렬**(제외하지 않음 — Task 9-1-3의 `byRegionPriority`와 동일 철학)로 보여주도록 추가했다. `get-all-spaces.ts`에 `sigungu_name` 필드를 추가해 이 정렬이 가능하게 했다.
+
+  ### 4. 5대 카테고리 통일 & 4대 뱃지 풀 노출
+  - **실측 확인(추측 없음, spec/data/ai-rule.md 3.3 Decision 008 공식 매핑표 활용)**: `events.event_type`/`open_spaces.category` 전수 조회 결과 레거시 값이 대량 잔존— `events`는 EXHIBITION(3,149)/FESTIVAL(1,000)/PERFORMANCE(6,216)/POPUP(6,266)/RESERVATION(2,544) = 전체의 79%, `open_spaces`는 PARK(300)/CULTURE(1,075). ai-rule.md 3.3의 "제안됨(코드 미반영)" 상태였던 공식 매핑표(🌳야외자연←PARK, 🏛️전시박물관←CULTURE·EXHIBITION, 🎪공연축제←FESTIVAL·PERFORMANCE, 🎡키즈액티비티←SPORTS·POPUP·RESERVATION)를 실제 코드에 반영했다.
+    - **소스 수정**: `category-map.mjs`(SEOUL_CODENAME_MAP, `classifyTourApiFestival`), `ai-tagging.mjs`(Gemini 분류 프롬프트 `EVENT_TYPES`), `cultural-spaces.mjs`(하드코딩된 `category: 'CULTURE'` → `'EXHIBITION_MUSEUM'`) — 앞으로의 모든 수집은 5대 UI 카테고리를 직접 만들어낸다.
+    - **기존 데이터 백필**: `scripts/migrations/2026-08-22-backfill-ui-categories.sql`로 위 매핑표 그대로 일괄 UPDATE. `RESERVATION`(2,544건)은 `SEOUL_RESERVATION` 접두사로 현재 활성 어댑터가 전혀 없는 폐기 소스의 잔존 데이터라 재수집이 불가능해 이 백필이 유일한 정정 경로였음을 실측으로 확인.
+    - **프론트엔드 정리**: `category-meta.ts`에서 레거시 8종 `CATEGORY_META` 엔트리 및 `CATEGORY_FILTER_OPTIONS`/`SPACE_CATEGORY_FILTER_OPTIONS`(둘 다 완전 미사용 확인 후) 제거. `category-filter.tsx` 기본값을 `UI_CATEGORY_FILTER_OPTIONS`로 전환 — `/nearby`(MapExplorer, 옵션 미지정으로 기본값 사용 중이었음)의 카테고리 칩에서도 레거시 8종이 사라짐.
+    - 백필 후 재검증: `events`/`open_spaces` 전수 조회 결과 5대 UI 카테고리(+ETC) 외 값 0건 확인.
+  - **4대 뱃지 풀 노출**:
+    - **실측으로 발견한 버그**: `getSpaceBadges`가 `[가성비, 주차, 아이동반, 유모차, 실내외]` 순으로 배열을 쌓은 뒤 `.slice(0,4)`를 적용해, 주차+유모차 정보까지 모두 있는 공간은 4대 핵심 뱃지 중 하나인 **"실내외"(facility_type)가 화면에서 아예 사라지는** 회귀 버그였다. 핵심 3종(가성비/실내외/아이동반)을 먼저 채우고 주차·유모차는 남는 자리에만 추가하도록 우선순위를 재배치해 수정. `parental-badges.test.ts`에 회귀 테스트 추가.
+    - **`HeroCarousel`에 4대 뱃지 중 2종(실내외/아이동반)이 아예 없던 것을 발견·보완**: 가성비·방문시점은 기존 썸네일 오버레이(무료/오늘당일·D-DAY)로 이미 노출되므로 중복 없이, `getParentalBadges`에서 `facility_type`/`kids` 항목만 뽑아 카드 본문에 보완 노출.
+    - `EventCard`/`SpaceGridCard`는 실측 확인 결과 이미 `getParentalBadges` 전체를 `.map()`으로 그대로 렌더링하고 있어(자체 추가 절단 없음) 수정 불필요.
+
+  ### 검증
+  - `npx tsc --noEmit` / `npm run test`(전체 163/163, 신규 다수 포함) / `npm run build`: 모두 통과.
+  - `npm run dev` 기동 후 실측: `/region` 무카테고리 진입 시 1단계 선택 화면만 노출, `?category=` 진입 시 2단계 직행 확인. `/nearby` 카테고리 칩에서 레거시 표기 사라짐 확인. 홈 화면 HTML에서 "실내"/"야외"/"복합" 뱃지 렌더링 확인. `?sigungu=성남시 분당구` 무료 피드 12건 전부 분당구로 확인(크로우딩 버그 수정 재검증).
+
+  ### [기존 기능명세서 충돌 및 스킵 로그]
+  - 없음 — 모든 세부 지시를 그대로 구현했다.

@@ -17,19 +17,26 @@ const BOOKING_STATUS_LABEL: Record<string, { icon: string; label: string; emphas
 };
 
 // spec/space/space-card.md 'Parental Checkpoint Badges' 구현
+// Task 9-1-4(2026-08-22)에서 발견해 수정한 버그: 4대 핵심 뱃지(가성비/실내외/아이동반/방문시점)
+// 중 공간 카드의 "실내외"(facility_type)가 배열 맨 끝에 있어, 주차/유모차 뱃지까지 전부 있는
+// 항목은 이미 4개가 채워진 뒤 facility_type이 밀려 `.slice(0, 4)`에 잘려나갔다(실측 확인 —
+// 예: 무료+주차가능+키즈+유모차가 모두 true인 공간은 실내외 뱃지가 화면에 아예 없었음).
+// 핵심 4대 뱃지(가성비/실내외/아이동반)를 먼저 채우고, 주차/유모차는 남는 자리에만 더한다.
 function getSpaceBadges(item: NearbyItem): ParentalBadge[] {
-  const badges: ParentalBadge[] = [];
+  const core: ParentalBadge[] = [];
 
   // is_free === null(정보 없음)은 요금 뱃지를 숨긴다 — null을 유료로 단정 표시하지 않는다.
-  if (item.is_free === true) badges.push({ key: 'is_free', label: '🎁 무료' });
-  else if (item.is_free === false) badges.push({ key: 'is_free', label: '💰 유료' });
+  if (item.is_free === true) core.push({ key: 'is_free', label: '🎁 무료' });
+  else if (item.is_free === false) core.push({ key: 'is_free', label: '💰 유료' });
 
-  if (item.has_parking) badges.push({ key: 'parking', label: '🅿️ 주차가능' });
-  if (item.is_kids_friendly) badges.push({ key: 'kids', label: '👶 키즈' });
-  if (item.stroller_accessible) badges.push({ key: 'stroller', label: '🛺 유모차가능' });
-  if (item.facility_type) badges.push({ key: 'facility_type', label: item.facility_type });
+  if (item.facility_type) core.push({ key: 'facility_type', label: item.facility_type });
+  if (item.is_kids_friendly) core.push({ key: 'kids', label: '👶 키즈' });
 
-  return badges.slice(0, 4);
+  const extra: ParentalBadge[] = [];
+  if (item.has_parking) extra.push({ key: 'parking', label: '🅿️ 주차가능' });
+  if (item.stroller_accessible) extra.push({ key: 'stroller', label: '🛺 유모차가능' });
+
+  return [...core, ...extra].slice(0, 4);
 }
 
 // spec/event/event-card.md 'Parental Checkpoint Badges' 구현

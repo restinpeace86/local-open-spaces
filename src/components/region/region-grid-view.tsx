@@ -1,29 +1,66 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
-import { CategoryFilter, ALL_CATEGORY } from '@/components/map/category-filter';
 import { SpaceGridCard } from '@/components/region/space-grid-card';
 import { EmptyState } from '@/components/map/empty-state';
 import { DetailModal } from '@/components/map/detail-modal';
 import { getAllOpenSpaces } from '@/lib/spaces/get-all-spaces';
 import { extractDistrict } from '@/lib/spaces/extract-district';
 import { UI_CATEGORY_FILTER_OPTIONS } from '@/lib/spaces/category-meta';
+import { CATEGORY_IMAGE_SRC } from '@/components/home/quick-category-grid';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { useUserLocation } from '@/hooks/use-user-location';
 
 const ALL_DISTRICT = 'ALL';
 
-// 지역별 도감 그리드 뷰: 자치구/카테고리별로 open_spaces 전체 카탈로그를 탐색한다.
+// Task 9-1-4: 카테고리 탭 1단계 — 5대 UI 카테고리 선택 화면을 먼저 깔끔하게 보여준다(리스트 없음).
+// 홈 Quick 그리드와 같은 이미지 자산을 재사용하되, 여기서는 탭 진입 시의 단독 화면이라 더 크게 보여준다.
+function CategoryPickerScreen({ onSelect }: { onSelect: (category: string) => void }) {
+  return (
+    <div className="flex-1 overflow-y-auto p-4">
+      <h2 className="text-lg font-bold text-gray-900">카테고리를 선택해주세요</h2>
+      <p className="mt-1 text-sm text-gray-500">
+        관심 있는 카테고리를 고르면 내 동네 기준으로 장소를 보여드려요.
+      </p>
+      <div className="mt-5 grid grid-cols-2 gap-3">
+        {UI_CATEGORY_FILTER_OPTIONS.map((opt) => (
+          <button
+            key={opt.category}
+            type="button"
+            onClick={() => onSelect(opt.category)}
+            className="flex flex-col items-center gap-2 rounded-2xl border border-gray-200 bg-white p-5 hover:shadow-md hover:border-gray-300 transition-shadow"
+          >
+            <span className="relative w-16 h-16 rounded-full overflow-hidden shrink-0">
+              <Image
+                src={CATEGORY_IMAGE_SRC[opt.category]}
+                alt=""
+                width={64}
+                height={64}
+                className="w-full h-full object-cover"
+              />
+            </span>
+            <span className="text-sm font-semibold text-gray-900">{opt.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// 지역별 도감 그리드 뷰: 카테고리 탭 2단계 — 자치구/카테고리별로 open_spaces 전체 카탈로그를 탐색한다.
 export function RegionGridView() {
-  const { center: userLocation } = useUserLocation();
+  // Task 9-1-4: 헤더에서 설정한 위치(전역 고정, useUserLocation이 LocalStorage로 관리)를
+  // 그대로 받아 이 탭에서도 "설정된 위치 기준 데이터 우선 노출"에 사용한다.
+  const { center: userLocation, sigunguName } = useUserLocation();
   // Task 9-1(2026-08-22): 홈 화면 5대 카테고리 Quick 그리드에서 "/region?category=KIDS_ACTIVITY"
-  // 형태로 넘어온 카테고리를 초기 필터값으로 반영한다(docs/spec.md 2.2 "클릭 시... 즉시 필터링").
+  // 형태로 넘어온 카테고리를 초기값으로 반영한다 — 이 경우 1단계(선택 화면)를 건너뛰고 바로 2단계로 간다.
   const searchParams = useSearchParams();
   const [items, setItems] = useState<NearbyItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [category, setCategory] = useState(() => searchParams.get('category') ?? ALL_CATEGORY);
+  const [category, setCategory] = useState<string | null>(() => searchParams.get('category') ?? null);
   const [district, setDistrict] = useState(ALL_DISTRICT);
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
 
@@ -50,32 +87,60 @@ export function RegionGridView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const categoryItems = useMemo(() => {
+    if (!category) return [];
+    return items.filter((item) => item.category === category);
+  }, [items, category]);
+
   const districtOptions = useMemo(() => {
-    const set = new Set(items.map((item) => extractDistrict(item.address)));
+    const set = new Set(categoryItems.map((item) => extractDistrict(item.address)));
     return Array.from(set).sort((a, b) => a.localeCompare(b, 'ko'));
-  }, [items]);
+  }, [categoryItems]);
 
   const filteredItems = useMemo(() => {
-    let result = items;
-    if (category !== ALL_CATEGORY) {
-      result = result.filter((item) => item.category === category);
-    }
+    let result = categoryItems;
     if (district !== ALL_DISTRICT) {
       result = result.filter((item) => extractDistrict(item.address) === district);
     }
+
+    // Task 9-1-4: 전역 고정 위치(sigunguName) 데이터를 1순위로 정렬한다(제외하지 않음 —
+    // 다른 지역만 있어도 빈 화면 대신 그 지역 결과를 보여준다).
+    if (sigunguName) {
+      result = [...result].sort((a, b) => {
+        const aRank = a.sigungu_name === sigunguName ? 0 : 1;
+        const bRank = b.sigungu_name === sigunguName ? 0 : 1;
+        return aRank - bRank;
+      });
+    }
+
     return result;
-  }, [items, category, district]);
+  }, [categoryItems, district, sigunguName]);
 
-  const resetFilters = () => {
-    setCategory(ALL_CATEGORY);
-    setDistrict(ALL_DISTRICT);
-  };
+  const resetFilters = () => setDistrict(ALL_DISTRICT);
 
-  const isEmptyByFilter = !isLoading && !errorMessage && items.length > 0 && filteredItems.length === 0;
+  const isEmptyByFilter =
+    !isLoading && !errorMessage && categoryItems.length > 0 && filteredItems.length === 0;
+
+  // 1단계: 카테고리를 아직 고르지 않았으면 선택 화면만 보여준다.
+  if (!category) {
+    return <CategoryPickerScreen onSelect={setCategory} />;
+  }
+
+  const categoryMeta = UI_CATEGORY_FILTER_OPTIONS.find((opt) => opt.category === category);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="shrink-0 p-4 border-b border-gray-100 flex flex-col gap-3">
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={() => setCategory(null)}
+            className="text-sm text-gray-500 hover:text-gray-800"
+          >
+            ← 다른 카테고리
+          </button>
+          <span className="text-base font-bold text-gray-900">{categoryMeta?.label ?? category}</span>
+        </div>
         <div className="flex items-center gap-2">
           <label htmlFor="district-select" className="text-sm text-gray-500 shrink-0">
             지역
@@ -94,10 +159,6 @@ export function RegionGridView() {
             ))}
           </select>
         </div>
-        {/* Task 9-1-10: 레거시 3종(PARK/SPORTS/CULTURE) 대신 실제 데이터 대부분이 쓰는
-            5대 UI 카테고리(Decision 008)로 교체 — 홈 Quick 그리드와 동일한 카테고리 체계라
-            "/region?category=KIDS_ACTIVITY" 같은 딥링크도 그대로 맞아떨어진다. */}
-        <CategoryFilter value={category} onChange={setCategory} options={UI_CATEGORY_FILTER_OPTIONS} />
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">

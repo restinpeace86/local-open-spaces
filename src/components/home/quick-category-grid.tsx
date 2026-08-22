@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { UI_CATEGORY_FILTER_OPTIONS } from '@/lib/spaces/category-meta';
 
 // Task 9-1-2: 5대 UI 카테고리 대표 이미지(원형 썸네일) — public/images/categories/*.svg
-const CATEGORY_IMAGE_SRC: Record<string, string> = {
+// Task 9-1-4: 카테고리 탭 1단계 선택 화면(region-grid-view.tsx)에서도 동일 이미지를 재사용한다.
+export const CATEGORY_IMAGE_SRC: Record<string, string> = {
   EXPERIENCE_CLASS: '/images/categories/experience-class.svg',
   OUTDOOR_NATURE: '/images/categories/outdoor-nature.svg',
   EXHIBITION_MUSEUM: '/images/categories/exhibition-museum.svg',

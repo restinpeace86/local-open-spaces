@@ -17,7 +17,9 @@ function todayYYYYMMDD() {
   return `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
 }
 
-async function fetchFestivals({ numOfRows = 20, pageNo = 1 } = {}) {
+const PAGE_SIZE = 100;
+
+async function fetchFestivalsPage(pageNo) {
   // Task 9-1-1에서 venue_name 백필을 위해 재실행하다 발견해 수정한 버그 2건(실측 확인):
   // (1) env.TOUR_API_KEY는 이미 URL-인코딩된 값인데 여기에 encodeURIComponent를 한 번 더 적용해
   //     이중 인코딩되어 SERVICE_KEY_IS_NOT_REGISTERED_ERROR(HTTP 403)가 났다 — 다른 모든 어댑터가
@@ -31,7 +33,7 @@ async function fetchFestivals({ numOfRows = 20, pageNo = 1 } = {}) {
     MobileApp: 'local-open-spaces',
     _type: 'json',
     eventStartDate: todayYYYYMMDD(),
-    numOfRows: String(numOfRows),
+    numOfRows: String(PAGE_SIZE),
     pageNo: String(pageNo),
   });
 
@@ -55,8 +57,30 @@ async function fetchFestivals({ numOfRows = 20, pageNo = 1 } = {}) {
     throw new Error(`TourAPI 에러 응답: ${header?.resultCode} ${header?.resultMsg}`);
   }
 
-  const items = json.response?.body?.items?.item ?? [];
-  return Array.isArray(items) ? items : [items];
+  const rawItems = json.response?.body?.items?.item ?? [];
+  return {
+    items: Array.isArray(rawItems) ? rawItems : [rawItems],
+    totalCount: json.response?.body?.totalCount ?? 0,
+  };
+}
+
+// Task 9-1-4(2026-08-22) 완결성 검증에서 발견: numOfRows=20 단발 호출만 있어 전국 축제 정보
+// 전체(실측 totalCount=244건, eventStartDate=오늘 기준) 중 20건만 수집되고 있었다(페이지네이션
+// 루프 부재). seoul-culture-events.mjs가 Task 8-4에서 겪었던 것과 동일한 유형의 완결성 문제 —
+// 다른 TourAPI 계열 어댑터(kor-tour 등)가 이미 쓰는 것과 동일한 while 루프 패턴으로 통일한다.
+async function fetchAllFestivals() {
+  const items = [];
+  let pageNo = 1;
+  let totalCount = Infinity;
+
+  while ((pageNo - 1) * PAGE_SIZE < totalCount) {
+    const page = await fetchFestivalsPage(pageNo);
+    totalCount = page.totalCount;
+    items.push(...page.items);
+    pageNo += 1;
+  }
+
+  return items;
 }
 
 function mapToEventRow(item) {
@@ -97,7 +121,7 @@ function mapToEventRow(item) {
 
 async function main() {
   console.log(`▶ TourAPI 축제 정보 수집 시작 (dry-run: ${dryRun})`);
-  const items = await fetchFestivals({ numOfRows: 20 });
+  const items = await fetchAllFestivals();
   console.log(`✅ TourAPI 호출 성공: ${items.length}건 수신`);
 
   const rows = items.map(mapToEventRow).filter(Boolean);

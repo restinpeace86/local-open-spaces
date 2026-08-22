@@ -72,6 +72,23 @@ describe('getParentalBadges (SPACE)', () => {
     );
     expect(badges.some((b) => ['parking', 'stroller', 'kids'].includes(b.key))).toBe(false);
   });
+
+  // Task 9-1-4(2026-08-22)에서 발견해 수정한 회귀 테스트: 주차/유모차 뱃지까지 전부 있으면
+  // 4개 제한(.slice(0,4))에 밀려 4대 핵심 뱃지 중 하나인 "실내외"(facility_type)가 잘려나갔다.
+  it('가성비/실내외/아이동반 핵심 뱃지는 주차·유모차 뱃지에 밀려 잘리지 않는다', () => {
+    const badges = getParentalBadges(
+      makeSpace({
+        is_free: true,
+        facility_type: '실내',
+        is_kids_friendly: true,
+        has_parking: true,
+        stroller_accessible: true,
+      })
+    );
+    expect(badges).toContainEqual({ key: 'facility_type', label: '실내' });
+    expect(badges).toContainEqual({ key: 'is_free', label: '🎁 무료' });
+    expect(badges).toContainEqual({ key: 'kids', label: '👶 키즈' });
+  });
 });
 
 function makeEvent(overrides: Partial<NearbyItem> = {}): NearbyItem {

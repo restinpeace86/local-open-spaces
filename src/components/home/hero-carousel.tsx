@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
+import { getParentalBadges } from '@/lib/spaces/parental-badges';
 import { formatVenueLine } from '@/lib/spaces/format';
 
 const AUTOPLAY_INTERVAL_MS = 5000;
@@ -64,6 +65,12 @@ export function HeroCarousel({
         // Task 9-1-3: "[장소명] · [시/군/구]"로 통일 표시(거리 계산 제거).
         const venueLine = formatVenueLine(item.address, item.sigungu_name);
         const todayActive = isTodayActive(item, todayStr);
+        // Task 9-1-4: 4대 핵심 뱃지(가성비/실내외/아이동반/방문시점) 중 가성비·방문시점은 이미
+        // 위 썸네일 오버레이(오늘당일·D-DAY / 무료)로 노출되므로, 여기서는 중복 없이 나머지
+        // 두 개(실내외·아이동반)만 보완해 4개 전부 빠짐없이 드러나게 한다.
+        const supplementBadges = getParentalBadges(item).filter(
+          (badge) => badge.key === 'facility_type' || badge.key === 'kids'
+        );
 
         return (
           // Task 9-1-8: 모바일에서 카드 1장이 화면 좌우 여백(컨테이너 px-4=32px)만큼만 뺀 폭으로
@@ -110,6 +117,18 @@ export function HeroCarousel({
             <div className="p-3">
               <p className="text-sm font-semibold text-gray-900 line-clamp-2">{item.name}</p>
               {venueLine && <p className="text-xs text-gray-400 mt-1 line-clamp-1">{venueLine}</p>}
+              {supplementBadges.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {supplementBadges.map((badge) => (
+                    <span
+                      key={badge.key}
+                      className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600"
+                    >
+                      {badge.label}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </button>
         );
