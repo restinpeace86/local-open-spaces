@@ -81,6 +81,11 @@
     - `formatVenueLine`은 하위호환을 위해 3번째 인자(distanceMeters)를 옵션으로 남겨뒀다 — sigunguName이 있으면 항상 우선하고, 없을 때만(지역 도감 페이지처럼 sigungu_name을 아직 채우지 않은 화면) 거리로 대체한다. 홈 피드 전용 화면(EventCard/HeroCarousel)은 2번째 인자까지만 사용한다.
     - `/region`·`/nearby` 페이지가 쓰는 `get_nearby_spaces_and_events` RPC와 `getAllOpenSpaces`는 이번 작업 범위(지시서에 명시된 get-home-feed.ts/모바일 홈 UX)에 포함되지 않아 그대로 두었다 — 해당 RPC에도 sigungu_name을 노출하려면 별도 마이그레이션/Spec 검토가 필요해 임의로 확장하지 않았다(CLAUDE.md 제7장 제4조 미래 기능 구현 금지).
 
+  - **[추가 개선] 사용자 지시(2026-08-22 후속)**: "매일 새벽 수집 시 최대한 데이터를 채워서 적재하고, 불러올 때는 계산 없이" 원칙을 재확인하고 남은 read-time 계산을 제거했다.
+    - **나이트 배치 확인**: 실제 스케줄된 GitHub Actions 워크플로(`ingest-daily.yml`→`seoul-public-reservation.mjs`/`seoul-culture-events.mjs`, `ingest-monthly.yml`→`city-park.mjs`/`cultural-spaces.mjs`, `ingest-tourapi-daily.yml`→`kor-tour`/`kor-with-tour`/`kor-pet-tour`/`go-camping`)를 전수 확인 — 전부 이미 이번 Task 9-1-3 변경(`buildOpenSpaceRow` 자동 추출 + 이벤트 3종 실제 필드 매핑)에 포함돼 있어, 앞으로의 나이트 배치는 별도 조치 없이 sigungu_name을 계속 채운다.
+    - **남은 read-time 계산 제거**: `/api/home/feed`가 매 요청마다 `extractSigunguName(addressParam)`으로 주소 문자열을 재파싱하던 부분을 제거. 대신 `UserLocation`(LocalStorage) 타입에 `sigungu_name`을 추가하고, 위치를 "설정하는 시점"(`LocationOnboardingModal`의 GPS/키워드 검색 확정 시) 딱 한 번 계산해 저장한다. `useUserLocation`이 이 저장값을 그대로 노출하고, `HomeView`는 `?sigungu=<저장값>`을 그대로 넘기며, `route.ts`는 파라미터를 그대로 읽어 쓸 뿐 어떤 계산도 하지 않는다.
+    - **검증**: `npx tsc --noEmit`/`npm run test`(134/134)/`npm run build` 모두 통과. `npm run dev` 실측으로 `?sigungu=강남구` 요청 시 계산 없이 그대로 반영되어 강남구 항목이 최상단으로 정렬됨을 재확인.
+
 - [x] **[Task 9-1-2] 메인 Quick 카테고리 그리드 텍스트/아이콘 ➔ 대표 이미지 UI 개편** 완료 (2026-08-22)
   - **작업 목표**: 메인 홈 5대 Quick 카테고리 버튼을 직관적인 카테고리 대표 이미지/일러스트 에셋으로 교체
   - **이미지 에셋 소스**: 외부 디자인 에셋을 받을 방법이 없어(작업 지시에 구체적 에셋 파일 첨부 없음), 5대 UI 카테고리 색상(`category-meta.ts` 기존 색상값 그대로 재사용, 임의 변경 없음)을 배경으로 한 경량 SVG 아이콘을 직접 제작했다 — 팔레트(체험·클래스), 나무(야외·자연), 전시대(전시·박물관), 별(공연·축제), 풍선(키즈·액티비티). SVG는 지시서가 명시한 허용 포맷(SVG/WebP/PNG) 중 하나이며, 벡터라 어떤 해상도에서도 깨지지 않고 파일 크기가 각 500바이트 내외로 최소다.

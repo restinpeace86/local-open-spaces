@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { reverseGeocodeAddress, searchPlaceKeyword, PlaceSearchResult } from '@/lib/kakao/geocode';
 import { UserLocation } from '@/lib/location/user-location-storage';
+import { extractSigunguName } from '@/lib/spaces/extract-district';
 
 // spec/common/search.md 2.1: 입력 즉시(Debounce 300ms) 검색
 const DEBOUNCE_MS = 300;
@@ -59,7 +60,7 @@ export function LocationOnboardingModal({
         const lng = position.coords.longitude;
         try {
           const addressName = await reverseGeocodeAddress(lat, lng);
-          onConfirm({ lat, lng, address_name: addressName });
+          onConfirm({ lat, lng, address_name: addressName, sigungu_name: extractSigunguName(addressName) });
         } catch (err) {
           setErrorMessage(err instanceof Error ? err.message : '주소 확인에 실패했습니다.');
         } finally {
@@ -125,7 +126,12 @@ export function LocationOnboardingModal({
                   <button
                     type="button"
                     onClick={() =>
-                      onConfirm({ lat: result.lat, lng: result.lng, address_name: result.addressName })
+                      onConfirm({
+                        lat: result.lat,
+                        lng: result.lng,
+                        address_name: result.addressName,
+                        sigungu_name: extractSigunguName(result.addressName),
+                      })
                     }
                     className="w-full text-left px-3 py-2.5 text-sm text-gray-800 hover:bg-gray-50"
                   >

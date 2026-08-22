@@ -3,6 +3,10 @@ export type UserLocation = {
   lat: number;
   lng: number;
   address_name: string;
+  // Task 9-1-3: 위치를 "설정하는 시점"(온보딩 모달 확정 시) 딱 한 번 계산해 저장한다.
+  // 홈 피드를 불러올 때마다(요청마다) 주소 문자열을 재파싱하지 않기 위함 — 저장된 값을
+  // 그대로 읽어서 쓴다. 위치 확정 이전(구버전 저장값 등)이라 값이 없으면 null.
+  sigungu_name: string | null;
 };
 
 const STORAGE_KEY = 'user_location';
@@ -23,7 +27,12 @@ export function getStoredUserLocation(): UserLocation | null {
       return null;
     }
 
-    return { lat: parsed.lat, lng: parsed.lng, address_name: parsed.address_name };
+    return {
+      lat: parsed.lat,
+      lng: parsed.lng,
+      address_name: parsed.address_name,
+      sigungu_name: typeof parsed.sigungu_name === 'string' ? parsed.sigungu_name : null,
+    };
   } catch {
     return null;
   }

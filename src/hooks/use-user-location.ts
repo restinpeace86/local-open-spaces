@@ -34,6 +34,8 @@ export function useUserLocation() {
   return {
     center: userLocation ? { lat: userLocation.lat, lng: userLocation.lng } : DEFAULT_CENTER,
     addressName: userLocation?.address_name ?? null,
+    // Task 9-1-3: 온보딩 확정 시 딱 한 번 계산해 저장한 값을 그대로 읽는다(재계산 없음).
+    sigunguName: userLocation?.sigungu_name ?? null,
     isOnboardingOpen,
     confirmLocation,
     openOnboarding,
