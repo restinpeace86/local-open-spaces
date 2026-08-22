@@ -207,6 +207,55 @@ describe('getTodayEvents (Task 9-1-3: 거리 계산 없음 / Task 9-1-6: Strict 
     expect(items[0].id).toBe('no-sigungu');
   });
 
+  // 긴급 수리(Hotfix, 2026-08-22) 실측 재현: sigunguName에 쉼표가 섞여 있으면(예: Kakao 검색
+  // 결과 주소의 건물/층수 부기가 남는 경우) PostgREST `.or()` 필터 문자열이 쉼표 때문에 깨져
+  // "failed to parse logic tree" 500 에러가 났고, 그 응답을 그대로 쓰는 클라이언트가 크래시했다.
+  // sigunguName 토큰에서 쉼표/괄호를 제거해 필터 문자열이 절대 깨지지 않아야 한다.
+  it('Task Hotfix: sigunguName에 쉼표가 섞여 있어도 PostgREST 필터가 깨지지 않고 정상 조회된다', async () => {
+    const orCalls: string[] = [];
+    const capturingChainable = (result: { data: unknown[]; error: null }) => {
+      const builder: Record<string, unknown> = {};
+      const self = () => builder;
+      builder.select = self;
+      builder.lte = self;
+      builder.gte = self;
+      builder.gt = self;
+      builder.eq = self;
+      builder.in = self;
+      builder.or = (expr: string) => {
+        orCalls.push(expr);
+        return builder;
+      };
+      builder.order = self;
+      builder.limit = () => Promise.resolve(result);
+      return builder;
+    };
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => capturingChainable({ data: [], error: null }) }),
+    }));
+
+    const { getTodayEvents } = await import('./get-home-feed');
+
+    // 쉼표가 섞인 지역명으로 호출해도 예외 없이 resolve돼야 한다(실측 재현 전에는 이 호출
+    // 자체가 아니라 실제 PostgREST 서버가 500을 반환했지만, 필터 문자열 생성 단계에서부터
+    // 쉼표가 그대로 남으면 안 되므로 여기서는 생성된 .or() 문자열을 직접 검증한다).
+    await expect(getTodayEvents(10, { sigunguName: '성남시, 분당구' })).resolves.toEqual([]);
+
+    // 지역 관련 .or() 호출(예약 조건 .or()는 sigungu_name을 포함하지 않으므로 제외) 중 어디에도
+    // 쉼표가 3개 초과로 들어있어(2개는 정상적인 조건 구분자) 필터가 깨지는 형태가 없어야 한다.
+    const regionFilters = orCalls.filter((expr) => expr.includes('sigungu_name'));
+    expect(regionFilters.length).toBeGreaterThan(0);
+    for (const filter of regionFilters) {
+      // "sigungu_name.ilike.%토큰%,venue_name.ilike.%토큰%" 형태는 쉼표(조건 구분자)가
+      // 정확히 1개여야 정상이다(토큰 자체에 쉼표가 그대로 남아있으면 3개 이상으로 쪼개진다).
+      expect(filter.split(',')).toHaveLength(2);
+      // 토큰에서 쉼표가 제거됐는지 직접 확인(정제 전이었다면 "분당구,"가 그대로 남았을 것).
+      expect(filter).not.toContain('분당구,');
+      expect(filter).not.toContain('성남시,');
+    }
+  });
+
   it('Task 9-1-6: Strict Location-First — 선택 지역만으로 limit이 충족되면 다른 지역은 완전히 배제한다', async () => {
     const selectedRegionRows = Array.from({ length: 3 }, (_, i) =>
       eventRow({ id: `selected-${i}`, title: `분당 행사 ${i}`, sigungu_name: '성남시 분당구' })

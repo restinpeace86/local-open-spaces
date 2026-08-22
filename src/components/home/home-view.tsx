@@ -76,7 +76,14 @@ function useFreeFeed(region: { sigunguName: string | null; lat?: number; lng?: n
 
     fetch(`/api/home/free-feed?${params.toString()}`)
       .then((res) => res.json())
-      .then((data: { freeFeed: NearbyItem[] }) => setFreeFeed(data.freeFeed))
+      // 긴급 수리(2026-08-22): API가 500과 함께 { error: "..." }를 돌려줘도 이 then은 그대로
+      // 실행된다(fetch는 HTTP 상태와 무관하게 응답 바디만 있으면 resolve됨) — data.freeFeed가
+      // 배열이 아니면(undefined 포함) setFreeFeed에 넘기지 않아야 이후 filter() 호출이 깨지지
+      // 않는다(실측 재현: 서버가 에러를 던지면 freeFeed가 undefined가 돼 화면이 통째로 크래시했음).
+      .then((data: { freeFeed?: NearbyItem[] }) => {
+        if (Array.isArray(data.freeFeed)) setFreeFeed(data.freeFeed);
+        else loadedKeyRef.current = null;
+      })
       .catch(() => {
         // 실패 시 다음 시도(재스크롤/탭 재선택)에서 다시 요청할 수 있도록 로드 키를 되돌린다.
         loadedKeyRef.current = null;
@@ -108,7 +115,9 @@ function useThemeSpotFeed(region: { sigunguName: string | null; lat?: number; ln
 
       fetch(`/api/home/theme-feed?${params.toString()}`)
         .then((res) => res.json())
-        .then((data: { items: NearbyItem[] }) => setItems(data.items ?? []))
+        // 긴급 수리(2026-08-22): API 에러 응답({ error: "..." })에는 items가 없으므로 빈
+        // 배열로 안전하게 폴백한다(items가 배열이 아닌 값으로 세팅되지 않도록).
+        .then((data: { items?: NearbyItem[] }) => setItems(Array.isArray(data.items) ? data.items : []))
         .catch(() => setItems([]))
         .finally(() => setIsLoading(false));
     },
@@ -152,8 +161,13 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
     let cancelled = false;
     fetch(`/api/home/feed?sigungu=${encodeURIComponent(sigunguName ?? '')}&lat=${center.lat}&lng=${center.lng}`)
       .then((res) => res.json())
-      .then((data: { heroEvents: NearbyItem[] }) => {
-        if (!cancelled) setHeroEvents(data.heroEvents);
+      // 긴급 수리(2026-08-22) 실측 재현: API가 500과 함께 { error: "..." }를 반환해도 이 then은
+      // 그대로 실행되므로(HTTP 상태와 무관하게 body만 있으면 resolve), heroEvents가 배열인지
+      // 확인 없이 그대로 setHeroEvents에 넘기면 undefined가 들어가 이후 heroEvents.slice(...)가
+      // 던지며 홈 화면이 통째로 크래시했다(실제 재현: sigungu 쿼리에 콤마가 섞이면 항상 발생).
+      .then((data: { heroEvents?: NearbyItem[] }) => {
+        if (!cancelled && Array.isArray(data.heroEvents)) setHeroEvents(data.heroEvents);
+        // 배열이 아니면(에러 응답 등) 기존 피드를 그대로 유지한다(Fail-Safe).
       })
       .catch(() => {
         // 재조회 실패 시 기존 피드를 그대로 유지한다(Fail-Safe — 화면이 깨지지 않게).

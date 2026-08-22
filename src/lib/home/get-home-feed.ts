@@ -203,8 +203,25 @@ function sortByDistanceIfKnown(items: NearbyItem[], region: HomeRegion): NearbyI
 // 단독(예: "춘천시") 형태다(schema-mapper.mjs의 extractSigunguName과 동일 규칙) — 공백 뒤
 // 마지막 토큰을 가장 구체적인("분당구") 토큰으로, 공백 앞 첫 토큰을 상위 시("성남시")로 본다
 // (토큰이 하나뿐이면 그 자체가 이미 가장 구체적인 값이라 상위 토큰은 없음).
+// 긴급 수리(Hotfix, 2026-08-22) 실측으로 재현한 버그: sigungu_name에 쉼표/괄호가 하나라도
+// 섞여 있으면(예: Kakao 키워드 검색 결과 주소에 건물/층수 부기가 붙어 "OO동, OO빌딩"처럼
+// 콤마가 남는 경우) 아래 regionOrFilter가 만드는 PostgREST `.or()` 필터 문자열이 깨져
+// "failed to parse logic tree" 500 에러가 나고, 그 응답을 그대로 받는 홈 화면 클라이언트가
+// 통째로 크래시했다(실측 재현: sigungu 쿼리 파라미터에 콤마 하나만 넣어도 /api/home/feed가
+// 항상 500을 반환함). PostgREST `.or()` 문법에서 쉼표는 조건 구분자, 괄호는 in() 등에 쓰이는
+// 예약 문자라 토큰에서 미리 제거한다 — ILIKE 부분 문자열 검색 의미상 이런 특수문자가 없어도
+// 매칭에 지장이 없다.
+function sanitizeRegionToken(token: string): string {
+  return token.replace(/[,()]/g, '').trim();
+}
+
 function tokensOf(sigunguName: string): { specific: string; broad: string | null } {
-  const tokens = sigunguName.trim().split(/\s+/);
+  const tokens = sigunguName
+    .trim()
+    .split(/\s+/)
+    .map(sanitizeRegionToken)
+    .filter(Boolean);
+  if (tokens.length === 0) return { specific: '', broad: null };
   const specific = tokens[tokens.length - 1];
   const broad = tokens.length > 1 ? tokens[0] : null;
   return { specific, broad };
@@ -248,8 +265,11 @@ function selectRegionFirst(items: NearbyItem[], region: HomeRegion, limit: numbe
 
 // Task 9-4-4: sigungu_name과 주소 텍스트(events는 venue_name, open_spaces는 address) 양쪽에
 // ILIKE 부분 문자열 매칭을 거는 OR 필터 문자열을 만든다(PostgREST `.or()` 문법).
+// 방어적으로 한 번 더 sanitizeRegionToken을 거친다(이 함수를 다른 경로에서 sanitize 없이
+// 직접 호출하더라도 필터 문자열이 깨지지 않도록).
 function regionOrFilter(token: string, textColumn: string): string {
-  return `sigungu_name.ilike.%${token}%,${textColumn}.ilike.%${token}%`;
+  const safeToken = sanitizeRegionToken(token);
+  return `sigungu_name.ilike.%${safeToken}%,${textColumn}.ilike.%${safeToken}%`;
 }
 
 // Task 9-1-4(2026-08-22) 실측에서 발견한 버그: open_spaces/events 후보군을 "최신순 500건"으로만
