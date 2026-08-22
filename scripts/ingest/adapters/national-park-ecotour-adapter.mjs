@@ -1,10 +1,16 @@
 // NATIONAL_PARK_ECOTOUR: 국립공원공단_국립공원 생태관광정보 DB (odcloud.kr)
 // data.go.kr 승인 계정으로 실제 호출 확인함 (Swagger: infuser.odcloud.kr/oas/docs?namespace=3068312/v1).
-// 원본 응답에 좌표가 없어(서비스 지역이 "강원도 속초"처럼 텍스트로만 제공됨) Kakao 지오코딩으로 보완한다.
+// 원본 응답에 좌표가 없어(서비스 지역이 "강원도 속초"처럼 텍스트로만 제공됨) 지오코딩으로 보완한다.
+// Task 9-2-1(2026-08-22): KAKAO_REST_API_KEY가 계속 미설정이라 이 어댑터만 유일하게 막혀
+// 있었다(실측 확인) — VWORLD_API_KEY는 이미 다른 어댑터에서 정상 동작 중이라(예:
+// cultural-facility-summary-adapter.mjs), 다른 코드는 그대로 두고 지오코더만 vworld로
+// 교체한다. "강원도 속초"/"강원도 원주시 소초면 학곡리 900번지" 등 실제 원본 값으로 직접
+// 호출해 VWorld가 정상 좌표를 반환함을 확인했다(일부 "OO국립공원"처럼 도로명/지번이 아닌
+// 값은 VWorld가 못 찾을 수 있으나, 기존과 동일하게 그 항목만 건너뛴다 — 추측 좌표 생성 없음).
 import crypto from 'crypto';
 import { BaseCollectorAdapter } from './base-collector-adapter.mjs';
 import { buildOpenSpaceRow, UI_CATEGORY } from './lib/schema-mapper.mjs';
-import { geocode, hasKakaoRestApiKey } from './lib/kakao-geocoder.mjs';
+import { geocode, hasVworldApiKey } from './lib/vworld-geocoder.mjs';
 import { deriveIsFreeFallback } from '../lib/ai-tagging.mjs';
 
 const BASE_URL =
@@ -19,9 +25,9 @@ export class NationalParkEcotourAdapter extends BaseCollectorAdapter {
     if (!this.apiKey) {
       throw new Error('PUBLIC_DATA_API_KEY 환경변수가 설정되지 않았습니다.');
     }
-    if (!hasKakaoRestApiKey()) {
+    if (!hasVworldApiKey()) {
       throw new Error(
-        'KAKAO_REST_API_KEY 환경변수가 설정되지 않았습니다. 원본 데이터에 좌표가 없어 지오코딩이 필수입니다. Kakao Developers > 앱 키 > REST API 키를 확인해 .env.local에 추가하세요.'
+        'VWORLD_API_KEY 환경변수가 설정되지 않았습니다. 원본 데이터에 좌표가 없어 지오코딩이 필수입니다. Vworld 오픈API(www.vworld.kr) 신청 후 .env.local에 추가하세요.'
       );
     }
   }
