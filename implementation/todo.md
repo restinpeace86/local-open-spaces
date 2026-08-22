@@ -177,3 +177,21 @@
   - **검증**:
     - `npx tsc --noEmit` / `npm run test`(전체 146/146, 신규 3건 포함) / `npm run build`: 모두 통과.
     - `npm run dev` 기동 후 실측: 좌표 없이 `?sigungu=강남구`만 요청하면 기존처럼 `distance_meters: -1`(정렬 미적용) 유지 확인. 좌표를 함께(`?sigungu=강남구&lat=37.5275&lng=127.0459`) 보내면 실제 응답이 2m → 2,280m → 2,889m → 3,658m → 3,894m 순으로 정확히 가까운 순 정렬됨을 확인.
+
+- [x] **[Task 9-1-7~9-1-10 통합] 하단 탭 고정·GPS Fallback·중복제거 재확인 + 당일 TOP10/D-Day 뱃지/더보기·카테고리 칩 전면 개편** 완료 (2026-08-22)
+
+  - **Task 9-1-7/9-1-8 재확인**: `git pull` 후 코드를 직접 확인한 결과 세 항목 모두 이전 세션(위 Task 9-1-7/9-1-8 항목)에서 이미 구현·커밋 완료 상태였다 — `BottomTabs`는 루트 레이아웃에 공통 고정, `/nearby` 바텀시트는 `bottom-16`으로 겹침 해소, GPS 2단계 Fallback(`openManualPicker`)과 Hero Carousel `w-[calc(100vw-32px)] snap-center`, `normalizeTitleKey` 기반 Fuzzy 중복 제거 전부 코드에 그대로 존재함을 재검증(중복 재구현 없음, 제5장 제4조 기존 구조 우선).
+
+  - **[Task 9-1-9] 당일 이벤트 TOP 10 + 더보기 + D-Day 뱃지**:
+    - `get-home-feed.ts`의 `getTodayEvents`: 당일(start_date~end_date에 오늘 포함) 이벤트를 1차 전량 추출 → 거리순 정렬(좌표를 알 때만) → Strict Location-First(Task 9-1-6)로 선택 지역 우선 채움. 이 결과가 `HERO_MIN_COUNT`(10)에 못 미치면, 신설한 `getUpcomingDeadlineFill()`이 "이번 주 시작 예정"(오늘 초과 ~ 이번 주 토요일, 한국 주간 관례) + 예약 마감 안 지난 이벤트를 `reservation_end_date` 오름차순(마감임박 우선)으로 조회해 부족분만 채운다. 마감임박 채움에는 거리 재정렬을 적용하지 않는다(그 콘텐츠의 우선순위는 "곧 마감"이지 "가까움"이 아니므로).
+    - `hero-carousel.tsx`: 카드 뱃지를 `item.start_date<=오늘<=item.end_date` 여부로 분기 — 당일 진행 중이면 "⚡ 오늘 당일 입장 가능"(파랑), 마감임박 채움 항목이면 "🔥 D-DAY 마감임박"(빨강)을 표시.
+    - **"더보기" 메커니즘 전면 교체**: 직전 세션에서 만든 "카루셀 아래 버튼 + 그리드 확장" 방식을 이번 지시서의 명시적 요구("마지막 슬라이드로 카드 노출 + 지도/목록 연동")로 대체했다. `HeroCarousel`에 `moreHref` prop을 추가해 후보가 10개를 넘으면 마지막 슬라이드에 "오늘 진행 중인 전체 행사 보기" CTA 카드(Link)를 렌더링한다. 클릭하면 `/nearby?filter=TODAY_WEEKEND`로 이동 — `MapExplorer`가 이미 갖고 있던 `TODAY_WEEKEND`(⚡ 오늘/주말) Quick 필터를 `?q=` 초기값 반영과 동일한 패턴으로 URL에서 읽어 처음부터 활성화하도록 확장했다(추측성 신규 필터 개념을 만들지 않고 기존 것을 재사용).
+    - **검증**: `npx tsc --noEmit` / `npm run test`(전체 158/158, 신규 다수 포함) / `npm run build` 모두 통과. `npm run dev` 실측 — 실제 데이터가 당일 기준 전국적으로 30건 이상 풍부해 마감임박 채움 분기는 라이브 환경에서 직접 관찰되진 않았지만(정상 — 데이터가 부족한 극소 지역이 없다는 뜻), 홈 SSR HTML에서 "⚡ 오늘 당일 입장 가능" 10건과 "오늘 진행 중인 전체 행사 보기" CTA 1건을 확인. 마감임박 채움 로직 자체는 목(mock) 데이터 기반 유닛 테스트(당일 2건 → 마감임박 8건으로 정확히 10건 채움, 이미 10건 이상이면 마감임박 조회 자체를 하지 않음)로 별도 검증.
+
+  - **[Task 9-1-10] 카테고리 탭 5대 UI 카테고리 칩 전면 개편**:
+    - **실측 확인(추측 없음)**: `/region` 페이지가 쓰던 `SPACE_CATEGORY_FILTER_OPTIONS`(PARK/SPORTS/CULTURE 레거시 3종)는 실제 DB 조회 결과 `open_spaces` 전체 26,346건 중 단 1,375건(PARK 300 + CULTURE 1,075)만 해당하고, 나머지 24,971건(94.8%)은 5대 UI 카테고리(OUTDOOR_NATURE 16,795 / KIDS_ACTIVITY 5,450 / EXHIBITION_MUSEUM 2,726 / CULTURE 1,075)에 속해 있어 기존 칩으로는 데이터 대부분을 필터링할 수 없는 상태였음을 확인했다.
+    - `region-grid-view.tsx`: `SPACE_CATEGORY_FILTER_OPTIONS` → `UI_CATEGORY_FILTER_OPTIONS`(홈 Quick 그리드와 동일한 5대 카테고리)로 교체. 기존 `?category=` URL 파라미터 초기값 반영 로직과 칩 클릭 시 즉시 필터링 로직은 이미 범용적으로 구현돼 있어(값 비교만 하는 구조) 코드 변경 없이 그대로 5대 카테고리에 맞아떨어졌다.
+    - `region-grid-view.test.tsx`(신규 3건): 레거시 칩 미노출 확인, 칩 클릭 시 즉시 필터링 확인, `?category=KIDS_ACTIVITY` 진입 시 칩 active 상태(배경색 반영) + 데이터 필터링 동시 확인.
+    - **검증**: `npm run dev` 실측으로 `/region` SSR HTML에 5대 카테고리(체험·클래스/야외·자연/전시·박물관/공연·축제/키즈·액티비티) 칩이 모두 노출됨을 확인.
+
+  - **특이 사항**: 레거시 카테고리로만 분류된 기존 1,375건(PARK/CULTURE)은 칩 필터 대상에서 빠지지만 "전체" 보기에서는 여전히 노출된다 — 5대 카테고리 체계 확립 이전 초기 어댑터의 잔존 데이터로 추정되며, 이번 지시서 범위(칩 교체)를 넘어서는 데이터 재분류 작업이라 별도로 손대지 않았다(CLAUDE.md 제7장 제4조).

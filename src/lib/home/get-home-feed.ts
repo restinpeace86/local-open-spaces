@@ -204,10 +204,57 @@ function selectRegionFirst(items: NearbyItem[], region: HomeRegion, limit: numbe
   return [...matching, ...others].slice(0, limit);
 }
 
+// Task 9-1-9: "이번 주 시작 예정" 범위 계산 — 한국 주간(일~토) 관례로 오늘부터 이번 주 토요일까지.
+function endOfThisWeek(reference: Date): string {
+  const day = reference.getDay(); // 0=일 ... 6=토
+  const end = new Date(reference);
+  end.setDate(reference.getDate() + (6 - day));
+  return end.toISOString().slice(0, 10);
+}
+
+// Task 9-1-9: 당일 진행 이벤트가 부족할 때(HERO_MIN_COUNT 미만) 채우는 "이번 주 시작 예정
+// 마감임박" 행사. 당일 이벤트와 달리 정렬 기준이 "거리"가 아니라 "마감임박"(예약 마감이 가장
+// 가까운 순, 없으면 시작일이 가장 가까운 순)이다 — reservation_end_date 오름차순으로 DB에서
+// 이미 그 순서로 가져오므로, selectRegionFirst가 지역만 우선시키고 이 순서는 그대로 보존한다
+// (거리 재정렬은 하지 않음 — 이 콘텐츠의 우선순위는 "곧 마감"이지 "가까움"이 아니기 때문).
+async function getUpcomingDeadlineFill(
+  count: number,
+  region: HomeRegion,
+  excludeIds: Set<string>
+): Promise<NearbyItem[]> {
+  if (count <= 0) return [];
+
+  const supabase = await createClient();
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const weekEnd = endOfThisWeek(now);
+  const nowIso = now.toISOString();
+
+  const { data, error } = await supabase
+    .from('events')
+    .select(EVENT_COLUMNS)
+    .gt('start_date', today)
+    .lte('start_date', weekEnd)
+    .eq('is_active', true)
+    .or(`is_reservation_required.eq.false,reservation_end_date.gte.${nowIso},reservation_end_date.is.null`)
+    .order('reservation_end_date', { ascending: true, nullsFirst: false })
+    .order('start_date', { ascending: true })
+    .limit(200);
+
+  if (error) throw new Error(`이번 주 마감임박 행사 조회 실패: ${error.message}`);
+
+  const items = dedupeAndMergeFree((data ?? []).map(toEventItem)).filter((item) => !excludeIds.has(item.id));
+  return selectRegionFirst(items, region, count);
+}
+
 // docs/spec.md 2.2 ①: "당일 진행 중인 행사/이벤트 중 추천 5~10개 동적 페칭"
 // docs/spec.md 1: "사전 예약 마감건은 제외하고, 오늘/주말 당일 즉시 방문 가능한 정보를 우선 추천"
 // Task 9-1-6: Hero Carousel은 Strict Location-First — 선택 지역 당일 이벤트로 limit이 충족되면
 // 다른 지역 이벤트는 완전히 배제한다(부족할 때만 다른 지역으로 최소 보충).
+// Task 9-1-9: 당일 진행 이벤트를 1차로 전량 추출해 가까운 순으로 채우되, 그마저도 HERO_MIN_COUNT
+// (10개)에 못 미치면 "이번 주 시작 예정 마감임박" 행사로 나머지를 채운다.
+const HERO_MIN_COUNT = 10;
+
 export async function getTodayEvents(
   limit = 10,
   region: HomeRegion = DEFAULT_HOME_REGION
@@ -231,7 +278,14 @@ export async function getTodayEvents(
 
   const items = dedupeAndMergeFree((data ?? []).map(toEventItem));
   const ordered = sortByDistanceIfKnown(items, region);
-  return selectRegionFirst(ordered, region, limit);
+  const primary = selectRegionFirst(ordered, region, limit);
+
+  const minTarget = Math.min(HERO_MIN_COUNT, limit);
+  if (primary.length >= minTarget) return primary;
+
+  const excludeIds = new Set(primary.map((item) => item.id));
+  const fill = await getUpcomingDeadlineFill(minTarget - primary.length, region, excludeIds);
+  return [...primary, ...fill];
 }
 
 // docs/spec.md 2.2 ③: "🎁 0원의 행복 — 지출 부담 없는 완전 무료 공공장소/행사 카드"

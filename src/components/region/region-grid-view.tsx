@@ -8,7 +8,7 @@ import { EmptyState } from '@/components/map/empty-state';
 import { DetailModal } from '@/components/map/detail-modal';
 import { getAllOpenSpaces } from '@/lib/spaces/get-all-spaces';
 import { extractDistrict } from '@/lib/spaces/extract-district';
-import { SPACE_CATEGORY_FILTER_OPTIONS } from '@/lib/spaces/category-meta';
+import { UI_CATEGORY_FILTER_OPTIONS } from '@/lib/spaces/category-meta';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { useUserLocation } from '@/hooks/use-user-location';
 
@@ -94,7 +94,10 @@ export function RegionGridView() {
             ))}
           </select>
         </div>
-        <CategoryFilter value={category} onChange={setCategory} options={SPACE_CATEGORY_FILTER_OPTIONS} />
+        {/* Task 9-1-10: 레거시 3종(PARK/SPORTS/CULTURE) 대신 실제 데이터 대부분이 쓰는
+            5대 UI 카테고리(Decision 008)로 교체 — 홈 Quick 그리드와 동일한 카테고리 체계라
+            "/region?category=KIDS_ACTIVITY" 같은 딥링크도 그대로 맞아떨어진다. */}
+        <CategoryFilter value={category} onChange={setCategory} options={UI_CATEGORY_FILTER_OPTIONS} />
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">

@@ -10,11 +10,23 @@ function makeChainable(result: { data: unknown[]; error: null }) {
   builder.select = self;
   builder.lte = self;
   builder.gte = self;
+  builder.gt = self;
   builder.eq = self;
   builder.or = self;
   builder.order = self;
   builder.limit = () => Promise.resolve(result);
   return builder;
+}
+
+// Task 9-1-9: getTodayEvents가 부족분을 채울 때 events 테이블을 두 번(당일 조회 → 이번 주
+// 마감임박 조회) 조회한다. 호출 순서대로 서로 다른 결과를 돌려주는 스텁이 필요하다.
+function makeSequentialFrom(dataSequence: unknown[][]) {
+  let callIndex = 0;
+  return () => {
+    const data = dataSequence[callIndex] ?? [];
+    callIndex += 1;
+    return makeChainable({ data, error: null });
+  };
 }
 
 function eventRow(overrides: Record<string, unknown> = {}) {
@@ -308,5 +320,59 @@ describe('위치 설정/재설정 시 가까운 순 정렬', () => {
 
     expect(items[0].id).toBe('event-near');
     expect(items[1].id).toBe('space-far');
+  });
+});
+
+// Task 9-1-9: 당일 진행 이벤트가 10개 미만이면 "이번 주 시작 예정 마감임박" 행사로 10개까지 채운다.
+describe('getTodayEvents: 당일 데이터 부족 시 이번 주 마감임박으로 채움 (Task 9-1-9)', () => {
+  afterEach(() => {
+    vi.doUnmock('@/lib/supabase/server');
+    vi.resetModules();
+  });
+
+  it('당일 이벤트가 2건뿐이면 이번 주 마감임박 이벤트로 나머지 8건을 채워 총 10건을 만든다', async () => {
+    const todayRows = [
+      eventRow({ id: 'today-1', title: '오늘 행사 1' }),
+      eventRow({ id: 'today-2', title: '오늘 행사 2' }),
+    ];
+    const upcomingRows = Array.from({ length: 8 }, (_, i) =>
+      eventRow({
+        id: `upcoming-${i}`,
+        title: `다음 주 행사 ${i}`,
+        start_date: '2026-08-25',
+        end_date: '2026-08-27',
+        reservation_end_date: `2026-08-2${i % 5}T00:00:00Z`,
+      })
+    );
+
+    // getTodayEvents가 createClient()를 두 번(당일 조회 → 마감임박 보충 조회) 호출하므로,
+    // 순번 카운터를 mock 팩토리 바깥에서 한 번만 만들어 두 호출 사이에 상태가 유지되게 한다.
+    const sharedFrom = makeSequentialFrom([todayRows, upcomingRows]);
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: sharedFrom }),
+    }));
+
+    const { getTodayEvents } = await import('./get-home-feed');
+    const items = await getTodayEvents(10);
+
+    expect(items).toHaveLength(10);
+    expect(items.slice(0, 2).map((i) => i.id)).toEqual(['today-1', 'today-2']);
+    expect(items.slice(2).every((i) => i.id.startsWith('upcoming-'))).toBe(true);
+  });
+
+  it('당일 이벤트가 이미 10건 이상이면 이번 주 마감임박 조회를 하지 않는다', async () => {
+    const todayRows = Array.from({ length: 10 }, (_, i) => eventRow({ id: `today-${i}`, title: `오늘 행사 ${i}` }));
+    const fromSpy = vi.fn(makeSequentialFrom([todayRows, []]));
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: fromSpy }),
+    }));
+
+    const { getTodayEvents } = await import('./get-home-feed');
+    const items = await getTodayEvents(10);
+
+    expect(items).toHaveLength(10);
+    // events 테이블은 "당일" 조회 1번만 호출되고, 마감임박 보충 조회는 발생하지 않는다.
+    expect(fromSpy).toHaveBeenCalledTimes(1);
   });
 });

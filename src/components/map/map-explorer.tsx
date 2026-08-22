@@ -17,8 +17,13 @@ import { LocationHeader } from '@/components/map/location-header';
 import { LocationOnboardingModal } from '@/components/map/location-onboarding-modal';
 import { RecenterButton } from '@/components/map/recenter-button';
 import { getNearbySpacesAndEvents, NearbyItem } from '@/lib/spaces/get-nearby';
-import { matchesQuickFilters, QuickFilterKey } from '@/lib/spaces/quick-filters';
+import { matchesQuickFilters, QuickFilterKey, QUICK_FILTER_OPTIONS } from '@/lib/spaces/quick-filters';
 import { useUserLocation } from '@/hooks/use-user-location';
+
+// Task 9-1-9: 유효한 QuickFilterKey인지 확인(URL에서 임의 값이 들어와도 안전하게 무시).
+function isQuickFilterKey(value: string): value is QuickFilterKey {
+  return QUICK_FILTER_OPTIONS.some((opt) => opt.key === value);
+}
 
 // spec/map/spatial-search.md 3.1: 반경 내 최대 200개 마커만 우선 렌더링
 const MARKER_LIMIT = 200;
@@ -33,12 +38,17 @@ export function MapExplorer() {
     closeOnboarding,
   } = useUserLocation();
   // Task 9-1(2026-08-22): 홈 화면 검색바에서 "/nearby?q=..."로 넘어온 검색어를 초기값으로 반영한다.
+  // Task 9-1-9: 홈 Hero Carousel의 "전체 보기" CTA에서 "/nearby?filter=TODAY_WEEKEND"로 넘어온
+  // Quick 필터를 초기 활성값으로 반영한다(오늘 진행 중인 전체 행사 보기 연동).
   const searchParams = useSearchParams();
   const [radius, setRadius] = useState(5000);
   const [showSpaces, setShowSpaces] = useState(false);
   const [keyword, setKeyword] = useState(() => searchParams.get('q') ?? '');
   const [category, setCategory] = useState(ALL_CATEGORY);
-  const [activeQuickFilters, setActiveQuickFilters] = useState<QuickFilterKey[]>([]);
+  const [activeQuickFilters, setActiveQuickFilters] = useState<QuickFilterKey[]>(() => {
+    const filterParam = searchParams.get('filter');
+    return filterParam && isQuickFilterKey(filterParam) ? [filterParam] : [];
+  });
   const [items, setItems] = useState<NearbyItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
   const [isSheetExpanded, setIsSheetExpanded] = useState(false);

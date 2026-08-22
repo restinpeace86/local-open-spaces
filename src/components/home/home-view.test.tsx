@@ -199,26 +199,32 @@ describe('HomeView', () => {
     vi.unstubAllGlobals();
   });
 
-  // 사용자 피드백(2026-08-22): 메인 카드(Hero Carousel)와 같은 조건인데 개수 제한(10개) 때문에
-  // 잘린 항목을 "+더보기"로 이어서 볼 수 있어야 한다.
-  it('Hero Carousel 항목이 10개를 넘으면 "+더보기" 버튼으로 나머지를 펼쳐 보여준다', () => {
+  // Task 9-1-9: 메인 카드(Hero Carousel)는 처음 10개만 슬라이드로 보여주고, 11번째 이상은
+  // 마지막 슬라이드의 "전체 보기" CTA 카드(지도 화면 연동)로 대체한다(더 이상 아래에 펼치지 않음).
+  it('Hero Carousel 항목이 10개를 넘으면 마지막 슬라이드로 "전체 보기" CTA 카드를 보여준다', () => {
     const heroEvents = Array.from({ length: 12 }, (_, i) =>
       makeEventItem({ id: `hero-${i}`, name: `오늘의 행사 ${i}` })
     );
     const feed: HomeFeed = { heroEvents, freeFeed: [] };
     render(<HomeView initialFeed={feed} />);
 
-    // 처음엔 10개까지만 보이고, 11/12번째는 아직 없다.
     expect(screen.getByText('오늘의 행사 0')).toBeInTheDocument();
     expect(screen.getByText('오늘의 행사 9')).toBeInTheDocument();
+    // 11/12번째는 카드로 보이지 않고, 대신 "전체 보기" CTA만 노출된다.
     expect(screen.queryByText('오늘의 행사 10')).not.toBeInTheDocument();
+    expect(screen.queryByText('오늘의 행사 11')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('+ 더보기 (2건)'));
+    const link = screen.getByText('오늘 진행 중인 전체 행사 보기').closest('a');
+    expect(link).toHaveAttribute('href', '/nearby?filter=TODAY_WEEKEND');
+  });
 
-    expect(screen.getByText('오늘의 행사 10')).toBeInTheDocument();
-    expect(screen.getByText('오늘의 행사 11')).toBeInTheDocument();
+  it('Hero Carousel 항목이 10개 이하면 "전체 보기" CTA 카드를 보여주지 않는다', () => {
+    const heroEvents = Array.from({ length: 5 }, (_, i) =>
+      makeEventItem({ id: `hero-${i}`, name: `오늘의 행사 ${i}` })
+    );
+    const feed: HomeFeed = { heroEvents, freeFeed: [] };
+    render(<HomeView initialFeed={feed} />);
 
-    fireEvent.click(screen.getByText('접기'));
-    expect(screen.queryByText('오늘의 행사 10')).not.toBeInTheDocument();
+    expect(screen.queryByText('오늘 진행 중인 전체 행사 보기')).not.toBeInTheDocument();
   });
 });
