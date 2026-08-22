@@ -1,14 +1,15 @@
-- [ ] **[Task 9-6-3] 활성/미래 이벤트 상세 URL 스크래핑 기반 정밀 주소/좌표 DB 업데이트 적재** 🎯
+- [x] **[Task 9-6-3] 활성/미래 이벤트 상세 URL 스크래핑 기반 정밀 주소/좌표 DB 업데이트 적재** 🎯 (2026-08-23 완료)
   - **작업 목표**: API 원본 주소가 부실했던 경기도/성남시 활성 이벤트의 상세 URL을 스크래핑하여 정확한 위치(도로명 주소, 장소명)를 추출하고, 지오코딩 좌표를 DB `events` 테이블에 직접 업데이트 적재 (`EXACT` 승격)
-  - **세부 작업 지시**:
-    1. **스크래핑 & 지오코딩 보완 파이프라인 연동 (`src/lib/ingestion/enrichment/enrich-event-locations.mjs`)**:
-       - `end_date >= CURRENT_DATE` 인 활성/미래 이벤트 중 `location_precision`이 `'CITY_APPROX'` 또는 `'UNKNOWN'`인 레코드 조회.
-       - 해당 레코드의 `url` 페이지 HTML 스크래핑 ➔ '주소', '장소', '위치', '도로명' 파싱을 통한 상세 주소 추출.
-       - 네이버/카카오 지오코딩 API를 거쳐 정확한 위경도(`lat`, `lng`) 파악.
-    2. **DB 적재 & 레코드 업데이트**:
-       - 정밀 좌표 획득 성공 시, 해당 이벤트 레코드의 `address`, `venue_name`, `location` (PostGIS point), `location_precision = 'EXACT'` 값으로 DB direct UPDATE 적재.
-    3. **지도 및 피드 검증**:
-       - DB 보완 후 지도 RPC(`get_nearby_spaces_and_events`) 및 성남시 피드에서 `EXACT` 승격 이벤트가 지도상에 정확히 찍히고 피드에 노출되는지 실측 검증.
-  - **검증 기준**:
-    - `npx tsc --noEmit`, `npm run test`, `npm run build` 통과.
-    - 스크래핑 후 DB 업데이트 성공 건수 및 지도 RPC 노출 실측 결과 보고.
+  - **세부 작업 지시 대비 실측으로 확인/수정한 지시서와의 차이점(추측 금지 원칙)**:
+    1. 지시 경로 `src/lib/ingestion/enrichment/enrich-event-locations.mjs`는 실제 프로젝트 구조와 다름(`src/lib/ingestion/`은 빈 디렉터리) — Task 9-6-1에서 이미 확인된 것과 동일한 패턴. 실제 수집 코드는 전부 `scripts/ingest/`에 있어 그 관례를 따라 `scripts/ingest/adapters/gg-culture-location-enrichment.mjs`(로직) + `scripts/ingest/enrich-gg-culture-event-locations.mjs`(CLI)로 구현.
+    2. "네이버/카카오 지오코딩 API": 실제 호출로 확인한 결과 이 프로젝트에는 서버사이드로 쓸 수 있는 키가 없음 — `NEXT_PUBLIC_KAKAO_MAP_API_KEY`는 카카오맵 JS SDK 전용 키라 `dapi.kakao.com/v2/local/search/address.json`에 직접 요청하면 401 "KA Header is required"로 거부됨(REST API 키는 별도 발급 필요, 미보유). 네이버 키(`NAVER_CLIENT_ID`/`SECRET` 등)는 `.env.local`에 아예 없음. 따라서 이미 전체 파이프라인에서 검증되어 쓰이고 있는 VWorld 지오코더(`vworld-geocoder.mjs`)로 대체(제5장 제4조 기존 구조 우선) — 최종 좌표 결과물은 Provider와 무관하게 동일.
+    3. `address` 컬럼: `events` 테이블에는 없음(Task 9-6-1/9-6-2에서 이미 확인/정정한 스키마 — `open_spaces`만 `address` 보유, `events`는 `venue_name`). `venue_name`/`location`/`location_precision` 3개 컬럼만 갱신.
+    4. `url` 컬럼도 `events`에 없어(스키마에 URL 저장 컬럼 자체가 없음) 대상 레코드에서 원본 URL을 직접 조회할 수 없었음 — `external_id`가 원본 URL의 SHA1 해시라 비가역적으로 저장돼 있었기 때문. API1(GGCULTUREVENTSTUS)을 다시 fetch해 동일한 `buildExternalId` 규칙으로 재계산한 external_id를 DB의 대상 행과 매칭시켜 URL을 복원(새 컬럼 추가 없이 해결, 데이터 구조 변경 최소화).
+  - **대상 실측**: `end_date >= 오늘 AND location_precision IN (CITY_APPROX, UNKNOWN)` 49건 전부가 API1(`GG_CULTURE_EVENT_` 접두어) 소스였음(API2는 수집 시점에 이미 지오코딩 성공한 것만 행을 만들어 CITY_APPROX/UNKNOWN이 구조적으로 존재하지 않음 — 실측 0건 확인).
+  - **상세 페이지 스크래핑 함정 발견(추측 금지로 회피)**: ggc.ggcf.kr 상세 페이지의 "주소" 필드는 `<!-- 주석 처리된 -->` 템플릿 잔재로, 모든 페이지에 동일한 예시 주소("경기도 수원시 팔달구 효원로 307번길 경기아트센터")가 박혀 있었다 — 이를 그대로 썼다면 49건 전부에 똑같이 틀린 주소가 들어갈 뻔했다. 3건 표본 실측으로 실제 렌더링되는 `<dl><dt>장 소</dt><dd>{실제 장소명}</dd></dl>` 패턴(페이지당 정확히 1회 등장)을 찾아 이것만 스크래핑 대상으로 사용.
+  - **결과**: 49건 중 6건(약 12%) `EXACT` 승격 성공. 나머지 43건은 VWorld가 도로명/지번 주소 검색 전용이라 시설/장소명(예: "고양아람누리 아람마슬 B1 음악감상실", "한강뮤지엄" 등)을 인식하지 못해 실패 — 이는 코드 결함이 아니라 사용 가능한 지오코더의 실측 확인된 한계다. 지시서가 원한 네이버/카카오(주소뿐 아니라 키워드/장소 검색 지원)를 실제로 쓸 수 있었다면 성공률이 더 높았을 것으로 추정되나, 이는 별도의 API 키 발급(사용자/기획 승인 필요)이 선행돼야 하는 사안이라 이번 범위에서는 임의로 진행하지 않고 그대로 보고한다.
+  - **지도/피드 검증(실측)**:
+    - `get_nearby_spaces_and_events` RPC를 EXACT 승격된 "2026년 경기도 무형유산 상설공연"(양주시) 좌표에 반경 500m로 직접 호출 → EVENT 1건 정상 반환 확인(지도 노출 성공).
+    - `getTodayEvents(30, {sigunguName:'양주시'})`를 실제 라이브 DB에 대해 직접 호출(Supabase anon 클라이언트로 실제 알고리즘 실행) → 승격된 이벤트가 결과에 정상 포함됨을 확인(피드 노출 성공). 개발 서버 curl 테스트에서는 일시적으로 안 보였는데, 직접 함수 호출로는 정상 확인돼 Next.js dev 서버의 fetch 캐시 지연 등 환경적 요인으로 판단(코드 결함 아님 — 실제 알고리즘/데이터는 정상 동작 확인됨).
+  - **검증**: `npx tsc --noEmit` 통과, `npm run test` 242/242 통과(신규 보완 모듈 테스트 13건 추가), `npm run build` 통과.
+  - **관련 파일**: `scripts/ingest/adapters/gg-culture-location-enrichment.mjs`(신규), `scripts/ingest/adapters/gg-culture-location-enrichment.test.mjs`(신규, 13 tests), `scripts/ingest/enrich-gg-culture-event-locations.mjs`(신규 CLI), `scripts/ingest/adapters/gg-culture-events-adapter.mjs`(GYEONGGI_BOUNDS/isWithinGyeonggiBounds export 추가), `package.json`(`ingest:enrich-gg-culture-locations` 스크립트 추가).

@@ -66,9 +66,11 @@ const GEOCODE_MAX_ATTEMPTS = 3;
 // 뻔한 사례라 더 위험하다. 이 어댑터는 "경기데이터드림"(경기도 전용) 소스이므로, 반환된 좌표가
 // 경기도 대략적 범위를 크게 벗어나면(여유 있게 잡은 바운딩 박스) 신뢰할 수 없는 매칭으로 보고
 // 좌표를 지어내는 대신 건너뛴다.
-const GYEONGGI_BOUNDS = { minLng: 126.0, maxLng: 128.0, minLat: 36.7, maxLat: 38.5 };
+// Task 9-6-3: enrich-gg-culture-event-locations.mjs(상세 페이지 스크래핑 지오코딩)에서도
+// 동일한 오매칭 방지 로직이 필요해 export한다.
+export const GYEONGGI_BOUNDS = { minLng: 126.0, maxLng: 128.0, minLat: 36.7, maxLat: 38.5 };
 
-function isWithinGyeonggiBounds({ lng, lat }) {
+export function isWithinGyeonggiBounds({ lng, lat }) {
   return (
     lng >= GYEONGGI_BOUNDS.minLng &&
     lng <= GYEONGGI_BOUNDS.maxLng &&
