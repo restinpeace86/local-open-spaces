@@ -12,6 +12,7 @@ import { UI_CATEGORY_FILTER_OPTIONS } from '@/lib/spaces/category-meta';
 import { CATEGORY_IMAGE_SRC } from '@/components/home/quick-category-grid';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { useUserLocation } from '@/hooks/use-user-location';
+import { classifyThemeSpot, isThemeSpotKey, THEME_SPOT_OPTIONS } from '@/lib/theme-spots';
 
 const ALL_DISTRICT = 'ALL';
 
@@ -99,6 +100,29 @@ function CategoryPickerScreen({ onSelect }: { onSelect: (selection: string) => v
           <span className="text-sm font-semibold text-gray-900">{ETC_META.label.replace(/^🎈\s*/, '')}</span>
         </button>
       </div>
+
+      {/* Task 9-5-1(2026-08-22): 목적/장소별 테마 스팟 그룹화 — 5대 카테고리와는 다른 축("무엇을
+          하고 싶은지")의 큐레이션이라 별도 섹션으로 분리해 배치한다. */}
+      <h2 className="mt-8 text-lg font-bold text-gray-900">🏞️ 목적별 추천 스팟</h2>
+      <p className="mt-1 text-sm text-gray-500">뭘 하고 싶은지로 골라도 찾을 수 있어요.</p>
+      <div className="mt-5 grid grid-cols-2 gap-3">
+        {THEME_SPOT_OPTIONS.map((theme) => (
+          <button
+            key={theme.key}
+            type="button"
+            onClick={() => onSelect(theme.key)}
+            className="flex flex-col items-center gap-2 rounded-2xl border border-gray-200 bg-white p-5 hover:shadow-md hover:border-gray-300 transition-shadow"
+          >
+            <span
+              aria-hidden
+              className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center text-3xl shrink-0"
+            >
+              {theme.emoji}
+            </span>
+            <span className="text-sm font-semibold text-gray-900">{theme.label}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -148,10 +172,12 @@ export function RegionGridView() {
 
   // Task 9-1-10: selection이 5대 UI 카테고리 값이면 category로, 'FREE'/'ACCESSIBLE'이면
   // 실제 존재하는 is_free/stroller_accessible 필드로 걸러낸다(카테고리와 동급 취급).
+  // Task 9-5-1: 6대 목적별 테마 키면 classifyThemeSpot(source_type+키워드)으로 걸러낸다.
   const selectionItems = useMemo(() => {
     if (!selection) return [];
     if (selection === 'FREE') return items.filter((item) => item.is_free === true);
     if (selection === 'ACCESSIBLE') return items.filter((item) => item.stroller_accessible === true);
+    if (isThemeSpotKey(selection)) return items.filter((item) => classifyThemeSpot(item) === selection);
     return items.filter((item) => item.category === selection);
   }, [items, selection]);
 
@@ -216,8 +242,12 @@ export function RegionGridView() {
   const specialFilterMeta = isSpecialFilterKey(selection)
     ? SPECIAL_FILTERS.find((f) => f.key === selection)
     : undefined;
+  const themeMeta = isThemeSpotKey(selection) ? THEME_SPOT_OPTIONS.find((t) => t.key === selection) : undefined;
   const selectionLabel =
-    categoryMeta?.label ?? specialFilterMeta?.label ?? (selection === ETC_CATEGORY ? ETC_META.label : selection);
+    categoryMeta?.label ??
+    specialFilterMeta?.label ??
+    (themeMeta ? `${themeMeta.emoji} ${themeMeta.label}` : undefined) ??
+    (selection === ETC_CATEGORY ? ETC_META.label : selection);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">

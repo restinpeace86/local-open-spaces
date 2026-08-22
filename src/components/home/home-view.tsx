@@ -9,6 +9,7 @@ import { HomeSubTabs, HomeSubTab } from '@/components/home/home-sub-tabs';
 import { HeroCarousel } from '@/components/home/hero-carousel';
 import { QuickCategoryGrid } from '@/components/home/quick-category-grid';
 import { FreeFeedSkeleton } from '@/components/home/free-feed-skeleton';
+import { THEME_SPOT_OPTIONS, ThemeSpotKey } from '@/lib/theme-spots';
 import { SpaceGridCard } from '@/components/region/space-grid-card';
 import { EventCard } from '@/components/cards/event-card';
 import { EmptyState } from '@/components/map/empty-state';
@@ -86,6 +87,38 @@ function useFreeFeed(region: { sigunguName: string | null; lat?: number; lng?: n
   return { freeFeed, ensureLoaded };
 }
 
+// Task 9-5-1(2026-08-22): "🏞️ 목적별 추천 스팟" 칩 — 가성비 행복과 달리 기본으로 선택된 테마가
+// 없어(6개 중 임의로 하나를 고를 근거가 없음) 스크롤 진입이 아니라 칩을 직접 눌렀을 때만
+// /api/home/theme-feed를 호출한다. 테마를 바꿔 누르면 그 즉시 새로 페칭한다.
+function useThemeSpotFeed(region: { sigunguName: string | null; lat?: number; lng?: number }) {
+  const [selectedTheme, setSelectedTheme] = useState<ThemeSpotKey | null>(null);
+  const [items, setItems] = useState<NearbyItem[] | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const selectTheme = useCallback(
+    (theme: ThemeSpotKey) => {
+      setSelectedTheme(theme);
+      setItems(null);
+      setIsLoading(true);
+
+      const params = new URLSearchParams({ theme });
+      if (region.sigunguName) params.set('sigungu', region.sigunguName);
+      if (typeof region.lat === 'number') params.set('lat', String(region.lat));
+      if (typeof region.lng === 'number') params.set('lng', String(region.lng));
+
+      fetch(`/api/home/theme-feed?${params.toString()}`)
+        .then((res) => res.json())
+        .then((data: { items: NearbyItem[] }) => setItems(data.items ?? []))
+        .catch(() => setItems([]))
+        .finally(() => setIsLoading(false));
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [region.sigunguName, region.lat, region.lng]
+  );
+
+  return { selectedTheme, items, isLoading, selectTheme };
+}
+
 export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[] }) {
   const { center, addressName, sigunguName, isOnboardingOpen, confirmLocation, openOnboarding, closeOnboarding } =
     useUserLocation();
@@ -97,6 +130,12 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
   const region = { sigunguName, lat: addressName ? center.lat : undefined, lng: addressName ? center.lng : undefined };
   const { freeFeed, ensureLoaded } = useFreeFeed(region);
   const { ref: freeFeedSectionRef, isInView: isFreeFeedSectionInView } = useInView<HTMLDivElement>();
+  const {
+    selectedTheme,
+    items: themeSpotItems,
+    isLoading: isThemeSpotLoading,
+    selectTheme,
+  } = useThemeSpotFeed(region);
 
   // Task 9-1-1: Server Component는 기본 지역(성남시 분당구)으로만 렌더링할 수 있으므로,
   // 유저가 실제로 위치를 설정한 경우(addressName이 채워짐)에만 그 지역으로 재조회한다.
@@ -159,6 +198,44 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
             </section>
 
             <QuickCategoryGrid />
+
+            {/* Task 9-5-1(2026-08-22): 목적/장소별 테마 스팟 그룹화 — 기본 선택 테마가 없어
+                (6개 중 임의로 하나를 고를 근거가 없음) 칩을 직접 누를 때만 지연 페칭한다. */}
+            <section aria-label="목적별 추천 스팟" className="px-4">
+              <h2 className="text-base font-bold text-gray-900 mb-3">🏞️ 목적별 추천 스팟</h2>
+              <div className="flex gap-1.5 overflow-x-auto pb-2">
+                {THEME_SPOT_OPTIONS.map((theme) => {
+                  const isActive = selectedTheme === theme.key;
+                  return (
+                    <button
+                      key={theme.key}
+                      type="button"
+                      onClick={() => selectTheme(theme.key)}
+                      className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                        isActive
+                          ? 'bg-gray-900 text-white'
+                          : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {theme.emoji} {theme.label}
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedTheme === null ? (
+                <p className="text-sm text-gray-400 mt-3">테마를 선택하면 관련 스팟을 보여드려요.</p>
+              ) : isThemeSpotLoading || themeSpotItems === null ? (
+                <FreeFeedSkeleton />
+              ) : themeSpotItems.length > 0 ? (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-3">
+                  {themeSpotItems.map((item) => (
+                    <FeedCard key={item.id} item={item} onSelect={setSelectedItem} />
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400 mt-3">조건에 맞는 스팟을 찾는 중입니다.</p>
+              )}
+            </section>
 
             {/* Task 9-3-1: 이 섹션이 화면에 처음 들어올 때 useInView가 감지해 가성비 행복
                 피드를 지연 페칭한다 — 그 전/로딩 중에는 Skeleton UI로 레이아웃을 미리 확보한다. */}

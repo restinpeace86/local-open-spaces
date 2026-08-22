@@ -17,6 +17,10 @@ declare namespace kakao.maps {
     getLevel(): number;
     getBounds(): LatLngBounds;
     setBounds(bounds: LatLngBounds): void;
+    // Task 9-5-1(2026-08-22): 미니맵(mini-map.tsx)에서 콤팩트 위젯 모드일 때 확대/이동
+    // 상호작용을 꺼두기 위해 추가 — 카카오 맵 JS SDK v2 공식 API에 실제로 존재하는 메서드다.
+    setDraggable(draggable: boolean): void;
+    setZoomable(zoomable: boolean): void;
   }
 
   class LatLngBounds {

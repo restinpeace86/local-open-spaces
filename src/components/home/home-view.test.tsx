@@ -7,10 +7,6 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: () => {} }),
 }));
 
-vi.mock('@/lib/kakao/directions-url', () => ({
-  buildKakaoDirectionsUrl: () => 'https://map.kakao.com/',
-}));
-
 // Task 9-3-1(2026-08-22): jsdom에는 IntersectionObserver가 없어, "가성비 행복" 섹션의 지연
 // 페칭을 테스트에서 직접 통제하기 위한 가짜 구현. 콜백을 저장해뒀다가 테스트에서 원하는
 // 시점에 "화면에 들어옴"을 시뮬레이션한다(observe()를 실제로 호출하지 않으면 데이터는
@@ -42,10 +38,13 @@ function simulateFreeFeedInView() {
   });
 }
 
-function stubFetchFreeFeed(freeFeed: NearbyItem[]) {
+function stubFetchFreeFeed(freeFeed: NearbyItem[], themeItems: NearbyItem[] = []) {
   const fetchMock = vi.fn((url: string) => {
     if (url.startsWith('/api/home/free-feed')) {
       return Promise.resolve({ json: () => Promise.resolve({ freeFeed }) } as Response);
+    }
+    if (url.startsWith('/api/home/theme-feed')) {
+      return Promise.resolve({ json: () => Promise.resolve({ items: themeItems }) } as Response);
     }
     return Promise.resolve({ json: () => Promise.resolve({ heroEvents: [] }) } as Response);
   });
@@ -280,6 +279,45 @@ describe('HomeView', () => {
     render(<HomeView initialHeroEvents={heroEvents} />);
 
     expect(screen.queryByText('오늘 진행 중인 전체 행사 보기')).not.toBeInTheDocument();
+  });
+
+  // Task 9-5-1(2026-08-22): 목적별 테마 스팟 칩 검증
+  describe('목적별 추천 스팟 (Task 9-5-1)', () => {
+    it('기본 상태에서는 어떤 테마도 선택돼 있지 않아 안내 문구만 보여준다', () => {
+      render(<HomeView initialHeroEvents={[]} />);
+      expect(screen.getByText('🏞️ 목적별 추천 스팟')).toBeInTheDocument();
+      expect(screen.getByText('테마를 선택하면 관련 스팟을 보여드려요.')).toBeInTheDocument();
+    });
+
+    it('테마 칩을 클릭하면 /api/home/theme-feed를 호출해 해당 테마 스팟을 보여준다', async () => {
+      const fetchMock = stubFetchFreeFeed([], [makeSpaceItem({ id: 'pool-1', name: '분당 수영장' })]);
+      render(<HomeView initialHeroEvents={[]} />);
+
+      fireEvent.click(screen.getByText('🏊 물놀이·수영장'));
+
+      expect(await screen.findByText('분당 수영장')).toBeInTheDocument();
+      expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/home/theme-feed?theme=SWIMMING'));
+    });
+
+    it('다른 테마 칩을 다시 누르면 그 테마로 새로 페칭한다', async () => {
+      const items: Record<string, NearbyItem[]> = {
+        SWIMMING: [makeSpaceItem({ id: 'pool-1', name: '분당 수영장' })],
+        PARK_WALK: [makeSpaceItem({ id: 'park-1', name: '분당중앙공원' })],
+      };
+      const fetchMock = vi.fn((url: string) => {
+        const theme = new URL(url, 'http://localhost').searchParams.get('theme') ?? '';
+        return Promise.resolve({ json: () => Promise.resolve({ items: items[theme] ?? [] }) } as Response);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(<HomeView initialHeroEvents={[]} />);
+
+      fireEvent.click(screen.getByText('🏊 물놀이·수영장'));
+      expect(await screen.findByText('분당 수영장')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText('🌳 공원·산책'));
+      expect(await screen.findByText('분당중앙공원')).toBeInTheDocument();
+      expect(screen.queryByText('분당 수영장')).not.toBeInTheDocument();
+    });
   });
 
   // Task 9-1-11: "0원의 행복" → "가성비 행복" 서브탭 개편 검증

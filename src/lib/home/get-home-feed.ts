@@ -1,6 +1,12 @@
 import { createClient } from '@/lib/supabase/server';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { haversineDistanceMeters } from '@/lib/geo/haversine';
+import {
+  AMBIGUOUS_SPACE_SOURCE_TYPES,
+  buildThemeKeywordFilter,
+  confidentSourceTypesFor,
+  ThemeSpotKey,
+} from '@/lib/theme-spots';
 
 // Task 9-1(2026-08-22): 홈 화면 Hero Carousel/큐레이션 피드용 서버 사이드 조회 로직.
 // /api/home/feed 라우트와 홈 페이지 Server Component가 이 함수들을 공유해서 쓴다
@@ -386,8 +392,10 @@ export async function getTodayEvents(
   return [...primary, ...fill];
 }
 
+// Task 9-5-1(2026-08-22): source_type을 추가했다 — 목적별 테마 스팟 분류(src/lib/theme-spots.ts)에
+// 쓰인다(events 테이블에는 이 컬럼 자체가 없어 EVENT_COLUMNS에는 추가하지 않음, 실측 확인).
 const SPACE_COLUMNS =
-  'id, name, category, address, location, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, sigungu_name';
+  'id, name, category, address, location, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, sigungu_name, source_type';
 
 type SpaceRow = {
   id: string;
@@ -404,7 +412,40 @@ type SpaceRow = {
   facility_type: string | null;
   target_age_group: string | null;
   sigungu_name: string | null;
+  source_type: string | null;
 };
+
+function toSpaceItem(row: SpaceRow): NearbyItem {
+  const { lng, lat } = extractCoords(row.location);
+  return {
+    id: row.id,
+    name: row.name,
+    category: row.category,
+    distance_meters: -1,
+    item_type: 'SPACE' as const,
+    lng,
+    lat,
+    address: row.address,
+    sigungu_name: row.sigungu_name,
+    thumbnail_url: null,
+    start_date: null,
+    end_date: null,
+    reservation_start_date: null,
+    reservation_end_date: null,
+    reservation_url: null,
+    is_reservation_required: null,
+    operating_hours: row.operating_hours,
+    is_free: row.is_free,
+    info_url: row.info_url,
+    is_kids_friendly: row.is_kids_friendly,
+    has_parking: row.has_parking,
+    stroller_accessible: row.stroller_accessible,
+    facility_type: row.facility_type,
+    target_age_group: row.target_age_group,
+    booking_status: null,
+    source_type: row.source_type,
+  };
+}
 
 // docs/spec.md 2.2 ③: "🎁 0원의 행복 — 지출 부담 없는 완전 무료 공공장소/행사 카드"
 export async function getFreeFeed(
@@ -430,40 +471,85 @@ export async function getFreeFeed(
     fetchRegionFirstRows<EventRow>(buildEventsQuery, region, limit),
   ]);
 
-  const spaceItems: NearbyItem[] = spaceRows.map((row) => {
-    const { lng, lat } = extractCoords(row.location);
-    return {
-      id: row.id,
-      name: row.name,
-      category: row.category,
-      distance_meters: -1,
-      item_type: 'SPACE' as const,
-      lng,
-      lat,
-      address: row.address,
-      sigungu_name: row.sigungu_name,
-      thumbnail_url: null,
-      start_date: null,
-      end_date: null,
-      reservation_start_date: null,
-      reservation_end_date: null,
-      reservation_url: null,
-      is_reservation_required: null,
-      operating_hours: row.operating_hours,
-      is_free: row.is_free,
-      info_url: row.info_url,
-      is_kids_friendly: row.is_kids_friendly,
-      has_parking: row.has_parking,
-      stroller_accessible: row.stroller_accessible,
-      facility_type: row.facility_type,
-      target_age_group: row.target_age_group,
-      booking_status: null,
-    };
-  });
+  const merged = dedupeAndMergeFree([...spaceRows.map(toSpaceItem), ...eventRows.map(toEventItem)]);
+  const ordered = sortByDistanceIfKnown(merged, region);
+  return ordered.sort(byRegionPriority(region)).slice(0, limit);
+}
 
-  const eventItems: NearbyItem[] = eventRows.map(toEventItem);
+// Task 9-5-1: 목적별 테마 스팟(🏊 물놀이·수영장 등) 통합 큐레이션 — 상시 공간(open_spaces)과
+// "현재 개장 중인"(오늘이 진행 기간에 포함된) 시즌 행사(events, 예: 여름 탄천 물놀이장)를 함께
+// 묶어 피딩한다.
+// 실측에서 발견한 성능 문제(위 confidentSourceTypesFor/AMBIGUOUS_SPACE_SOURCE_TYPES 주석 참고):
+// open_spaces는 "source_type IN 확정 소스" 쿼리와 "혼합 소스 한정 키워드 ILIKE" 쿼리를
+// 분리해 각각 인덱스를 태운다(하나로 합치면 옵티마이저가 인덱스를 못 써 4초+ 순차 스캔,
+// 지역 필터까지 더하면 타임아웃 — 실측 확인). 지역 우선순위는 SQL 필터가 아니라(같은 이유로
+// 성능 문제 재발 방지) 이미 로드된 결과에 byRegionPriority로 정렬만 적용한다(제외하지 않음).
+export async function getThemeSpotFeed(
+  theme: ThemeSpotKey,
+  limit = 20,
+  region: HomeRegion = DEFAULT_HOME_REGION
+): Promise<NearbyItem[]> {
+  const supabase = await createClient();
+  const today = new Date().toISOString().slice(0, 10);
 
-  const merged = dedupeAndMergeFree([...spaceItems, ...eventItems]);
+  const confidentSourceTypes = confidentSourceTypesFor(theme);
+  const spaceKeywordFilter = buildThemeKeywordFilter(theme, 'address');
+  const eventKeywordFilter = buildThemeKeywordFilter(theme, 'venue_name');
+
+  const spaceQueries: PromiseLike<{ data: SpaceRow[] | null; error: { message: string } | null }>[] = [];
+  if (confidentSourceTypes.length > 0) {
+    // Task 9-5-1 실측에서 추가로 발견한 문제: LOCALDATA_PLAYGROUND처럼 매칭 건수가 매우 큰
+    // (전체의 60%가 넘는) source_type은, source_type+created_at 복합 인덱스가 있어도 PostgREST
+    // 연결(anon 롤, 커넥션 풀러의 일반화된 실행 계획)에서는 `ORDER BY created_at DESC LIMIT 500`
+    // 조합이 여전히 타임아웃을 일으켰다(관리 API로 직접 돌린 EXPLAIN ANALYZE는 빨랐지만 실제
+    // PostgREST 경로에서는 재현됨 — raw SQL 결과만 믿지 않고 실제 API 엔드포인트로 재검증함).
+    // ORDER BY를 빼고(어차피 최종 노출 순서는 이후 byRegionPriority가 다시 정렬함) limit도
+    // 100으로 낮추니 안정적으로 빨라졌다(실측: 82,373건 소스에서 250~500ms).
+    spaceQueries.push(
+      supabase.from('open_spaces').select(SPACE_COLUMNS).in('source_type', confidentSourceTypes).limit(100)
+    );
+  }
+  if (spaceKeywordFilter) {
+    spaceQueries.push(
+      supabase
+        .from('open_spaces')
+        .select(SPACE_COLUMNS)
+        .in('source_type', AMBIGUOUS_SPACE_SOURCE_TYPES)
+        .or(spaceKeywordFilter)
+        .order('created_at', { ascending: false })
+        .limit(500)
+    );
+  }
+
+  const eventQuery = supabase
+    .from('events')
+    .select(EVENT_COLUMNS)
+    .eq('is_active', true)
+    .lte('start_date', today)
+    .gte('end_date', today)
+    .or(eventKeywordFilter)
+    .order('start_date', { ascending: false })
+    .limit(500);
+
+  const [spaceResults, eventResult] = await Promise.all([Promise.all(spaceQueries), eventQuery]);
+
+  for (const result of spaceResults) {
+    if (result.error) throw new Error(result.error.message);
+  }
+  if (eventResult.error) throw new Error(eventResult.error.message);
+
+  const seenSpaceIds = new Set<string>();
+  const spaceRows: SpaceRow[] = [];
+  for (const result of spaceResults) {
+    for (const row of result.data ?? []) {
+      if (!seenSpaceIds.has(row.id)) {
+        seenSpaceIds.add(row.id);
+        spaceRows.push(row);
+      }
+    }
+  }
+
+  const merged = dedupeAndMergeFree([...spaceRows.map(toSpaceItem), ...(eventResult.data ?? []).map(toEventItem)]);
   const ordered = sortByDistanceIfKnown(merged, region);
   return ordered.sort(byRegionPriority(region)).slice(0, limit);
 }

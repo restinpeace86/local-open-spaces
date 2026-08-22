@@ -1,15 +1,7 @@
-- [ ] **[Task 9-5-1] 목적별 테마 스팟 그룹화 피드 & 인앱 미니맵/네이버 지도 길안내 통합 연동** 🏞️
-  - **작업 목표**: 목적별 테마 스팟 그룹화 큐레이션을 구축하고, 상세 화면 내 인앱 미니맵 및 출발지('내 위치') 자동 매핑 네이버 지도 길안내 연동
-  - **세부 작업 지시**:
-    1. **목적/장소별 테마 스팟 그룹화 (`src/lib/theme-spots.ts`)**:
-       - `source_type` 및 장소/행사명 키워드를 파싱하여 6대 목적별 테마 스팟 구축 (🏊 물놀이·수영장, 🛝 놀이터·키즈, 🌳 공원·산책, 🌲 숲·휴양림, 🎡 유원지·액티비티, 🏛️ 문화·체육).
-       - 상시 공간(`open_spaces`)과 현재 개장 중인 시즌 이벤트(`events`, 예: 여름 탄천 물놀이장 등)를 통합 묶음 피딩.
-       - 메인 홈 및 카테고리 화면에 "🏞️ 목적별 추천 스팟" 칩 및 큐레이션 피드 배치.
-    2. **인앱 미니맵(Mini Map) & 크게보기 모달 구현**:
-       - 상세 페이지 위치 영역에 콤팩트 인앱 미니맵 위젯을 배치하고, `🔍 크게보기` 버튼 터치 시 풀스크린 지도 모달 제공.
-    3. **네이버 지도 길안내 출발지('내 위치') 자동 매핑 수리 (`src/lib/navigation.ts`)**:
-       - '🚗 네이버 지도로 길안내' 터치 시 유저의 현재 GPS/전역 위치(`slat`, `slng`)를 출발지('내 위치')로 자동 수집.
-       - 네이버 지도 열릴 때 출발지('내 위치') ➔ 목적지가 100% 자동 매핑되어 경로 탐색이 바로 실행되도록 연결.
-  - **검증 기준**:
-    - `npx tsc --noEmit`, `npm run test`, `npm run build` 통과.
-    - 테마 칩 클릭 시 해당 목적 데이터 통합 피딩 확인, 인앱 미니맵 노출 및 네이버 지도 길안내 시 출발지('내 위치') 자동 입력 여부 실측 검증.
+- [x] **[Task 9-5-1] 목적별 테마 스팟 그룹화 피드 & 인앱 미니맵/네이버 지도 길안내 통합 연동** 🏞️ (2026-08-22 완료)
+  - **완료 내역**:
+    1. **목적/장소별 테마 스팟 그룹화**: 신규 `src/lib/theme-spots.ts`에 6대 테마(🏊 물놀이·수영장, 🛝 놀이터·키즈, 🌳 공원·산책, 🌲 숲·휴양림, 🎡 유원지·액티비티, 🏛️ 문화·체육)를 `source_type`(확정적인 소스, 실측 확인)과 이름 키워드(혼합 소스 KOR_TOUR_API_V4/GG_EVENTS/PUBLIC_FACILITY_OPEN용)로 분류. `get-home-feed.ts`의 신규 `getThemeSpotFeed()`가 상시 공간(open_spaces)과 오늘 개장 중인 시즌 행사(events)를 함께 조회해 통합 피딩(신규 `/api/home/theme-feed` 라우트). 메인 홈(`home-view.tsx`)과 카테고리 화면(`region-grid-view.tsx`) 양쪽에 "🏞️ 목적별 추천 스팟" 칩/타일 배치. `NearbyItem`에 `source_type?` 필드를 추가해(get-home-feed.ts/get-all-spaces.ts 경로만, `/nearby`의 RPC 경로는 이 Task 범위 밖이라 손대지 않음) 분류 근거로 사용.
+       - **실측으로 발견하고 해결한 성능 문제**: `source_type IN (...) OR name ILIKE '%키워드%'`를 하나의 조건절에 섞으면 옵티마이저가 인덱스를 못 써 4초 이상 걸리고, 지역 필터까지 더하면 타임아웃이 났다 — 확정 소스 쿼리와 혼합 소스 한정 키워드 쿼리를 분리하고 `idx_open_spaces_source_type_created_at` 복합 인덱스를 추가해 해결(마이그레이션: `scripts/migrations/2026-08-22-theme-spot-source-type-index.sql`). 추가로 `LOCALDATA_PLAYGROUND`(전체의 63%)처럼 매칭 건수가 극단적으로 큰 소스는 관리 API로 돌린 EXPLAIN ANALYZE는 빨랐지만 실제 PostgREST(anon 롤) 경로에서는 여전히 타임아웃이 나는 것을 라이브 API 직접 호출로 재현·확인함 — `ORDER BY` 제거 및 `limit`을 500→100으로 낮춰 안정적으로 해결(6개 테마 전체 라이브 재검증: 모두 400~650ms 내 성공).
+    2. **인앱 미니맵 & 크게보기 모달**: 신규 `src/components/map/mini-map.tsx`(단일 마커 콤팩트 Kakao 지도, 기존 지도 탐색용 `KakaoMapView`와 분리된 경량 버전)와 `map-preview-modal.tsx`(풀스크린)를 `detail-modal.tsx`의 위치 영역에 배치. `src/types/kakao.d.ts`에 `setDraggable`/`setZoomable` 타입 선언 추가(콤팩트 모드에서 확대/이동 비활성화).
+    3. **네이버 지도 길안내 출발지 자동 매핑**: 신규 `src/lib/navigation.ts`의 `buildNaverMapDirectionsUrl()`이 네이버 공식 URL Scheme 문서(WebSearch/WebFetch로 직접 확인 — `guide.ncloud-docs.com/docs/maps-url-scheme`)를 따라 `slat`/`slng`/`sname`(출발지, 유저 전역 위치)와 `dlat`/`dlng`/`dname`(목적지)을 `nmap://route/car?...`에 채운다. `detail-modal.tsx`가 `useUserLocation()`의 좌표를 그대로 출발지로 연결. **한계 명시**: 네이버 공식 문서에도 PC/앱 미설치 환경용 대체 웹 URL이 없어(직접 확인) 임의로 만들지 않음 — 모바일 앱 설치 환경에서는 그대로 동작.
+  - **검증 기준 결과**: `npx tsc --noEmit`, `npm run test`(24 files/210 tests 전체 통과 — `theme-spots.test.ts`/`navigation.test.ts`/`detail-modal.test.tsx` 신규 작성, `home-view.test.tsx`/`region-grid-view.test.tsx`/`get-home-feed.test.ts` 확장), `npm run build` 모두 통과. `npm run dev` 기동 후 6개 테마 칩 전체를 실제 `/api/home/theme-feed` 라이브 호출로 재검증(각 20건 반환, 모두 타임아웃 없이 성공), 네이버 길안내 링크(`slat`/`slng` 자동 채움)와 미니맵/크게보기 버튼도 실측 확인.

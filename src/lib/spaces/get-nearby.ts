@@ -28,6 +28,9 @@ export type NearbyItem = {
   // Task 9-1-3: 홈 피드 전용(반경/거리 계산 제거 후 위치 표기용) — get_nearby_spaces_and_events
   // RPC 결과에는 아직 없어 optional로 둔다(있으면 사용, 없으면 formatVenueLine이 거리로 대체).
   sigungu_name?: string | null;
+  // Task 9-5-1(2026-08-22): 목적별 테마 스팟 분류(src/lib/theme-spots.ts)용 — get_nearby_spaces_and_events
+  // RPC(이 Task 범위 밖) 결과에는 없어 optional. 홈/카테고리 화면 경로만 채워 넣는다.
+  source_type?: string | null;
 };
 
 export async function getNearbySpacesAndEvents(

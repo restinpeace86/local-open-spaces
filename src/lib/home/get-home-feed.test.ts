@@ -12,6 +12,7 @@ function makeChainable(result: { data: unknown[]; error: null }) {
   builder.gte = self;
   builder.gt = self;
   builder.eq = self;
+  builder.in = self;
   builder.or = self;
   builder.order = self;
   builder.limit = () => Promise.resolve(result);
@@ -29,15 +30,19 @@ function makeSequentialFrom(dataSequence: unknown[][]) {
   };
 }
 
-// Task 9-1-4/9-4-4: fetchRegionFirstRows가 실제로 지역 조건을 SQL 단에서 필터링해 후보군을
-// 확보하는지(단순히 최신순 500건을 한 번 가져와 뒤섞이는 게 아닌지) 검증하려면, .eq()/.or()에
-// 넘어온 조건을 실제로 반영해 데이터를 걸러주는 좀 더 정교한 스텁이 필요하다.
-// Task 9-4-4: get-home-feed.ts가 이제 sigungu_name 정확 일치(.eq) 대신 sigungu_name/주소
-// 텍스트에 대한 ILIKE 퍼지 매칭(.or('col.ilike.%token%,col2.ilike.%token%'))을 쓰므로,
-// PostgREST의 `column.ilike.%value%` 필터 문자열을 파싱해 실제로 부분 문자열 매칭하듯 걸러준다.
+// Task 9-1-4/9-4-4/9-5-1: fetchRegionFirstRows가 실제로 지역/테마 조건을 SQL 단에서 필터링해
+// 후보군을 확보하는지(단순히 최신순 500건을 한 번 가져와 뒤섞이는 게 아닌지) 검증하려면,
+// .eq()/.or()에 넘어온 조건을 실제로 반영해 데이터를 걸러주는 좀 더 정교한 스텁이 필요하다.
+// Task 9-4-4: sigungu_name 정확 일치(.eq) 대신 ILIKE 퍼지 매칭(.or('col.ilike.%token%,...'))을
+// 쓰고, Task 9-5-1: 테마 필터에는 `source_type.in.(A,B)` 조건도 함께 온다.
+// 실제 PostgREST/supabase-js는 .or()를 여러 번 호출하면 각각 별도의 OR 그룹으로 추가돼
+// AND로 결합된다(실측 확인: postgrest-js의 or()는 매번 새 `or=` 쿼리 파라미터를 append함) —
+// 이 스텁도 그 동작을 그대로 재현해야 한다(마지막 .or()만 남기면 안 됨 — 예: 테마 필터 뒤에
+// 지역 필터가 덧붙는 getThemeSpotFeed에서 앞선 테마 조건이 사라지는 버그가 생김).
 function makeFilteringChainable(rows: Array<Record<string, unknown>>) {
   const eqFilters: Record<string, unknown> = {};
-  let orFilterExpr: string | null = null;
+  const inFilters: Record<string, unknown[]> = {};
+  const orFilterGroups: string[] = [];
   const builder: Record<string, unknown> = {};
   builder.select = () => builder;
   builder.lte = () => builder;
@@ -48,8 +53,12 @@ function makeFilteringChainable(rows: Array<Record<string, unknown>>) {
     eqFilters[column] = value;
     return builder;
   };
+  builder.in = (column: string, values: unknown[]) => {
+    inFilters[column] = values;
+    return builder;
+  };
   builder.or = (expr: string) => {
-    orFilterExpr = expr;
+    orFilterGroups.push(expr);
     return builder;
   };
   builder.limit = (n: number) => {
@@ -57,14 +66,39 @@ function makeFilteringChainable(rows: Array<Record<string, unknown>>) {
     if (Object.keys(eqFilters).length > 0) {
       filtered = filtered.filter((row) => Object.entries(eqFilters).every(([col, val]) => row[col] === val));
     }
-    if (orFilterExpr) {
-      const conditions = orFilterExpr.split(',').map((cond) => {
-        const [column, , ...rest] = cond.split('.');
-        const value = rest.join('.').replace(/^%|%$/g, '');
-        return { column, value };
+    if (Object.keys(inFilters).length > 0) {
+      filtered = filtered.filter((row) => Object.entries(inFilters).every(([col, vals]) => vals.includes(row[col])));
+    }
+    for (const group of orFilterGroups) {
+      const conditions = group.split(',').map((cond) => {
+        const [column, operator, ...rest] = cond.split('.');
+        const rawValue = rest.join('.');
+        return { column, operator, rawValue };
       });
       filtered = filtered.filter((row) =>
-        conditions.some(({ column, value }) => typeof row[column] === 'string' && (row[column] as string).includes(value))
+        conditions.some(({ column, operator, rawValue }) => {
+          const cell = row[column];
+          if (operator === 'in') {
+            const values = rawValue.replace(/^\(|\)$/g, '').split(',');
+            return typeof cell === 'string' && values.includes(cell);
+          }
+          if (operator === 'ilike') {
+            const needle = rawValue.replace(/^%|%$/g, '');
+            return typeof cell === 'string' && cell.includes(needle);
+          }
+          if (operator === 'eq') {
+            if (rawValue === 'true') return cell === true;
+            if (rawValue === 'false') return cell === false;
+            return String(cell) === rawValue;
+          }
+          if (operator === 'is') {
+            return rawValue === 'null' ? cell === null || cell === undefined : String(cell) === rawValue;
+          }
+          if (operator === 'gte') {
+            return cell !== null && cell !== undefined && String(cell) >= rawValue;
+          }
+          return false;
+        })
       );
     }
     return Promise.resolve({ data: filtered.slice(0, n), error: null });
@@ -520,5 +554,66 @@ describe('getFreeFeed: 대량 단일 소스가 후보군을 독점해도 선택 
     const items = await getFreeFeed(12, { sigunguName: '성남시 분당구' });
 
     expect(items.some((item) => item.id === 'bundang-1')).toBe(true);
+  });
+});
+
+// Task 9-5-1(2026-08-22): 목적별 테마 스팟 통합 피드 — 상시 공간(open_spaces, source_type
+// 기반)과 개장 중인 시즌 행사(events, 키워드 기반)가 한 목록으로 묶여 나오는지 검증한다.
+describe('getThemeSpotFeed (Task 9-5-1: 목적별 테마 스팟 통합 피딩)', () => {
+  afterEach(() => {
+    vi.doUnmock('@/lib/supabase/server');
+    vi.resetModules();
+  });
+
+  it('open_spaces(source_type)와 events(키워드)에서 같은 테마 항목만 찾아 합쳐서 반환한다', async () => {
+    const pool = {
+      id: 'pool-1',
+      name: '분당 실내수영장',
+      category: 'KIDS_ACTIVITY',
+      address: '경기도 성남시 분당구 어딘가',
+      location: { coordinates: [127.12, 37.38] },
+      is_free: true,
+      operating_hours: null,
+      info_url: null,
+      is_kids_friendly: false,
+      has_parking: false,
+      stroller_accessible: false,
+      facility_type: '실내',
+      target_age_group: null,
+      sigungu_name: '성남시 분당구',
+      source_type: 'SWIMMING_POOL',
+    };
+    const playground = {
+      ...pool,
+      id: 'playground-1',
+      name: '분당 어린이놀이터',
+      source_type: 'LOCALDATA_PLAYGROUND',
+    };
+    const waterEvent = eventRow({
+      id: 'water-event',
+      title: '탄천 여름 물놀이장',
+      venue_name: '탄천 물놀이장',
+      is_active: true,
+    });
+    const unrelatedEvent = eventRow({ id: 'other-event', title: '가을 음악회', venue_name: '문화회관', is_active: true });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () =>
+        Promise.resolve({
+          from: (table: string) =>
+            table === 'open_spaces'
+              ? makeFilteringChainable([pool, playground])
+              : makeFilteringChainable([waterEvent, unrelatedEvent]),
+        }),
+    }));
+
+    const { getThemeSpotFeed } = await import('./get-home-feed');
+    const items = await getThemeSpotFeed('SWIMMING', 20, { sigunguName: '성남시 분당구' });
+
+    const ids = items.map((item) => item.id);
+    expect(ids).toContain('pool-1');
+    expect(ids).toContain('water-event');
+    expect(ids).not.toContain('playground-1');
+    expect(ids).not.toContain('other-event');
   });
 });

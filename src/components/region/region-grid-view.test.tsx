@@ -252,3 +252,52 @@ describe('RegionGridView 특화 필터 (Task 9-1-10)', () => {
     await waitFor(() => expect(screen.getByText('검색 결과가 없습니다.')).toBeInTheDocument());
   });
 });
+
+// Task 9-5-1(2026-08-22): 목적/장소별 테마 스팟 그룹화(6대 테마)가 카테고리 탭에도 배치되고,
+// classifyThemeSpot(source_type + 키워드) 기준으로 실제로 걸러지는지 검증한다.
+describe('RegionGridView 목적별 추천 스팟 (Task 9-5-1)', () => {
+  afterEach(() => {
+    mockSearchParams = new URLSearchParams();
+    mockSigunguName = null;
+    vi.doUnmock('@/lib/spaces/get-all-spaces');
+    vi.resetModules();
+  });
+
+  it('1단계 화면에 "🏞️ 목적별 추천 스팟" 섹션과 6대 테마 타일이 노출된다', async () => {
+    vi.doMock('@/lib/spaces/get-all-spaces', () => ({
+      getAllOpenSpaces: () => Promise.resolve([]),
+    }));
+
+    const { RegionGridView: FreshView } = await import('./region-grid-view');
+    render(<FreshView />);
+
+    expect(screen.getByText('🏞️ 목적별 추천 스팟')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '물놀이·수영장' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '놀이터·키즈' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '공원·산책' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '숲·휴양림' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '유원지·액티비티' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '문화·체육' })).toBeInTheDocument();
+  });
+
+  it('"물놀이·수영장" 타일을 누르면 source_type=SWIMMING_POOL인 항목만 보여준다', async () => {
+    const pool = makeSpaceItem({ id: 'pool', name: '분당 실내수영장', source_type: 'SWIMMING_POOL' });
+    const playground = makeSpaceItem({
+      id: 'playground',
+      name: '분당 어린이놀이터',
+      source_type: 'LOCALDATA_PLAYGROUND',
+    });
+
+    vi.doMock('@/lib/spaces/get-all-spaces', () => ({
+      getAllOpenSpaces: () => Promise.resolve([pool, playground]),
+    }));
+
+    const { RegionGridView: FreshView } = await import('./region-grid-view');
+    render(<FreshView />);
+
+    fireEvent.click(screen.getByRole('button', { name: '물놀이·수영장' }));
+
+    await waitFor(() => expect(screen.getByText('분당 실내수영장')).toBeInTheDocument());
+    expect(screen.queryByText('분당 어린이놀이터')).not.toBeInTheDocument();
+  });
+});

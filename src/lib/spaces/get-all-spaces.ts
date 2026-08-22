@@ -10,7 +10,7 @@ export async function getAllOpenSpaces(referencePoint: { lat: number; lng: numbe
   const { data, error } = await supabase
     .from('open_spaces')
     .select(
-      'id, name, category, address, location, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, sigungu_name'
+      'id, name, category, address, location, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, sigungu_name, source_type'
     )
     .order('name');
 
@@ -51,6 +51,8 @@ export async function getAllOpenSpaces(referencePoint: { lat: number; lng: numbe
       facility_type: row.facility_type,
       target_age_group: row.target_age_group,
       booking_status: null,
+      // Task 9-5-1: 목적별 테마 스팟 분류용.
+      source_type: row.source_type,
     };
   });
 }
