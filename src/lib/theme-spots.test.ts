@@ -8,8 +8,10 @@ import {
 } from './theme-spots';
 
 describe('THEME_SPOT_OPTIONS / isThemeSpotKey', () => {
-  it('6대 목적별 테마를 정확히 노출한다', () => {
-    expect(THEME_SPOT_OPTIONS).toHaveLength(6);
+  // Task 9-6-4(2026-08-23): 홈 화면 "🎪 행사·축제" 대분류의 "체험·자연" 칩을 위해
+  // EXPERIENCE_NATURE가 7번째 테마로 추가됐다(events 전용 — source_type 매핑 없음).
+  it('7대 목적별 테마를 정확히 노출한다', () => {
+    expect(THEME_SPOT_OPTIONS).toHaveLength(7);
     expect(THEME_SPOT_OPTIONS.map((o) => o.key)).toEqual([
       'SWIMMING',
       'PLAYGROUND_KIDS',
@@ -17,11 +19,13 @@ describe('THEME_SPOT_OPTIONS / isThemeSpotKey', () => {
       'FOREST_RECREATION',
       'AMUSEMENT_ACTIVITY',
       'CULTURE_SPORTS',
+      'EXPERIENCE_NATURE',
     ]);
   });
 
-  it('isThemeSpotKey는 6대 테마 키만 참으로 판별한다', () => {
+  it('isThemeSpotKey는 7대 테마 키만 참으로 판별한다', () => {
     expect(isThemeSpotKey('SWIMMING')).toBe(true);
+    expect(isThemeSpotKey('EXPERIENCE_NATURE')).toBe(true);
     expect(isThemeSpotKey('KIDS_ACTIVITY')).toBe(false);
   });
 });

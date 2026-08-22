@@ -281,11 +281,12 @@ describe('HomeView', () => {
     expect(screen.queryByText('오늘 진행 중인 전체 행사 보기')).not.toBeInTheDocument();
   });
 
-  // Task 9-5-1(2026-08-22): 목적별 테마 스팟 칩 검증
-  describe('목적별 추천 스팟 (Task 9-5-1)', () => {
+  // Task 9-5-1(2026-08-22)/9-6-4(2026-08-23): 대분류별 테마 칩 검증. 기본 대분류는
+  // "🎪 행사·축제"(EVENTS)이므로 기본으로 보이는 칩은 EVENT_THEME_OPTIONS(물놀이·수영 등)다.
+  describe('테마별 추천 (Task 9-5-1/9-6-4)', () => {
     it('기본 상태에서는 어떤 테마도 선택돼 있지 않아 안내 문구만 보여준다', () => {
       render(<HomeView initialHeroEvents={[]} />);
-      expect(screen.getByText('🏞️ 목적별 추천 스팟')).toBeInTheDocument();
+      expect(screen.getByText('🎪 테마별 행사')).toBeInTheDocument();
       expect(screen.getByText('테마를 선택하면 관련 스팟을 보여드려요.')).toBeInTheDocument();
     });
 
@@ -293,7 +294,7 @@ describe('HomeView', () => {
       const fetchMock = stubFetchFreeFeed([], [makeSpaceItem({ id: 'pool-1', name: '분당 수영장' })]);
       render(<HomeView initialHeroEvents={[]} />);
 
-      fireEvent.click(screen.getByText('🏊 물놀이·수영장'));
+      fireEvent.click(screen.getByText('🏊 물놀이·수영'));
 
       expect(await screen.findByText('분당 수영장')).toBeInTheDocument();
       expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/home/theme-feed?theme=SWIMMING'));
@@ -302,7 +303,7 @@ describe('HomeView', () => {
     it('다른 테마 칩을 다시 누르면 그 테마로 새로 페칭한다', async () => {
       const items: Record<string, NearbyItem[]> = {
         SWIMMING: [makeSpaceItem({ id: 'pool-1', name: '분당 수영장' })],
-        PARK_WALK: [makeSpaceItem({ id: 'park-1', name: '분당중앙공원' })],
+        PLAYGROUND_KIDS: [makeSpaceItem({ id: 'playground-1', name: '분당 키즈놀이터' })],
       };
       const fetchMock = vi.fn((url: string) => {
         const theme = new URL(url, 'http://localhost').searchParams.get('theme') ?? '';
@@ -311,12 +312,29 @@ describe('HomeView', () => {
       vi.stubGlobal('fetch', fetchMock);
       render(<HomeView initialHeroEvents={[]} />);
 
-      fireEvent.click(screen.getByText('🏊 물놀이·수영장'));
+      fireEvent.click(screen.getByText('🏊 물놀이·수영'));
       expect(await screen.findByText('분당 수영장')).toBeInTheDocument();
 
-      fireEvent.click(screen.getByText('🌳 공원·산책'));
-      expect(await screen.findByText('분당중앙공원')).toBeInTheDocument();
+      fireEvent.click(screen.getByText('🛝 놀이터·키즈'));
+      expect(await screen.findByText('분당 키즈놀이터')).toBeInTheDocument();
       expect(screen.queryByText('분당 수영장')).not.toBeInTheDocument();
+    });
+
+    it('최상위 대분류를 "🏞️ 상시 장소"로 전환하면 공간 전용 테마 칩(5개)이 보이고 이전 선택은 초기화된다', async () => {
+      stubFetchFreeFeed([], [makeSpaceItem({ id: 'pool-1', name: '분당 수영장' })]);
+      render(<HomeView initialHeroEvents={[]} />);
+
+      fireEvent.click(screen.getByText('🏊 물놀이·수영'));
+      expect(await screen.findByText('분당 수영장')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText('🏞️ 상시 장소'));
+
+      expect(screen.getByText('🏞️ 테마별 장소')).toBeInTheDocument();
+      expect(screen.getByText('🌳 공원·광장')).toBeInTheDocument();
+      expect(screen.getByText('🏊 야외 수영장·물놀이터')).toBeInTheDocument();
+      // 이전 대분류(EVENTS)의 칩 선택/결과는 초기화된다.
+      expect(screen.queryByText('분당 수영장')).not.toBeInTheDocument();
+      expect(screen.getByText('테마를 선택하면 관련 스팟을 보여드려요.')).toBeInTheDocument();
     });
   });
 

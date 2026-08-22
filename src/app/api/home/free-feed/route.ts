@@ -20,7 +20,10 @@ export async function GET(request: NextRequest) {
       ...(hasCoords ? { lat: latParam, lng: lngParam } : {}),
     };
 
-    const freeFeed = await getFreeFeed(12, region);
+    // Task 9-6-4(2026-08-23): 홈 화면 최상위 대분류(🎪 행사·축제 기본/🏞️ 상시 장소) 토글용.
+    const dataType = searchParams.get('dataType') === 'open_spaces' ? 'open_spaces' : 'events';
+
+    const freeFeed = await getFreeFeed(12, region, dataType);
     return NextResponse.json({ freeFeed });
   } catch (err) {
     const message = err instanceof Error ? err.message : '가성비 행복 피드 조회 실패';

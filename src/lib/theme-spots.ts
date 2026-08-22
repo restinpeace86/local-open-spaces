@@ -11,7 +11,8 @@ export type ThemeSpotKey =
   | 'PARK_WALK'
   | 'FOREST_RECREATION'
   | 'AMUSEMENT_ACTIVITY'
-  | 'CULTURE_SPORTS';
+  | 'CULTURE_SPORTS'
+  | 'EXPERIENCE_NATURE';
 
 export const THEME_SPOT_OPTIONS: { key: ThemeSpotKey; label: string; emoji: string }[] = [
   { key: 'SWIMMING', label: '물놀이·수영장', emoji: '🏊' },
@@ -20,6 +21,10 @@ export const THEME_SPOT_OPTIONS: { key: ThemeSpotKey; label: string; emoji: stri
   { key: 'FOREST_RECREATION', label: '숲·휴양림', emoji: '🌲' },
   { key: 'AMUSEMENT_ACTIVITY', label: '유원지·액티비티', emoji: '🎡' },
   { key: 'CULTURE_SPORTS', label: '문화·체육', emoji: '🏛️' },
+  // Task 9-6-4(2026-08-23): 홈 화면 "🎪 행사·축제" 대분류의 "체험·자연" 칩을 위해 추가.
+  // 기존 6개와 달리 매핑된 source_type이 없어(events 전용) confidentSourceTypesFor는 항상
+  // 빈 배열을 반환한다 — 키워드 ILIKE로만 분류된다.
+  { key: 'EXPERIENCE_NATURE', label: '체험·자연', emoji: '🌿' },
 ];
 
 export function isThemeSpotKey(value: string): value is ThemeSpotKey {
@@ -45,7 +50,11 @@ const SOURCE_TYPE_THEME_MAP: Record<string, ThemeSpotKey> = {
 // 키워드로 세분화한다. 순서가 우선순위다 — 예를 들어 "국립공원"은 "공원"을 포함하지만 먼저
 // 검사되는 FOREST_RECREATION 규칙에 걸려야 하므로 PARK_WALK보다 앞에 둔다.
 const KEYWORD_RULES: { key: ThemeSpotKey; keywords: string[] }[] = [
-  { key: 'SWIMMING', keywords: ['물놀이', '수영장', '워터파크', '아쿠아', '해수욕장', '풀빌라'] },
+  // Task 9-6-4(2026-08-23) 실측 추가: 경기데이터드림 물놀이형 수경시설(TBWTRWTRPLYHYDRDTAM,
+  // gg-splash-events-adapter.mjs) 972건의 실제 시설명을 확인한 결과 "분수"/"바닥분수"/
+  // "물놀이터"/"물놀이시설"이 매우 흔한 표기였다(예: "나혜석거리 분수", "효원공원 바닥분수",
+  // "갈매중앙공원 물놀이시설") — 기존 목록에는 없어 전부 미분류로 빠지고 있었다.
+  { key: 'SWIMMING', keywords: ['물놀이', '수영장', '워터파크', '아쿠아', '해수욕장', '풀빌라', '분수', '물놀이터', '물놀이시설', '물놀이장'] },
   { key: 'FOREST_RECREATION', keywords: ['휴양림', '자연휴양림', '숲', '국립공원', '산림욕', '캠핑', '야영장'] },
   {
     key: 'AMUSEMENT_ACTIVITY',
@@ -57,6 +66,7 @@ const KEYWORD_RULES: { key: ThemeSpotKey; keywords: string[] }[] = [
   },
   { key: 'PARK_WALK', keywords: ['공원', '산책로', '둘레길', '생태공원'] },
   { key: 'PLAYGROUND_KIDS', keywords: ['놀이터', '키즈카페', '플레이그라운드'] },
+  { key: 'EXPERIENCE_NATURE', keywords: ['체험', '생태체험', '농장체험', '자연학습', '생태'] },
 ];
 
 // Task 9-5-1: NearbyItem은 원래 source_type을 담지 않았으나(get-nearby.ts), 이 분류를 위해

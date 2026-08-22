@@ -369,8 +369,11 @@ describe('getFreeFeed (Task 9-1-3: open_spaces+events 지역 우선 정렬)', ()
     vi.resetModules();
   });
 
-  it('open_spaces와 events를 합쳐 선택 지역을 1순위로 정렬한다', async () => {
-    const spaceRow = {
+  // Task 9-6-4(2026-08-23): getFreeFeed는 이제 dataType('events' 기본 | 'open_spaces')당 한
+  // 테이블만 조회한다(대분류 토글에 맞춰 섞지 않음) — 기존 "합쳐서" 테스트를 각 테이블별로
+  // 분리해 지역 우선 정렬 자체는 여전히 정확한지 검증한다.
+  it('dataType=open_spaces면 open_spaces 안에서 선택 지역을 1순위로 정렬한다', async () => {
+    const matching = {
       id: 's1',
       name: '무료 공원',
       category: 'OUTDOOR_NATURE',
@@ -386,21 +389,32 @@ describe('getFreeFeed (Task 9-1-3: open_spaces+events 지역 우선 정렬)', ()
       target_age_group: null,
       sigungu_name: '성남시 중원구',
     };
-    const eventRowData = eventRow({ id: 'e-free', sigungu_name: '강남구' });
+    const other = { ...matching, id: 's2', sigungu_name: '강남구', address: '서울특별시 강남구 어딘가' };
 
     vi.doMock('@/lib/supabase/server', () => ({
-      createClient: () =>
-        Promise.resolve({
-          from: (table: string) =>
-            makeChainable({ data: table === 'open_spaces' ? [spaceRow] : [eventRowData], error: null }),
-        }),
+      createClient: () => Promise.resolve({ from: () => makeChainable({ data: [other, matching], error: null }) }),
+    }));
+
+    const { getFreeFeed } = await import('./get-home-feed');
+    const items = await getFreeFeed(10, { sigunguName: '성남시 중원구' }, 'open_spaces');
+
+    expect(items).toHaveLength(2);
+    expect(items[0].id).toBe('s1');
+  });
+
+  it('dataType=events(기본값)면 events 안에서 선택 지역을 1순위로 정렬한다', async () => {
+    const matching = eventRow({ id: 'e1', sigungu_name: '성남시 중원구' });
+    const other = eventRow({ id: 'e2', sigungu_name: '강남구', venue_name: '강남 어딘가' });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeChainable({ data: [other, matching], error: null }) }),
     }));
 
     const { getFreeFeed } = await import('./get-home-feed');
     const items = await getFreeFeed(10, { sigunguName: '성남시 중원구' });
 
     expect(items).toHaveLength(2);
-    expect(items[0].id).toBe('s1');
+    expect(items[0].id).toBe('e1');
   });
 });
 
@@ -450,9 +464,11 @@ describe('위치 설정/재설정 시 가까운 순 정렬', () => {
     expect(items[0].distance_meters).toBe(-1);
   });
 
-  it('getFreeFeed: region에 좌표가 있으면 open_spaces/events를 합쳐 가까운 순서로 정렬한다', async () => {
+  // Task 9-6-4(2026-08-23): dataType별로 나뉘었으므로 "합쳐서 거리순 정렬"이 아니라 각
+  // 테이블 안에서 거리순 정렬이 여전히 정확한지로 나눠 검증한다.
+  it('getFreeFeed: dataType=open_spaces면 open_spaces 안에서 가까운 순서로 정렬한다', async () => {
     const origin = { lat: 37.5, lng: 127.0 };
-    const spaceRow = {
+    const far = {
       id: 'space-far',
       name: '먼 공원',
       category: 'OUTDOOR_NATURE',
@@ -468,25 +484,37 @@ describe('위치 설정/재설정 시 가까운 순 정렬', () => {
       target_age_group: null,
       sigungu_name: '성남시 분당구',
     };
-    const nearEvent = eventRow({
+    const near = { ...far, id: 'space-near', name: '가까운 공원', location: { coordinates: [127.001, 37.501] } };
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeChainable({ data: [far, near], error: null }) }),
+    }));
+
+    const { getFreeFeed } = await import('./get-home-feed');
+    const items = await getFreeFeed(10, { sigunguName: '성남시 분당구', ...origin }, 'open_spaces');
+
+    expect(items[0].id).toBe('space-near');
+    expect(items[1].id).toBe('space-far');
+  });
+
+  it('getFreeFeed: dataType=events(기본값)면 events 안에서 가까운 순서로 정렬한다', async () => {
+    const origin = { lat: 37.5, lng: 127.0 };
+    const far = eventRow({ id: 'event-far', title: '먼 무료 행사', location: { coordinates: [127.5, 37.9] } });
+    const near = eventRow({
       id: 'event-near',
       title: '가까운 무료 행사',
       location: { coordinates: [127.001, 37.501] },
     });
 
     vi.doMock('@/lib/supabase/server', () => ({
-      createClient: () =>
-        Promise.resolve({
-          from: (table: string) =>
-            makeChainable({ data: table === 'open_spaces' ? [spaceRow] : [nearEvent], error: null }),
-        }),
+      createClient: () => Promise.resolve({ from: () => makeChainable({ data: [far, near], error: null }) }),
     }));
 
     const { getFreeFeed } = await import('./get-home-feed');
     const items = await getFreeFeed(10, { sigunguName: '성남시 분당구', ...origin });
 
     expect(items[0].id).toBe('event-near');
-    expect(items[1].id).toBe('space-far');
+    expect(items[1].id).toBe('event-far');
   });
 });
 
@@ -600,7 +628,7 @@ describe('getFreeFeed: 대량 단일 소스가 후보군을 독점해도 선택 
     }));
 
     const { getFreeFeed } = await import('./get-home-feed');
-    const items = await getFreeFeed(12, { sigunguName: '성남시 분당구' });
+    const items = await getFreeFeed(12, { sigunguName: '성남시 분당구' }, 'open_spaces');
 
     expect(items.some((item) => item.id === 'bundang-1')).toBe(true);
   });
@@ -614,7 +642,9 @@ describe('getThemeSpotFeed (Task 9-5-1: 목적별 테마 스팟 통합 피딩)',
     vi.resetModules();
   });
 
-  it('open_spaces(source_type)와 events(키워드)에서 같은 테마 항목만 찾아 합쳐서 반환한다', async () => {
+  // Task 9-6-4(2026-08-23): getThemeSpotFeed도 dataType당 한 테이블만 조회하도록 바뀌어
+  // "합쳐서" 검증하던 기존 테스트를 테이블별로 분리한다.
+  it('dataType=open_spaces면 source_type 기준으로 같은 테마 항목만 반환한다', async () => {
     const pool = {
       id: 'pool-1',
       name: '분당 실내수영장',
@@ -638,6 +668,20 @@ describe('getThemeSpotFeed (Task 9-5-1: 목적별 테마 스팟 통합 피딩)',
       name: '분당 어린이놀이터',
       source_type: 'LOCALDATA_PLAYGROUND',
     };
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeFilteringChainable([pool, playground]) }),
+    }));
+
+    const { getThemeSpotFeed } = await import('./get-home-feed');
+    const items = await getThemeSpotFeed('SWIMMING', 20, { sigunguName: '성남시 분당구' }, 'open_spaces');
+
+    const ids = items.map((item) => item.id);
+    expect(ids).toContain('pool-1');
+    expect(ids).not.toContain('playground-1');
+  });
+
+  it('dataType=events(기본값)면 키워드 기준으로 같은 테마 항목만 반환한다', async () => {
     const waterEvent = eventRow({
       id: 'water-event',
       title: '탄천 여름 물놀이장',
@@ -647,22 +691,14 @@ describe('getThemeSpotFeed (Task 9-5-1: 목적별 테마 스팟 통합 피딩)',
     const unrelatedEvent = eventRow({ id: 'other-event', title: '가을 음악회', venue_name: '문화회관', is_active: true });
 
     vi.doMock('@/lib/supabase/server', () => ({
-      createClient: () =>
-        Promise.resolve({
-          from: (table: string) =>
-            table === 'open_spaces'
-              ? makeFilteringChainable([pool, playground])
-              : makeFilteringChainable([waterEvent, unrelatedEvent]),
-        }),
+      createClient: () => Promise.resolve({ from: () => makeFilteringChainable([waterEvent, unrelatedEvent]) }),
     }));
 
     const { getThemeSpotFeed } = await import('./get-home-feed');
     const items = await getThemeSpotFeed('SWIMMING', 20, { sigunguName: '성남시 분당구' });
 
     const ids = items.map((item) => item.id);
-    expect(ids).toContain('pool-1');
     expect(ids).toContain('water-event');
-    expect(ids).not.toContain('playground-1');
     expect(ids).not.toContain('other-event');
   });
 });

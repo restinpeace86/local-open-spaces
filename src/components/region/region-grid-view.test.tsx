@@ -12,6 +12,13 @@ vi.mock('@/hooks/use-user-location', () => ({
   useUserLocation: () => ({ center: { lat: 37.5665, lng: 126.978 }, sigunguName: mockSigunguName }),
 }));
 
+// Task 9-6-4(2026-08-23): 이 화면은 이제 open_spaces와 events를 모두 fetch한다. 이 파일의
+// 기존 테스트는 전부 "🏞️ 상시 장소"(기본값)를 전제로 open_spaces만 검증하므로, events 쪽은
+// 항상 빈 배열로 고정해 둔다(개별 테스트에서 커스터마이즈할 필요 없음).
+vi.mock('@/lib/spaces/get-all-events', () => ({
+  getAllEvents: () => Promise.resolve([]),
+}));
+
 function makeSpaceItem(overrides: Partial<NearbyItem> = {}): NearbyItem {
   return {
     id: 'space-1',
@@ -253,9 +260,10 @@ describe('RegionGridView 특화 필터 (Task 9-1-10)', () => {
   });
 });
 
-// Task 9-5-1(2026-08-22): 목적/장소별 테마 스팟 그룹화(6대 테마)가 카테고리 탭에도 배치되고,
-// classifyThemeSpot(source_type + 키워드) 기준으로 실제로 걸러지는지 검증한다.
-describe('RegionGridView 목적별 추천 스팟 (Task 9-5-1)', () => {
+// Task 9-5-1(2026-08-22)/9-6-4(2026-08-23): 목적/장소별 테마 스팟 그룹화가 카테고리 탭에도
+// 배치되고, classifyThemeSpot(source_type + 키워드) 기준으로 실제로 걸러지는지 검증한다.
+// 기본 대분류는 "🏞️ 상시 장소"라 SPACE_THEME_OPTIONS(5개)가 기본으로 보인다.
+describe('RegionGridView 테마별 추천 (Task 9-5-1/9-6-4)', () => {
   afterEach(() => {
     mockSearchParams = new URLSearchParams();
     mockSigunguName = null;
@@ -263,7 +271,7 @@ describe('RegionGridView 목적별 추천 스팟 (Task 9-5-1)', () => {
     vi.resetModules();
   });
 
-  it('1단계 화면에 "🏞️ 목적별 추천 스팟" 섹션과 6대 테마 타일이 노출된다', async () => {
+  it('1단계 화면에 "🏞️ 테마별 장소" 섹션과 5개 공간 테마 타일이 노출된다', async () => {
     vi.doMock('@/lib/spaces/get-all-spaces', () => ({
       getAllOpenSpaces: () => Promise.resolve([]),
     }));
@@ -271,16 +279,15 @@ describe('RegionGridView 목적별 추천 스팟 (Task 9-5-1)', () => {
     const { RegionGridView: FreshView } = await import('./region-grid-view');
     render(<FreshView />);
 
-    expect(screen.getByText('🏞️ 목적별 추천 스팟')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '물놀이·수영장' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '놀이터·키즈' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '공원·산책' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '숲·휴양림' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '유원지·액티비티' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '문화·체육' })).toBeInTheDocument();
+    expect(screen.getByText('🏞️ 테마별 장소')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '공원·광장' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '어린이 놀이터' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '야외 수영장·물놀이터' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '국립공원·수목원·휴양림' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '박물관·미술관·체육시설' })).toBeInTheDocument();
   });
 
-  it('"물놀이·수영장" 타일을 누르면 source_type=SWIMMING_POOL인 항목만 보여준다', async () => {
+  it('"야외 수영장·물놀이터" 타일을 누르면 source_type=SWIMMING_POOL인 항목만 보여준다', async () => {
     const pool = makeSpaceItem({ id: 'pool', name: '분당 실내수영장', source_type: 'SWIMMING_POOL' });
     const playground = makeSpaceItem({
       id: 'playground',
@@ -295,9 +302,27 @@ describe('RegionGridView 목적별 추천 스팟 (Task 9-5-1)', () => {
     const { RegionGridView: FreshView } = await import('./region-grid-view');
     render(<FreshView />);
 
-    fireEvent.click(screen.getByRole('button', { name: '물놀이·수영장' }));
+    fireEvent.click(screen.getByRole('button', { name: '야외 수영장·물놀이터' }));
 
     await waitFor(() => expect(screen.getByText('분당 실내수영장')).toBeInTheDocument());
     expect(screen.queryByText('분당 어린이놀이터')).not.toBeInTheDocument();
+  });
+
+  it('"🎪 행사·축제"로 전환하면 이벤트 전용 테마 칩(5개)이 보이고 open_spaces 항목은 사라진다', async () => {
+    vi.doMock('@/lib/spaces/get-all-spaces', () => ({
+      getAllOpenSpaces: () => Promise.resolve([makeSpaceItem({ name: '분당 실내수영장' })]),
+    }));
+
+    const { RegionGridView: FreshView } = await import('./region-grid-view');
+    render(<FreshView />);
+
+    fireEvent.click(screen.getByRole('button', { name: '🎪 행사·축제' }));
+
+    expect(screen.getByText('🎪 테마별 행사')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '물놀이·수영' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '놀이터·키즈' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '유원지·액티비티' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '전시·공연·문화' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '체험·자연' })).toBeInTheDocument();
   });
 });

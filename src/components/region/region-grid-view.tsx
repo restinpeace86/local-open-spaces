@@ -4,15 +4,27 @@ import { useEffect, useMemo, useState } from 'react';
 import Image from 'next/image';
 import { useSearchParams } from 'next/navigation';
 import { SpaceGridCard } from '@/components/region/space-grid-card';
+import { EventCard } from '@/components/cards/event-card';
 import { EmptyState } from '@/components/map/empty-state';
 import { DetailModal } from '@/components/map/detail-modal';
 import { getAllOpenSpaces } from '@/lib/spaces/get-all-spaces';
+import { getAllEvents } from '@/lib/spaces/get-all-events';
 import { extractDistrict } from '@/lib/spaces/extract-district';
 import { UI_CATEGORY_FILTER_OPTIONS } from '@/lib/spaces/category-meta';
 import { CATEGORY_IMAGE_SRC } from '@/components/home/quick-category-grid';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { useUserLocation } from '@/hooks/use-user-location';
-import { classifyThemeSpot, isThemeSpotKey, THEME_SPOT_OPTIONS } from '@/lib/theme-spots';
+import { classifyThemeSpot, isThemeSpotKey, ThemeSpotKey } from '@/lib/theme-spots';
+import { HOME_CATEGORY_OPTIONS, HomeCategory, themeOptionsFor } from '@/lib/home-categories';
+
+// Task 9-6-4(2026-08-23): home-view.tsx와 동일한 대분류 카드 디스패치.
+function FeedCard({ item, onSelect }: { item: NearbyItem; onSelect: (item: NearbyItem) => void }) {
+  return item.item_type === 'EVENT' ? (
+    <EventCard item={item} onSelect={onSelect} />
+  ) : (
+    <SpaceGridCard item={item} onSelect={onSelect} />
+  );
+}
 
 const ALL_DISTRICT = 'ALL';
 
@@ -43,9 +55,36 @@ const ETC_META = { label: '🎈 기타', emoji: '🎈' };
 // Task 9-1-4: 카테고리 탭 1단계 — 5대 UI 카테고리 선택 화면을 먼저 깔끔하게 보여준다(리스트 없음).
 // 홈 Quick 그리드와 같은 이미지 자산을 재사용하되, 여기서는 탭 진입 시의 단독 화면이라 더 크게 보여준다.
 // Task 9-1-10: 5대 카테고리와 동급으로 "완전무료"/"무장애·유모차" 특화 필터 타일을 추가로 노출한다.
-function CategoryPickerScreen({ onSelect }: { onSelect: (selection: string) => void }) {
+function CategoryPickerScreen({
+  homeCategory,
+  onCategoryChange,
+  onSelect,
+}: {
+  homeCategory: HomeCategory;
+  onCategoryChange: (category: HomeCategory) => void;
+  onSelect: (selection: string) => void;
+}) {
   return (
     <div className="flex-1 overflow-y-auto p-4">
+      {/* Task 9-6-4(2026-08-23): 최상위 대분류 토글 — "🎪 행사·축제"가 기본. */}
+      <div className="flex gap-2 mb-5">
+        {HOME_CATEGORY_OPTIONS.map((option) => {
+          const isActive = homeCategory === option.key;
+          return (
+            <button
+              key={option.key}
+              type="button"
+              onClick={() => onCategoryChange(option.key)}
+              className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+                isActive ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+
       <h2 className="text-lg font-bold text-gray-900">카테고리를 선택해주세요</h2>
       <p className="mt-1 text-sm text-gray-500">
         관심 있는 카테고리를 고르면 내 동네 기준으로 장소를 보여드려요.
@@ -101,12 +140,15 @@ function CategoryPickerScreen({ onSelect }: { onSelect: (selection: string) => v
         </button>
       </div>
 
-      {/* Task 9-5-1(2026-08-22): 목적/장소별 테마 스팟 그룹화 — 5대 카테고리와는 다른 축("무엇을
-          하고 싶은지")의 큐레이션이라 별도 섹션으로 분리해 배치한다. */}
-      <h2 className="mt-8 text-lg font-bold text-gray-900">🏞️ 목적별 추천 스팟</h2>
+      {/* Task 9-5-1(2026-08-22)/9-6-4(2026-08-23): 목적/장소별 테마 스팟 그룹화 — 5대 카테고리와는
+          다른 축("무엇을 하고 싶은지")의 큐레이션이라 별도 섹션으로 분리해 배치한다. 대분류에
+          따라 다른 5개 칩을 보여준다(home-view.tsx와 동일한 themeOptionsFor). */}
+      <h2 className="mt-8 text-lg font-bold text-gray-900">
+        {homeCategory === 'EVENTS' ? '🎪 테마별 행사' : '🏞️ 테마별 장소'}
+      </h2>
       <p className="mt-1 text-sm text-gray-500">뭘 하고 싶은지로 골라도 찾을 수 있어요.</p>
       <div className="mt-5 grid grid-cols-2 gap-3">
-        {THEME_SPOT_OPTIONS.map((theme) => (
+        {themeOptionsFor(homeCategory).map((theme) => (
           <button
             key={theme.key}
             type="button"
@@ -135,7 +177,14 @@ export function RegionGridView() {
   // Task 9-1(2026-08-22): 홈 화면 5대 카테고리 Quick 그리드에서 "/region?category=KIDS_ACTIVITY"
   // 형태로 넘어온 카테고리를 초기값으로 반영한다 — 이 경우 1단계(선택 화면)를 건너뛰고 바로 2단계로 간다.
   const searchParams = useSearchParams();
-  const [items, setItems] = useState<NearbyItem[]>([]);
+  // Task 9-6-4(2026-08-23): 최상위 대분류 — 이 "지역별 도감" 탭은 원래부터 상시 공간(open_spaces)
+  // 전용 카탈로그였으므로(기존 UX/테스트 전제 유지) "🏞️ 상시 장소"를 기본으로 둔다. 홈 화면의
+  // 기본값(🎪 행사·축제)과는 화면 성격이 달라 서로 다른 기본값을 갖는다 — 이 화면은 유저가
+  // 명시적으로 전환해야만 행사·축제 카탈로그를 본다. 두 테이블 모두 한 번만 전체 카탈로그를
+  // 받아와(get-all-spaces.ts와 동일 패턴) 대분류 전환 시 재조회 없이 즉시 전환되도록 한다.
+  const [homeCategory, setHomeCategory] = useState<HomeCategory>('SPACES');
+  const [spaceItems, setSpaceItems] = useState<NearbyItem[]>([]);
+  const [eventItems, setEventItems] = useState<NearbyItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // Task 9-1-10: 5대 UI 카테고리 값 또는 특화 필터 키('FREE'/'ACCESSIBLE') 중 하나를 담는다.
@@ -147,14 +196,18 @@ export function RegionGridView() {
   const [districtManuallyChanged, setDistrictManuallyChanged] = useState(false);
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
 
+  const items = homeCategory === 'EVENTS' ? eventItems : spaceItems;
+
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
     setErrorMessage(null);
 
-    getAllOpenSpaces(userLocation)
-      .then((result) => {
-        if (!cancelled) setItems(result);
+    Promise.all([getAllOpenSpaces(userLocation), getAllEvents()])
+      .then(([spaces, events]) => {
+        if (cancelled) return;
+        setSpaceItems(spaces);
+        setEventItems(events);
       })
       .catch((err: Error) => {
         if (!cancelled) setErrorMessage(err.message);
@@ -235,14 +288,16 @@ export function RegionGridView() {
 
   // 1단계: 아직 아무 것도 고르지 않았으면 선택 화면만 보여준다.
   if (!selection) {
-    return <CategoryPickerScreen onSelect={setSelection} />;
+    return <CategoryPickerScreen homeCategory={homeCategory} onCategoryChange={setHomeCategory} onSelect={setSelection} />;
   }
 
   const categoryMeta = UI_CATEGORY_FILTER_OPTIONS.find((opt) => opt.category === selection);
   const specialFilterMeta = isSpecialFilterKey(selection)
     ? SPECIAL_FILTERS.find((f) => f.key === selection)
     : undefined;
-  const themeMeta = isThemeSpotKey(selection) ? THEME_SPOT_OPTIONS.find((t) => t.key === selection) : undefined;
+  const themeMeta = isThemeSpotKey(selection)
+    ? themeOptionsFor(homeCategory).find((t) => t.key === selection)
+    : undefined;
   const selectionLabel =
     categoryMeta?.label ??
     specialFilterMeta?.label ??
@@ -292,7 +347,7 @@ export function RegionGridView() {
         {!isLoading && !errorMessage && !isEmptyByFilter && (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
             {filteredItems.map((item) => (
-              <SpaceGridCard key={item.id} item={item} onSelect={setSelectedItem} />
+              <FeedCard key={item.id} item={item} onSelect={setSelectedItem} />
             ))}
           </div>
         )}

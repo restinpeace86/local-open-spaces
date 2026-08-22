@@ -25,7 +25,10 @@ export async function GET(request: NextRequest) {
       ...(hasCoords ? { lat: latParam, lng: lngParam } : {}),
     };
 
-    const items = await getThemeSpotFeed(themeParam, 20, region);
+    // Task 9-6-4(2026-08-23): 홈 화면 최상위 대분류(🎪 행사·축제 기본/🏞️ 상시 장소) 토글용.
+    const dataType = searchParams.get('dataType') === 'open_spaces' ? 'open_spaces' : 'events';
+
+    const items = await getThemeSpotFeed(themeParam, 20, region, dataType);
     return NextResponse.json({ items });
   } catch (err) {
     const message = err instanceof Error ? err.message : '테마 스팟 피드 조회 실패';

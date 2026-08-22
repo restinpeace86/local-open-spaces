@@ -1,5 +1,13 @@
-// GG_EVENTS: 경기데이터드림(data.gg.go.kr) 공공 수영장 + 물놀이형 수경시설(바닥분수) 통합 수집 (Task 8-2)
-// API 1(PublicSwimmingPool): 경기도 공공 수영장 현황. API 2(TBWTRWTRPLYHYDRDTAM): 물놀이형 수경시설 현황.
+// GG_EVENTS: 경기데이터드림(data.gg.go.kr) 공공 수영장 현황 수집 (Task 8-2)
+// API 1(PublicSwimmingPool): 경기도 공공 수영장 현황.
+//
+// Task 9-6-4(2026-08-23, 이벤트 VS 상시 공간 재분류): 원래 이 어댑터는 API2(TBWTRWTRPLYHYDRDTAM,
+// 물놀이형 수경시설=바닥분수 등)도 함께 수집해 open_spaces에 넣었으나, 이 시설들은 원본 API의
+// OPR_PRD 필드("3개월(6월~8월)" 등)가 보여주듯 여름 한정 계절 운영 설치물이라 "상시 개방 공간"이
+// 아니라 시한성 이벤트로 재분류했다. API2 수집 로직은 `gg-splash-events-adapter.mjs`(targetTable:
+// 'events')로 분리 이전했고, 이 어댑터는 API1(수영장, 진짜 상시 시설)만 남긴다.
+// 이관 전 이미 open_spaces에 적재된 API2 원본 데이터(raw_data ? 'HYDR_NM'으로 식별 가능, 1,075건
+// 실측 확인)는 삭제 등 되돌리기 어려운 조치 없이 그대로 남겨뒀다 — 정리 여부는 별도 승인 필요.
 //
 // WAF 우회: User-Agent 헤더 없이 호출하면 JSON이 아니라 "보안 정책에 의해 차단 되었습니다"라는
 // HTML 차단 페이지가 반환됨을 실측으로 확인했다(Task 8-2 1차 스킵 기록 참고). 브라우저
@@ -54,7 +62,6 @@ import { matchesKidsKeyword } from '../lib/ai-tagging.mjs';
 import { geocode, hasVworldApiKey } from './lib/vworld-geocoder.mjs';
 
 const POOL_BASE_URL = 'https://openapi.gg.go.kr/PublicSwimmingPool';
-const SPLASH_BASE_URL = 'https://openapi.gg.go.kr/TBWTRWTRPLYHYDRDTAM';
 const PAGE_SIZE = 100;
 const SUCCESS_RESULT_CODE = 'INFO-000';
 const USER_AGENT =
@@ -76,7 +83,7 @@ export class GgEventsAdapter extends BaseCollectorAdapter {
     }
     if (!hasVworldApiKey()) {
       throw new Error(
-        'VWORLD_API_KEY 환경변수가 설정되지 않았습니다. 경기데이터드림 두 API 모두 좌표 필드가 없어 지오코딩이 필수입니다. Vworld 오픈API(www.vworld.kr) 신청 후 .env.local에 VWORLD_API_KEY를 추가하세요.'
+        'VWORLD_API_KEY 환경변수가 설정되지 않았습니다. 경기데이터드림 API에는 좌표 필드가 없어 지오코딩이 필수입니다. Vworld 오픈API(www.vworld.kr) 신청 후 .env.local에 VWORLD_API_KEY를 추가하세요.'
       );
     }
   }
@@ -137,11 +144,8 @@ export class GgEventsAdapter extends BaseCollectorAdapter {
   }
 
   async fetch() {
-    const [poolItems, splashItems] = await Promise.all([
-      this.fetchAll(POOL_BASE_URL, 'PublicSwimmingPool'),
-      this.fetchAll(SPLASH_BASE_URL, 'TBWTRWTRPLYHYDRDTAM'),
-    ]);
-    return { poolItems, splashItems };
+    const poolItems = await this.fetchAll(POOL_BASE_URL, 'PublicSwimmingPool');
+    return { poolItems };
   }
 
   // eslint-disable-next-line class-methods-use-this
@@ -203,41 +207,13 @@ export class GgEventsAdapter extends BaseCollectorAdapter {
     });
   }
 
-  async transformSplashItem(item) {
-    const name = item.HYDR_NM;
-    const address = item.HYDR_ADDR;
-    if (!name || !address) return null;
-
-    const coords = await this.geocodeOrSkip(name, address);
-    if (!coords) return null;
-
-    return buildOpenSpaceRow({
-      externalId: this.buildExternalId(name, address),
-      sourceType: 'GG_EVENTS',
-      name,
-      uiCategory: UI_CATEGORY.OUTDOOR_NATURE,
-      address,
-      lng: coords.lng,
-      lat: coords.lat,
-      isFree: true, // Task 지시서 명시: 바닥분수/물놀이터는 기본 무료로 매핑
-      isKidsFriendly: true, // Task 지시서 명시: 바닥분수/물놀이터는 기본 키즈 친화로 매핑
-      facilityType: '야외', // 계절 운영(OPR_PRD)형 실외 수경시설이라는 물리적 특성
-      rawData: item,
-    });
-  }
-
   // 지오코딩은 외부 API(VWorld) 호출이라 NationalParkEcotourAdapter와 동일하게 순차 처리한다
   // (Promise.all로 동시에 수백~천 건을 쏘면 레이트리밋에 걸릴 위험이 있음).
-  async transform({ poolItems, splashItems }) {
+  async transform({ poolItems }) {
     const rows = [];
 
     for (const item of poolItems) {
       const row = await this.transformPoolItem(item);
-      if (row) rows.push(row);
-    }
-
-    for (const item of splashItems) {
-      const row = await this.transformSplashItem(item);
       if (row) rows.push(row);
     }
 

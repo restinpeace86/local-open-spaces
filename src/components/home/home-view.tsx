@@ -9,7 +9,8 @@ import { HomeSubTabs, HomeSubTab } from '@/components/home/home-sub-tabs';
 import { HeroCarousel } from '@/components/home/hero-carousel';
 import { QuickCategoryGrid } from '@/components/home/quick-category-grid';
 import { FreeFeedSkeleton } from '@/components/home/free-feed-skeleton';
-import { THEME_SPOT_OPTIONS, ThemeSpotKey } from '@/lib/theme-spots';
+import { ThemeSpotKey } from '@/lib/theme-spots';
+import { HOME_CATEGORY_OPTIONS, HomeCategory, dataTypeFor, themeOptionsFor } from '@/lib/home-categories';
 import { SpaceGridCard } from '@/components/region/space-grid-card';
 import { EventCard } from '@/components/cards/event-card';
 import { EmptyState } from '@/components/map/empty-state';
@@ -60,16 +61,18 @@ const FREE_FEED_PREDICATES: Record<FreeFeedFilterKey, (item: NearbyItem, todaySt
 // freeFeed === null은 "아직 로드 전"(Skeleton 노출), 배열이면 로드 완료(빈 배열도 포함)를 뜻한다.
 // region(sigunguName/lat/lng)이 바뀌면(위치 재설정) 이미 로드된 상태라도 새 지역으로 다시
 // 페칭하도록, 마지막으로 로드를 시작한 region 키를 기억해뒀다가 달라지면 재요청한다.
-function useFreeFeed(region: { sigunguName: string | null; lat?: number; lng?: number }) {
+// Task 9-6-4(2026-08-23): 최상위 대분류(🎪 행사·축제/🏞️ 상시 장소)에 따라 dataType이 바뀌므로
+// regionKey에 포함해, 카테고리를 전환하면 이미 로드된 상태라도 다시 페칭하도록 한다.
+function useFreeFeed(region: { sigunguName: string | null; lat?: number; lng?: number }, dataType: 'events' | 'open_spaces') {
   const [freeFeed, setFreeFeed] = useState<NearbyItem[] | null>(null);
-  const regionKey = `${region.sigunguName ?? ''}|${region.lat ?? ''}|${region.lng ?? ''}`;
+  const regionKey = `${region.sigunguName ?? ''}|${region.lat ?? ''}|${region.lng ?? ''}|${dataType}`;
   const loadedKeyRef = useRef<string | null>(null);
 
   const ensureLoaded = useCallback(() => {
     if (loadedKeyRef.current === regionKey) return;
     loadedKeyRef.current = regionKey;
 
-    const params = new URLSearchParams();
+    const params = new URLSearchParams({ dataType });
     if (region.sigunguName) params.set('sigungu', region.sigunguName);
     if (typeof region.lat === 'number') params.set('lat', String(region.lat));
     if (typeof region.lng === 'number') params.set('lng', String(region.lng));
@@ -122,7 +125,7 @@ function useProvinceWideEvents() {
 // Task 9-5-1(2026-08-22): "🏞️ 목적별 추천 스팟" 칩 — 가성비 행복과 달리 기본으로 선택된 테마가
 // 없어(6개 중 임의로 하나를 고를 근거가 없음) 스크롤 진입이 아니라 칩을 직접 눌렀을 때만
 // /api/home/theme-feed를 호출한다. 테마를 바꿔 누르면 그 즉시 새로 페칭한다.
-function useThemeSpotFeed(region: { sigunguName: string | null; lat?: number; lng?: number }) {
+function useThemeSpotFeed(region: { sigunguName: string | null; lat?: number; lng?: number }, dataType: 'events' | 'open_spaces') {
   const [selectedTheme, setSelectedTheme] = useState<ThemeSpotKey | null>(null);
   const [items, setItems] = useState<NearbyItem[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -133,7 +136,7 @@ function useThemeSpotFeed(region: { sigunguName: string | null; lat?: number; ln
       setItems(null);
       setIsLoading(true);
 
-      const params = new URLSearchParams({ theme });
+      const params = new URLSearchParams({ theme, dataType });
       if (region.sigunguName) params.set('sigungu', region.sigunguName);
       if (typeof region.lat === 'number') params.set('lat', String(region.lat));
       if (typeof region.lng === 'number') params.set('lng', String(region.lng));
@@ -147,10 +150,17 @@ function useThemeSpotFeed(region: { sigunguName: string | null; lat?: number; ln
         .finally(() => setIsLoading(false));
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [region.sigunguName, region.lat, region.lng]
+    [region.sigunguName, region.lat, region.lng, dataType]
   );
 
-  return { selectedTheme, items, isLoading, selectTheme };
+  // Task 9-6-4: 최상위 대분류를 전환하면 이전 칩 선택/결과를 그대로 두지 않는다(다른 dataType
+  // 기준으로 조회된 결과가 새 대분류 화면에 남아있지 않도록).
+  const reset = useCallback(() => {
+    setSelectedTheme(null);
+    setItems(null);
+  }, []);
+
+  return { selectedTheme, items, isLoading, selectTheme, reset };
 }
 
 export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[] }) {
@@ -160,6 +170,10 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
   const [heroEvents, setHeroEvents] = useState<NearbyItem[]>(initialHeroEvents);
   const [freeFeedFilter, setFreeFeedFilter] = useState<FreeFeedFilterKey>('ALL');
+  // Task 9-6-4(2026-08-23): 최상위 대분류 — "🎪 행사·축제"가 기본(get-home-feed.ts의 events
+  // 기본값과 일치). 상시 공간(open_spaces)은 유저가 명시적으로 전환할 때만 보여준다.
+  const [homeCategory, setHomeCategory] = useState<HomeCategory>('EVENTS');
+  const dataType = dataTypeFor(homeCategory);
 
   const region = { sigunguName, lat: addressName ? center.lat : undefined, lng: addressName ? center.lng : undefined };
   // 순서 주의: home-view.test.tsx의 FakeIntersectionObserver.instances.at(-1) 관례(가장 최근
@@ -167,14 +181,24 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
   // 아래 섹션)의 useInView를 먼저 선언해 인스턴스 배열에서 가성비 행복보다 앞에 오도록 한다.
   const { items: provinceWideEvents, ensureLoaded: ensureProvinceWideLoaded } = useProvinceWideEvents();
   const { ref: provinceWideSectionRef, isInView: isProvinceWideSectionInView } = useInView<HTMLDivElement>();
-  const { freeFeed, ensureLoaded } = useFreeFeed(region);
+  const { freeFeed, ensureLoaded } = useFreeFeed(region, dataType);
   const { ref: freeFeedSectionRef, isInView: isFreeFeedSectionInView } = useInView<HTMLDivElement>();
   const {
     selectedTheme,
     items: themeSpotItems,
     isLoading: isThemeSpotLoading,
     selectTheme,
-  } = useThemeSpotFeed(region);
+    reset: resetThemeSpotFeed,
+  } = useThemeSpotFeed(region, dataType);
+
+  // 대분류를 전환하면 이전 칩 선택 결과를 지운다(다른 dataType으로 조회된 결과가 남지 않도록).
+  const handleCategoryChange = useCallback(
+    (next: HomeCategory) => {
+      setHomeCategory(next);
+      resetThemeSpotFeed();
+    },
+    [resetThemeSpotFeed]
+  );
 
   // Task 9-1-1: Server Component는 기본 지역(성남시 분당구)으로만 렌더링할 수 있으므로,
   // 유저가 실제로 위치를 설정한 경우(addressName이 채워짐)에만 그 지역으로 재조회한다.
@@ -238,22 +262,50 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
       <div className="flex-1 overflow-y-auto py-4 flex flex-col gap-5">
         {activeTab === 'home' && (
           <>
-            <section aria-label="오늘의 추천 행사">
-              {heroEvents.length > 0 ? (
-                <HeroCarousel items={visibleHeroEvents} onSelect={setSelectedItem} moreHref={heroMoreHref} />
-              ) : (
-                <p className="px-4 text-sm text-gray-400">오늘 진행 중인 추천 행사가 아직 없습니다.</p>
-              )}
+            {/* Task 9-6-4(2026-08-23): 최상위 대분류 토글 — "🎪 행사·축제"가 기본이고, 유저가
+                명시적으로 전환해야만 상시 공간(open_spaces)이 보인다. */}
+            <section aria-label="대분류" className="px-4">
+              <div className="flex gap-2">
+                {HOME_CATEGORY_OPTIONS.map((option) => {
+                  const isActive = homeCategory === option.key;
+                  return (
+                    <button
+                      key={option.key}
+                      type="button"
+                      onClick={() => handleCategoryChange(option.key)}
+                      className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
+                        isActive ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  );
+                })}
+              </div>
             </section>
+
+            {/* 상시 공간(open_spaces)은 "오늘의 추천"이라는 시한성 개념이 없어(항상 이용 가능)
+                이벤트 대분류에서만 Hero Carousel을 보여준다. */}
+            {homeCategory === 'EVENTS' && (
+              <section aria-label="오늘의 추천 행사">
+                {heroEvents.length > 0 ? (
+                  <HeroCarousel items={visibleHeroEvents} onSelect={setSelectedItem} moreHref={heroMoreHref} />
+                ) : (
+                  <p className="px-4 text-sm text-gray-400">오늘 진행 중인 추천 행사가 아직 없습니다.</p>
+                )}
+              </section>
+            )}
 
             <QuickCategoryGrid />
 
-            {/* Task 9-5-1(2026-08-22): 목적/장소별 테마 스팟 그룹화 — 기본 선택 테마가 없어
-                (6개 중 임의로 하나를 고를 근거가 없음) 칩을 직접 누를 때만 지연 페칭한다. */}
-            <section aria-label="목적별 추천 스팟" className="px-4">
-              <h2 className="text-base font-bold text-gray-900 mb-3">🏞️ 목적별 추천 스팟</h2>
+            {/* Task 9-5-1(2026-08-22)/9-6-4(2026-08-23): 대분류별 5개 하위 테마 칩 — 기본 선택
+                테마가 없어(임의로 하나를 고를 근거가 없음) 칩을 직접 누를 때만 지연 페칭한다. */}
+            <section aria-label="테마별 추천" className="px-4">
+              <h2 className="text-base font-bold text-gray-900 mb-3">
+                {homeCategory === 'EVENTS' ? '🎪 테마별 행사' : '🏞️ 테마별 장소'}
+              </h2>
               <div className="flex gap-1.5 overflow-x-auto pb-2">
-                {THEME_SPOT_OPTIONS.map((theme) => {
+                {themeOptionsFor(homeCategory).map((theme) => {
                   const isActive = selectedTheme === theme.key;
                   return (
                     <button
@@ -324,9 +376,9 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
 
             {/* Task 9-6-2(2026-08-23, Decision 009): 위치 정보가 전혀 없는(location_precision=
                 'UNKNOWN') 경기도권 행사 — 지도/주변에는 노출되지 않고 메인 페이지에서만 볼 수 있다.
-                항목이 없으면 섹션 자체를 숨긴다(다른 섹션과 달리 "찾는 중" 안내를 굳이 보여줄
-                핵심 콘텐츠가 아님). */}
-            {provinceWideEvents === null || provinceWideEvents.length > 0 ? (
+                events 전용 콘텐츠라 상시 장소 대분류에서는 보이지 않는다. 항목이 없으면 섹션
+                자체를 숨긴다(다른 섹션과 달리 "찾는 중" 안내를 굳이 보여줄 핵심 콘텐츠가 아님). */}
+            {homeCategory === 'EVENTS' && (provinceWideEvents === null || provinceWideEvents.length > 0) ? (
               <section aria-label="경기도권 기타" className="px-4" ref={provinceWideSectionRef}>
                 <h2 className="text-base font-bold text-gray-900 mb-3">🗺️ 경기도권 기타</h2>
                 {provinceWideEvents === null ? (

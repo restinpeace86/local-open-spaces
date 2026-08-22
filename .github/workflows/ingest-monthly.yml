@@ -37,6 +37,16 @@ jobs:
           SEOUL_OPEN_DATA_KEY: ${{ secrets.SEOUL_OPEN_DATA_KEY }}
         run: node scripts/ingest/cultural-spaces.mjs
 
+      # Task 9-6-4(2026-08-23): 완성돼 있었지만 어떤 워크플로에도 연결돼 있지 않았던 소스
+      # (VWorld 지오코더 기반 문화기반시설 총람 — cultural-facility-summary-adapter.mjs 참고).
+      - name: 전국 문화기반시설총람 정보
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PUBLIC_DATA_API_KEY: ${{ secrets.PUBLIC_DATA_API_KEY }}
+          VWORLD_API_KEY: ${{ secrets.VWORLD_API_KEY }}
+        run: node scripts/ingest/cultural-facility-summary.mjs
+
       # 사용자 지시(2026-08-22): 전체 어댑터 일반 정책 점검에서 발견 — 아래 3개는 코드가 이미
       # 완성돼 있고(페이지네이션 포함) 실제 라이브 호출도 정상 동작하는데, 지금까지 어떤
       # 워크플로에도 연결돼 있지 않아 DB에 단 한 건도 적재된 적이 없었다(실측 확인: 수동

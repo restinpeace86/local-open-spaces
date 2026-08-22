@@ -497,9 +497,12 @@ export async function getProvinceWideEvents(limit = 12): Promise<NearbyItem[]> {
 }
 
 // docs/spec.md 2.2 ③: "🎁 0원의 행복 — 지출 부담 없는 완전 무료 공공장소/행사 카드"
+// Task 9-6-4(2026-08-23): dataType 기본값 'events' — 홈 화면 최상위 대분류(🎪 행사·축제가
+// 기본)에 맞춰 open_spaces는 명시적으로 'open_spaces'를 넘길 때만 조회한다.
 export async function getFreeFeed(
   limit = 12,
-  region: HomeRegion = DEFAULT_HOME_REGION
+  region: HomeRegion = DEFAULT_HOME_REGION,
+  dataType: 'events' | 'open_spaces' = 'events'
 ): Promise<NearbyItem[]> {
   const supabase = await createClient();
 
@@ -516,8 +519,8 @@ export async function getFreeFeed(
   };
 
   const [spaceRows, eventRows] = await Promise.all([
-    fetchRegionFirstRows<SpaceRow>(buildSpacesQuery, region, limit),
-    fetchRegionFirstRows<EventRow>(buildEventsQuery, region, limit),
+    dataType === 'open_spaces' ? fetchRegionFirstRows<SpaceRow>(buildSpacesQuery, region, limit) : Promise.resolve([]),
+    dataType === 'events' ? fetchRegionFirstRows<EventRow>(buildEventsQuery, region, limit) : Promise.resolve([]),
   ]);
 
   const merged = dedupeAndMergeFree([...spaceRows.map(toSpaceItem), ...eventRows.map(toEventItem)]);
@@ -533,17 +536,23 @@ export async function getFreeFeed(
 // 분리해 각각 인덱스를 태운다(하나로 합치면 옵티마이저가 인덱스를 못 써 4초+ 순차 스캔,
 // 지역 필터까지 더하면 타임아웃 — 실측 확인). 지역 우선순위는 SQL 필터가 아니라(같은 이유로
 // 성능 문제 재발 방지) 이미 로드된 결과에 byRegionPriority로 정렬만 적용한다(제외하지 않음).
+// Task 9-6-4(2026-08-23): dataType 기본값 'events' — 홈 화면 대분류 토글에 맞춰 'events'면
+// open_spaces 쿼리를, 'open_spaces'면 events 쿼리를 아예 건너뛴다(대분류 간 데이터가 섞이지
+// 않도록). 기존 "🏞️ 목적별 추천 스팟" 섹션은 이 함수의 유일한 호출부였고 이번에 새 대분류
+// UI로 대체되었으므로, 혼합 조회가 필요한 다른 호출부는 없다(그래도 하위 호환을 위해
+// 파라미터를 optional로 둔다).
 export async function getThemeSpotFeed(
   theme: ThemeSpotKey,
   limit = 20,
-  region: HomeRegion = DEFAULT_HOME_REGION
+  region: HomeRegion = DEFAULT_HOME_REGION,
+  dataType: 'events' | 'open_spaces' = 'events'
 ): Promise<NearbyItem[]> {
   const supabase = await createClient();
   const today = new Date().toISOString().slice(0, 10);
 
-  const confidentSourceTypes = confidentSourceTypesFor(theme);
-  const spaceKeywordFilter = buildThemeKeywordFilter(theme, 'address');
-  const eventKeywordFilter = buildThemeKeywordFilter(theme, 'venue_name');
+  const confidentSourceTypes = dataType === 'open_spaces' ? confidentSourceTypesFor(theme) : [];
+  const spaceKeywordFilter = dataType === 'open_spaces' ? buildThemeKeywordFilter(theme, 'address') : '';
+  const eventKeywordFilter = dataType === 'events' ? buildThemeKeywordFilter(theme, 'venue_name') : '';
 
   const spaceQueries: PromiseLike<{ data: SpaceRow[] | null; error: { message: string } | null }>[] = [];
   if (confidentSourceTypes.length > 0) {
@@ -570,15 +579,18 @@ export async function getThemeSpotFeed(
     );
   }
 
-  const eventQuery = supabase
-    .from('events')
-    .select(EVENT_COLUMNS)
-    .eq('is_active', true)
-    .lte('start_date', today)
-    .gte('end_date', today)
-    .or(eventKeywordFilter)
-    .order('start_date', { ascending: false })
-    .limit(500);
+  const eventQuery =
+    dataType === 'events'
+      ? supabase
+          .from('events')
+          .select(EVENT_COLUMNS)
+          .eq('is_active', true)
+          .lte('start_date', today)
+          .gte('end_date', today)
+          .or(eventKeywordFilter)
+          .order('start_date', { ascending: false })
+          .limit(500)
+      : Promise.resolve({ data: [] as EventRow[], error: null });
 
   const [spaceResults, eventResult] = await Promise.all([Promise.all(spaceQueries), eventQuery]);
 
