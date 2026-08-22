@@ -43,7 +43,7 @@ function eventRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
-describe('getTodayEvents (Task 9-1-3: 지역 우선 정렬, 거리 계산 없음)', () => {
+describe('getTodayEvents (Task 9-1-3: 거리 계산 없음 / Task 9-1-6: Strict Location-First)', () => {
   afterEach(() => {
     vi.doUnmock('@/lib/supabase/server');
     vi.resetModules();
@@ -77,7 +77,7 @@ describe('getTodayEvents (Task 9-1-3: 지역 우선 정렬, 거리 계산 없음
     expect(items[0].address).toBeNull();
   });
 
-  it('유저가 선택한 지역(sigunguName) 항목을 1순위로, 그 외 지역을 2순위로 정렬한다(제외하지 않음)', async () => {
+  it('Task 9-1-6: 선택 지역 데이터가 limit보다 적으면 부족분만 다른 지역으로 채운다', async () => {
     const otherRegion = eventRow({ id: 'other', sigungu_name: '강남구' });
     const selectedRegion = eventRow({ id: 'selected', sigungu_name: '성남시 분당구' });
 
@@ -89,10 +89,32 @@ describe('getTodayEvents (Task 9-1-3: 지역 우선 정렬, 거리 계산 없음
     const { getTodayEvents } = await import('./get-home-feed');
     const items = await getTodayEvents(10, { sigunguName: '성남시 분당구' });
 
-    // 다른 지역이라고 제외되지 않고 2건 모두 남되, 선택 지역이 먼저 온다.
+    // 선택 지역 1건뿐이라 limit(10)에 못 미치므로, 다른 지역으로 부족분을 채운다.
     expect(items).toHaveLength(2);
     expect(items[0].id).toBe('selected');
     expect(items[1].id).toBe('other');
+  });
+
+  it('Task 9-1-6: Strict Location-First — 선택 지역만으로 limit이 충족되면 다른 지역은 완전히 배제한다', async () => {
+    const selectedRegionRows = Array.from({ length: 3 }, (_, i) =>
+      eventRow({ id: `selected-${i}`, title: `분당 행사 ${i}`, sigungu_name: '성남시 분당구' })
+    );
+    const otherRegionRow = eventRow({ id: 'other', sigungu_name: '강남구' });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () =>
+        Promise.resolve({
+          from: () => makeChainable({ data: [otherRegionRow, ...selectedRegionRows], error: null }),
+        }),
+    }));
+
+    const { getTodayEvents } = await import('./get-home-feed');
+    // limit을 3으로 두면 선택 지역 3건만으로 충족되므로 강남구 항목은 결과에 전혀 없어야 한다.
+    const items = await getTodayEvents(3, { sigunguName: '성남시 분당구' });
+
+    expect(items).toHaveLength(3);
+    expect(items.every((item) => item.sigungu_name === '성남시 분당구')).toBe(true);
+    expect(items.some((item) => item.id === 'other')).toBe(false);
   });
 
   it('정규화된 (행사명+시군구) 기준 중복을 병합하고, 하나라도 무료면 무료로 남긴다', async () => {

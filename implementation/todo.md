@@ -96,3 +96,20 @@
   - **검증**:
     - `npx tsc --noEmit` / `npm run test`(전체 129/129, 신규 3건 포함) / `npm run build`: 모두 통과
     - `npm run dev` 기동 후 SSR HTML에서 5대 카테고리 이미지 `src` 경로(`/images/categories/*.svg`) 전부 확인, 각 파일 직접 요청으로 HTTP 200 + 유효한 SVG 콘텐츠 확인, 서버 로그 에러/경고 없음
+
+- [x] **[Task 9-1-6] 메인 Hero Carousel 선택 지역(시/군/구) 당일 이벤트 최우선 정렬 보완** 완료 (2026-08-22)
+  - **작업 목표**: 유저 선택 지역 내 당일 진행되는 가성비/무료 이벤트가 메인 카드 슬라이더에 1순위로 집중 노출되도록 큐레이션 로직 보완
+
+  - **Strict Location-First 피드 쿼리 적용**:
+    - `src/lib/home/get-home-feed.ts`에 `selectRegionFirst(items, region, limit)` 신설 — Task 9-1-3의 `byRegionPriority`(정렬만 하고 배제하지 않음)와 달리, 선택 지역(`sigungu_name`) 항목만으로 limit이 충족되면 다른 지역 항목을 최종 결과에서 완전히 배제한다. 부족할 때만 부족분만큼 다른 지역 항목으로 채운다.
+    - `getTodayEvents`(Hero Carousel이 쓰는 조회 함수)만 `byRegionPriority` 대신 `selectRegionFirst`로 교체 — 지시서가 "HeroCarousel 페칭 시"로 범위를 명시했으므로, "0원의 행복" 그리드가 쓰는 `getFreeFeed`는 Task 9-1-3의 우선 정렬(배제하지 않음) 방식을 그대로 유지했다(임의 확장 금지).
+    - 후보군은 기존과 동일하게 `.limit(500)`으로 넉넉히 가져온 뒤 애플리케이션 레벨에서 선별하므로 추가 쿼리/재요청 없이 그대로 동작한다.
+
+  - **카드 표기 검증**: 각 카드는 자기 자신의 실제 `sigungu_name`을 그대로 표시(Task 9-1-3의 `formatVenueLine`)하므로, 선택 지역 이벤트로 100% 채워지면 모든 카드가 선택 지역명과 일치하고, 부족해서 다른 지역으로 채워진 경우엔 그 카드가 각자의 실제 지역명을 정직하게 보여준다(라벨 조작 없음).
+
+  - **검증**:
+    - `npx tsc --noEmit` / `npm run test`(전체 135/135, 신규 1건 포함) / `npm run build`: 모두 통과.
+    - `npm run dev` 기동 후 실측: `?sigungu=강남구` 요청 시 실제 데이터가 강남구 6건 + 다른 지역 4건(limit 10 미충족이라 부족분만 채움)으로 정확히 동작함을 확인. `getTodayEvents(3, {sigunguName: '성남시 분당구'})`처럼 limit을 매칭 건수 이하로 두면 다른 지역이 100% 배제됨을 신규 테스트로 검증.
+    - `?sigungu=성남시 분당구`(기본 지역)는 오늘 진행 중인 이벤트가 0건이라 자연스럽게 전량 다른 지역으로 대체되는 것도 확인(버그 아님 — 실제 데이터 상황).
+
+  - **특이 사항**: `getFreeFeed`(0원의 행복 그리드)는 이번 지시서 범위(HeroCarousel 한정)에 포함되지 않아 손대지 않았다 — 필요 시 별도 지시로 진행.

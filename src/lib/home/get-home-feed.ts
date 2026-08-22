@@ -125,8 +125,23 @@ function byRegionPriority(region: HomeRegion) {
   };
 }
 
+// Task 9-1-6: Hero Carousel 전용 "Strict Location-First" 선택. byRegionPriority(정렬만 하고
+// 배제하지 않음)와 달리, 선택 지역 항목만으로 limit이 충족되면 다른 지역 항목은 최종 결과에서
+// 완전히 배제한다. 선택 지역 데이터가 부족할 때만 다른 지역 데이터로 남은 자리를 채운다.
+function selectRegionFirst(items: NearbyItem[], region: HomeRegion, limit: number): NearbyItem[] {
+  if (!region.sigunguName) return items.slice(0, limit);
+
+  const matching = items.filter((item) => item.sigungu_name === region.sigunguName);
+  if (matching.length >= limit) return matching.slice(0, limit);
+
+  const others = items.filter((item) => item.sigungu_name !== region.sigunguName);
+  return [...matching, ...others].slice(0, limit);
+}
+
 // docs/spec.md 2.2 ①: "당일 진행 중인 행사/이벤트 중 추천 5~10개 동적 페칭"
 // docs/spec.md 1: "사전 예약 마감건은 제외하고, 오늘/주말 당일 즉시 방문 가능한 정보를 우선 추천"
+// Task 9-1-6: Hero Carousel은 Strict Location-First — 선택 지역 당일 이벤트로 limit이 충족되면
+// 다른 지역 이벤트는 완전히 배제한다(부족할 때만 다른 지역으로 최소 보충).
 export async function getTodayEvents(
   limit = 10,
   region: HomeRegion = DEFAULT_HOME_REGION
@@ -149,7 +164,7 @@ export async function getTodayEvents(
   if (error) throw new Error(`오늘의 행사 조회 실패: ${error.message}`);
 
   const items = dedupeAndMergeFree((data ?? []).map(toEventItem));
-  return items.sort(byRegionPriority(region)).slice(0, limit);
+  return selectRegionFirst(items, region, limit);
 }
 
 // docs/spec.md 2.2 ③: "🎁 0원의 행복 — 지출 부담 없는 완전 무료 공공장소/행사 카드"
