@@ -191,17 +191,40 @@ function sortByDistanceIfKnown(items: NearbyItem[], region: HomeRegion): NearbyI
     .sort((a, b) => a.distance_meters - b.distance_meters);
 }
 
+// Task 9-4-3(2026-08-22): sigungu_name은 "{시} {구}"(예: "성남시 분당구") 또는 구 없는 "{시}"
+// 단독(예: "춘천시") 형태다(schema-mapper.mjs의 extractSigunguName과 동일 규칙). 공백 앞부분을
+// "상위 시"로 본다 — DB에 시/도(province) 컬럼이 별도로 없어(추측으로 새 컬럼/전국 매핑표를
+// 만들지 않음, 제3장 제3조 데이터 구조 변경 금지) "성남시 전체"까지만 상위 지역으로 판별하고,
+// "경기도" 같은 시/도 단위까지는 이 데이터만으로 구분할 수 없다.
+function parentCityOf(sigunguName: string): string {
+  const spaceIndex = sigunguName.indexOf(' ');
+  return spaceIndex === -1 ? sigunguName : sigunguName.slice(0, spaceIndex);
+}
+
+// Task 9-4-3: 메인 카드(Hero Carousel) 2단계 지역 큐레이션 우선순위.
+// 0(1순위)=선택 시/군/구와 정확히 일치, 1(2순위)=같은 상위 시의 다른 구, 2(3순위)=그 외 전체.
+function regionTier(item: NearbyItem, region: HomeRegion): 0 | 1 | 2 {
+  if (!region.sigunguName) return 0;
+  if (item.sigungu_name === region.sigunguName) return 0;
+
+  const parentCity = parentCityOf(region.sigunguName);
+  if (item.sigungu_name && item.sigungu_name.startsWith(`${parentCity} `)) return 1;
+
+  return 2;
+}
+
 // Task 9-1-6: Hero Carousel 전용 "Strict Location-First" 선택. byRegionPriority(정렬만 하고
 // 배제하지 않음)와 달리, 선택 지역 항목만으로 limit이 충족되면 다른 지역 항목은 최종 결과에서
 // 완전히 배제한다. 선택 지역 데이터가 부족할 때만 다른 지역 데이터로 남은 자리를 채운다.
+// Task 9-4-3: 부족분을 채울 때도 아무 지역이나 뒤섞지 않고, 같은 상위 시(예: 성남시 전체)를
+// 2순위로 먼저 채운 뒤에야 그 외 지역(3순위)으로 채운다. Array.sort는 안정 정렬이므로 각 순위
+// 그룹 내부의 기존 정렬(거리순 등)은 그대로 유지된다 — 1순위만으로 limit이 채워지면 정렬 후
+// slice 단계에서 2·3순위 항목은 자연히 결과에서 제외되어 기존 Strict 배제 동작도 유지된다.
 function selectRegionFirst(items: NearbyItem[], region: HomeRegion, limit: number): NearbyItem[] {
   if (!region.sigunguName) return items.slice(0, limit);
 
-  const matching = items.filter((item) => item.sigungu_name === region.sigunguName);
-  if (matching.length >= limit) return matching.slice(0, limit);
-
-  const others = items.filter((item) => item.sigungu_name !== region.sigunguName);
-  return [...matching, ...others].slice(0, limit);
+  const ranked = [...items].sort((a, b) => regionTier(a, region) - regionTier(b, region));
+  return ranked.slice(0, limit);
 }
 
 // Task 9-1-4(2026-08-22) 실측에서 발견한 버그: open_spaces/events 후보군을 "최신순 500건"으로만

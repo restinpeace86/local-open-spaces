@@ -1,13 +1,8 @@
-- [ ] **[Task 9-4-1 ~ 9-4-3] 나드리픽 브랜드 스플래시, 탭 전환 로딩 UX, Floating `+더보기` 및 메인카드 2단계 지역 큐레이션 통합 구현** 🚀
-  - **세부 작업 지시**:
-    1. **[Task 9-4-1] 브랜드 스플래시 & 로딩 컴포넌트 (`src/components/common/brand-splash.tsx`)**:
-       - 화면 중앙에 **`나드리픽 (NadriPick)`** 타이틀, 서브 문구("오늘 어디 가지?") 및 스피너 애니메이션 배치.
-       - Next.js `src/app/loading.tsx` 연동으로 초기 진입 스플래시 제공.
-    2. **[Task 9-4-1] 하단 탭 반응성 로딩 오버레이 연동**:
-       - `bottom-tabs.tsx`에 `useTransition` 기반 라우트 전환 상태 연동 ➔ 탭 누르는 즉시 화면 중앙에 `NadriPick` 로딩 오버레이 노출.
-    3. **[Task 9-4-2] 메인 카드 우측 하단 Floating `+더보기` 버튼 상시 노출 (`hero-carousel.tsx`)**:
-       - Carousel 프레임 우측 하단(`absolute bottom-4 right-4 z-20`)에 글래스모피즘 스타일의 `⚡ 오늘 전체보기 +` Floating 버튼 배치.
-       - 스와이프 상태와 무관하게 상시 노출되며, 터치 시 당일 전체 이벤트 목록(`/nearby?filter=today`)으로 바로 직행.
-    4. **[Task 9-4-3] 메인 카드 당일 이벤트 2단계 지역 큐레이션 (`get-home-feed.ts`)**:
-       - 메인 카드 데이터 피딩 시 **1순위: 선택 시/군/구(성남시 분당구)** 당일 행사 최우선 배치.
-       - 10개 미달 시 **2순위: 상위 시/도(성남시 전체 / 경기도)** 당일 행사로 순차 보충 정렬.
+- [x] **[Task 9-4-1 ~ 9-4-3] 나드리픽 브랜드 스플래시, 탭 전환 로딩 UX, Floating `+더보기` 및 메인카드 2단계 지역 큐레이션 통합 구현** 🚀 (2026-08-22 완료)
+  - **완료 내역**:
+    1. **[Task 9-4-1] 브랜드 스플래시 & 로딩 컴포넌트**: 신규 `src/components/common/brand-splash.tsx`에 스피너 + "나드리픽 (NadriPick)" 타이틀 + "오늘 어디 가지?" 서브 문구 + "LOADING..." 텍스트를 배치. 신규 `src/app/loading.tsx`가 이를 감싸 App Router 표준 로딩 Suspense 경계로 연동됨.
+    2. **[Task 9-4-1] 하단 탭 반응성 로딩 오버레이**: `bottom-tabs.tsx`를 `<Link>` 대신 `router.push` + `useTransition`으로 전환해, 탭 클릭 즉시 `isPending` 동안 화면 전체를 덮는 반투명 오버레이(`BrandSplash` 포함)를 노출하도록 변경. 같은 탭 재클릭(이미 활성) 시에는 이동을 요청하지 않음.
+    3. **[Task 9-4-2] 메인 카드 Floating `+더보기` 버튼**: `hero-carousel.tsx`의 슬라이드 스크롤 컨테이너를 `relative` 래퍼로 감싸고, `absolute bottom-4 right-4 z-20` 글래스모피즘(`bg-white/70 backdrop-blur-md`) 버튼을 카드 개수/스와이프 상태와 무관하게 항상 노출. **보정 사항**: 지시된 링크값 `/nearby?filter=today`는 실제 `map-explorer.tsx`가 읽는 `QuickFilterKey`(`'KIDS'|'FREE'|'TODAY_WEEKEND'`)에 없는 값이라 필터가 걸리지 않는 것을 코드 확인 후, 바로 위 기존 "전체 보기" CTA 슬라이드와 동일하게 이미 검증된 `TODAY_WEEKEND`를 그대로 사용함(임의 판단이 아니라 실제 동작하도록 하는 사실 정정).
+    4. **[Task 9-4-3] 메인 카드 2단계 지역 큐레이션**: `get-home-feed.ts`에 `parentCityOf()`/`regionTier()`를 추가해 `selectRegionFirst`가 안정 정렬(1순위=선택 시/군/구 정확히 일치, 2순위=같은 상위 시의 다른 구, 3순위=그 외 전체)로 동작하도록 개편. 기존 "1순위만으로 limit 충족 시 나머지 완전 배제"(Task 9-1-6 Strict Location-First) 동작은 그대로 보존됨. **범위 한정**: DB에 시/도(province) 컬럼이 별도로 없어(`sigungu_name`은 "시 구" 형태만 저장) "경기도" 같은 시/도 단위 3순위는 전국 시/군/구→시/도 매핑표를 새로 만들어야 하는데, 이는 스키마/데이터 구조 변경에 해당해 임의로 추가하지 않음(제3장 제3조) — 현재는 "같은 상위 시(성남시 전체)"까지만 2순위로 구현함.
+  - **실측 검증**: `npm run dev` 기동 후 `curl localhost:3000/`로 Floating 버튼(`⚡ 오늘 전체보기 +`, `href=/nearby?filter=TODAY_WEEKEND`)과 브랜드 스플래시 마크업("나드리픽 (NadriPick)", "오늘 어디 가지?")이 정상 포함됨을 확인. 하단 탭이 `<button>`으로 전환되어 렌더링됨을 확인.
+  - **검증 기준 결과**: `npx tsc --noEmit`, `npm run test`(21 files/189 tests 전체 통과 — `bottom-tabs.test.tsx` 신규 작성, `hero-carousel.test.tsx`/`get-home-feed.test.ts`에 Task 9-4-2/9-4-3 케이스 추가), `npm run build`(정상 라우트 생성 확인) 모두 통과.

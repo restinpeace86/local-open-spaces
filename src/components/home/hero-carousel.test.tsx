@@ -156,6 +156,26 @@ describe('HeroCarousel "전체 보기" CTA (Task 9-1-9)', () => {
   });
 });
 
+// Task 9-4-2(2026-08-22): 카드 개수/스와이프 상태와 무관하게 항상 노출되는 Floating 버튼.
+describe('HeroCarousel Floating "오늘 전체보기" 버튼 (Task 9-4-2)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('아이템이 10개 이하라도(moreHref 없이도) Floating 버튼은 항상 노출된다', () => {
+    render(<HeroCarousel items={[makeItem('1', '행사1')]} onSelect={() => {}} />);
+
+    const link = screen.getByText('⚡ 오늘 전체보기 +').closest('a');
+    // map-explorer.tsx가 실제로 인식하는 QuickFilterKey 값과 일치해야 자동 필터가 걸린다.
+    expect(link).toHaveAttribute('href', '/nearby?filter=TODAY_WEEKEND');
+  });
+});
+
 // Task 9-1-4: 4대 핵심 뱃지(가성비/실내외/아이동반/방문시점) 중 실내외·아이동반이 HeroCarousel에
 // 아예 노출되지 않던 것을 보완했는지 검증한다(가성비·방문시점은 기존 오버레이로 이미 노출됨).
 describe('HeroCarousel 4대 뱃지 보완 (Task 9-1-4)', () => {

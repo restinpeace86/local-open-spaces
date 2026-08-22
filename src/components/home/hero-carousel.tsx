@@ -55,14 +55,17 @@ export function HeroCarousel({
   const todayStr = new Date().toISOString().slice(0, 10);
 
   return (
+    // Task 9-4-2(2026-08-22): Floating 버튼이 가로 스크롤 내용과 무관하게 프레임 우측 하단에
+    // 고정되도록, 스크롤되는 슬라이드 컨테이너와 버튼을 감싸는 relative 래퍼를 하나 둔다.
     <div
-      className="flex gap-3 overflow-x-auto px-4 pb-1 snap-x snap-mandatory"
+      className="relative"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}
       onTouchStart={() => setIsPaused(true)}
       onTouchEnd={() => setIsPaused(false)}
     >
-      {items.map((item, index) => {
+      <div className="flex gap-3 overflow-x-auto px-4 pb-1 snap-x snap-mandatory">
+        {items.map((item, index) => {
         const meta = getCategoryMeta(item.category);
         // Task 9-1-3: "[장소명] · [시/군/구]"로 통일 표시(거리 계산 제거).
         const venueLine = formatVenueLine(item.address, item.sigungu_name);
@@ -147,17 +150,31 @@ export function HeroCarousel({
         );
       })}
 
-      {moreHref && (
-        <Link
-          href={moreHref}
-          className="shrink-0 w-[calc(100vw-32px)] sm:w-72 snap-center [scroll-snap-stop:always] rounded-2xl border border-dashed border-gray-300 bg-gray-50 flex flex-col items-center justify-center gap-2 text-center p-4 hover:bg-gray-100 transition-colors"
-        >
-          <span className="text-3xl" aria-hidden>
-            🗺️
-          </span>
-          <span className="text-sm font-semibold text-gray-700">오늘 진행 중인 전체 행사 보기</span>
-        </Link>
-      )}
+        {moreHref && (
+          <Link
+            href={moreHref}
+            className="shrink-0 w-[calc(100vw-32px)] sm:w-72 snap-center [scroll-snap-stop:always] rounded-2xl border border-dashed border-gray-300 bg-gray-50 flex flex-col items-center justify-center gap-2 text-center p-4 hover:bg-gray-100 transition-colors"
+          >
+            <span className="text-3xl" aria-hidden>
+              🗺️
+            </span>
+            <span className="text-sm font-semibold text-gray-700">오늘 진행 중인 전체 행사 보기</span>
+          </Link>
+        )}
+      </div>
+
+      {/* Task 9-4-2(2026-08-22): 스와이프 상태와 무관하게 항상 노출되는 Floating "오늘 전체보기"
+          버튼. 마지막 슬라이드까지 넘겨야만 나오는 위 moreHref CTA 카드(10개 초과 시에만 존재)와
+          달리, 이 버튼은 카드 개수와 무관하게 항상 눌러서 당일 전체 행사로 바로 이동할 수 있다.
+          링크 값은 map-explorer.tsx의 QuickFilterKey와 정확히 일치해야 자동 필터가 걸린다
+          (지시된 "today"는 실제 QuickFilterKey에 없는 값이라 필터가 걸리지 않아, 위 moreHref와
+          동일하게 이미 검증된 'TODAY_WEEKEND'를 그대로 사용함). */}
+      <Link
+        href="/nearby?filter=TODAY_WEEKEND"
+        className="absolute bottom-4 right-4 z-20 flex items-center gap-1 rounded-full bg-white/70 backdrop-blur-md border border-white/40 px-3 py-1.5 text-xs font-semibold text-gray-800 shadow-md hover:bg-white/90 transition-colors"
+      >
+        ⚡ 오늘 전체보기 +
+      </Link>
     </div>
   );
 }

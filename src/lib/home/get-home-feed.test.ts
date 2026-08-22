@@ -152,6 +152,24 @@ describe('getTodayEvents (Task 9-1-3: 거리 계산 없음 / Task 9-1-6: Strict 
     expect(items.some((item) => item.id === 'other')).toBe(false);
   });
 
+  // Task 9-4-3(2026-08-22): 1순위(선택 시/군/구)로 limit이 안 채워지면, 아무 지역이나 섞지 않고
+  // 같은 상위 시(성남시)의 다른 구를 2순위로 먼저 채운 뒤에야 완전히 다른 지역(3순위)을 채운다.
+  it('Task 9-4-3: 1순위 부족 시 같은 상위 시(성남시)를 2순위로, 그 외 지역은 3순위로 채운다', async () => {
+    const unrelated = eventRow({ id: 'unrelated', title: '강남 행사', sigungu_name: '강남구' });
+    const sameParentCity = eventRow({ id: 'jungwon', title: '중원구 행사', sigungu_name: '성남시 중원구' });
+    const selected = eventRow({ id: 'bundang', title: '분당 행사', sigungu_name: '성남시 분당구' });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () =>
+        Promise.resolve({ from: () => makeChainable({ data: [unrelated, sameParentCity, selected], error: null }) }),
+    }));
+
+    const { getTodayEvents } = await import('./get-home-feed');
+    const items = await getTodayEvents(10, { sigunguName: '성남시 분당구' });
+
+    expect(items.map((item) => item.id)).toEqual(['bundang', 'jungwon', 'unrelated']);
+  });
+
   it('정규화된 (행사명+시군구) 기준 중복을 병합하고, 하나라도 무료면 무료로 남긴다', async () => {
     const paid = eventRow({ id: 'paid-dup', title: '분당 여름 축제', sigungu_name: '성남시 분당구', is_free: false });
     const free = eventRow({ id: 'free-dup', title: '분당  여름 축제', sigungu_name: '성남시 분당구', is_free: true });
