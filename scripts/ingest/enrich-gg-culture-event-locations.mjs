@@ -1,5 +1,7 @@
 // CLI 진입점 — 실제 로직은 adapters/gg-culture-location-enrichment.mjs.
 // 실행 전 .env.local에 GG_DATA_API_KEY, VWORLD_API_KEY, SUPABASE_SERVICE_ROLE_KEY 설정 필요.
+// Task 9-6-5(2026-08-23): KAKAO_REST_API_KEY도 설정돼 있으면 VWorld 실패 시 카카오 키워드
+// 장소 검색으로 2차 폴백한다(선택 — 없어도 VWorld만으로 동작).
 import { loadEnv } from '../lib/load-env.mjs';
 import { createAdminClient } from './lib/supabase-admin.mjs';
 import { GgCultureEventsAdapter } from './adapters/gg-culture-events-adapter.mjs';

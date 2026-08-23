@@ -6,6 +6,12 @@ vi.mock('./lib/vworld-geocoder.mjs', () => ({
   geocode: vi.fn(),
 }));
 
+// Task 9-6-5: 카카오 키워드 장소 검색(VWorld 실패 시 2차 폴백) 모킹.
+vi.mock('./lib/kakao-geocoder.mjs', () => ({
+  hasKakaoApiKey: vi.fn(() => false),
+  geocodeKeyword: vi.fn(),
+}));
+
 const {
   extractVenueFromHtml,
   buildUrlLookup,
@@ -14,6 +20,7 @@ const {
   API1_EXTERNAL_ID_PREFIX,
 } = await import('./gg-culture-location-enrichment.mjs');
 const { geocode } = await import('./lib/vworld-geocoder.mjs');
+const { hasKakaoApiKey, geocodeKeyword } = await import('./lib/kakao-geocoder.mjs');
 
 // 실측 확인(2026-08-23)한 ggc.ggcf.kr 상세 페이지의 실제 마크업 구조를 그대로 재현한 표본.
 // "주소" 필드는 실제로는 <!-- 주석 처리된 --> 템플릿 잔재(모든 페이지에 동일 예시값)라
@@ -63,25 +70,73 @@ describe('buildUrlLookup', () => {
 describe('geocodeVenueOrNull', () => {
   beforeEach(() => {
     geocode.mockReset();
+    hasKakaoApiKey.mockReset();
+    hasKakaoApiKey.mockReturnValue(false);
+    geocodeKeyword.mockReset();
   });
 
   it('콤마로 나열된 경우 첫 번째 장소만 지오코딩한다', async () => {
     geocode.mockResolvedValueOnce(GEOCODE_RESULT);
     const result = await geocodeVenueOrNull('경기아트센터, 경기 예술인의 집');
     expect(geocode).toHaveBeenCalledWith('경기아트센터');
-    expect(result).toEqual({ primary: '경기아트센터', coords: GEOCODE_RESULT });
+    expect(result).toEqual({ primary: '경기아트센터', coords: GEOCODE_RESULT, provider: 'vworld' });
   });
 
-  it('경기도 범위를 벗어나면 null을 반환한다', async () => {
+  it('경기도 범위를 벗어나고 카카오 키가 없으면 null을 반환한다', async () => {
     geocode.mockResolvedValueOnce({ lng: 129.5, lat: 35.8 });
     const result = await geocodeVenueOrNull('알 수 없는 장소');
     expect(result).toBeNull();
+    expect(geocodeKeyword).not.toHaveBeenCalled();
   });
 
-  it('지오코딩 결과가 없으면 null을 반환한다', async () => {
+  it('지오코딩 결과가 없고 카카오 키가 없으면 null을 반환한다', async () => {
     geocode.mockResolvedValueOnce(null);
     const result = await geocodeVenueOrNull('알 수 없는 장소');
     expect(result).toBeNull();
+    expect(geocodeKeyword).not.toHaveBeenCalled();
+  });
+
+  // Task 9-6-5: VWorld 실패 시 카카오 키워드 장소 검색으로 2차 폴백.
+  it('VWorld가 실패하고 카카오 키가 있으면 카카오 키워드 검색으로 재시도한다', async () => {
+    geocode.mockResolvedValueOnce(null);
+    hasKakaoApiKey.mockReturnValue(true);
+    geocodeKeyword.mockResolvedValueOnce({ lng: 126.77, lat: 37.66, placeName: '고양아람누리' });
+
+    const result = await geocodeVenueOrNull('고양아람누리 아람마슬');
+
+    expect(geocodeKeyword).toHaveBeenCalledWith('고양아람누리 아람마슬');
+    expect(result).toEqual({
+      primary: '고양아람누리 아람마슬',
+      coords: { lng: 126.77, lat: 37.66, placeName: '고양아람누리' },
+      provider: 'kakao',
+    });
+  });
+
+  it('카카오도 경기도 범위를 벗어나면 null을 반환한다(오매칭 방지)', async () => {
+    geocode.mockResolvedValueOnce(null);
+    hasKakaoApiKey.mockReturnValue(true);
+    geocodeKeyword.mockResolvedValueOnce({ lng: 129.5, lat: 35.8, placeName: '무관한 장소' });
+
+    const result = await geocodeVenueOrNull('알 수 없는 장소');
+    expect(result).toBeNull();
+  });
+
+  it('카카오도 결과가 없으면 null을 반환한다', async () => {
+    geocode.mockResolvedValueOnce(null);
+    hasKakaoApiKey.mockReturnValue(true);
+    geocodeKeyword.mockResolvedValueOnce(null);
+
+    const result = await geocodeVenueOrNull('존재하지 않는 장소');
+    expect(result).toBeNull();
+  });
+
+  it('VWorld가 성공하면 카카오는 아예 호출하지 않는다(1차 우선)', async () => {
+    geocode.mockResolvedValueOnce(GEOCODE_RESULT);
+    hasKakaoApiKey.mockReturnValue(true);
+
+    await geocodeVenueOrNull('정상 주소');
+
+    expect(geocodeKeyword).not.toHaveBeenCalled();
   });
 });
 

@@ -1,13 +1,10 @@
-- [ ] **[Task 9-6-5] 카카오 REST API 키 기반 시설명 이벤트 장소 37건 `EXACT` 추가 승격 및 DB 적재** 🎯
-  - **작업 배경**: VWorld 지오코더(도로명 주소 전용)로 변환 실패했던 시설명 단독 장소 37건을 `KAKAO_REST_API_KEY` 기반 카카오 장소 검색 API(`https://dapi.kakao.com/v2/local/search/keyword.json`)로 지오코딩 진행.
-  - **세부 작업 지시**:
-    1. **카카오 키워드 장소 검색 연동 (`scripts/ingest/adapters/gg-culture-location-enrichment.mjs`)**:
-       - `.env.local`의 `KAKAO_REST_API_KEY` 환경변수를 활용해 카카오 장소 검색 REST API 호출부 추가.
-       - VWorld 1차 검색 실패 시 카카오 장소 검색 API로 2차 검색(Fallback) 수행.
-    2. **DB 업데이트 & `EXACT` 승격 적재**:
-       - 변환 성공 시 DB `events` 테이블의 `venue_name`, `location` (PostGIS point), `location_precision = 'EXACT'` 값으로 direct UPDATE 적재.
-    3. **지도 RPC 및 피드 실측 검증**:
-       - 승격된 성남시/경기도 이벤트가 지도 주변 검색 RPC(`get_nearby_spaces_and_events`) 및 피드에 정상 반영되는지 실측 검증.
-  - **검증 기준**:
-    - `npx tsc --noEmit`, `npm run test`, `npm run build` 통과.
-    - 카카오 REST API 검색 성공 건수 및 지도 RPC 노출 실측 결과 보고.
+- [x] **[Task 9-6-5] 카카오 REST API 키 기반 시설명 이벤트 장소 EXACT 추가 승격 및 DB 적재** 🎯 (2026-08-23 완료)
+  - **작업 배경**: VWorld 지오코더(도로명 주소 전용)로 변환 실패했던 시설명 단독 장소를 `KAKAO_REST_API_KEY` 기반 카카오 장소 검색 API(`https://dapi.kakao.com/v2/local/search/keyword.json`)로 지오코딩.
+  - **실측으로 확인한 지시서와의 차이**: 지시서는 "37건"이라 명시했으나 실측 재조회 결과 대상 건수는 41건이었다(직전 Task 9-6-3 완료 이후 시간 경과로 일부 이벤트의 `end_date`가 지나 대상 집합이 자연 변동한 것으로 추정 — 41건을 정확한 현재 기준으로 삼아 작업 진행).
+  - [x] `scripts/ingest/adapters/lib/kakao-geocoder.mjs` 신규 작성: `KAKAO_REST_API_KEY`(카카오맵 JS SDK 전용 키인 `NEXT_PUBLIC_KAKAO_MAP_API_KEY`와 별개, Task 9-6-3에서 401 확인했던 그 키가 아님을 실측으로 재확인 — 이번엔 REST 키가 실제로 발급돼 HTTP 200 정상 응답 확인) 기반 카카오 키워드 장소 검색 연동.
+  - [x] `gg-culture-location-enrichment.mjs`의 `geocodeVenueOrNull`: VWorld 1차 시도 → 실패(결과 없음 또는 경기도 범위 밖) 시 카카오 키워드 검색으로 2차 시도, 카카오 결과도 동일하게 경기도 범위(GYEONGGI_BOUNDS) 검증을 거쳐 오매칭 방지.
+  - [x] 성공 시 `venue_name`/`location`/`location_precision='EXACT'` 동일 UPDATE 경로로 적재(기존 Task 9-6-3 로직 재사용, 신규 컬럼 없음).
+  - **결과**: 대상 41건 중 11건이 카카오 키워드 검색으로 신규 EXACT 승격(예: "화성행궁", "한강뮤지엄", "어메이징 아웃사이더 아트센터" 등 — VWorld가 찾지 못한 시설명/건물명 단독 텍스트). 나머지 30건은 카카오로도 검색 불가(예: "백남준아트센터 제2전시실" 같은 건물 내부 특정 실/층 단위 텍스트, "회차별 상이"처럼 애초에 장소가 아닌 텍스트) — 코드 결함이 아니라 원본 텍스트 자체의 한계로, 좌표를 지어내지 않고 정직하게 스킵.
+  - **지도/피드 검증(실측)**: `get_nearby_spaces_and_events` RPC를 신규 EXACT 승격된 "2026 화성행궁 야간개장"(수원시) 좌표에 반경 300m로 직접 호출 → EVENT 정상 반환(지도 노출 확인). `getTodayEvents(1000, {sigunguName:'수원시'})`를 실제 라이브 DB에 직접 호출해 해당 이벤트가 지역-매칭 결과 집합에 정상 포함됨을 확인 — 다만 `limit=30`(실제 UI가 쓰는 기본값)로는 수원시 경쟁 콘텐츠가 343건이나 돼 상위 30건 안에는 안 들었다(콘텐츠 우선순위 정책의 정상 동작이지 지역 매칭 파이프라인의 결함이 아님을 limit=1000 재조회로 별도 검증).
+  - **검증**: `npx tsc --noEmit` 통과, `npm run test` 273/273 통과(kakao-geocoder 4건 + geocodeVenueOrNull 폴백 시나리오 4건 추가), `npm run build` 통과.
+  - **관련 파일**: `scripts/ingest/adapters/lib/kakao-geocoder.mjs`(신규, +test), `scripts/ingest/adapters/gg-culture-location-enrichment.mjs`(+test), `scripts/ingest/enrich-gg-culture-event-locations.mjs`(주석 갱신), `.github/workflows/ingest-daily.yml`(`KAKAO_REST_API_KEY` env 추가 — GitHub Actions Secrets에도 별도 등록 필요, 로컬 `.env.local`과 별개).

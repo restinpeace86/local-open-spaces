@@ -85,12 +85,15 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: node scripts/ingest/gg-culture-events.mjs
 
+      # Task 9-6-5(2026-08-23): KAKAO_REST_API_KEY는 선택 값이다(없어도 VWorld만으로 동작) —
+      # GitHub Actions 저장소 Secrets에 별도 등록이 필요하다(로컬 .env.local과 별개).
       - name: 경기데이터드림 문화행사 위치 보완(상세 페이지 스크래핑 EXACT 승격)
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GG_DATA_API_KEY: ${{ secrets.GG_DATA_API_KEY }}
           VWORLD_API_KEY: ${{ secrets.VWORLD_API_KEY }}
+          KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
         run: node scripts/ingest/enrich-gg-culture-event-locations.mjs
 
       # Task 9-6-4(2026-08-23): 물놀이형 수경시설(여름 한정 설치 공간)은 상시 공간이 아니라

@@ -7,16 +7,20 @@
 // transformFoundationEvents 참고) — 그래서 API2발 CITY_APPROX/UNKNOWN은 구조적으로 존재하지
 // 않는다(실측으로 0건 확인). 따라서 이 보완 스크립트는 API1 소스만 다룬다.
 //
-// 지시서는 "네이버/카카오 지오코딩 API"를 언급했으나, 이 프로젝트에는 서버사이드로 쓸 수 있는
-// 키가 없다 — 실제 호출로 확인함(2026-08-23):
+// 지시서는 "네이버/카카오 지오코딩 API"를 언급했으나, 애초 이 프로젝트에는 서버사이드로 쓸 수
+// 있는 키가 없었다 — 실제 호출로 확인함(2026-08-23):
 //   - NEXT_PUBLIC_KAKAO_MAP_API_KEY는 카카오맵 JS SDK 전용 키(브라우저 도메인 제한)라
 //     dapi.kakao.com/v2/local/search/address.json에 직접 요청하면 401
 //     "KA Header is required but neither os nor origin field is given"로 거부된다.
-//     (REST API 전용 별도 키가 필요하며 현재 프로젝트에 없음.)
 //   - 네이버(NAVER_CLIENT_ID/SECRET 등)는 .env.local에 아예 설정돼 있지 않다.
-// 따라서 이미 이 프로젝트 전체 파이프라인에서 검증되어 쓰이고 있는 VWorld 지오코더
-// (vworld-geocoder.mjs)를 재사용한다(제5장 제4조 기존 구조 우선 — 새 Provider를 무리하게
-// 끼워 넣지 않음). 최종 좌표 결과물은 지오코딩 Provider와 무관하게 동일하다.
+// 그래서 당시엔 VWorld 지오코더(vworld-geocoder.mjs, 도로명/지번 주소 전용)만으로 처리했고,
+// "OO아트센터 1층 전시실"류 시설명/건물명 단독 텍스트(VWorld가 주소로 인식 못 함)는 스킵됐다.
+//
+// Task 9-6-5(2026-08-23): 사용자가 KAKAO_REST_API_KEY(REST API 전용 키, JS SDK 키와 다름)를
+// 새로 발급해 .env.local에 추가함 — 실제 호출로 정상 동작 확인(HTTP 200). 카카오 로컬
+// "키워드 장소 검색"(주소가 아니라 등록된 장소/POI명으로 검색 가능)을 VWorld 실패 시 2차
+// 폴백으로 추가한다(kakao-geocoder.mjs) — VWorld가 여전히 1차(이미 검증된 기존 경로 우선,
+// 제5장 제4조), 실패하면 카카오로 재시도.
 //
 // 지시서의 "address" 컬럼도 events 테이블에는 존재하지 않는다(open_spaces와 달리 events는
 // address가 없고 venue_name을 쓴다 — Task 9-6-1/9-6-2에서 이미 실측 확인/정정한 스키마).
@@ -35,6 +39,7 @@
 // 모든 행에 똑같이 채워 넣게 된다 — 실측으로 이 함정을 발견해 피했다(추측 금지 원칙).
 import { cleanText } from '../lib/ai-tagging.mjs';
 import { geocode } from './lib/vworld-geocoder.mjs';
+import { geocodeKeyword, hasKakaoApiKey } from './lib/kakao-geocoder.mjs';
 import { GYEONGGI_BOUNDS, isWithinGyeonggiBounds } from './gg-culture-events-adapter.mjs';
 
 export const API1_EXTERNAL_ID_PREFIX = 'GG_CULTURE_EVENT_';
@@ -80,13 +85,26 @@ export async function scrapeVenueName(url) {
 
 // 콤마로 여러 장소가 나열된 경우 첫 번째만 대표 장소로 지오코딩한다
 // (gg-culture-events-adapter.mjs의 API2 처리와 동일한 정책 — national-park-ecotour-adapter.mjs 선례).
+// Task 9-6-5: VWorld(도로명/지번 주소 전용) 실패 시 카카오 키워드 장소 검색으로 2차 시도한다
+// (등록된 장소/POI명으로 검색 가능해 "OO아트센터 1층 전시실" 같은 시설명 단독 텍스트에 강함).
+// 두 Provider 모두 동일하게 경기도 범위 검증을 거친다(이 소스는 경기도 전용이므로).
 export async function geocodeVenueOrNull(venue) {
   const primary = venue.split(',')[0].trim();
   if (!primary) return null;
-  const coords = await geocode(primary);
-  if (!coords) return null;
-  if (!isWithinGyeonggiBounds(coords)) return null;
-  return { primary, coords };
+
+  const vworldCoords = await geocode(primary);
+  if (vworldCoords && isWithinGyeonggiBounds(vworldCoords)) {
+    return { primary, coords: vworldCoords, provider: 'vworld' };
+  }
+
+  if (hasKakaoApiKey()) {
+    const kakaoResult = await geocodeKeyword(primary);
+    if (kakaoResult && isWithinGyeonggiBounds(kakaoResult)) {
+      return { primary, coords: kakaoResult, provider: 'kakao' };
+    }
+  }
+
+  return null;
 }
 
 export { GYEONGGI_BOUNDS };
@@ -156,7 +174,7 @@ export async function enrichGgCultureEventLocations({ client, adapter, dryRun = 
     }
 
     console.log(
-      `✅ [${target.title}] "${venue}" → (${geocoded.coords.lng}, ${geocoded.coords.lat}) EXACT 승격${dryRun ? ' (dry-run)' : ''}`
+      `✅ [${target.title}] "${venue}" → (${geocoded.coords.lng}, ${geocoded.coords.lat}) [${geocoded.provider}] EXACT 승격${dryRun ? ' (dry-run)' : ''}`
     );
 
     if (!dryRun) {
