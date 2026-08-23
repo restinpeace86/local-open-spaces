@@ -1,31 +1,13 @@
-- [x] **[Task 9-6-4] 이벤트 VS 상시 공간 최상위 대분류 분리 및 성격별 하위 카테고리/수집 주기 적용** 🗂️ (2026-08-23 완료, 사용자가 "Task 9-6-2"로 지칭했으나 그 번호는 이미 완료된 다른 작업(location_precision)에 쓰여 9-6-4로 등록)
-  - **실측 확인(2026-08-23)**: 사전 조사 결과 events=매일1회/open_spaces=월1회 수집 주기 정책은 이미 `project/data_sources.md` §2.1/2.2와 `.github/workflows/ingest-daily.yml`/`ingest-monthly.yml`로 기존에 구축돼 있었음 — 신규 인프라가 아니라 "아직 스케줄에 연결 안 된 완성된 스크립트들을 마저 연결"하는 작업이었음.
-  - [x] 수집 주기 배선: `tour-api-festival.mjs`(실측 재확인 결과 계정 승인 완료돼 정상 동작 — 240건 실제 수신 확인, 기존 "보류" 코멘트는 stale이었음)/`gg-culture-events.mjs`/`enrich-gg-culture-event-locations.mjs`/신규 `gg-splash-events.mjs` → `ingest-daily.yml`(events), `cultural-facility-summary.mjs` → `ingest-monthly.yml`(open_spaces). `project/data_sources.md` §2.1/2.2 갱신(신규 소스 반영 + "이 문서 대신 workflows/*.yml이 실질 SSOT" 정정 노트 추가).
-  - [x] 물놀이형 수경시설(TBWTRWTRPLYHYDRDTAM) → events 재분류:
-    - 신규 `gg-splash-events-adapter.mjs`(events) 작성, 기존 `gg-events-adapter.mjs`에서는 수경시설(API2) 수집 로직 완전히 제거(수영장만 유지 — pool-only). open_spaces에 이미 있던 구 수경시설 데이터 1,075건은 삭제 등 되돌리기 어려운 조치 없이 그대로 남겨뒀다(정리 필요 항목으로만 기록, 새 수집은 더 이상 발생하지 않음).
-    - **실측으로 발견/보완한 `OPR_PRD` 파싱 문제**: 최초 "N개월(M월~M월)" 형식 하나만 가정했다가 실제 811건 라이브 수집 결과 상당수가 스킵됨을 발견 — 실제로는 최소 4개 형식이 혼재("3개월(6~8월)"처럼 시작월에 "월" 없음, "2개월(6월22일~8월18일)"처럼 일자 포함, "2025.5.24~10.10."처럼 점 구분 날짜+연도)했다. 4개 형식 모두 파싱하도록 보완해 811건 → 972건으로 회수(나머지 ~14건은 "7월 말~8월 중순"류 fuzzy 표현으로, 특정 날짜를 추측해 만들어내지 않고 정직하게 스킵).
-    - **실측으로 발견한 2차 버그**: `venue_name`에 원본 주소(HYDR_ADDR)를 넣었더니 테마 칩 키워드 매칭(venue_name ILIKE)이 항상 0건이었다 — 실제 시설명(예: "나혜석거리 분수")에는 있는 "분수" 등 키워드가 주소 문자열에는 나타나지 않기 때문. 다른 이벤트 어댑터 관례대로 `venue_name`에 실제 시설명을 넣도록 수정(주소는 EXACT 좌표로 지도에서 확인 가능하므로 정보 손실 아님). `theme-spots.ts`의 SWIMMING 키워드에도 "분수"/"물놀이터"/"물놀이시설"/"물놀이장"을 추가(실측 972건 표본에서 확인한 실제 표기).
-    - **최종 결과**: 경기도 972개 물놀이형 수경시설을 EXACT 정밀도로 events에 신규 적재. `get_nearby_spaces_and_events` RPC 직접 호출로 지도 노출 실측 확인(반경 200m 내 EVENT 2건 정상 반환), `/api/home/theme-feed?theme=SWIMMING&dataType=events` 실측 호출로 "물놀이·수영" 칩이 새 데이터를 정상 노출함을 확인(20건, 예: "백현어린이공원 바닥분수").
-  - [x] `get-home-feed.ts`의 `getFreeFeed`/`getThemeSpotFeed`에 `dataType: 'events'|'open_spaces' = 'events'` 파라미터 추가(둘 다 기본값 'events'), `/api/home/free-feed`·`/api/home/theme-feed` 라우트에 `dataType` 쿼리 파라미터로 노출. 실측 호출로 `dataType=events`→`item_type:'EVENT'`만, `dataType=open_spaces`→`item_type:'SPACE'`만 반환됨을 확인.
-  - [x] 신규 홈 2대분류 카테고리 정의(`src/lib/home-categories.ts`): 기존 `theme-spots.ts`(7개 테마 — EXPERIENCE_NATURE 신설 포함, `/nearby`·`region-grid-view.tsx`에서 계속 사용)는 건드리지 않고 별도 신설. 이벤트 5개 칩(물놀이·수영/놀이터·키즈/유원지·액티비티/전시·공연·문화/체험·자연, events는 source_type이 없어 venue_name ILIKE만)/공간 5개 칩(공원·광장/어린이 놀이터/야외 수영장·물놀이터/국립공원·수목원·휴양림/박물관·미술관·체육시설 — 기존 source_type 매핑 재사용). "유원지·액티비티"는 사용자가 준 공간 칩 목록에 없어 이번 5개 공간 칩에서는 제외(기존 theme-spots.ts 경로에서는 계속 노출).
-  - [x] `home-view.tsx`: 최상위 "🎪 행사·축제(기본)"/"🏞️ 상시 장소" 토글 추가 — 기존 "🏞️ 목적별 추천 스팟"(6개 테마 혼합 노출) 섹션을 대체. Hero Carousel/"🗺️ 경기도권 기타"는 events 전용 콘텐츠라 EVENTS 대분류에서만 노출. "💰 가성비 행복"은 선택된 대분류만 조회.
-  - [x] `region-grid-view.tsx`: 동일한 최상위 토글 추가 + 신규 `getAllEvents()`(`get-all-spaces.ts`와 동일 패턴) 작성해 이벤트 카탈로그 탐색 지원. **기본값은 "🏞️ 상시 장소"로 설정**(홈 화면과 다름) — 이 "지역별 도감" 탭은 처음부터 open_spaces 전용 카탈로그로 설계돼 있었고 기존 테스트/UX 전제가 전부 그 가정 위에 있어, 굳이 기본값을 바꿔 기존 경험을 깨뜨리지 않는 쪽을 택함(홈 화면은 사용자 지시대로 이벤트 기본 유지).
-  - [x] `docs/spec.md` §2.2(홈 화면 레이아웃 스택의 실제 SSOT) 갱신 — 최상위 대분류 토글과 대분류별 테마 칩 구조 반영.
-  - **검증**: `npx tsc --noEmit` 통과, `npm run test` 265/265 통과(신규/수정 테스트 다수 포함 — home-view.tsx 20개, region-grid-view.tsx 13개, get-home-feed.ts dataType 분리 22개, gg-splash-events-adapter 18개, theme-spots 9개), `npm run build` 통과.
-  - **관련 파일**: `.github/workflows/ingest-daily.yml`/`ingest-monthly.yml`, `project/data_sources.md`, `docs/spec.md`, `scripts/ingest/adapters/gg-events-adapter.mjs`(+test, pool-only로 축소), `scripts/ingest/adapters/gg-splash-events-adapter.mjs`(신규, +test), `scripts/ingest/gg-splash-events.mjs`(신규 CLI), `src/lib/theme-spots.ts`(+test, EXPERIENCE_NATURE 추가 + SWIMMING 키워드 보강), `src/lib/home-categories.ts`(신규), `src/lib/home/get-home-feed.ts`(+test), `src/lib/spaces/get-all-events.ts`(신규), `src/app/api/home/free-feed/route.ts`, `src/app/api/home/theme-feed/route.ts`, `src/components/home/home-view.tsx`(+test), `src/components/region/region-grid-view.tsx`(+test), `package.json`(`ingest:gg-splash-events` 스크립트 추가).
-
-- [x] **[Task 9-6-3] 활성/미래 이벤트 상세 URL 스크래핑 기반 정밀 주소/좌표 DB 업데이트 적재** 🎯 (2026-08-23 완료)
-  - **작업 목표**: API 원본 주소가 부실했던 경기도/성남시 활성 이벤트의 상세 URL을 스크래핑하여 정확한 위치(도로명 주소, 장소명)를 추출하고, 지오코딩 좌표를 DB `events` 테이블에 직접 업데이트 적재 (`EXACT` 승격)
-  - **세부 작업 지시 대비 실측으로 확인/수정한 지시서와의 차이점(추측 금지 원칙)**:
-    1. 지시 경로 `src/lib/ingestion/enrichment/enrich-event-locations.mjs`는 실제 프로젝트 구조와 다름(`src/lib/ingestion/`은 빈 디렉터리) — Task 9-6-1에서 이미 확인된 것과 동일한 패턴. 실제 수집 코드는 전부 `scripts/ingest/`에 있어 그 관례를 따라 `scripts/ingest/adapters/gg-culture-location-enrichment.mjs`(로직) + `scripts/ingest/enrich-gg-culture-event-locations.mjs`(CLI)로 구현.
-    2. "네이버/카카오 지오코딩 API": 실제 호출로 확인한 결과 이 프로젝트에는 서버사이드로 쓸 수 있는 키가 없음 — `NEXT_PUBLIC_KAKAO_MAP_API_KEY`는 카카오맵 JS SDK 전용 키라 `dapi.kakao.com/v2/local/search/address.json`에 직접 요청하면 401 "KA Header is required"로 거부됨(REST API 키는 별도 발급 필요, 미보유). 네이버 키(`NAVER_CLIENT_ID`/`SECRET` 등)는 `.env.local`에 아예 없음. 따라서 이미 전체 파이프라인에서 검증되어 쓰이고 있는 VWorld 지오코더(`vworld-geocoder.mjs`)로 대체(제5장 제4조 기존 구조 우선) — 최종 좌표 결과물은 Provider와 무관하게 동일.
-    3. `address` 컬럼: `events` 테이블에는 없음(Task 9-6-1/9-6-2에서 이미 확인/정정한 스키마 — `open_spaces`만 `address` 보유, `events`는 `venue_name`). `venue_name`/`location`/`location_precision` 3개 컬럼만 갱신.
-    4. `url` 컬럼도 `events`에 없어(스키마에 URL 저장 컬럼 자체가 없음) 대상 레코드에서 원본 URL을 직접 조회할 수 없었음 — `external_id`가 원본 URL의 SHA1 해시라 비가역적으로 저장돼 있었기 때문. API1(GGCULTUREVENTSTUS)을 다시 fetch해 동일한 `buildExternalId` 규칙으로 재계산한 external_id를 DB의 대상 행과 매칭시켜 URL을 복원(새 컬럼 추가 없이 해결, 데이터 구조 변경 최소화).
-  - **대상 실측**: `end_date >= 오늘 AND location_precision IN (CITY_APPROX, UNKNOWN)` 49건 전부가 API1(`GG_CULTURE_EVENT_` 접두어) 소스였음(API2는 수집 시점에 이미 지오코딩 성공한 것만 행을 만들어 CITY_APPROX/UNKNOWN이 구조적으로 존재하지 않음 — 실측 0건 확인).
-  - **상세 페이지 스크래핑 함정 발견(추측 금지로 회피)**: ggc.ggcf.kr 상세 페이지의 "주소" 필드는 `<!-- 주석 처리된 -->` 템플릿 잔재로, 모든 페이지에 동일한 예시 주소("경기도 수원시 팔달구 효원로 307번길 경기아트센터")가 박혀 있었다 — 이를 그대로 썼다면 49건 전부에 똑같이 틀린 주소가 들어갈 뻔했다. 3건 표본 실측으로 실제 렌더링되는 `<dl><dt>장 소</dt><dd>{실제 장소명}</dd></dl>` 패턴(페이지당 정확히 1회 등장)을 찾아 이것만 스크래핑 대상으로 사용.
-  - **결과**: 49건 중 6건(약 12%) `EXACT` 승격 성공. 나머지 43건은 VWorld가 도로명/지번 주소 검색 전용이라 시설/장소명(예: "고양아람누리 아람마슬 B1 음악감상실", "한강뮤지엄" 등)을 인식하지 못해 실패 — 이는 코드 결함이 아니라 사용 가능한 지오코더의 실측 확인된 한계다. 지시서가 원한 네이버/카카오(주소뿐 아니라 키워드/장소 검색 지원)를 실제로 쓸 수 있었다면 성공률이 더 높았을 것으로 추정되나, 이는 별도의 API 키 발급(사용자/기획 승인 필요)이 선행돼야 하는 사안이라 이번 범위에서는 임의로 진행하지 않고 그대로 보고한다.
-  - **지도/피드 검증(실측)**:
-    - `get_nearby_spaces_and_events` RPC를 EXACT 승격된 "2026년 경기도 무형유산 상설공연"(양주시) 좌표에 반경 500m로 직접 호출 → EVENT 1건 정상 반환 확인(지도 노출 성공).
-    - `getTodayEvents(30, {sigunguName:'양주시'})`를 실제 라이브 DB에 대해 직접 호출(Supabase anon 클라이언트로 실제 알고리즘 실행) → 승격된 이벤트가 결과에 정상 포함됨을 확인(피드 노출 성공). 개발 서버 curl 테스트에서는 일시적으로 안 보였는데, 직접 함수 호출로는 정상 확인돼 Next.js dev 서버의 fetch 캐시 지연 등 환경적 요인으로 판단(코드 결함 아님 — 실제 알고리즘/데이터는 정상 동작 확인됨).
-  - **검증**: `npx tsc --noEmit` 통과, `npm run test` 242/242 통과(신규 보완 모듈 테스트 13건 추가), `npm run build` 통과.
-  - **관련 파일**: `scripts/ingest/adapters/gg-culture-location-enrichment.mjs`(신규), `scripts/ingest/adapters/gg-culture-location-enrichment.test.mjs`(신규, 13 tests), `scripts/ingest/enrich-gg-culture-event-locations.mjs`(신규 CLI), `scripts/ingest/adapters/gg-culture-events-adapter.mjs`(GYEONGGI_BOUNDS/isWithinGyeonggiBounds export 추가), `package.json`(`ingest:enrich-gg-culture-locations` 스크립트 추가).
+- [ ] **[Task 9-6-5] 카카오 REST API 키 기반 시설명 이벤트 장소 37건 `EXACT` 추가 승격 및 DB 적재** 🎯
+  - **작업 배경**: VWorld 지오코더(도로명 주소 전용)로 변환 실패했던 시설명 단독 장소 37건을 `KAKAO_REST_API_KEY` 기반 카카오 장소 검색 API(`https://dapi.kakao.com/v2/local/search/keyword.json`)로 지오코딩 진행.
+  - **세부 작업 지시**:
+    1. **카카오 키워드 장소 검색 연동 (`scripts/ingest/adapters/gg-culture-location-enrichment.mjs`)**:
+       - `.env.local`의 `KAKAO_REST_API_KEY` 환경변수를 활용해 카카오 장소 검색 REST API 호출부 추가.
+       - VWorld 1차 검색 실패 시 카카오 장소 검색 API로 2차 검색(Fallback) 수행.
+    2. **DB 업데이트 & `EXACT` 승격 적재**:
+       - 변환 성공 시 DB `events` 테이블의 `venue_name`, `location` (PostGIS point), `location_precision = 'EXACT'` 값으로 direct UPDATE 적재.
+    3. **지도 RPC 및 피드 실측 검증**:
+       - 승격된 성남시/경기도 이벤트가 지도 주변 검색 RPC(`get_nearby_spaces_and_events`) 및 피드에 정상 반영되는지 실측 검증.
+  - **검증 기준**:
+    - `npx tsc --noEmit`, `npm run test`, `npm run build` 통과.
+    - 카카오 REST API 검색 성공 건수 및 지도 RPC 노출 실측 결과 보고.
