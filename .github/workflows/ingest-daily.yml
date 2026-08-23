@@ -4,13 +4,17 @@ name: Daily Data Ingestion (Events)
 # KST 03:00/03:30/04:00은 UTC로 전일 18:00/18:30/19:00에 해당한다.
 # Task 9-6-4(2026-08-23): tour-api-festival.mjs는 실측 재확인 결과 계정 승인이 이미 완료돼
 # 정상 동작함(기존 "보류" 코멘트는 stale — kor-tour.mjs와 동일한 PUBLIC_DATA_API_KEY 사용).
-# gg-culture-events.mjs/enrich-gg-culture-event-locations.mjs/gg-splash-events.mjs는 완성돼
-# 있었지만 지금까지 어떤 스케줄에도 연결돼 있지 않았다(수동 실행 이력만 존재).
+# gg-culture-events.mjs/enrich-gg-culture-event-locations.mjs는 완성돼 있었지만 지금까지
+# 어떤 스케줄에도 연결돼 있지 않았다(수동 실행 이력만 존재).
+# Task 9-6-6(2026-08-23): 물놀이형 수경시설(TBWTRWTRPLYHYDRDTAM)은 한때 이 워크플로에 events로
+# 수집했으나("경기도 물놀이형 수경시설" 스텝), 상시 시설(공원 내 바닥분수 등)이 홈 화면
+# 행사·축제에 잘못 노출된다는 사용자 피드백으로 되돌렸다 — 다시 ingest-monthly.yml의
+# gg-events.mjs(open_spaces)가 수집한다.
 on:
   schedule:
     - cron: '0 18 * * *'  # 03:00 KST - Source 04 서울시 공공서비스예약
     - cron: '30 18 * * *' # 03:30 KST - Source 05/06 서울시 문화행사 정보 + TourAPI 4.0 축제
-    - cron: '0 19 * * *'  # 04:00 KST - 경기데이터드림 문화행사 + 위치 보완 + 물놀이형 수경시설
+    - cron: '0 19 * * *'  # 04:00 KST - 경기데이터드림 문화행사 + 위치 보완
   workflow_dispatch:
 
 jobs:
@@ -95,13 +99,3 @@ jobs:
           VWORLD_API_KEY: ${{ secrets.VWORLD_API_KEY }}
           KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
         run: node scripts/ingest/enrich-gg-culture-event-locations.mjs
-
-      # Task 9-6-4(2026-08-23): 물놀이형 수경시설(여름 한정 설치 공간)은 상시 공간이 아니라
-      # 시한성 이벤트로 분류한다(events, 매일 수집) — project/data_sources.md 참고.
-      - name: 경기도 물놀이형 수경시설(여름 한정 설치 공간)
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          GG_DATA_API_KEY: ${{ secrets.GG_DATA_API_KEY }}
-          VWORLD_API_KEY: ${{ secrets.VWORLD_API_KEY }}
-        run: node scripts/ingest/gg-splash-events.mjs

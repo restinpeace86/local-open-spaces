@@ -82,11 +82,16 @@ jobs:
           PUBLIC_DATA_API_KEY: ${{ secrets.PUBLIC_DATA_API_KEY }}
         run: node scripts/ingest/swimming-pool.mjs
 
-      - name: 경기도 물놀이형 수경시설 정보
+      # Task 9-6-6(2026-08-23): 물놀이형 수경시설(바닥분수 등)을 한때 events로 옮겼다가
+      # ("경기도 물놀이형 수경시설" 별도 스텝, ingest-daily.yml) 상시 시설이 홈 화면 행사·축제에
+      # 잘못 노출된다는 사용자 피드백으로 open_spaces로 되돌렸다 — 이 스텝이 공공 수영장과
+      # 물놀이형 수경시설을 다시 함께 수집한다.
+      - name: 경기도 공공 수영장 + 물놀이형 수경시설 정보
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           GG_DATA_API_KEY: ${{ secrets.GG_DATA_API_KEY }}
+          VWORLD_API_KEY: ${{ secrets.VWORLD_API_KEY }}
         run: node scripts/ingest/gg-events.mjs
 
       # Source 02(전국 공공체육시설 현황)는 서울시 서버 측 장애(ERROR-500)로 보류 중.

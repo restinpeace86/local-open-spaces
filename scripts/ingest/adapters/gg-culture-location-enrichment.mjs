@@ -83,25 +83,88 @@ export async function scrapeVenueName(url) {
   return extractVenueFromHtml(html);
 }
 
+// Task 9-6-6(2026-08-23): "OO아트센터 제2전시실"/"OO박물관 2층 교육실"처럼 건물명 뒤에 건물
+// 내부 특정 실/층 단위가 붙은 텍스트는 VWorld/카카오 둘 다 통째로는 찾지 못하는 경우가 많다
+// (건물 자체는 등록된 장소라도 그 안의 특정 전시실/교육실까지 POI로 등록돼 있지는 않음) —
+// 사용자 지시대로 뒷부분의 실/층 단위를 제외한 "건물명"만 남겨 재시도한다.
+// 실측(2026-08-23)으로 확인한 접미어 토큰 목록: 전시실/전시장/교육실/다목적홀/기획전시실/
+// 소극장/소공연장/공연장/강당/아트홀/세미나실/멀티벙커/음악감상실/로비/갤러리/정원/어울림터/
+// 내외부, 그리고 "홀"/"실"/"장"으로 끝나는 일반 명사(예: "맹사성홀", "전시장"). 순수 숫자·범위
+// 토큰("1-4", "2,3")과 층수 표기("2층", "1F", "B1")도 함께 제거 대상이다. 토큰 단위로(부분
+// 문자열이 아니라 공백으로 나눈 전체 단어 단위로) 뒤에서부터 하나씩 제거해, "맹사성홀"처럼
+// 방 이름 전체가 하나의 단어인 경우도 그 단어 전체가 사라지게 한다(부분 문자열만 잘라내면
+// "맹사성"처럼 애매한 잔재가 남아 오히려 지오코딩이 더 안 될 수 있음 — 실측으로 발견).
+// "공원"처럼 그 자체로 유효한 장소명일 수 있는 단어는 목록에서 제외했다(추측 금지 — 실제로
+// 건물 내부 단위인 것만 제거 대상으로 삼는다).
+const ROOM_FLOOR_SUFFIX_WORDS = [
+  '전시실', '전시장', '교육실', '다목적홀', '기획전시실', '소극장', '소공연장', '공연장',
+  '강당', '아트홀', '세미나실', '멀티벙커', '음악감상실', '로비', '갤러리', '정원',
+  '어울림터', '내외부', '홀', '실', '장',
+];
+
+function isRoomFloorTrailingToken(token) {
+  const bare = token.replace(/[()]/g, '');
+  if (/^\d+([-,]\d+)*$/.test(bare)) return true; // "1-4", "2,3" 등 순수 숫자/범위
+  if (/^제?\d*(층|[fF])$/.test(bare)) return true; // "1층", "1F"
+  if (/^[bB]\d{0,2}$/.test(bare)) return true; // "B1", "B" 등
+  return ROOM_FLOOR_SUFFIX_WORDS.some((w) => bare.endsWith(w));
+}
+
+function isLeadingFloorToken(token) {
+  return /^\(?[bB]?\d+[fF]\)?$/.test(token.replace(/[()]/g, ''));
+}
+
+// 못 찾으면 null(추측하지 않음 — 제거할 실/층 단위 토큰이 하나도 없으면 아예 시도하지 않는다).
+export function stripRoomFloorDescriptor(text) {
+  let tokens = text.trim().split(/\s+/);
+  const originalLength = tokens.length;
+
+  while (tokens.length > 1 && isLeadingFloorToken(tokens[0])) {
+    tokens = tokens.slice(1);
+  }
+
+  let end = tokens.length;
+  while (end > 1 && isRoomFloorTrailingToken(tokens[end - 1])) {
+    end -= 1;
+  }
+  tokens = tokens.slice(0, end);
+
+  if (tokens.length === originalLength) return null;
+  const stripped = tokens.join(' ').replace(/[,\-]+$/, '').trim();
+  return stripped || null;
+}
+
 // 콤마로 여러 장소가 나열된 경우 첫 번째만 대표 장소로 지오코딩한다
 // (gg-culture-events-adapter.mjs의 API2 처리와 동일한 정책 — national-park-ecotour-adapter.mjs 선례).
 // Task 9-6-5: VWorld(도로명/지번 주소 전용) 실패 시 카카오 키워드 장소 검색으로 2차 시도한다
 // (등록된 장소/POI명으로 검색 가능해 "OO아트센터 1층 전시실" 같은 시설명 단독 텍스트에 강함).
-// 두 Provider 모두 동일하게 경기도 범위 검증을 거친다(이 소스는 경기도 전용이므로).
+// Task 9-6-6: 그래도 둘 다 실패하면 건물 내부 실/층 단위를 제외한 건물명만으로 3차 재시도한다.
+// 모든 시도가 동일하게 경기도 범위 검증을 거친다(이 소스는 경기도 전용이므로).
 export async function geocodeVenueOrNull(venue) {
   const primary = venue.split(',')[0].trim();
   if (!primary) return null;
 
-  const vworldCoords = await geocode(primary);
-  if (vworldCoords && isWithinGyeonggiBounds(vworldCoords)) {
-    return { primary, coords: vworldCoords, provider: 'vworld' };
-  }
-
-  if (hasKakaoApiKey()) {
-    const kakaoResult = await geocodeKeyword(primary);
-    if (kakaoResult && isWithinGyeonggiBounds(kakaoResult)) {
-      return { primary, coords: kakaoResult, provider: 'kakao' };
+  const tryQuery = async (query) => {
+    const vworldCoords = await geocode(query);
+    if (vworldCoords && isWithinGyeonggiBounds(vworldCoords)) {
+      return { coords: vworldCoords, provider: 'vworld' };
     }
+    if (hasKakaoApiKey()) {
+      const kakaoResult = await geocodeKeyword(query);
+      if (kakaoResult && isWithinGyeonggiBounds(kakaoResult)) {
+        return { coords: kakaoResult, provider: 'kakao' };
+      }
+    }
+    return null;
+  };
+
+  const direct = await tryQuery(primary);
+  if (direct) return { primary, ...direct };
+
+  const stripped = stripRoomFloorDescriptor(primary);
+  if (stripped) {
+    const strippedResult = await tryQuery(stripped);
+    if (strippedResult) return { primary: stripped, ...strippedResult };
   }
 
   return null;
@@ -173,8 +236,11 @@ export async function enrichGgCultureEventLocations({ client, adapter, dryRun = 
       continue;
     }
 
+    // geocoded.primary가 venue와 다르면(콤마 분리 또는 Task 9-6-6 실/층 단위 제거로 재시도해
+    // 성공한 경우) 실제로 검색에 쓴 문자열을 함께 남겨 어떤 시도가 통했는지 알 수 있게 한다.
+    const queryNote = geocoded.primary !== venue ? ` (검색어: "${geocoded.primary}")` : '';
     console.log(
-      `✅ [${target.title}] "${venue}" → (${geocoded.coords.lng}, ${geocoded.coords.lat}) [${geocoded.provider}] EXACT 승격${dryRun ? ' (dry-run)' : ''}`
+      `✅ [${target.title}] "${venue}"${queryNote} → (${geocoded.coords.lng}, ${geocoded.coords.lat}) [${geocoded.provider}] EXACT 승격${dryRun ? ' (dry-run)' : ''}`
     );
 
     if (!dryRun) {

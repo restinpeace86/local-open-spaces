@@ -255,7 +255,9 @@ describe('HomeView', () => {
   });
 
   // Task 9-1-9: 메인 카드(Hero Carousel)는 처음 10개만 슬라이드로 보여주고, 11번째 이상은
-  // 마지막 슬라이드의 "전체 보기" CTA 카드(지도 화면 연동)로 대체한다(더 이상 아래에 펼치지 않음).
+  // 마지막 슬라이드의 "전체 보기" CTA 카드로 대체한다(더 이상 아래에 펼치지 않음).
+  // 사용자 피드백(2026-08-23): 지도(/nearby)가 아니라 카드 그리드 화면(/region)의 "🎪 행사·축제"
+  // 대분류로 연동돼야 한다.
   it('Hero Carousel 항목이 10개를 넘으면 마지막 슬라이드로 "전체 보기" CTA 카드를 보여준다', () => {
     const heroEvents = Array.from({ length: 12 }, (_, i) =>
       makeEventItem({ id: `hero-${i}`, name: `오늘의 행사 ${i}` })
@@ -269,7 +271,7 @@ describe('HomeView', () => {
     expect(screen.queryByText('오늘의 행사 11')).not.toBeInTheDocument();
 
     const link = screen.getByText('오늘 진행 중인 전체 행사 보기').closest('a');
-    expect(link).toHaveAttribute('href', '/nearby?filter=TODAY_WEEKEND');
+    expect(link).toHaveAttribute('href', '/region?homeCategory=EVENTS&category=TODAY_WEEKEND');
   });
 
   it('Hero Carousel 항목이 10개 이하면 "전체 보기" CTA 카드를 보여주지 않는다', () => {

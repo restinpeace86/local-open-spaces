@@ -1,13 +1,13 @@
-// GG_EVENTS: 경기데이터드림(data.gg.go.kr) 공공 수영장 현황 수집 (Task 8-2)
-// API 1(PublicSwimmingPool): 경기도 공공 수영장 현황.
+// GG_EVENTS: 경기데이터드림(data.gg.go.kr) 공공 수영장 + 물놀이형 수경시설(바닥분수) 통합 수집 (Task 8-2)
+// API 1(PublicSwimmingPool): 경기도 공공 수영장 현황. API 2(TBWTRWTRPLYHYDRDTAM): 물놀이형 수경시설 현황.
 //
-// Task 9-6-4(2026-08-23, 이벤트 VS 상시 공간 재분류): 원래 이 어댑터는 API2(TBWTRWTRPLYHYDRDTAM,
-// 물놀이형 수경시설=바닥분수 등)도 함께 수집해 open_spaces에 넣었으나, 이 시설들은 원본 API의
-// OPR_PRD 필드("3개월(6월~8월)" 등)가 보여주듯 여름 한정 계절 운영 설치물이라 "상시 개방 공간"이
-// 아니라 시한성 이벤트로 재분류했다. API2 수집 로직은 `gg-splash-events-adapter.mjs`(targetTable:
-// 'events')로 분리 이전했고, 이 어댑터는 API1(수영장, 진짜 상시 시설)만 남긴다.
-// 이관 전 이미 open_spaces에 적재된 API2 원본 데이터(raw_data ? 'HYDR_NM'으로 식별 가능, 1,075건
-// 실측 확인)는 삭제 등 되돌리기 어려운 조치 없이 그대로 남겨뒀다 — 정리 여부는 별도 승인 필요.
+// Task 9-6-4(2026-08-23)에서 한 차례 API2를 "시한성 이벤트"로 재분류해 별도 어댑터
+// (gg-splash-events-adapter.mjs, targetTable: 'events')로 옮겼으나, 사용자 피드백(2026-08-23)에
+// 따라 되돌렸다 — 실제 서비스에서 "물빛어린이공원 바닥분수"류가 홈 화면 "행사·축제" 메인
+// 카드에 노출되는 것이 사용자 기대와 어긋난다는 지적(이 시설은 특정 기간에만 열리는 "행사"가
+// 아니라 공원에 상시 설치된 "시설"이며, 계절 운영은 부가 정보일 뿐 정체성이 아니다). API2는
+// 다시 이 어댑터(open_spaces)로 복귀했고, 이전에 events로 적재됐던 GG_SPLASH_EVENT_* 972건은
+// 삭제, gg-splash-events-adapter.mjs/gg-splash-events.mjs/일간 워크플로 스텝도 함께 제거했다.
 //
 // WAF 우회: User-Agent 헤더 없이 호출하면 JSON이 아니라 "보안 정책에 의해 차단 되었습니다"라는
 // HTML 차단 페이지가 반환됨을 실측으로 확인했다(Task 8-2 1차 스킵 기록 참고). 브라우저
@@ -62,12 +62,27 @@ import { matchesKidsKeyword } from '../lib/ai-tagging.mjs';
 import { geocode, hasVworldApiKey } from './lib/vworld-geocoder.mjs';
 
 const POOL_BASE_URL = 'https://openapi.gg.go.kr/PublicSwimmingPool';
+const SPLASH_BASE_URL = 'https://openapi.gg.go.kr/TBWTRWTRPLYHYDRDTAM';
 const PAGE_SIZE = 100;
 const SUCCESS_RESULT_CODE = 'INFO-000';
 const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const GEOCODE_PACING_MS = 250;
 const GEOCODE_MAX_ATTEMPTS = 3;
+
+// Task 9-6-4/9-6-6에서 gg-culture-events-adapter.mjs 계열 어댑터에 도입했던 오매칭 방지
+// 검증을 복귀 시점에 함께 적용한다 — 이 소스도 경기데이터드림(경기도 전용)이라 반환 좌표가
+// 경기도 범위를 크게 벗어나면 신뢰할 수 없는 매칭으로 보고 좌표를 지어내는 대신 건너뛴다.
+const GYEONGGI_BOUNDS = { minLng: 126.0, maxLng: 128.0, minLat: 36.7, maxLat: 38.5 };
+
+function isWithinGyeonggiBounds({ lng, lat }) {
+  return (
+    lng >= GYEONGGI_BOUNDS.minLng &&
+    lng <= GYEONGGI_BOUNDS.maxLng &&
+    lat >= GYEONGGI_BOUNDS.minLat &&
+    lat <= GYEONGGI_BOUNDS.maxLat
+  );
+}
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -144,8 +159,11 @@ export class GgEventsAdapter extends BaseCollectorAdapter {
   }
 
   async fetch() {
-    const poolItems = await this.fetchAll(POOL_BASE_URL, 'PublicSwimmingPool');
-    return { poolItems };
+    const [poolItems, splashItems] = await Promise.all([
+      this.fetchAll(POOL_BASE_URL, 'PublicSwimmingPool'),
+      this.fetchAll(SPLASH_BASE_URL, 'TBWTRWTRPLYHYDRDTAM'),
+    ]);
+    return { poolItems, splashItems };
   }
 
   // eslint-disable-next-line class-methods-use-this
@@ -162,6 +180,12 @@ export class GgEventsAdapter extends BaseCollectorAdapter {
 
         if (!coords) {
           console.warn(`⚠️ 지오코딩 결과 없음 [${name}] "${address}" — 건너뜀`);
+          return null;
+        }
+        if (!isWithinGyeonggiBounds(coords)) {
+          console.warn(
+            `⚠️ 지오코딩 결과가 경기도 범위를 벗어남 [${name}] "${address}" → (${coords.lng}, ${coords.lat}) — 잘못된 매칭으로 보고 건너뜀`
+          );
           return null;
         }
         return coords;
@@ -207,13 +231,41 @@ export class GgEventsAdapter extends BaseCollectorAdapter {
     });
   }
 
+  async transformSplashItem(item) {
+    const name = item.HYDR_NM;
+    const address = item.HYDR_ADDR;
+    if (!name || !address) return null;
+
+    const coords = await this.geocodeOrSkip(name, address);
+    if (!coords) return null;
+
+    return buildOpenSpaceRow({
+      externalId: this.buildExternalId(name, address),
+      sourceType: 'GG_EVENTS',
+      name,
+      uiCategory: UI_CATEGORY.OUTDOOR_NATURE,
+      address,
+      lng: coords.lng,
+      lat: coords.lat,
+      isFree: true, // Task 지시서 명시: 바닥분수/물놀이터는 기본 무료로 매핑
+      isKidsFriendly: true, // Task 지시서 명시: 바닥분수/물놀이터는 기본 키즈 친화로 매핑
+      facilityType: '야외', // 계절 운영(OPR_PRD)형 실외 수경시설이라는 물리적 특성
+      rawData: item,
+    });
+  }
+
   // 지오코딩은 외부 API(VWorld) 호출이라 NationalParkEcotourAdapter와 동일하게 순차 처리한다
   // (Promise.all로 동시에 수백~천 건을 쏘면 레이트리밋에 걸릴 위험이 있음).
-  async transform({ poolItems }) {
+  async transform({ poolItems, splashItems }) {
     const rows = [];
 
     for (const item of poolItems) {
       const row = await this.transformPoolItem(item);
+      if (row) rows.push(row);
+    }
+
+    for (const item of splashItems) {
+      const row = await this.transformSplashItem(item);
       if (row) rows.push(row);
     }
 

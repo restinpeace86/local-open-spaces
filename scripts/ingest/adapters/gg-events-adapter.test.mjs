@@ -3,10 +3,12 @@
 // - 좌표 필드가 없어 VWorld 지오코딩 필수(geocode 모킹으로 검증)
 // - API1(PublicSwimmingPool): INOUTDR_DIV_NM 기준 facility_type 매핑, 요금 정보 없어 is_free=null(Task 8-4에서 수정),
 //   명칭 키워드 기반 is_kids_friendly
+// - API2(TBWTRWTRPLYHYDRDTAM): is_free/is_kids_friendly 고정 true, facility_type 고정 '야외'
 // - SHA1(이름|주소) 기반 external_id
 // - 지오코딩 Pacing/재시도(Task 8-3): 일시 실패 시 재시도로 복구, 최대 시도 초과 시 해당 건만 건너뜀
-// Task 9-6-4(2026-08-23): API2(TBWTRWTRPLYHYDRDTAM, 물놀이형 수경시설)는 events로 재분류돼
-// gg-splash-events-adapter.mjs로 이전했다 — 이 파일에서 관련 테스트를 제거하고 API1(수영장)만 남긴다.
+// Task 9-6-6(2026-08-23): Task 9-6-4에서 API2를 events로 재분류했다가 사용자 피드백으로 되돌렸다
+// ("물빛어린이공원 바닥분수"처럼 상시 시설이 홈 화면 행사·축제 카드에 잘못 노출됨) — API2 관련
+// 테스트를 복원하고, 그 사이 도입된 경기도 범위 오매칭 방지 검증(GYEONGGI_BOUNDS)도 함께 반영한다.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('./lib/vworld-geocoder.mjs', () => ({
@@ -27,6 +29,12 @@ function poolBody({ code = 'INFO-000', message = '정상 처리되었습니다.'
   };
 }
 
+function splashBody({ code = 'INFO-000', message = '정상 처리되었습니다.', rows = [], totalCount = rows.length } = {}) {
+  return {
+    TBWTRWTRPLYHYDRDTAM: [{ head: [{ list_total_count: totalCount }, { RESULT: { CODE: code, MESSAGE: message } }, { api_version: '1.0' }] }, { row: rows }],
+  };
+}
+
 // 실측 표본(경기도 남양주시): REFINE_ROADNM_ADDR 등 실제 응답 필드 그대로 사용.
 const POOL_ITEM = {
   FACLT_NM: '남양주체육문화센터수영장',
@@ -34,6 +42,14 @@ const POOL_ITEM = {
   REFINE_LOTNO_ADDR: '경기도 남양주시 이패동 산87번지',
   REFINE_ROADNM_ADDR: '경기도 남양주시 다산지금로 91',
   INOUTDR_DIV_NM: '실내',
+};
+
+// 실측 표본(경기도 수원시): HYDR_ADDR 등 실제 응답 필드 그대로 사용.
+const SPLASH_ITEM = {
+  HYDR_NM: '고래의모험 어린이공원',
+  HYDR_KIND: '바닥분수, 조합놀이대',
+  HYDR_ADDR: '경기도 수원시 권선구 세류동 1066-9',
+  SIGUN_NM: '수원시',
 };
 
 const GEOCODE_RESULT = { lng: 127.123, lat: 37.456 };
@@ -56,7 +72,10 @@ describe('GgEventsAdapter', () => {
 
   describe('fetch (User-Agent 헤더 + 페이지네이션)', () => {
     it('모든 요청에 User-Agent 헤더를 포함한다', async () => {
-      const fetchMock = vi.fn(() => Promise.resolve(jsonResponse(poolBody({ rows: [POOL_ITEM], totalCount: 1 }))));
+      const fetchMock = vi.fn((url) => {
+        if (url.includes('PublicSwimmingPool')) return Promise.resolve(jsonResponse(poolBody({ rows: [POOL_ITEM], totalCount: 1 })));
+        return Promise.resolve(jsonResponse(splashBody({ rows: [SPLASH_ITEM], totalCount: 1 })));
+      });
       vi.stubGlobal('fetch', fetchMock);
 
       const adapter = new GgEventsAdapter();
@@ -69,10 +88,13 @@ describe('GgEventsAdapter', () => {
 
     it('list_total_count에 도달할 때까지 pIndex를 증가시키며 반복 호출한다', async () => {
       const fetchMock = vi.fn((url) => {
-        const pIndex = new URL(url).searchParams.get('pIndex');
-        if (pIndex === '1') return Promise.resolve(jsonResponse(poolBody({ rows: [POOL_ITEM], totalCount: 101 })));
-        if (pIndex === '2') return Promise.resolve(jsonResponse(poolBody({ rows: [{ ...POOL_ITEM, FACLT_NM: '제2수영장' }], totalCount: 101 })));
-        throw new Error(`unexpected pool pIndex ${pIndex}`);
+        if (url.includes('PublicSwimmingPool')) {
+          const pIndex = new URL(url).searchParams.get('pIndex');
+          if (pIndex === '1') return Promise.resolve(jsonResponse(poolBody({ rows: [POOL_ITEM], totalCount: 101 })));
+          if (pIndex === '2') return Promise.resolve(jsonResponse(poolBody({ rows: [{ ...POOL_ITEM, FACLT_NM: '제2수영장' }], totalCount: 101 })));
+          throw new Error(`unexpected pool pIndex ${pIndex}`);
+        }
+        return Promise.resolve(jsonResponse(splashBody({ rows: [], totalCount: 0 })));
       });
       vi.stubGlobal('fetch', fetchMock);
 
@@ -83,10 +105,10 @@ describe('GgEventsAdapter', () => {
     });
 
     it('RESULT.CODE가 INFO-000이 아니면 에러를 던진다', async () => {
-      vi.stubGlobal(
-        'fetch',
-        vi.fn(() => Promise.resolve(jsonResponse(poolBody({ code: 'ERROR-310', message: '해당하는 서비스를 찾을 수 없습니다.' }))))
-      );
+      vi.stubGlobal('fetch', vi.fn((url) => {
+        if (url.includes('PublicSwimmingPool')) return Promise.resolve(jsonResponse(poolBody({ code: 'ERROR-310', message: '해당하는 서비스를 찾을 수 없습니다.' })));
+        return Promise.resolve(jsonResponse(splashBody({ rows: [] })));
+      }));
 
       const adapter = new GgEventsAdapter();
       await expect(adapter.fetch()).rejects.toThrow('GgEvents(PublicSwimmingPool) 에러 응답');
@@ -94,12 +116,14 @@ describe('GgEventsAdapter', () => {
   });
 
   describe('transform', () => {
-    it('API1 정상 항목을 open_spaces 표준 스키마 행으로 변환한다', async () => {
+    it('API1/API2 정상 항목을 open_spaces 표준 스키마 행으로 변환한다', async () => {
       const adapter = new GgEventsAdapter();
-      const rows = await adapter.transform({ poolItems: [POOL_ITEM] });
+      const rows = await adapter.transform({ poolItems: [POOL_ITEM], splashItems: [SPLASH_ITEM] });
 
-      expect(rows).toHaveLength(1);
-      expect(rows[0]).toMatchObject({
+      expect(rows).toHaveLength(2);
+
+      const poolRow = rows.find((r) => r.name === POOL_ITEM.FACLT_NM);
+      expect(poolRow).toMatchObject({
         source_type: 'GG_EVENTS',
         name: '남양주체육문화센터수영장',
         category: 'KIDS_ACTIVITY',
@@ -108,29 +132,50 @@ describe('GgEventsAdapter', () => {
         is_free: null,
         is_kids_friendly: false,
       });
-      expect(rows[0].external_id).toMatch(/^GG_EVENTS_[0-9a-f]{16}$/);
+      expect(poolRow.external_id).toMatch(/^GG_EVENTS_[0-9a-f]{16}$/);
+
+      const splashRow = rows.find((r) => r.name === SPLASH_ITEM.HYDR_NM);
+      expect(splashRow).toMatchObject({
+        source_type: 'GG_EVENTS',
+        name: '고래의모험 어린이공원',
+        category: 'OUTDOOR_NATURE',
+        address: '경기도 수원시 권선구 세류동 1066-9',
+        facility_type: '야외',
+        is_free: true,
+        is_kids_friendly: true,
+      });
     });
 
     it('지오코딩 결과가 없으면 해당 항목을 건너뛴다', async () => {
       geocode.mockResolvedValueOnce(null);
       const adapter = new GgEventsAdapter();
-      const rows = await adapter.transform({ poolItems: [POOL_ITEM] });
+      const rows = await adapter.transform({ poolItems: [POOL_ITEM], splashItems: [] });
       expect(rows).toEqual([]);
     });
 
-    it('지오코딩 호출이 재시도 횟수만큼 계속 실패하면 전체를 중단하지 않고 해당 건만 건너뛴다', async () => {
+    // Task 9-6-6: gg-splash-events-adapter.mjs에서 실측으로 발견했던 오매칭 방지 검증을
+    // 복귀 시점에 이 어댑터에도 반영한다.
+    it('지오코딩 결과가 경기도 범위를 벗어나면 오매칭으로 보고 건너뛴다', async () => {
+      geocode.mockResolvedValueOnce({ lng: 129.5, lat: 35.8 });
+      const adapter = new GgEventsAdapter();
+      const rows = await adapter.transform({ poolItems: [POOL_ITEM], splashItems: [] });
+      expect(rows).toEqual([]);
+    });
+
+    it('지오코딩 호출이 재시도 횟수만큼 계속 실패하면 전체를 중단하지 않고 해당 항목만 건너뛴다', async () => {
       geocode.mockRejectedValueOnce(new Error('네트워크 오류 1'));
       geocode.mockRejectedValueOnce(new Error('네트워크 오류 2'));
       geocode.mockRejectedValueOnce(new Error('네트워크 오류 3'));
       const adapter = new GgEventsAdapter();
-      const rows = await adapter.transform({ poolItems: [POOL_ITEM] });
-      expect(rows).toEqual([]);
+      const rows = await adapter.transform({ poolItems: [POOL_ITEM], splashItems: [SPLASH_ITEM] });
+      expect(rows).toHaveLength(1);
+      expect(rows[0].name).toBe(SPLASH_ITEM.HYDR_NM);
     });
 
     it('일시적으로 실패해도 재시도 중 성공하면 해당 항목을 정상 수집한다(Task 8-3 pacing/재시도)', async () => {
       geocode.mockRejectedValueOnce(new Error('502 Bad Gateway'));
       const adapter = new GgEventsAdapter();
-      const rows = await adapter.transform({ poolItems: [POOL_ITEM] });
+      const rows = await adapter.transform({ poolItems: [POOL_ITEM], splashItems: [] });
       expect(rows).toHaveLength(1);
       expect(rows[0].name).toBe(POOL_ITEM.FACLT_NM);
       expect(geocode).toHaveBeenCalledTimes(2); // 1차 실패 + 2차 성공
@@ -138,26 +183,35 @@ describe('GgEventsAdapter', () => {
 
     it('INOUTDR_DIV_NM이 실외이면 API1 facility_type을 야외로 매핑한다', async () => {
       const adapter = new GgEventsAdapter();
-      const rows = await adapter.transform({ poolItems: [{ ...POOL_ITEM, INOUTDR_DIV_NM: '실외' }] });
+      const rows = await adapter.transform({
+        poolItems: [{ ...POOL_ITEM, INOUTDR_DIV_NM: '실외' }],
+        splashItems: [],
+      });
       expect(rows[0].facility_type).toBe('야외');
     });
 
     it('명칭에 키즈 키워드가 포함되면 API1 is_kids_friendly를 true로 매핑한다', async () => {
       const adapter = new GgEventsAdapter();
-      const rows = await adapter.transform({ poolItems: [{ ...POOL_ITEM, FACLT_NM: '어린이 수영장' }] });
+      const rows = await adapter.transform({
+        poolItems: [{ ...POOL_ITEM, FACLT_NM: '어린이 수영장' }],
+        splashItems: [],
+      });
       expect(rows[0].is_kids_friendly).toBe(true);
     });
 
     it('시설명/주소 중 하나라도 없으면 해당 항목을 건너뛴다', async () => {
       const adapter = new GgEventsAdapter();
-      const rows = await adapter.transform({ poolItems: [{ ...POOL_ITEM, FACLT_NM: '' }] });
+      const rows = await adapter.transform({
+        poolItems: [{ ...POOL_ITEM, FACLT_NM: '' }],
+        splashItems: [{ ...SPLASH_ITEM, HYDR_ADDR: '' }],
+      });
       expect(rows).toEqual([]);
     });
 
     it('동일한 이름+주소는 동일한 external_id를 생성한다(결정적 해시)', async () => {
       const adapter = new GgEventsAdapter();
-      const rows1 = await adapter.transform({ poolItems: [POOL_ITEM] });
-      const rows2 = await adapter.transform({ poolItems: [POOL_ITEM] });
+      const rows1 = await adapter.transform({ poolItems: [POOL_ITEM], splashItems: [] });
+      const rows2 = await adapter.transform({ poolItems: [POOL_ITEM], splashItems: [] });
       expect(rows1[0].external_id).toBe(rows2[0].external_id);
     });
   });

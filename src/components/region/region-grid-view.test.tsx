@@ -50,6 +50,39 @@ function makeSpaceItem(overrides: Partial<NearbyItem> = {}): NearbyItem {
   };
 }
 
+// Task 9-6-4/9-6-6: 홈 Hero Carousel "전체 보기"(?homeCategory=EVENTS&category=TODAY_WEEKEND)
+// 검증용 이벤트 표본.
+function makeEventItem(overrides: Partial<NearbyItem> = {}): NearbyItem {
+  return {
+    id: 'event-1',
+    name: '테스트 행사',
+    category: 'PERFORMANCE_FESTIVAL',
+    distance_meters: -1,
+    item_type: 'EVENT',
+    lng: 127,
+    lat: 37.5,
+    address: '테스트 장소',
+    sigungu_name: '강남구',
+    thumbnail_url: null,
+    start_date: '2026-08-23',
+    end_date: '2026-08-23',
+    reservation_start_date: null,
+    reservation_end_date: null,
+    reservation_url: null,
+    is_reservation_required: false,
+    operating_hours: null,
+    is_free: true,
+    info_url: null,
+    is_kids_friendly: null,
+    has_parking: null,
+    stroller_accessible: null,
+    facility_type: null,
+    target_age_group: null,
+    booking_status: null,
+    ...overrides,
+  };
+}
+
 // Task 9-1-4: /region 탭 진입 시 5대 카테고리 선택 화면(1단계)을 먼저 보여주고, 선택해야만
 // 해당 카테고리 리스트(2단계)가 노출되는지, 그리고 전역 고정 위치가 우선 노출에 반영되는지 검증한다.
 describe('RegionGridView 2단계 탐색 UX (Task 9-1-4)', () => {
@@ -324,5 +357,56 @@ describe('RegionGridView 테마별 추천 (Task 9-5-1/9-6-4)', () => {
     expect(screen.getByRole('button', { name: '유원지·액티비티' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '전시·공연·문화' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '체험·자연' })).toBeInTheDocument();
+  });
+});
+
+// 사용자 피드백(2026-08-23): 홈 Hero Carousel의 "전체 보기"는 지도(/nearby)가 아니라 이
+// 카드 그리드 화면의 "🎪 행사·축제" 대분류로 와야 한다.
+describe('RegionGridView 홈 "전체 보기" 진입(?homeCategory=EVENTS&category=TODAY_WEEKEND)', () => {
+  afterEach(() => {
+    mockSearchParams = new URLSearchParams();
+    mockSigunguName = null;
+    vi.doUnmock('@/lib/spaces/get-all-spaces');
+    vi.doUnmock('@/lib/spaces/get-all-events');
+    vi.resetModules();
+  });
+
+  it('homeCategory=EVENTS면 1단계를 건너뛰고 바로 행사 카드 그리드를 보여준다', async () => {
+    mockSearchParams = new URLSearchParams('homeCategory=EVENTS&category=TODAY_WEEKEND');
+    const today = makeEventItem({ id: 'today-1', name: '오늘 행사', start_date: '2026-08-23', end_date: '2026-08-23' });
+
+    vi.doMock('@/lib/spaces/get-all-spaces', () => ({ getAllOpenSpaces: () => Promise.resolve([]) }));
+    vi.doMock('@/lib/spaces/get-all-events', () => ({ getAllEvents: () => Promise.resolve([today]) }));
+
+    const { RegionGridView: FreshView } = await import('./region-grid-view');
+    render(<FreshView />);
+
+    expect(screen.queryByText('카테고리를 선택해주세요')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('오늘 행사')).toBeInTheDocument());
+  });
+
+  it('TODAY_WEEKEND는 예약 필수면서 기간이 지난 행사를 제외한다(quick-filters.ts 기준)', async () => {
+    mockSearchParams = new URLSearchParams('homeCategory=EVENTS&category=TODAY_WEEKEND');
+    const today = makeEventItem({ id: 'today-1', name: '오늘 행사', start_date: '2026-08-23', end_date: '2026-08-23' });
+    const past = makeEventItem({ id: 'past-1', name: '지난 행사', start_date: '2026-01-01', end_date: '2026-01-02' });
+
+    vi.doMock('@/lib/spaces/get-all-spaces', () => ({ getAllOpenSpaces: () => Promise.resolve([]) }));
+    vi.doMock('@/lib/spaces/get-all-events', () => ({ getAllEvents: () => Promise.resolve([today, past]) }));
+
+    const { RegionGridView: FreshView } = await import('./region-grid-view');
+    render(<FreshView />);
+
+    await waitFor(() => expect(screen.getByText('오늘 행사')).toBeInTheDocument());
+    expect(screen.queryByText('지난 행사')).not.toBeInTheDocument();
+  });
+
+  it('homeCategory 파라미터가 없으면 기존처럼 "🏞️ 상시 장소"가 기본값이다', async () => {
+    vi.doMock('@/lib/spaces/get-all-spaces', () => ({ getAllOpenSpaces: () => Promise.resolve([]) }));
+    vi.doMock('@/lib/spaces/get-all-events', () => ({ getAllEvents: () => Promise.resolve([]) }));
+
+    const { RegionGridView: FreshView } = await import('./region-grid-view');
+    render(<FreshView />);
+
+    expect(screen.getByText('카테고리를 선택해주세요')).toBeInTheDocument();
   });
 });

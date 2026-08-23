@@ -16,6 +16,7 @@ import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { useUserLocation } from '@/hooks/use-user-location';
 import { classifyThemeSpot, isThemeSpotKey, ThemeSpotKey } from '@/lib/theme-spots';
 import { HOME_CATEGORY_OPTIONS, HomeCategory, themeOptionsFor } from '@/lib/home-categories';
+import { matchesQuickFilters } from '@/lib/spaces/quick-filters';
 
 // Task 9-6-4(2026-08-23): home-view.tsx와 동일한 대분류 카드 디스패치.
 function FeedCard({ item, onSelect }: { item: NearbyItem; onSelect: (item: NearbyItem) => void }) {
@@ -182,7 +183,12 @@ export function RegionGridView() {
   // 기본값(🎪 행사·축제)과는 화면 성격이 달라 서로 다른 기본값을 갖는다 — 이 화면은 유저가
   // 명시적으로 전환해야만 행사·축제 카탈로그를 본다. 두 테이블 모두 한 번만 전체 카탈로그를
   // 받아와(get-all-spaces.ts와 동일 패턴) 대분류 전환 시 재조회 없이 즉시 전환되도록 한다.
-  const [homeCategory, setHomeCategory] = useState<HomeCategory>('SPACES');
+  // 사용자 피드백(2026-08-23): 홈 화면 Hero Carousel의 "전체 보기"는 지도(/nearby)가 아니라
+  // 이 카드 그리드 화면으로 와야 한다 — ?homeCategory=EVENTS로 넘어오면 상시 장소가 아니라
+  // 행사·축제 대분류로 바로 진입한다.
+  const [homeCategory, setHomeCategory] = useState<HomeCategory>(() =>
+    searchParams.get('homeCategory') === 'EVENTS' ? 'EVENTS' : 'SPACES'
+  );
   const [spaceItems, setSpaceItems] = useState<NearbyItem[]>([]);
   const [eventItems, setEventItems] = useState<NearbyItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -226,10 +232,13 @@ export function RegionGridView() {
   // Task 9-1-10: selection이 5대 UI 카테고리 값이면 category로, 'FREE'/'ACCESSIBLE'이면
   // 실제 존재하는 is_free/stroller_accessible 필드로 걸러낸다(카테고리와 동급 취급).
   // Task 9-5-1: 6대 목적별 테마 키면 classifyThemeSpot(source_type+키워드)으로 걸러낸다.
+  // 사용자 피드백(2026-08-23): 홈 Hero Carousel "전체 보기"가 넘겨주는 TODAY_WEEKEND는 카테고리가
+  // 아니라 map-explorer.tsx와 동일한 quick-filters.ts 기준(오늘/이번 주말 이용 가능)으로 거른다.
   const selectionItems = useMemo(() => {
     if (!selection) return [];
     if (selection === 'FREE') return items.filter((item) => item.is_free === true);
     if (selection === 'ACCESSIBLE') return items.filter((item) => item.stroller_accessible === true);
+    if (selection === 'TODAY_WEEKEND') return items.filter((item) => matchesQuickFilters(item, ['TODAY_WEEKEND']));
     if (isThemeSpotKey(selection)) return items.filter((item) => classifyThemeSpot(item) === selection);
     return items.filter((item) => item.category === selection);
   }, [items, selection]);
@@ -302,7 +311,8 @@ export function RegionGridView() {
     categoryMeta?.label ??
     specialFilterMeta?.label ??
     (themeMeta ? `${themeMeta.emoji} ${themeMeta.label}` : undefined) ??
-    (selection === ETC_CATEGORY ? ETC_META.label : selection);
+    (selection === ETC_CATEGORY ? ETC_META.label : undefined) ??
+    (selection === 'TODAY_WEEKEND' ? '⚡ 오늘/주말' : selection);
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">

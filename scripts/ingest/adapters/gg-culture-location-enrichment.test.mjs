@@ -16,6 +16,7 @@ const {
   extractVenueFromHtml,
   buildUrlLookup,
   geocodeVenueOrNull,
+  stripRoomFloorDescriptor,
   enrichGgCultureEventLocations,
   API1_EXTERNAL_ID_PREFIX,
 } = await import('./gg-culture-location-enrichment.mjs');
@@ -138,6 +139,63 @@ describe('geocodeVenueOrNull', () => {
 
     expect(geocodeKeyword).not.toHaveBeenCalled();
   });
+
+  // Task 9-6-6(2026-08-23): 사용자 지시 — 건물 내부 특정 실/층 단위가 있으면 그걸 제외한
+  // 건물명으로 재시도한다. VWorld/카카오 둘 다 원문으로는 실패해야 이 3차 시도가 트리거된다.
+  it('직접 시도가 모두 실패하면 실/층 단위를 제거한 건물명으로 3차 재시도한다', async () => {
+    geocode.mockResolvedValueOnce(null); // 원문("백남준아트센터 제2전시실") 직접 시도 실패
+    geocode.mockResolvedValueOnce(GEOCODE_RESULT); // 제거 후("백남준아트센터") 재시도 성공
+
+    const result = await geocodeVenueOrNull('백남준아트센터 제2전시실');
+
+    expect(geocode).toHaveBeenNthCalledWith(1, '백남준아트센터 제2전시실');
+    expect(geocode).toHaveBeenNthCalledWith(2, '백남준아트센터');
+    expect(result).toEqual({ primary: '백남준아트센터', coords: GEOCODE_RESULT, provider: 'vworld' });
+  });
+
+  it('제거할 실/층 단위 토큰이 없으면 3차 재시도 자체를 하지 않는다', async () => {
+    geocode.mockResolvedValueOnce(null);
+
+    await geocodeVenueOrNull('안양 평촌중앙공원');
+
+    expect(geocode).toHaveBeenCalledTimes(1); // "공원"은 제거 대상이 아님 — 재시도 없음
+  });
+
+  it('건물명만 남겨도 실패하면 최종적으로 null을 반환한다', async () => {
+    geocode.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
+
+    const result = await geocodeVenueOrNull('전곡선사박물관 2층 교육실');
+
+    expect(result).toBeNull();
+    expect(geocode).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('stripRoomFloorDescriptor', () => {
+  it('건물명 뒤에 붙은 층/실 단위를 제거한다', () => {
+    expect(stripRoomFloorDescriptor('백남준아트센터 제2전시실')).toBe('백남준아트센터');
+    expect(stripRoomFloorDescriptor('전곡선사박물관 2층 교육실')).toBe('전곡선사박물관');
+    expect(stripRoomFloorDescriptor('경기도박물관 1F 기획전시실')).toBe('경기도박물관');
+    expect(stripRoomFloorDescriptor('전곡선사박물관 B1 기획전시실')).toBe('전곡선사박물관');
+  });
+
+  it('방 이름 전체가 하나의 단어여도(부분 문자열이 아니라) 통째로 제거한다', () => {
+    expect(stripRoomFloorDescriptor('광주시문화예술의전당 맹사성홀')).toBe('광주시문화예술의전당');
+  });
+
+  it('숫자/범위 단위 뒤에 오는 실 이름도 순서대로 제거한다', () => {
+    expect(stripRoomFloorDescriptor('경기도미술관 전시실 1-4')).toBe('경기도미술관');
+  });
+
+  it('"내외부"처럼 접미 패턴이 없는 특수 케이스도 제거한다', () => {
+    expect(stripRoomFloorDescriptor('백남준아트센터 내외부')).toBe('백남준아트센터');
+  });
+
+  it('제거할 실/층 단위가 없으면 null을 반환한다(추측하지 않음)', () => {
+    expect(stripRoomFloorDescriptor('경기상상캠퍼스 업사이클플라자')).toBeNull();
+    expect(stripRoomFloorDescriptor('안양 평촌중앙공원')).toBeNull();
+    expect(stripRoomFloorDescriptor('회차별 상이')).toBeNull();
+  });
 });
 
 function makeFakeClient({ selectData, updateError = null }) {
@@ -251,7 +309,10 @@ describe('enrichGgCultureEventLocations', () => {
   });
 
   it('지오코딩이 실패하면 건너뛴다', async () => {
-    geocode.mockResolvedValueOnce(null);
+    // 이 표본의 venue("경기도자미술관 상설전시실 2,3층")는 Task 9-6-6의 실/층 단위 제거 재시도
+    // 대상이라("상설전시실 2" -> "경기도자미술관") geocode가 두 번(직접 시도 + 제거 후 재시도)
+    // 호출된다 — 둘 다 실패로 모킹해야 진짜 "완전히 실패" 시나리오가 재현된다.
+    geocode.mockResolvedValueOnce(null).mockResolvedValueOnce(null);
     const rawItem = { TITLE: '경기도자미술관 소장품상설전', BEGIN_DE: '20231124', URL: 'https://ggc.ggcf.kr/view/abc' };
     const adapter = fakeAdapter([rawItem]);
     const externalId = adapter.buildExternalId('GG_CULTURE_EVENT', rawItem.URL);
