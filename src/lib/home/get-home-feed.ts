@@ -359,61 +359,16 @@ async function fetchRegionFirstRows<T extends { id: string }>(
   return [...rows, ...others];
 }
 
-// Task 9-1-9: "이번 주 시작 예정" 범위 계산 — 한국 주간(일~토) 관례로 오늘부터 이번 주 토요일까지.
-function endOfThisWeek(reference: Date): string {
-  const day = reference.getDay(); // 0=일 ... 6=토
-  const end = new Date(reference);
-  end.setDate(reference.getDate() + (6 - day));
-  return end.toISOString().slice(0, 10);
-}
-
-// Task 9-1-9: 당일 진행 이벤트가 부족할 때(HERO_MIN_COUNT 미만) 채우는 "이번 주 시작 예정
-// 마감임박" 행사. 당일 이벤트와 달리 정렬 기준이 "거리"가 아니라 "마감임박"(예약 마감이 가장
-// 가까운 순, 없으면 시작일이 가장 가까운 순)이다 — reservation_end_date 오름차순으로 DB에서
-// 이미 그 순서로 가져오므로, selectRegionFirst가 지역만 우선시키고 이 순서는 그대로 보존한다
-// (거리 재정렬은 하지 않음 — 이 콘텐츠의 우선순위는 "곧 마감"이지 "가까움"이 아니기 때문).
-async function getUpcomingDeadlineFill(
-  count: number,
-  region: HomeRegion,
-  excludeIds: Set<string>
-): Promise<NearbyItem[]> {
-  if (count <= 0) return [];
-
-  const supabase = await createClient();
-  const now = new Date();
-  const today = now.toISOString().slice(0, 10);
-  const weekEnd = endOfThisWeek(now);
-  const nowIso = now.toISOString();
-
-  const buildQuery = (token: string | readonly string[] | null) => {
-    let query = supabase
-      .from('events')
-      .select(EVENT_COLUMNS)
-      .gt('start_date', today)
-      .lte('start_date', weekEnd)
-      .eq('is_active', true)
-      .or(`is_reservation_required.eq.false,reservation_end_date.gte.${nowIso},reservation_end_date.is.null`);
-    if (token) query = query.or(regionOrFilter(token, 'venue_name'));
-    return query
-      .order('reservation_end_date', { ascending: true, nullsFirst: false })
-      .order('start_date', { ascending: true })
-      .limit(200);
-  };
-
-  const data = await fetchRegionFirstRows<EventRow>(buildQuery, region, count);
-
-  const items = dedupeAndMergeFree(data.map(toEventItem)).filter((item) => !excludeIds.has(item.id));
-  return selectRegionFirst(items, region, count);
-}
-
 // docs/spec.md 2.2 ①: "당일 진행 중인 행사/이벤트 중 추천 5~10개 동적 페칭"
 // docs/spec.md 1: "사전 예약 마감건은 제외하고, 오늘/주말 당일 즉시 방문 가능한 정보를 우선 추천"
 // Task 9-1-6: Hero Carousel은 Strict Location-First — 선택 지역 당일 이벤트로 limit이 충족되면
-// 다른 지역 이벤트는 완전히 배제한다(부족할 때만 다른 지역으로 최소 보충).
-// Task 9-1-9: 당일 진행 이벤트를 1차로 전량 추출해 가까운 순으로 채우되, 그마저도 HERO_MIN_COUNT
-// (10개)에 못 미치면 "이번 주 시작 예정 마감임박" 행사로 나머지를 채운다.
-const HERO_MIN_COUNT = 10;
-
+// 다른 지역 이벤트는 완전히 배제한다.
+// Task 9-6-9(2026-08-23): 사용자 피드백 — "당일 진행 중"(start_date<=오늘<=end_date, 몇 주짜리
+// 장기 전시도 매일 노출됨)이 아니라 "당일 한정"(end_date=오늘, 오늘이 사실상 마지막 날이거나
+// 하루짜리 행사)만 노출해야 "오늘의 추천"이라는 이름에 맞는 실제 긴급성이 생긴다. 또한 Task
+// 9-1-9에서 도입한 "이번 주 시작 예정 마감임박으로 최소 10개 채우기"(HERO_MIN_COUNT/
+// getUpcomingDeadlineFill)를 완전히 제거한다 — 조건에 맞는 당일 한정 행사가 0건이면 섹션
+// 자체를 숨기고(home-view.tsx), N건이면 N개만 그대로 보여준다(10개로 억지로 채우지 않음).
 export async function getTodayEvents(
   limit = 10,
   region: HomeRegion = DEFAULT_HOME_REGION
@@ -426,8 +381,7 @@ export async function getTodayEvents(
     let query = supabase
       .from('events')
       .select(EVENT_COLUMNS)
-      .lte('start_date', today)
-      .gte('end_date', today)
+      .eq('end_date', today)
       .eq('is_active', true)
       // 예약 필수이면서 이미 마감된 건은 DB 단에서 제외(마감 안 지난 것 OR 예약 불필요)
       .or(`is_reservation_required.eq.false,reservation_end_date.gte.${nowIso},reservation_end_date.is.null`);
@@ -439,14 +393,7 @@ export async function getTodayEvents(
 
   const items = dedupeAndMergeFree(data.map(toEventItem));
   const ordered = sortByDistanceIfKnown(items, region);
-  const primary = selectRegionFirst(ordered, region, limit);
-
-  const minTarget = Math.min(HERO_MIN_COUNT, limit);
-  if (primary.length >= minTarget) return primary;
-
-  const excludeIds = new Set(primary.map((item) => item.id));
-  const fill = await getUpcomingDeadlineFill(minTarget - primary.length, region, excludeIds);
-  return [...primary, ...fill];
+  return selectRegionFirst(ordered, region, limit);
 }
 
 // Task 9-5-1(2026-08-22): source_type을 추가했다 — 목적별 테마 스팟 분류(src/lib/theme-spots.ts)에

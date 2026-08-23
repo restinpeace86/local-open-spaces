@@ -19,6 +19,12 @@ export const SEOUL_GU_NAMES = [
   '관악구', '서초구', '강남구', '송파구', '강동구',
 ] as const;
 
+// Task 9-6-9(2026-08-23): 서울과 경기는 실생활권이 사실상 하나로 붙어 있는 수도권이라(예:
+// 분당구 거주자가 매일 서울로 통근), 선택 지역이 이 둘 중 하나면 3순위 조회를 "경기도 OR
+// 서울특별시" 둘 다로 넓힌다 — 그 외 "지방" 데이터는 여전히 차단된다(Task 9-6-7의 완전 차단
+// 원칙 유지, 수도권 두 곳만 서로 묶는 것뿐).
+export const CAPITAL_AREA_MEMBERS: readonly string[] = [...GYEONGGI_SIGUN_NAMES, ...SEOUL_GU_NAMES];
+
 export type RegionOption = {
   key: string;
   label: string;
@@ -28,10 +34,11 @@ export type RegionOption = {
 
 // 지시서 예시 그대로 2개 옵션을 기본 제공한다(성남시 분당구가 기본/1순위 예시). 새 지역을
 // 추가하려면 이 배열에 항목만 더하면 되는 구조라 확장에 열려 있다(제7장 제7조 — 확장 기능
-// 자체를 미리 만들지는 않되 구조는 막지 않는다).
+// 자체를 미리 만들지는 않되 구조는 막지 않는다). 두 옵션 모두 수도권(서울+경기) 소속이라
+// CAPITAL_AREA_MEMBERS를 함께 쓴다.
 export const REGION_OPTIONS: readonly RegionOption[] = [
-  { key: 'seongnam-bundang', label: '성남시 분당구', sigunguName: '성남시 분당구', provinceMembers: GYEONGGI_SIGUN_NAMES },
-  { key: 'seoul-seocho', label: '서울시 서초구', sigunguName: '서초구', provinceMembers: SEOUL_GU_NAMES },
+  { key: 'seongnam-bundang', label: '성남시 분당구', sigunguName: '성남시 분당구', provinceMembers: CAPITAL_AREA_MEMBERS },
+  { key: 'seoul-seocho', label: '서울시 서초구', sigunguName: '서초구', provinceMembers: CAPITAL_AREA_MEMBERS },
 ];
 
 export const DEFAULT_REGION_OPTION: RegionOption = REGION_OPTIONS[0];
@@ -51,9 +58,12 @@ export function findRegionOption(key: string | null | undefined): RegionOption {
 // 넘기든 안전하게 차단된다. 인식 불가능한(경기도/서울 어느 목록에도 없는) sigunguName은
 // undefined를 반환해 기존처럼 지역 제한 없는 폴백을 유지한다(이 서비스가 아직 다루지 않는
 // 지역을 임의로 차단하지 않음 — 추측 금지).
+// Task 9-6-9(2026-08-23): 경기/서울 둘 다 CAPITAL_AREA_MEMBERS(수도권 통합)를 반환하도록
+// 바꿨다 — 이제 성남시 분당구 기준이어도 서울 데이터가 3순위에서 정당하게 섞여 들어온다(Task
+// 9-6-7이 막던 "지방" 데이터는 여전히 차단, 수도권 두 곳만 서로 묶는 것).
 export function resolveProvinceMembers(sigunguName: string | null | undefined): readonly string[] | undefined {
   if (!sigunguName) return undefined;
-  if (GYEONGGI_SIGUN_NAMES.some((name) => sigunguName.includes(name))) return GYEONGGI_SIGUN_NAMES;
-  if (SEOUL_GU_NAMES.some((name) => sigunguName.includes(name))) return SEOUL_GU_NAMES;
+  if (GYEONGGI_SIGUN_NAMES.some((name) => sigunguName.includes(name))) return CAPITAL_AREA_MEMBERS;
+  if (SEOUL_GU_NAMES.some((name) => sigunguName.includes(name))) return CAPITAL_AREA_MEMBERS;
   return undefined;
 }

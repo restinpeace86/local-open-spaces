@@ -156,9 +156,12 @@ describe('HomeView', () => {
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/home/free-feed'));
   });
 
-  it('오늘의 추천 행사가 없으면 안내 문구를 보여준다', () => {
+  // Task 9-6-9(2026-08-23): 당일 한정 조건 강화로 0건인 날이 흔해져, 빈 상태 안내 문구 대신
+  // 섹션 자체를 숨긴다(가변 노출 — 10개로 억지로 채우지 않는 정책과 짝을 이룸).
+  it('오늘의 추천 행사가 없으면 안내 문구 없이 섹션 자체를 숨긴다', () => {
     render(<HomeView initialHeroEvents={[]} />);
-    expect(screen.getByText('오늘 진행 중인 추천 행사가 아직 없습니다.')).toBeInTheDocument();
+    expect(screen.queryByText('오늘 진행 중인 추천 행사가 아직 없습니다.')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('오늘의 추천 행사')).not.toBeInTheDocument();
   });
 
   it('특가·핫딜 서브탭은 비활성화 상태로 노출된다(커머스 API 미연동)', () => {

@@ -3,6 +3,53 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HeroCarousel } from './hero-carousel';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 
+// Task 9-6-9(2026-08-23): jsdom에는 IntersectionObserver가 없어, 뷰포트 이탈 시 Autoplay
+// 정지를 테스트에서 직접 통제하기 위한 가짜 구현. observe() 호출 시 기본값으로 즉시
+// "화면에 보임"(isIntersecting: true)을 통지해, 이 옵저버를 신경 쓰지 않는 기존 테스트들이
+// 그대로 통과하게 한다 — 뷰포트 이탈 시나리오를 검증하는 테스트만 simulateOutOfViewport()로
+// 명시적으로 false를 통지한다.
+class FakeIntersectionObserver {
+  static instances: FakeIntersectionObserver[] = [];
+  callback: IntersectionObserverCallback;
+  root = null;
+  rootMargin = '';
+  thresholds: ReadonlyArray<number> = [];
+
+  constructor(callback: IntersectionObserverCallback) {
+    this.callback = callback;
+    FakeIntersectionObserver.instances.push(this);
+  }
+  observe = vi.fn(() => {
+    this.callback(
+      [{ isIntersecting: true } as unknown as IntersectionObserverEntry],
+      this as unknown as IntersectionObserver
+    );
+  });
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+  takeRecords = () => [];
+}
+
+function simulateOutOfViewport() {
+  const instance = FakeIntersectionObserver.instances.at(-1);
+  act(() => {
+    instance?.callback(
+      [{ isIntersecting: false } as unknown as IntersectionObserverEntry],
+      instance as unknown as IntersectionObserver
+    );
+  });
+}
+
+function simulateInViewport() {
+  const instance = FakeIntersectionObserver.instances.at(-1);
+  act(() => {
+    instance?.callback(
+      [{ isIntersecting: true } as unknown as IntersectionObserverEntry],
+      instance as unknown as IntersectionObserver
+    );
+  });
+}
+
 function makeItem(id: string, name: string): NearbyItem {
   return {
     id,
@@ -31,6 +78,17 @@ function makeItem(id: string, name: string): NearbyItem {
     booking_status: '오늘방문',
   };
 }
+
+// 파일 전체 공용: 모든 describe 블록의 렌더링이 IntersectionObserver를 필요로 하므로(뷰포트
+// 감시 훅이 항상 실행됨) 이 파일 전역에 한 번만 스텁한다.
+beforeEach(() => {
+  FakeIntersectionObserver.instances = [];
+  vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 // Task 9-1-1: Hero Carousel 5초 Auto-play + 호버/터치 일시정지 검증
 describe('HeroCarousel', () => {
@@ -88,6 +146,21 @@ describe('HeroCarousel', () => {
     expect(Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
 
     fireEvent.touchEnd(track);
+    act(() => vi.advanceTimersByTime(5000));
+    expect(Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(1);
+  });
+
+  // Task 9-6-9(2026-08-23) 버그 수정: 캐러셀이 뷰포트를 벗어나면(하단 섹션 스크롤 중)
+  // Autoplay가 scrollIntoView를 호출해 화면을 강제로 위로 튕기던 버그 방지.
+  it('캐러셀이 뷰포트를 벗어나면 자동 전환을 멈추고, 다시 들어오면 재개한다', () => {
+    const items = [makeItem('1', '행사1'), makeItem('2', '행사2')];
+    render(<HeroCarousel items={items} onSelect={() => {}} />);
+
+    simulateOutOfViewport();
+    act(() => vi.advanceTimersByTime(10000));
+    expect(Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>).not.toHaveBeenCalled();
+
+    simulateInViewport();
     act(() => vi.advanceTimersByTime(5000));
     expect(Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>).toHaveBeenCalledTimes(1);
   });

@@ -35,11 +35,33 @@ export function HeroCarousel({
   moreHref?: string;
 }) {
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const rootRef = useRef<HTMLDivElement | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
+  // Task 9-6-9(2026-08-23) 버그 수정: 캐러셀이 화면 밖으로 스크롤돼도(하단 "가성비 행복" 섹션
+  // 감상 중) Autoplay 타이머가 계속 돌면서 5초마다 itemRefs.current[next]?.scrollIntoView()를
+  // 호출해 화면이 강제로 캐러셀 위치까지 튕겨 올라가는 버그가 있었다. IntersectionObserver로
+  // 캐러셀 자체가 뷰포트에 조금이라도 보이는지 감시해, 완전히 벗어나면 Autoplay를 멈춘다
+  // (호버/터치 일시정지와는 별개 상태로 관리 — 뷰포트 밖에서 마우스가 우연히 올라가 있어도
+  // 안전하게 정지 상태를 유지해야 하므로 OR로 합친다).
+  const [isInViewport, setIsInViewport] = useState(true);
 
   useEffect(() => {
-    if (items.length <= 1 || isPaused) return undefined;
+    const node = rootRef.current;
+    if (!node) return undefined;
+
+    const observer = new IntersectionObserver(([entry]) => setIsInViewport(entry.isIntersecting), {
+      threshold: 0,
+    });
+    observer.observe(node);
+
+    return () => observer.disconnect();
+  }, [items.length]);
+
+  const isAutoplayPaused = isPaused || !isInViewport;
+
+  useEffect(() => {
+    if (items.length <= 1 || isAutoplayPaused) return undefined;
 
     const timer = setInterval(() => {
       setCurrentIndex((prev) => {
@@ -50,7 +72,7 @@ export function HeroCarousel({
     }, AUTOPLAY_INTERVAL_MS);
 
     return () => clearInterval(timer);
-  }, [items.length, isPaused]);
+  }, [items.length, isAutoplayPaused]);
 
   if (items.length === 0) return null;
 
@@ -60,6 +82,7 @@ export function HeroCarousel({
     // Task 9-4-2(2026-08-22): Floating 버튼이 가로 스크롤 내용과 무관하게 프레임 우측 하단에
     // 고정되도록, 스크롤되는 슬라이드 컨테이너와 버튼을 감싸는 relative 래퍼를 하나 둔다.
     <div
+      ref={rootRef}
       className="relative"
       onMouseEnter={() => setIsPaused(true)}
       onMouseLeave={() => setIsPaused(false)}

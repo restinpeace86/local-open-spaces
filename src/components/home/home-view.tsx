@@ -287,14 +287,13 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
             </section>
 
             {/* 상시 공간(open_spaces)은 "오늘의 추천"이라는 시한성 개념이 없어(항상 이용 가능)
-                이벤트 대분류에서만 Hero Carousel을 보여준다. */}
-            {homeCategory === 'EVENTS' && (
+                이벤트 대분류에서만 Hero Carousel을 보여준다.
+                Task 9-6-9(2026-08-23): getTodayEvents가 "당일 한정"(end_date=오늘)으로만 좁혀져
+                0건인 날도 흔해졌다 — 이제 빈 상태 안내 문구 대신 섹션 자체를 아예 숨긴다(가변
+                노출: N건이면 N개 그대로, 0건이면 비노출, 10개로 억지로 채우지 않음). */}
+            {homeCategory === 'EVENTS' && heroEvents.length > 0 && (
               <section aria-label="오늘의 추천 행사">
-                {heroEvents.length > 0 ? (
-                  <HeroCarousel items={visibleHeroEvents} onSelect={setSelectedItem} moreHref={heroMoreHref} />
-                ) : (
-                  <p className="px-4 text-sm text-gray-400">오늘 진행 중인 추천 행사가 아직 없습니다.</p>
-                )}
+                <HeroCarousel items={visibleHeroEvents} onSelect={setSelectedItem} moreHref={heroMoreHref} />
               </section>
             )}
 

@@ -106,6 +106,12 @@ function makeFilteringChainable(rows: Array<Record<string, unknown>>) {
   return builder;
 }
 
+// Task 9-6-9(2026-08-23): getTodayEvents가 이제 end_date를 "오늘" 날짜와 정확히 일치(.eq)하는
+// 행만 조회한다(당일 한정 피딩) — makeFilteringChainable은 .eq()를 실제로 강제하므로, 고정된
+// 과거 날짜 문자열을 쓰면 테스트를 실행하는 실제 날짜에 따라 우연히 깨진다. 항상 "실행 시점의
+// 오늘"을 기본값으로 써서 날짜에 무관하게 안정적으로 통과하게 한다.
+const TODAY_STR = new Date().toISOString().slice(0, 10);
+
 function eventRow(overrides: Record<string, unknown> = {}) {
   return {
     id: 'e1',
@@ -113,8 +119,8 @@ function eventRow(overrides: Record<string, unknown> = {}) {
     event_type: 'PERFORMANCE_FESTIVAL',
     location: { coordinates: [127.1287, 37.3809] },
     thumbnail_url: null,
-    start_date: '2026-08-22',
-    end_date: '2026-08-22',
+    start_date: TODAY_STR,
+    end_date: TODAY_STR,
     reservation_start_date: null,
     reservation_end_date: null,
     reservation_url: null,
@@ -327,24 +333,24 @@ describe('getTodayEvents (Task 9-1-3: 거리 계산 없음 / Task 9-1-6: Strict 
     expect(items.some((item) => item.id === 'seoul')).toBe(false);
   });
 
-  // Task 9-6-7(2026-08-23) 버그 수정: "성남시 분당구" 설정 시 Hero Carousel(getTodayEvents를
-  // provinceMembers 없이 DEFAULT_HOME_REGION으로 호출)에 "서울형 키즈카페 서초구 양재1동2호점"
-  // 같은 서울시 데이터가 섞여 나오던 실제 버그를 재현/검증한다. provinceMembers를 명시적으로
-  // 넘기지 않아도 sigunguName("성남시 분당구")만으로 경기도 소속임을 자동 판별해 차단해야
-  // 한다 — 예전(Task 9-6-6 시점)에는 이 경우 "지역 제한 없는 폴백"이라 서초구가 섞였다.
-  it('Task 9-6-7: provinceMembers를 넘기지 않아도 sigunguName으로 자동 판별해 타 지자체를 차단한다', async () => {
+  // Task 9-6-7(2026-08-23) 버그 수정 + Task 9-6-9(2026-08-23) 정책 변경: "성남시 분당구" 설정
+  // 시 provinceMembers를 명시적으로 넘기지 않아도 sigunguName만으로 소속 권역을 자동 판별해
+  // 차단해야 한다. 단 Task 9-6-9부터는 서울/경기가 "수도권"으로 통합되어, 서울 데이터(서초구)는
+  // 더 이상 차단 대상이 아니라 정당하게 3순위로 섞여 들어온다 — 진짜 "지방"(부산 등)만 차단된다.
+  it('Task 9-6-9: 성남시 분당구 기준이면 수도권(서울) 데이터는 섞이고, 지방 데이터는 차단된다', async () => {
     const seoul = eventRow({ id: 'seoul', title: '서초구 행사', sigungu_name: '서초구', is_active: true });
+    const busan = eventRow({ id: 'busan', title: '부산 행사', sigungu_name: '해운대구', is_active: true });
     const bundang = eventRow({ id: 'bundang', title: '분당 행사', sigungu_name: '성남시 분당구', is_active: true });
 
     vi.doMock('@/lib/supabase/server', () => ({
-      createClient: () => Promise.resolve({ from: () => makeFilteringChainable([seoul, bundang]) }),
+      createClient: () => Promise.resolve({ from: () => makeFilteringChainable([seoul, busan, bundang]) }),
     }));
 
     const { getTodayEvents } = await import('./get-home-feed');
     const items = await getTodayEvents(10, { sigunguName: '성남시 분당구' });
 
-    expect(items.map((item) => item.id)).toEqual(['bundang']);
-    expect(items.some((item) => item.id === 'seoul')).toBe(false);
+    expect(items.map((item) => item.id).sort()).toEqual(['bundang', 'seoul']);
+    expect(items.some((item) => item.id === 'busan')).toBe(false);
   });
 
   // 인식 불가능한(경기도/서울 어느 목록에도 없는) sigunguName이면 기존처럼 지역 제한 없는
@@ -586,56 +592,71 @@ describe('위치 설정/재설정 시 가까운 순 정렬', () => {
 });
 
 // Task 9-1-9: 당일 진행 이벤트가 10개 미만이면 "이번 주 시작 예정 마감임박" 행사로 10개까지 채운다.
-describe('getTodayEvents: 당일 데이터 부족 시 이번 주 마감임박으로 채움 (Task 9-1-9)', () => {
+// Task 9-6-9(2026-08-23): "이번 주 시작 예정 마감임박으로 최소 10개 채우기"(Task 9-1-9의
+// getUpcomingDeadlineFill/HERO_MIN_COUNT)를 완전히 제거했다 — 이제 당일 한정 조건에 맞는
+// 건수가 곧 최종 결과다(0건이면 빈 배열, N건이면 N개 그대로, 10개로 억지로 채우지 않음).
+describe('getTodayEvents: 10개 강제 채움 로직 제거, 가변 수량 그대로 반환 (Task 9-6-9)', () => {
   afterEach(() => {
     vi.doUnmock('@/lib/supabase/server');
     vi.resetModules();
   });
 
-  it('당일 이벤트가 2건뿐이면 이번 주 마감임박 이벤트로 나머지 8건을 채워 총 10건을 만든다', async () => {
+  it('당일 한정 조건에 맞는 이벤트가 2건뿐이면 채우지 않고 2건 그대로 반환한다(다른 지역/다른 목적의 보충 조회로 채워지지 않음)', async () => {
     const todayRows = [
       eventRow({ id: 'today-1', title: '오늘 행사 1' }),
       eventRow({ id: 'today-2', title: '오늘 행사 2' }),
     ];
-    const upcomingRows = Array.from({ length: 8 }, (_, i) =>
-      eventRow({
-        id: `upcoming-${i}`,
-        title: `다음 주 행사 ${i}`,
-        start_date: '2026-08-25',
-        end_date: '2026-08-27',
-        reservation_end_date: `2026-08-2${i % 5}T00:00:00Z`,
-      })
-    );
 
-    // getTodayEvents가 createClient()를 두 번(당일 조회 → 마감임박 보충 조회) 호출하므로,
-    // 순번 카운터를 mock 팩토리 바깥에서 한 번만 만들어 두 호출 사이에 상태가 유지되게 한다.
-    const sharedFrom = makeSequentialFrom([todayRows, upcomingRows]);
     vi.doMock('@/lib/supabase/server', () => ({
-      createClient: () => Promise.resolve({ from: sharedFrom }),
+      createClient: () => Promise.resolve({ from: () => makeChainable({ data: todayRows, error: null }) }),
     }));
 
     const { getTodayEvents } = await import('./get-home-feed');
     const items = await getTodayEvents(10);
 
-    expect(items).toHaveLength(10);
-    expect(items.slice(0, 2).map((i) => i.id)).toEqual(['today-1', 'today-2']);
-    expect(items.slice(2).every((i) => i.id.startsWith('upcoming-'))).toBe(true);
+    // limit=10이어도 조건에 맞는 게 2건뿐이면 2건 그대로 — "이번 주 마감임박"류로 나머지
+    // 8건을 채우는 로직(Task 9-1-9)이 완전히 제거됐다.
+    expect(items.map((i) => i.id)).toEqual(['today-1', 'today-2']);
   });
 
-  it('당일 이벤트가 이미 10건 이상이면 이번 주 마감임박 조회를 하지 않는다', async () => {
-    const todayRows = Array.from({ length: 10 }, (_, i) => eventRow({ id: `today-${i}`, title: `오늘 행사 ${i}` }));
-    const fromSpy = vi.fn(makeSequentialFrom([todayRows, []]));
-
+  it('조건에 맞는 이벤트가 0건이면 빈 배열을 반환한다(홈 화면이 섹션을 숨기는 근거)', async () => {
     vi.doMock('@/lib/supabase/server', () => ({
-      createClient: () => Promise.resolve({ from: fromSpy }),
+      createClient: () => Promise.resolve({ from: makeSequentialFrom([[]]) }),
     }));
 
     const { getTodayEvents } = await import('./get-home-feed');
     const items = await getTodayEvents(10);
 
-    expect(items).toHaveLength(10);
-    // events 테이블은 "당일" 조회 1번만 호출되고, 마감임박 보충 조회는 발생하지 않는다.
-    expect(fromSpy).toHaveBeenCalledTimes(1);
+    expect(items).toEqual([]);
+  });
+});
+
+// Task 9-6-9(2026-08-23): getTodayEvents가 이제 "당일 진행 중"(범위 포함)이 아니라
+// "당일 한정"(end_date가 정확히 오늘)만 조회한다.
+describe('getTodayEvents: 당일 한정(end_date=오늘) 조건 강화 (Task 9-6-9)', () => {
+  afterEach(() => {
+    vi.doUnmock('@/lib/supabase/server');
+    vi.resetModules();
+  });
+
+  it('end_date가 오늘이 아니면(몇 주짜리 장기 행사 등) 제외한다', async () => {
+    const longRunning = eventRow({
+      id: 'long-running',
+      title: '장기 전시',
+      start_date: '2026-08-01',
+      end_date: '2026-09-30',
+      is_active: true,
+    });
+    const endsToday = eventRow({ id: 'ends-today', title: '오늘 마감 행사', is_active: true });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeFilteringChainable([longRunning, endsToday]) }),
+    }));
+
+    const { getTodayEvents } = await import('./get-home-feed');
+    const items = await getTodayEvents(10, { sigunguName: null });
+
+    expect(items.map((i) => i.id)).toEqual(['ends-today']);
   });
 });
 
