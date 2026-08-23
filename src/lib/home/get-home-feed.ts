@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { haversineDistanceMeters } from '@/lib/geo/haversine';
+import { resolveProvinceMembers } from '@/lib/geo/region-hierarchy';
 import {
   AMBIGUOUS_SPACE_SOURCE_TYPES,
   buildThemeKeywordFilter,
@@ -339,8 +340,17 @@ async function fetchRegionFirstRows<T extends { id: string }>(
   }
 
   // Task 9-6-6: provinceMembers가 있으면 마지막 단계도 그 목록(예: 경기도 31개 시/군)으로만
-  // 제한된 조회로 바꾼다 — 없으면(기존 호출부) 지역 제한 없는 전체 조회로 그대로 폴백한다.
-  const finalToken = region.provinceMembers && region.provinceMembers.length > 0 ? region.provinceMembers : null;
+  // 제한된 조회로 바꾼다.
+  // Task 9-6-7(2026-08-23): provinceMembers를 명시적으로 넘기지 않은 호출부(Hero Carousel의
+  // DEFAULT_HOME_REGION, 가성비 행복 섹션 등)에서 "성남시 분당구" 같은 sigunguName만으로도
+  // 소속 도/특별시를 자동 판별해 같은 차단을 적용한다 — 호출부가 provinceMembers를 넘기는 걸
+  // 잊어도(실제로 이 버그의 원인이었다) 안전하게 타 지자체가 차단된다. 인식 불가능한 지역이면
+  // resolveProvinceMembers가 undefined를 반환해 기존처럼 지역 제한 없는 폴백을 유지한다.
+  const provinceMembers =
+    region.provinceMembers && region.provinceMembers.length > 0
+      ? region.provinceMembers
+      : resolveProvinceMembers(region.sigunguName);
+  const finalToken = provinceMembers ?? null;
   const openResult = await buildQuery(finalToken);
   if (openResult.error) throw new Error(openResult.error.message);
   const seenIds = new Set(rows.map((row) => row.id));

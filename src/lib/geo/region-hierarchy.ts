@@ -39,3 +39,21 @@ export const DEFAULT_REGION_OPTION: RegionOption = REGION_OPTIONS[0];
 export function findRegionOption(key: string | null | undefined): RegionOption {
   return REGION_OPTIONS.find((option) => option.key === key) ?? DEFAULT_REGION_OPTION;
 }
+
+// Task 9-6-7(2026-08-23): "성남시 분당구" 설정 시 메인 피드/가성비 행복 섹션에 "서울형
+// 키즈카페 서초구 양재1동2호점" 같은 서울시 데이터가 섞여 나오던 버그의 원인 — get-home-feed.ts의
+// getTodayEvents/getFreeFeed는 HomeRegion.provinceMembers를 명시적으로 넘긴 호출부(/events/today)
+// 에서만 3순위 조회가 도/특별시 경계로 제한되고, provinceMembers를 넘기지 않는 기존 호출부
+// (Hero Carousel의 DEFAULT_HOME_REGION, 가성비 행복 섹션)는 여전히 "지역 제한 없는 전체 조회"로
+// 폴백해 타 지자체 데이터가 그대로 후보군에 들어왔다. 매 호출부가 provinceMembers를 일일이
+// 넘기도록 강제하는 대신(넘기는 걸 잊으면 똑같은 버그가 재발함), sigunguName만으로 소속 도/
+// 특별시를 자동 판별해 fetchRegionFirstRows 내부에서 항상 적용되도록 한다 — 호출부가 무엇을
+// 넘기든 안전하게 차단된다. 인식 불가능한(경기도/서울 어느 목록에도 없는) sigunguName은
+// undefined를 반환해 기존처럼 지역 제한 없는 폴백을 유지한다(이 서비스가 아직 다루지 않는
+// 지역을 임의로 차단하지 않음 — 추측 금지).
+export function resolveProvinceMembers(sigunguName: string | null | undefined): readonly string[] | undefined {
+  if (!sigunguName) return undefined;
+  if (GYEONGGI_SIGUN_NAMES.some((name) => sigunguName.includes(name))) return GYEONGGI_SIGUN_NAMES;
+  if (SEOUL_GU_NAMES.some((name) => sigunguName.includes(name))) return SEOUL_GU_NAMES;
+  return undefined;
+}

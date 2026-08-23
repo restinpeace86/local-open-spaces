@@ -243,13 +243,14 @@ describe('getTodayEvents (Task 9-1-3: 거리 계산 없음 / Task 9-1-6: Strict 
     await expect(getTodayEvents(10, { sigunguName: '성남시, 분당구' })).resolves.toEqual([]);
 
     // 지역 관련 .or() 호출(예약 조건 .or()는 sigungu_name을 포함하지 않으므로 제외) 중 어디에도
-    // 쉼표가 3개 초과로 들어있어(2개는 정상적인 조건 구분자) 필터가 깨지는 형태가 없어야 한다.
+    // 토큰 자체에 남은 쉼표(정제 전 원본 조각) 때문에 필터가 깨지는 형태가 없어야 한다.
+    // Task 9-6-7: 3순위(도 전체) 조회는 provinceMembers 여러 개를 한 번에 묶은 필터라 정상적으로
+    // 조건이 2개보다 많다(토큰 개수 × 2) — "정확히 2개"가 아니라 "항상 짝수(토큰마다 쌍으로
+    // 생성됨)"인지, 그리고 정제 안 된 쉼표 조각이 하나도 안 남는지를 검증한다.
     const regionFilters = orCalls.filter((expr) => expr.includes('sigungu_name'));
     expect(regionFilters.length).toBeGreaterThan(0);
     for (const filter of regionFilters) {
-      // "sigungu_name.ilike.%토큰%,venue_name.ilike.%토큰%" 형태는 쉼표(조건 구분자)가
-      // 정확히 1개여야 정상이다(토큰 자체에 쉼표가 그대로 남아있으면 3개 이상으로 쪼개진다).
-      expect(filter.split(',')).toHaveLength(2);
+      expect(filter.split(',').length % 2).toBe(0);
       // 토큰에서 쉼표가 제거됐는지 직접 확인(정제 전이었다면 "분당구,"가 그대로 남았을 것).
       expect(filter).not.toContain('분당구,');
       expect(filter).not.toContain('성남시,');
@@ -279,21 +280,28 @@ describe('getTodayEvents (Task 9-1-3: 거리 계산 없음 / Task 9-1-6: Strict 
   });
 
   // Task 9-4-3(2026-08-22): 1순위(선택 시/군/구)로 limit이 안 채워지면, 아무 지역이나 섞지 않고
-  // 같은 상위 시(성남시)의 다른 구를 2순위로 먼저 채운 뒤에야 완전히 다른 지역(3순위)을 채운다.
-  it('Task 9-4-3: 1순위 부족 시 같은 상위 시(성남시)를 2순위로, 그 외 지역은 3순위로 채운다', async () => {
-    const unrelated = eventRow({ id: 'unrelated', title: '강남 행사', sigungu_name: '강남구' });
-    const sameParentCity = eventRow({ id: 'jungwon', title: '중원구 행사', sigungu_name: '성남시 중원구' });
-    const selected = eventRow({ id: 'bundang', title: '분당 행사', sigungu_name: '성남시 분당구' });
+  // 같은 상위 시(성남시)의 다른 구를 2순위로 먼저 채운 뒤에야 도내 다른 지역(3순위)을 채운다.
+  // Task 9-6-7(2026-08-23): 원래 "완전히 다른 지역" 예시로 강남구(서울)를 썼으나, 이제
+  // provinceMembers 자동 판별로 서울은 3순위에서도 완전히 차단되는 게 맞는 동작이라(아래
+  // "provinceMembers를 넘기지 않아도..." 테스트가 그 시나리오를 전담) 이 테스트의 원래 취지
+  // (지역 계층 3단계 순서 자체)를 그대로 검증하려면 "도내의 다른 시"(수원시)로 바꿔야 한다.
+  // 또한 makeChainable(비필터링 스텁)은 실제 SQL 단 지역 필터링을 전혀 검증하지 못해(토큰이
+  // 뭐든 항상 같은 데이터를 반환) 서초구 오피딩 버그를 애초에 잡아내지 못했던 원인 중 하나였다
+  // — makeFilteringChainable로 바꿔 실제 쿼리 필터링까지 검증한다.
+  it('Task 9-4-3: 1순위 부족 시 같은 상위 시(성남시)를 2순위로, 도내 다른 시는 3순위로 채운다', async () => {
+    const otherCity = eventRow({ id: 'suwon', title: '수원 행사', sigungu_name: '수원시', is_active: true });
+    const sameParentCity = eventRow({ id: 'jungwon', title: '중원구 행사', sigungu_name: '성남시 중원구', is_active: true });
+    const selected = eventRow({ id: 'bundang', title: '분당 행사', sigungu_name: '성남시 분당구', is_active: true });
 
     vi.doMock('@/lib/supabase/server', () => ({
       createClient: () =>
-        Promise.resolve({ from: () => makeChainable({ data: [unrelated, sameParentCity, selected], error: null }) }),
+        Promise.resolve({ from: () => makeFilteringChainable([otherCity, sameParentCity, selected]) }),
     }));
 
     const { getTodayEvents } = await import('./get-home-feed');
     const items = await getTodayEvents(10, { sigunguName: '성남시 분당구' });
 
-    expect(items.map((item) => item.id)).toEqual(['bundang', 'jungwon', 'unrelated']);
+    expect(items.map((item) => item.id)).toEqual(['bundang', 'jungwon', 'suwon']);
   });
 
   // Task 9-6-6(2026-08-23): "/events/today" 전용 지역 계층 피딩 — region.provinceMembers가
@@ -319,10 +327,12 @@ describe('getTodayEvents (Task 9-1-3: 거리 계산 없음 / Task 9-1-6: Strict 
     expect(items.some((item) => item.id === 'seoul')).toBe(false);
   });
 
-  // provinceMembers를 넘기지 않는 기존 호출부(Hero Carousel 등)는 계속 "그 외 지역"까지
-  // 채워야 한다(피드가 텅 비지 않도록 하는 기존 설계 — 위 9-4-3 테스트가 이미 검증하지만,
-  // provinceMembers 필드 도입이 옵션을 안 넘긴 경우의 동작을 바꾸지 않았음을 명시적으로도 확인).
-  it('Task 9-6-6: provinceMembers를 넘기지 않으면 기존처럼 지역 제한 없는 3순위로 폴백한다', async () => {
+  // Task 9-6-7(2026-08-23) 버그 수정: "성남시 분당구" 설정 시 Hero Carousel(getTodayEvents를
+  // provinceMembers 없이 DEFAULT_HOME_REGION으로 호출)에 "서울형 키즈카페 서초구 양재1동2호점"
+  // 같은 서울시 데이터가 섞여 나오던 실제 버그를 재현/검증한다. provinceMembers를 명시적으로
+  // 넘기지 않아도 sigunguName("성남시 분당구")만으로 경기도 소속임을 자동 판별해 차단해야
+  // 한다 — 예전(Task 9-6-6 시점)에는 이 경우 "지역 제한 없는 폴백"이라 서초구가 섞였다.
+  it('Task 9-6-7: provinceMembers를 넘기지 않아도 sigunguName으로 자동 판별해 타 지자체를 차단한다', async () => {
     const seoul = eventRow({ id: 'seoul', title: '서초구 행사', sigungu_name: '서초구', is_active: true });
     const bundang = eventRow({ id: 'bundang', title: '분당 행사', sigungu_name: '성남시 분당구', is_active: true });
 
@@ -333,7 +343,24 @@ describe('getTodayEvents (Task 9-1-3: 거리 계산 없음 / Task 9-1-6: Strict 
     const { getTodayEvents } = await import('./get-home-feed');
     const items = await getTodayEvents(10, { sigunguName: '성남시 분당구' });
 
-    expect(items.map((item) => item.id).sort()).toEqual(['bundang', 'seoul']);
+    expect(items.map((item) => item.id)).toEqual(['bundang']);
+    expect(items.some((item) => item.id === 'seoul')).toBe(false);
+  });
+
+  // 인식 불가능한(경기도/서울 어느 목록에도 없는) sigunguName이면 기존처럼 지역 제한 없는
+  // 폴백을 유지한다 — 이 서비스가 아직 다루지 않는 지역을 임의로 차단하지 않는다(추측 금지).
+  it('Task 9-6-7: 경기도/서울 어디에도 속하지 않는 sigunguName이면 기존처럼 지역 제한 없이 폴백한다', async () => {
+    const unknown = eventRow({ id: 'unknown', title: '알 수 없는 지역 행사', sigungu_name: '청주시', is_active: true });
+    const jeju = eventRow({ id: 'jeju', title: '제주 행사', sigungu_name: '제주시', is_active: true });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeFilteringChainable([unknown, jeju]) }),
+    }));
+
+    const { getTodayEvents } = await import('./get-home-feed');
+    const items = await getTodayEvents(10, { sigunguName: '청주시' });
+
+    expect(items.map((item) => item.id).sort()).toEqual(['jeju', 'unknown']);
   });
 
   it('정규화된 (행사명+시군구) 기준 중복을 병합하고, 하나라도 무료면 무료로 남긴다', async () => {
