@@ -1,20 +1,31 @@
-- [x] **[Task 9-6-5] 카카오 REST API 키 기반 시설명 이벤트 장소 EXACT 추가 승격 및 DB 적재** 🎯 (2026-08-23 완료)
-  - **작업 배경**: VWorld 지오코더(도로명 주소 전용)로 변환 실패했던 시설명 단독 장소를 `KAKAO_REST_API_KEY` 기반 카카오 장소 검색 API(`https://dapi.kakao.com/v2/local/search/keyword.json`)로 지오코딩.
-  - **실측으로 확인한 지시서와의 차이**: 지시서는 "37건"이라 명시했으나 실측 재조회 결과 대상 건수는 41건이었다(직전 Task 9-6-3 완료 이후 시간 경과로 일부 이벤트의 `end_date`가 지나 대상 집합이 자연 변동한 것으로 추정 — 41건을 정확한 현재 기준으로 삼아 작업 진행).
-  - [x] `scripts/ingest/adapters/lib/kakao-geocoder.mjs` 신규 작성: `KAKAO_REST_API_KEY`(카카오맵 JS SDK 전용 키인 `NEXT_PUBLIC_KAKAO_MAP_API_KEY`와 별개, Task 9-6-3에서 401 확인했던 그 키가 아님을 실측으로 재확인 — 이번엔 REST 키가 실제로 발급돼 HTTP 200 정상 응답 확인) 기반 카카오 키워드 장소 검색 연동.
-  - [x] `gg-culture-location-enrichment.mjs`의 `geocodeVenueOrNull`: VWorld 1차 시도 → 실패(결과 없음 또는 경기도 범위 밖) 시 카카오 키워드 검색으로 2차 시도, 카카오 결과도 동일하게 경기도 범위(GYEONGGI_BOUNDS) 검증을 거쳐 오매칭 방지.
-  - [x] 성공 시 `venue_name`/`location`/`location_precision='EXACT'` 동일 UPDATE 경로로 적재(기존 Task 9-6-3 로직 재사용, 신규 컬럼 없음).
-  - **결과**: 대상 41건 중 11건이 카카오 키워드 검색으로 신규 EXACT 승격(예: "화성행궁", "한강뮤지엄", "어메이징 아웃사이더 아트센터" 등 — VWorld가 찾지 못한 시설명/건물명 단독 텍스트). 나머지 30건은 카카오로도 검색 불가(예: "백남준아트센터 제2전시실" 같은 건물 내부 특정 실/층 단위 텍스트, "회차별 상이"처럼 애초에 장소가 아닌 텍스트) — 코드 결함이 아니라 원본 텍스트 자체의 한계로, 좌표를 지어내지 않고 정직하게 스킵.
-  - **지도/피드 검증(실측)**: `get_nearby_spaces_and_events` RPC를 신규 EXACT 승격된 "2026 화성행궁 야간개장"(수원시) 좌표에 반경 300m로 직접 호출 → EVENT 정상 반환(지도 노출 확인). `getTodayEvents(1000, {sigunguName:'수원시'})`를 실제 라이브 DB에 직접 호출해 해당 이벤트가 지역-매칭 결과 집합에 정상 포함됨을 확인 — 다만 `limit=30`(실제 UI가 쓰는 기본값)로는 수원시 경쟁 콘텐츠가 343건이나 돼 상위 30건 안에는 안 들었다(콘텐츠 우선순위 정책의 정상 동작이지 지역 매칭 파이프라인의 결함이 아님을 limit=1000 재조회로 별도 검증).
-  - **검증**: `npx tsc --noEmit` 통과, `npm run test` 273/273 통과(kakao-geocoder 4건 + geocodeVenueOrNull 폴백 시나리오 4건 추가), `npm run build` 통과.
-  - **관련 파일**: `scripts/ingest/adapters/lib/kakao-geocoder.mjs`(신규, +test), `scripts/ingest/adapters/gg-culture-location-enrichment.mjs`(+test), `scripts/ingest/enrich-gg-culture-event-locations.mjs`(주석 갱신), `.github/workflows/ingest-daily.yml`(`KAKAO_REST_API_KEY` env 추가 — GitHub Actions Secrets에도 별도 등록 필요, 로컬 `.env.local`과 별개).
+- [ ] **[Task 9-6-6] 오늘 전체보기 페이지(`/events/today`) 신설, 행정구역 계층 피딩 적용 & 4단계 지오코딩 파이프라인 표준화** 🎯
+  - **작업 목표**: 거리(GPS) 기반 피딩을 배제하고 행정구역 계층 기반 피딩을 적용한 '오늘 전체보기' 카드 그리드 페이지 구축 및 4단계 정교화된 지오코딩 표준 파이프라인 구현.
 
-- [x] **[Task 9-6-6] 건물 내부 실/층 단위 지오코딩 보완 + 물놀이형 수경시설 행사 오분류 정정(9-6-4 롤백) + "오늘 전체보기" 진입 화면 수정** 🎯 (2026-08-23 완료, 사용자 채팅 피드백 3건 반영)
-  - **배경**: `implementation/todo.md` 경유 지시가 아니라 사용자가 실제 서비스 화면을 확인한 뒤 채팅으로 직접 지적한 3가지 문제. (1) 건물명 뒤에 "제2전시실", "3층 기획전시실" 같은 실/층 단위가 붙은 장소 텍스트는 지오코딩이 실패하고 있었음. (2) 홈 화면 "🎪 행사·축제" 메인 카드에 "물빛어린이공원 바닥분수", "운중어린이공원 바닥분수" 같은 상시 설치 공원 시설이 노출되고 있었음 — 이는 Task 9-6-4에서 물놀이형 수경시설(TBWTRWTRPLYHYDRDTAM)을 `events` 테이블로 재분류한 결정의 직접적 결과이며, 사용자가 실제 화면에서 보고 "상시공간인데 행사/축제로 보이는 건 잘못됐다"고 명확히 정정 지시. (3) 홈 화면 "오늘 전체보기" 클릭 시 지도(`/nearby`)로 이동하던 것을 카드 그리드 화면으로 바꿔달라는 요청.
-  - **(1) 실/층 단위 지오코딩 보완**: `gg-culture-location-enrichment.mjs`에 `stripRoomFloorDescriptor()` 신규 추가 — 토큰(공백 분리) 단위로 끝부분의 실/층/숫자 범위 토큰과 앞부분의 층수 접두 토큰을 제거해 건물명만 남긴 뒤 재지오코딩하는 3차 폴백(VWorld → 카카오 → 실/층 제거 후 재시도)을 `geocodeVenueOrNull`에 추가. 정규식 부분치환이 아닌 토큰 전체 단위 제거 방식을 채택(예: "맹사성홀"에서 "홀"만 잘라내면 "맹사성"이라는 어색한 잔여물이 남는 문제를 방지, ~22건의 실제 실패 샘플로 사전 검증).
-    - **실측 결과**: 대상 30건(Task 9-6-5 완료 후 남은 CITY_APPROX/UNKNOWN) 중 **20건 EXACT 신규 승격**(직전 대비 성공률 대폭 개선: 41건 중 11건 → 30건 중 20건). 실제 DB 적용 완료(dry-run 아님). 예: "백남준아트센터 제2전시실"→"백남준아트센터"(vworld), "경기도자미술관 상설전시실 2,3층"→"경기도자미술관"(카카오), "고양아람누리 아람마슬 B1 음악감상실"→"고양아람누리 아람마슬"(vworld, 선행 층 접두사 제거 케이스). 나머지 10건은 "회차별 상이"(장소 아님), 이케아 주차구역 설명처럼 애초에 지오코딩 불가능한 텍스트로 정직하게 스킵.
-  - **(2) 물놀이형 수경시설 행사 오분류 정정(9-6-4 롤백)**: `gg-splash-events-adapter.mjs`/`gg-splash-events.mjs`(+test) 삭제, `gg-events-adapter.mjs`를 9-6-4 이전처럼 수영장+물놀이형 수경시설을 함께 `open_spaces`로 수집하도록 복원(단, 이후 도입된 `GYEONGGI_BOUNDS` 오매칭 방지 검증은 그대로 유지 — 단순 되돌리기가 아니라 개선점은 보존). `package.json`/`ingest-daily.yml`/`ingest-monthly.yml`/`project/data_sources.md`도 함께 갱신. **부수 발견**: `ingest-monthly.yml`의 `gg-events.mjs` 스텝에 `VWORLD_API_KEY` env가 누락돼 있어 실제 스케줄 실행 시 어댑터 생성자가 예외를 던졌을 것으로 추정(기존 데이터는 수동 실행 이력만 존재) — 이번에 추가해 수정.
-    - **DB 정정**: 잘못 적재됐던 `events.external_id LIKE 'GG_SPLASH_EVENT_%'` 972건을 사용자의 명시적 삭제 지시("삭제해줘")에 따라 `DELETE`로 완전 제거(삭제 전/후 `count(*)` 972→0 확인). 이후 복원된 `gg-events.mjs`를 실제 재실행해 수영장+물놀이형 수경시설 1199건을 `open_spaces`(`source_type='GG_EVENTS'`)에 재적재 완료, `events` 테이블에는 `GG_SPLASH_EVENT_%` 잔존 0건 확인.
-  - **(3) "오늘 전체보기" 진입 화면 수정**: `home-view.tsx`의 `heroMoreHref`를 `/nearby?filter=TODAY_WEEKEND`(지도)에서 `/region?homeCategory=EVENTS&category=TODAY_WEEKEND`(카드 그리드)로 변경. `region-grid-view.tsx`에 `homeCategory` URL 파라미터 처리(기본값은 여전히 'SPACES' 유지 — `/region` 화면 자체의 기본 진입은 상시 공간 카탈로그라는 9-6-4 설계를 유지하고, 홈 화면에서 명시적으로 넘어올 때만 `EVENTS`로 강제)와 `TODAY_WEEKEND` 선택지(기존 `quick-filters.ts`의 `matchesQuickFilters` 재사용, `/nearby` 지도 화면과 동일 판정 기준) 분기를 추가해 2단계 카테고리picker를 건너뛰고 바로 필터링된 카드 그리드로 진입하도록 처리.
-  - **검증**: `npx tsc --noEmit` 통과, `npm run test` 267/267 통과, `npm run build` 통과. DB 실측: `events` 테이블 `GG_SPLASH_EVENT_%` 0건, `open_spaces` `source_type='GG_EVENTS'` 1199건, `events` `GG_CULTURE_EVENT_%` EXACT 37건(누적).
-  - **관련 파일**: `scripts/ingest/adapters/gg-culture-location-enrichment.mjs`(+test), `scripts/ingest/adapters/gg-events-adapter.mjs`(+test, 복원+개선), `scripts/ingest/adapters/gg-splash-events-adapter.mjs`/`gg-splash-events.mjs`(+test, 삭제), `package.json`, `.github/workflows/ingest-daily.yml`, `.github/workflows/ingest-monthly.yml`, `project/data_sources.md`, `src/components/home/home-view.tsx`(+test), `src/components/region/region-grid-view.tsx`(+test).
+  - **Part 1. 오늘 전체보기 전용 목록 페이지 신설 & 행정구역 계층 피딩 (`/events/today`)**:
+    1. **행정구역 계층 피딩 로직 개편 (`get-today-events.ts` / `/api/events/today`)**:
+       - 거리(distance) 정렬 및 피딩 전면 제거.
+       - 선택된 지역 기준 계층 정렬: `1순위: 성남시 분당구` ➔ `2순위: 성남시` ➔ `3순위: 경기도`. 타 광역시/지자체(서울 서초구 등) 피딩 완전 차단.
+    2. **오늘 전체보기 카드 그리드 화면 신설 (`src/app/events/today/page.tsx`)**:
+       - 상단: 선택 가능 관심 지역 **[지역 선택 스위처/드롭다운]** 배치 (예: 성남시 분당구, 서울시 서초구 등).
+       - 메인: 카드 그리드 형태로 당일/시즌 이벤트 리스트 노출.
+    3. **홈 화면 연결 (`home-view.tsx`)**:
+       - 메인 홈의 "오늘 전체보기+" 버튼 클릭 시 지도가 아닌 `/events/today` 목록 화면으로 라우팅.
+
+  - **Part 2. 4단계 지오코딩 파이프라인 표준화 & 토큰 정규화 정제**:
+    - **4단계 순차 파이프라인** (성공 시 `break` 후 DB `EXACT` 업데이트, 4단계 실패 시 좌표 없이 `UNKNOWN` 처리):
+      1. **1단계**: VWorld 도로명/지번 지오코딩.
+      2. **2단계**: Kakao REST API (`KAKAO_REST_API_KEY`) 키워드/장소 검색 (`https://dapi.kakao.com/v2/local/search/keyword.json`).
+      3. **3단계**: 상세 URL 크롤링('장 소' 텍스트 추출) ➔ VWorld/Kakao 지오코딩.
+      4. **4단계**: 토큰 정규화 정제 ➔ VWorld/Kakao 재지오코딩.
+    - **4단계 토큰 정규화 규칙**:
+      - **실/층/홀 단위 제거**:
+        * 예: `'광주시문화예술의전당 맹사성홀'` ➔ `'광주시문화예술의전당'`
+        * 예: `'강진 다산박물관 2층 다목적홀'` ➔ `'강진 다산박물관'`
+      - **'및' 키워드 이하 절단**:
+        * 예: `'과천시민광장 및 과천시민회관 일대'` ➔ `'과천시민광장'`
+        * 예: `'양평군 세미원 및 두물머리'` ➔ `'양평군 세미원'`
+
+  - **검증 기준**:
+    - `npx tsc --noEmit`, `npm run test`, `npm run build` 통과.
+    - `/events/today` 진입 시 타 지자체 차단 및 카드 그리드 정상 표출 검증.
+    - 4단계 지오코딩 적용 후 `EXACT` 승격 건수 및 미변환건 `UNKNOWN` 처리 실측 보고.
