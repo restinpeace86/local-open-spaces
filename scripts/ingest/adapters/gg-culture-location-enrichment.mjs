@@ -134,12 +134,45 @@ export function stripRoomFloorDescriptor(text) {
   return stripped || null;
 }
 
-// 콤마로 여러 장소가 나열된 경우 첫 번째만 대표 장소로 지오코딩한다
-// (gg-culture-events-adapter.mjs의 API2 처리와 동일한 정책 — national-park-ecotour-adapter.mjs 선례).
-// Task 9-6-5: VWorld(도로명/지번 주소 전용) 실패 시 카카오 키워드 장소 검색으로 2차 시도한다
-// (등록된 장소/POI명으로 검색 가능해 "OO아트센터 1층 전시실" 같은 시설명 단독 텍스트에 강함).
-// Task 9-6-6: 그래도 둘 다 실패하면 건물 내부 실/층 단위를 제외한 건물명만으로 3차 재시도한다.
-// 모든 시도가 동일하게 경기도 범위 검증을 거친다(이 소스는 경기도 전용이므로).
+// Task 9-6-6(2026-08-23) Part 2: "A 및 B" 형태로 서로 다른 장소 두 곳이 나열된 텍스트에서
+// 앞쪽 대표 장소만 남긴다(콤마 나열 시 첫 번째만 대표로 삼는 기존 정책과 동일한 이유 —
+// 지오코딩 결과가 어느 장소를 가리키는지 모호해지지 않도록). "및"이 맨 앞 토큰이면(대표로
+// 삼을 앞부분이 없음) 시도하지 않는다.
+// 예: "과천시민광장 및 과천시민회관 일대" → "과천시민광장", "양평군 세미원 및 두물머리" → "양평군 세미원"
+export function truncateAtAndKeyword(text) {
+  const tokens = text.trim().split(/\s+/);
+  const idx = tokens.indexOf('및');
+  if (idx <= 0) return null;
+  const truncated = tokens.slice(0, idx).join(' ').trim();
+  return truncated || null;
+}
+
+// Task 9-6-6 Part 2: 4단계 파이프라인의 "토큰 정규화 정제" 단계 — ① '및' 이하 절단을 먼저
+// 적용해 대표 장소를 골라낸 뒤, ② 그 결과에 남아있을 수 있는 실/층/홀 단위를 제거한다.
+// 두 규칙 모두 적용 대상이 없으면 null(추측하지 않음 — 원문을 억지로 바꾸지 않는다).
+export function normalizeVenueText(text) {
+  const truncated = truncateAtAndKeyword(text) ?? text;
+  const stripped = stripRoomFloorDescriptor(truncated);
+  if (stripped) return stripped;
+  return truncated !== text ? truncated : null;
+}
+
+// Task 9-6-6(2026-08-23) Part 2: 4단계 표준 지오코딩 파이프라인 — 성공하는 단계에서 즉시
+// break(반환)하고, 4단계까지 전부 실패하면 좌표를 지어내지 않고 null을 반환한다(호출부가 이를
+// "실패"로 처리해 location_precision을 UNKNOWN/CITY_APPROX 상태 그대로 둔다 — 추측 금지).
+//   1단계: VWorld 도로명/지번 지오코딩 (tryQuery 내부 1차 시도)
+//   2단계: Kakao REST API 키워드/장소 검색 (tryQuery 내부 2차 시도, Task 9-6-5)
+//   3단계: 상세 URL HTML 크롤링('장 소' 필드 추출) → 위 1·2단계 재시도
+//     ※ 이 스크립트가 다루는 API1(GG_CULTURE_EVENT_) 소스는 애초에 원본 API 응답 자체에
+//       장소 텍스트가 없어(주석 상단 설명 참고) 크롤링이 "지오코딩용 텍스트를 얻는 유일한
+//       방법"이다 — 그래서 enrichGgCultureEventLocations()가 scrapeVenueName()으로 먼저
+//       venue 텍스트를 확보한 뒤에야 이 함수(geocodeVenueOrNull)가 호출된다(1·2단계가
+//       "크롤링 이후"에 오는 것이 아니라 크롤링한 결과에 대해 1·2단계를 적용하는 구조).
+//   4단계: 토큰 정규화 정제(normalizeVenueText — '및' 이하 절단 + 실/층/홀 단위 제거) →
+//     위 1·2단계로 재시도
+// 콤마로 여러 장소가 나열된 경우 첫 번째만 대표 장소로 지오코딩한다(gg-culture-events-adapter.mjs의
+// API2 처리와 동일한 정책 — national-park-ecotour-adapter.mjs 선례). 모든 시도가 동일하게
+// 경기도 범위 검증을 거친다(이 소스는 경기도 전용이므로).
 export async function geocodeVenueOrNull(venue) {
   const primary = venue.split(',')[0].trim();
   if (!primary) return null;
@@ -161,10 +194,10 @@ export async function geocodeVenueOrNull(venue) {
   const direct = await tryQuery(primary);
   if (direct) return { primary, ...direct };
 
-  const stripped = stripRoomFloorDescriptor(primary);
-  if (stripped) {
-    const strippedResult = await tryQuery(stripped);
-    if (strippedResult) return { primary: stripped, ...strippedResult };
+  const normalized = normalizeVenueText(primary);
+  if (normalized) {
+    const normalizedResult = await tryQuery(normalized);
+    if (normalizedResult) return { primary: normalized, ...normalizedResult };
   }
 
   return null;

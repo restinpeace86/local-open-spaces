@@ -24,7 +24,17 @@ import {
 // 위치 미설정 상태(기본값)의 익명 요청에는 전혀 적용되지 않고, 좌표를 아는 소수의 요청에서만
 // 이미 축소된 배열(최대 수십 건)에 대해서만 도는 가벼운 정렬이라 성능에 영향이 없다.
 
-export type HomeRegion = { sigunguName: string | null; lat?: number; lng?: number };
+// Task 9-6-6(2026-08-23): provinceMembers가 있으면(예: /events/today 전용 지역 계층 피딩)
+// fetchRegionFirstRows의 마지막(3순위) 조회 단계가 "지역 제한 없는 전체 조회"가 아니라 이
+// 목록에 속한 시/군(구)로만 제한된 조회로 바뀐다 — 선택 지역과 무관한 타 지자체(예: 서울 서초구)
+// 데이터가 완전히 차단된다. 기존 호출부(Hero Carousel 등)는 이 필드를 넘기지 않아 undefined로
+// 남으므로 기존의 "부족하면 전체 지역으로 폴백"(피드가 텅 비지 않도록) 동작이 그대로 유지된다.
+export type HomeRegion = {
+  sigunguName: string | null;
+  lat?: number;
+  lng?: number;
+  provinceMembers?: readonly string[];
+};
 
 // Task 9-1-1에서 정한 기본값(성남시 분당구 — 실제 지오코딩된 자사 DB 좌표 기준)의 지역명을
 // 그대로 계승한다(추측 없음). 위치 미설정 상태를 나타내므로 lat/lng는 일부러 넣지 않는다.
@@ -273,9 +283,15 @@ function selectRegionFirst(items: NearbyItem[], region: HomeRegion, limit: numbe
 // ILIKE 부분 문자열 매칭을 거는 OR 필터 문자열을 만든다(PostgREST `.or()` 문법).
 // 방어적으로 한 번 더 sanitizeRegionToken을 거친다(이 함수를 다른 경로에서 sanitize 없이
 // 직접 호출하더라도 필터 문자열이 깨지지 않도록).
-function regionOrFilter(token: string, textColumn: string): string {
-  const safeToken = sanitizeRegionToken(token);
-  return `sigungu_name.ilike.%${safeToken}%,${textColumn}.ilike.%${safeToken}%`;
+// Task 9-6-6: token이 배열이면(provinceMembers 등 여러 시/군 목록) 각 이름마다 조건을 만들어
+// 전부 이어붙인다 — "이 목록에 속한 지역 중 하나라도 매칭되면 포함"이라는 의미의 OR 확장.
+function regionOrFilter(tokenOrTokens: string | readonly string[], textColumn: string): string {
+  const tokens = Array.isArray(tokenOrTokens) ? tokenOrTokens : [tokenOrTokens];
+  return tokens
+    .map(sanitizeRegionToken)
+    .filter(Boolean)
+    .map((safeToken) => `sigungu_name.ilike.%${safeToken}%,${textColumn}.ilike.%${safeToken}%`)
+    .join(',');
 }
 
 // Task 9-1-4(2026-08-22) 실측에서 발견한 버그: open_spaces/events 후보군을 "최신순 500건"으로만
@@ -295,7 +311,9 @@ function regionOrFilter(token: string, textColumn: string): string {
 // (정렬·개별 .limit()은 호출부가 buildQuery 안에 이미 포함해 둔다) — 여러 번 호출될 수 있으므로
 // 매번 새 쿼리 체인을 반환해야 한다.
 async function fetchRegionFirstRows<T extends { id: string }>(
-  buildQuery: (token: string | null) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
+  buildQuery: (
+    token: string | readonly string[] | null
+  ) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>,
   region: HomeRegion,
   minRequired: number
 ): Promise<T[]> {
@@ -320,7 +338,10 @@ async function fetchRegionFirstRows<T extends { id: string }>(
     if (rows.length >= minRequired) return rows;
   }
 
-  const openResult = await buildQuery(null);
+  // Task 9-6-6: provinceMembers가 있으면 마지막 단계도 그 목록(예: 경기도 31개 시/군)으로만
+  // 제한된 조회로 바꾼다 — 없으면(기존 호출부) 지역 제한 없는 전체 조회로 그대로 폴백한다.
+  const finalToken = region.provinceMembers && region.provinceMembers.length > 0 ? region.provinceMembers : null;
+  const openResult = await buildQuery(finalToken);
   if (openResult.error) throw new Error(openResult.error.message);
   const seenIds = new Set(rows.map((row) => row.id));
   const others = (openResult.data ?? []).filter((row) => !seenIds.has(row.id));
@@ -354,7 +375,7 @@ async function getUpcomingDeadlineFill(
   const weekEnd = endOfThisWeek(now);
   const nowIso = now.toISOString();
 
-  const buildQuery = (token: string | null) => {
+  const buildQuery = (token: string | readonly string[] | null) => {
     let query = supabase
       .from('events')
       .select(EVENT_COLUMNS)
@@ -391,7 +412,7 @@ export async function getTodayEvents(
   const today = new Date().toISOString().slice(0, 10);
   const nowIso = new Date().toISOString();
 
-  const buildQuery = (token: string | null) => {
+  const buildQuery = (token: string | readonly string[] | null) => {
     let query = supabase
       .from('events')
       .select(EVENT_COLUMNS)
@@ -506,13 +527,13 @@ export async function getFreeFeed(
 ): Promise<NearbyItem[]> {
   const supabase = await createClient();
 
-  const buildSpacesQuery = (token: string | null) => {
+  const buildSpacesQuery = (token: string | readonly string[] | null) => {
     let query = supabase.from('open_spaces').select(SPACE_COLUMNS).eq('is_free', true);
     if (token) query = query.or(regionOrFilter(token, 'address'));
     return query.order('created_at', { ascending: false }).limit(500);
   };
 
-  const buildEventsQuery = (token: string | null) => {
+  const buildEventsQuery = (token: string | readonly string[] | null) => {
     let query = supabase.from('events').select(EVENT_COLUMNS).eq('is_free', true).eq('is_active', true);
     if (token) query = query.or(regionOrFilter(token, 'venue_name'));
     return query.order('start_date', { ascending: false }).limit(500);

@@ -245,11 +245,10 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
 
   const visibleHeroEvents = heroEvents.slice(0, HERO_VISIBLE_COUNT);
   // Task 9-1-9: 10개 초과 시 "전체 보기" CTA 카드를 마지막 슬라이드에 노출한다.
-  // 사용자 피드백(2026-08-23): 지도(/nearby)가 아니라 카드 그리드 화면(/region)의 "🎪 행사·축제"
-  // 대분류로 이동해야 한다 — homeCategory=EVENTS로 대분류를 강제하고, category=TODAY_WEEKEND로
-  // "오늘/주말 즉시 이용 가능" quick-filters.ts 조건을 그대로 적용한다(map-explorer.tsx와 동일 기준).
-  const heroMoreHref =
-    heroEvents.length > HERO_VISIBLE_COUNT ? '/region?homeCategory=EVENTS&category=TODAY_WEEKEND' : undefined;
+  // Task 9-6-6(2026-08-23): 지도(/nearby)도, 상시 공간 카탈로그 화면(/region)도 아니라 오늘
+  // 진행 중인 행사만 모아 보여주는 전용 카드 그리드 페이지(/events/today)로 이동한다 —
+  // 거리(GPS) 기반 정렬 없이 행정구역 계층(구/시 → 도, 타 지자체 완전 차단)으로만 피딩된다.
+  const heroMoreHref = heroEvents.length > HERO_VISIBLE_COUNT ? '/events/today' : undefined;
 
   // Task 9-1-11: "가성비 행복" 서브탭 선택에 따라 freeFeed를 다시 걸러낸다.
   const todayStr = new Date().toISOString().slice(0, 10);

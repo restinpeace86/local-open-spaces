@@ -17,6 +17,8 @@ const {
   buildUrlLookup,
   geocodeVenueOrNull,
   stripRoomFloorDescriptor,
+  truncateAtAndKeyword,
+  normalizeVenueText,
   enrichGgCultureEventLocations,
   API1_EXTERNAL_ID_PREFIX,
 } = await import('./gg-culture-location-enrichment.mjs');
@@ -169,6 +171,19 @@ describe('geocodeVenueOrNull', () => {
     expect(result).toBeNull();
     expect(geocode).toHaveBeenCalledTimes(2);
   });
+
+  // Task 9-6-6(2026-08-23) Part 2: "A 및 B" 형태로 나열된 텍스트는 원문 직접 시도가 실패하면
+  // '및' 이하를 절단한 대표 장소로 4단계 재시도한다.
+  it('직접 시도가 실패하면 "및" 이하를 절단한 대표 장소로 4단계 재시도한다', async () => {
+    geocode.mockResolvedValueOnce(null); // 원문("과천시민광장 및 과천시민회관 일대") 직접 시도 실패
+    geocode.mockResolvedValueOnce(GEOCODE_RESULT); // 절단 후("과천시민광장") 재시도 성공
+
+    const result = await geocodeVenueOrNull('과천시민광장 및 과천시민회관 일대');
+
+    expect(geocode).toHaveBeenNthCalledWith(1, '과천시민광장 및 과천시민회관 일대');
+    expect(geocode).toHaveBeenNthCalledWith(2, '과천시민광장');
+    expect(result).toEqual({ primary: '과천시민광장', coords: GEOCODE_RESULT, provider: 'vworld' });
+  });
 });
 
 describe('stripRoomFloorDescriptor', () => {
@@ -195,6 +210,35 @@ describe('stripRoomFloorDescriptor', () => {
     expect(stripRoomFloorDescriptor('경기상상캠퍼스 업사이클플라자')).toBeNull();
     expect(stripRoomFloorDescriptor('안양 평촌중앙공원')).toBeNull();
     expect(stripRoomFloorDescriptor('회차별 상이')).toBeNull();
+  });
+});
+
+describe('truncateAtAndKeyword', () => {
+  it('"및" 이하를 잘라 앞쪽 대표 장소만 남긴다', () => {
+    expect(truncateAtAndKeyword('과천시민광장 및 과천시민회관 일대')).toBe('과천시민광장');
+    expect(truncateAtAndKeyword('양평군 세미원 및 두물머리')).toBe('양평군 세미원');
+  });
+
+  it('"및"이 없으면 null을 반환한다(추측하지 않음)', () => {
+    expect(truncateAtAndKeyword('백남준아트센터 제2전시실')).toBeNull();
+  });
+
+  it('"및"이 맨 앞 토큰이면(대표로 삼을 앞부분이 없음) null을 반환한다', () => {
+    expect(truncateAtAndKeyword('및 두물머리')).toBeNull();
+  });
+});
+
+describe('normalizeVenueText', () => {
+  it('"및" 절단을 먼저 적용한 뒤 남은 실/층 단위를 제거한다', () => {
+    expect(normalizeVenueText('과천시민광장 및 과천시민회관 일대')).toBe('과천시민광장');
+  });
+
+  it('"및"이 없으면 실/층 단위 제거만 적용한다(기존 stripRoomFloorDescriptor와 동일 결과)', () => {
+    expect(normalizeVenueText('백남준아트센터 제2전시실')).toBe('백남준아트센터');
+  });
+
+  it('둘 다 적용할 게 없으면 null을 반환한다', () => {
+    expect(normalizeVenueText('안양 평촌중앙공원')).toBeNull();
   });
 });
 

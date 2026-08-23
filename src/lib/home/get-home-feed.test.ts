@@ -296,6 +296,46 @@ describe('getTodayEvents (Task 9-1-3: 거리 계산 없음 / Task 9-1-6: Strict 
     expect(items.map((item) => item.id)).toEqual(['bundang', 'jungwon', 'unrelated']);
   });
 
+  // Task 9-6-6(2026-08-23): "/events/today" 전용 지역 계층 피딩 — region.provinceMembers가
+  // 있으면 3순위(부족분 채우기) 조회도 그 목록(예: 경기도 31개 시/군)으로만 제한되어, 목록에
+  // 없는 타 지자체(서울 서초구 등)는 완전히 배제되어야 한다(기존 9-4-3처럼 "그 외 지역"으로
+  // 섞여 들어가면 안 됨).
+  it('Task 9-6-6: provinceMembers가 있으면 3순위 조회도 그 목록으로 제한해 타 지자체를 완전히 차단한다', async () => {
+    const seoul = eventRow({ id: 'seoul', title: '서초구 행사', sigungu_name: '서초구', is_active: true });
+    const suwon = eventRow({ id: 'suwon', title: '수원 행사', sigungu_name: '수원시', is_active: true });
+    const bundang = eventRow({ id: 'bundang', title: '분당 행사', sigungu_name: '성남시 분당구', is_active: true });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeFilteringChainable([seoul, suwon, bundang]) }),
+    }));
+
+    const { getTodayEvents } = await import('./get-home-feed');
+    const items = await getTodayEvents(10, {
+      sigunguName: '성남시 분당구',
+      provinceMembers: ['수원시', '성남시'],
+    });
+
+    expect(items.map((item) => item.id).sort()).toEqual(['bundang', 'suwon']);
+    expect(items.some((item) => item.id === 'seoul')).toBe(false);
+  });
+
+  // provinceMembers를 넘기지 않는 기존 호출부(Hero Carousel 등)는 계속 "그 외 지역"까지
+  // 채워야 한다(피드가 텅 비지 않도록 하는 기존 설계 — 위 9-4-3 테스트가 이미 검증하지만,
+  // provinceMembers 필드 도입이 옵션을 안 넘긴 경우의 동작을 바꾸지 않았음을 명시적으로도 확인).
+  it('Task 9-6-6: provinceMembers를 넘기지 않으면 기존처럼 지역 제한 없는 3순위로 폴백한다', async () => {
+    const seoul = eventRow({ id: 'seoul', title: '서초구 행사', sigungu_name: '서초구', is_active: true });
+    const bundang = eventRow({ id: 'bundang', title: '분당 행사', sigungu_name: '성남시 분당구', is_active: true });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeFilteringChainable([seoul, bundang]) }),
+    }));
+
+    const { getTodayEvents } = await import('./get-home-feed');
+    const items = await getTodayEvents(10, { sigunguName: '성남시 분당구' });
+
+    expect(items.map((item) => item.id).sort()).toEqual(['bundang', 'seoul']);
+  });
+
   it('정규화된 (행사명+시군구) 기준 중복을 병합하고, 하나라도 무료면 무료로 남긴다', async () => {
     const paid = eventRow({ id: 'paid-dup', title: '분당 여름 축제', sigungu_name: '성남시 분당구', is_free: false });
     const free = eventRow({ id: 'free-dup', title: '분당  여름 축제', sigungu_name: '성남시 분당구', is_free: true });
