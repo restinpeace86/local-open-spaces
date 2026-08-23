@@ -191,14 +191,16 @@ describe('HomeView', () => {
   });
 
   // Task 9-1-3: "[장소명] · [시/군/구]" 카드 표기 검증(거리 계산 제거)
-  it('venue_name과 sigungu_name이 있으면 "[장소명] · [시/군/구]" 형태로 카드에 표시한다', () => {
+  // Task 9-6-8(2026-08-23): formatVenueLine이 이제 normalizeSigunguProvince로 광역 지자체
+  // 접두를 방어적으로 보완해 표시한다.
+  it('venue_name과 sigungu_name이 있으면 "[장소명] · [광역 지자체] [시/군/구]" 형태로 카드에 표시한다', () => {
     render(
       <HomeView
         initialHeroEvents={[makeEventItem({ address: '율동공원 야외무대', sigungu_name: '성남시 분당구' })]}
       />
     );
 
-    expect(screen.getByText('율동공원 야외무대 · 성남시 분당구')).toBeInTheDocument();
+    expect(screen.getByText('율동공원 야외무대 · 경기도 성남시 분당구')).toBeInTheDocument();
   });
 
   // Task 9-1-3: 유저가 실제 위치를 설정하면(온보딩 확정 시 이미 계산돼 저장된 sigungu_name)

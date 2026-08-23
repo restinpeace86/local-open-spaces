@@ -1,6 +1,8 @@
 // 신규 소스 어댑터가 공통으로 사용하는 "5대 카테고리 / 4대 핵심 뱃지" 매핑 인터페이스.
 // docs/spec.md 3.2, spec/data/ai-rule.md 3.3(UI 카테고리 매핑) 기준.
 //
+import { normalizeSigunguProvince } from './korea-region-lookup.mjs';
+//
 // 주의: DB의 `category`/`event_type` 컬럼에는 CHECK 제약이 없어(VARCHAR),
 // 기존 7대 공공 API 소스가 쓰는 원본 세부값(PARK/SPORTS/CULTURE/FESTIVAL 등)과
 // 이 5대 UI 카테고리 값이 같은 컬럼에 공존한다. 프론트엔드 category-meta.ts에도
@@ -125,7 +127,10 @@ export function buildOpenSpaceRow({
     raw_data: rawData,
     // Task 9-1-3: 명시적으로 넘어온 값이 없으면 address에서 자동 추출한다(모든 open_spaces
     // 어댑터가 address를 이미 갖고 있으므로 각 어댑터를 개별 수정할 필요가 없다).
-    sigungu_name: sigunguName !== undefined ? sigunguName : extractSigunguName(address),
+    // Task 9-6-8(2026-08-23): 어느 경로로 얻어졌든(명시적 전달 또는 자동 추출) 최종값에
+    // 광역 지자체 접두가 빠져 있으면 normalizeSigunguProvince가 보완한다 — 여기 한 곳만
+    // 고치면 이 함수를 쓰는 모든 open_spaces 어댑터에 자동 적용된다(개별 어댑터 수정 불필요).
+    sigungu_name: normalizeSigunguProvince(sigunguName !== undefined ? sigunguName : extractSigunguName(address)),
   };
 }
 
@@ -196,6 +201,8 @@ export function buildEventRow({
     venue_name: venueName,
     // Task 9-1-3: events는 공통 address 컬럼이 없어 자동 추출이 불가능하므로, 호출부가
     // 원본 API의 실제 구/지역명 필드(예: GUNAME/AREANM)나 주소(addr1)에서 뽑아 명시적으로 넘긴다.
-    sigungu_name: sigunguName,
+    // Task 9-6-8(2026-08-23): 호출부가 넘긴 값에 광역 지자체 접두가 빠져 있으면 여기서 한 번에
+    // 보완한다(모든 events 어댑터 공용 — 개별 어댑터 수정 불필요).
+    sigungu_name: normalizeSigunguProvince(sigunguName),
   };
 }

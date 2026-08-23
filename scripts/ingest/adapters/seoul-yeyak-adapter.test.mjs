@@ -104,12 +104,15 @@ describe('SeoulYeyakAdapter', () => {
       expect(row.sigungu_name).toBe('서울시 종로구');
     });
 
-    it('AREANM이 서울 자치구가 아니면(예: 과천시) 접두를 붙이지 않고 그대로 쓴다', () => {
+    // Task 9-6-8(2026-08-23): buildEventRow가 이제 normalizeSigunguProvince로 광역 접두를
+    // 자동 보완한다 — buildSigunguName은 "서울시 " 오접두만 안 붙이면 되고(Task 9-6-7),
+    // 실제 올바른 광역 지자체(경기도) 접두는 그 다음 단계에서 붙는다.
+    it('AREANM이 서울 자치구가 아니면(예: 과천시) "서울시" 접두는 안 붙이지만, 실제 광역 지자체(경기도) 접두는 붙는다', () => {
       const adapter = new SeoulYeyakAdapter();
       const [row] = adapter.transform([
         { ...BASE_ITEM, SVCID: 'S-gwacheon', SVCNM: '서울대공원 테마가든', AREANM: '과천시' },
       ]);
-      expect(row.sigungu_name).toBe('과천시');
+      expect(row.sigungu_name).toBe('경기도 과천시');
     });
 
     it('DIV별로 UI 카테고리를 매핑한다(시설대관/진료는 ETC)', () => {

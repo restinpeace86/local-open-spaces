@@ -152,7 +152,8 @@ describe('GgCultureEventsAdapter', () => {
         foundationEventItems: [],
       });
       expect(rows).toHaveLength(1);
-      expect(rows[0]).toMatchObject({ location_precision: 'CITY_APPROX', sigungu_name: '화성시' });
+      // Task 9-6-8: schema-mapper.mjs의 buildEventRow가 이제 광역 지자체 접두를 자동 보완한다.
+      expect(rows[0]).toMatchObject({ location_precision: 'CITY_APPROX', sigungu_name: '경기도 화성시' });
       expect(geocode).toHaveBeenCalledWith('경기도 화성시');
     });
 
@@ -206,7 +207,8 @@ describe('GgCultureEventsAdapter', () => {
         start_date: '2025-11-15',
         end_date: '2025-11-15',
         venue_name: '경기도 안산시 경기도미술관',
-        sigungu_name: '안산시',
+        // Task 9-6-8: schema-mapper.mjs의 buildEventRow가 이제 광역 지자체 접두를 자동 보완한다.
+        sigungu_name: '경기도 안산시',
         event_type: 'PERFORMANCE_FESTIVAL',
       });
       expect(rows[0].external_id).toMatch(/^GG_FOUNDATION_EVENT_[0-9a-f]{16}$/);
