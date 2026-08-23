@@ -38,8 +38,10 @@ export function MapExplorer() {
     closeOnboarding,
   } = useUserLocation();
   // Task 9-1(2026-08-22): 홈 화면 검색바에서 "/nearby?q=..."로 넘어온 검색어를 초기값으로 반영한다.
-  // Task 9-1-9: 홈 Hero Carousel의 "전체 보기" CTA에서 "/nearby?filter=TODAY_WEEKEND"로 넘어온
-  // Quick 필터를 초기 활성값으로 반영한다(오늘 진행 중인 전체 행사 보기 연동).
+  // Task 9-1-9: "/nearby?filter=TODAY_WEEKEND"처럼 넘어온 Quick 필터를 초기 활성값으로 반영한다.
+  // Task 9-6-6(2026-08-23) 이후: 홈 Hero Carousel의 "전체 보기" CTA는 더 이상 이 화면(지도)이
+  // 아니라 /events/today로 연결되므로, 이 쿼리 파라미터 처리는 현재 실제로 이걸 넘기는 진입점이
+  // 없다 — 다만 범용 기능이라 제거하지 않고 남겨둔다(향후 다른 진입점이 재사용할 수 있음).
   const searchParams = useSearchParams();
   const [radius, setRadius] = useState(5000);
   const [showSpaces, setShowSpaces] = useState(false);

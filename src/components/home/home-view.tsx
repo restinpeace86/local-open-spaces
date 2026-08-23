@@ -27,7 +27,7 @@ function FeedCard({ item, onSelect }: { item: NearbyItem; onSelect: (item: Nearb
 }
 
 // Task 9-1-9: Hero Carousel은 처음엔 이만큼만 보여주고, 10개를 넘는 나머지는 마지막 슬라이드의
-// "전체 보기" CTA 카드(지도 화면 연동)로 대체한다.
+// "전체 보기" CTA 카드(/events/today 연동, Task 9-6-6)로 대체한다.
 const HERO_VISIBLE_COUNT = 10;
 
 // Task 9-1-11(2026-08-22): "0원의 행복" → "가성비 행복" 서브탭 개편.

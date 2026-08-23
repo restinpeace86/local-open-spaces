@@ -36,6 +36,25 @@ function isActiveStatus(svcStatNm) {
   return !svcStatNm.includes('종료') && !svcStatNm.includes('마감');
 }
 
+// Task 9-6-7(2026-08-23) 버그 수정: AREANM이 항상 서울 자치구라는 가정이 틀렸음을 실측으로
+// 확인함 — "서울시 공공서비스예약" API가 서울시(기관)이 운영/위탁하지만 실제로는 서울 밖에
+// 있는 시설(예: 서울대공원·서울동물원은 경기도 과천시, "상주서울농장"은 경상북도 상주시,
+// 지자체 간 협약 캠핑장 등은 충북/전남/경북 등)도 함께 내려준다. 이런 행에 "서울시 " 접두를
+// 붙이면 "서울시 과천시"처럼 존재하지 않는 행정구역이 만들어져(대한민국 공식 행정구역명 기준,
+// 과천시는 경기도 소속이지 서울시 소속이 아님) 검색/지역 필터가 오동작한다. AREANM이 실제
+// 서울 25개 자치구 중 하나일 때만 "서울시 " 접두를 붙이고, 그 외에는 원본 AREANM을 그대로
+// 쓴다(상위 시/도를 추측해서 붙이지 않음 — 제3장 제5조 추측 금지).
+const SEOUL_GU_NAMES = [
+  '종로구', '중구', '용산구', '성동구', '광진구', '동대문구', '중랑구', '성북구', '강북구', '도봉구',
+  '노원구', '은평구', '서대문구', '마포구', '양천구', '강서구', '구로구', '금천구', '영등포구', '동작구',
+  '관악구', '서초구', '강남구', '송파구', '강동구',
+];
+
+export function buildSigunguName(areanm) {
+  if (!areanm) return null;
+  return SEOUL_GU_NAMES.includes(areanm) ? `서울시 ${areanm}` : areanm;
+}
+
 export class SeoulYeyakAdapter extends BaseCollectorAdapter {
   constructor() {
     super({ sourceKey: 'SEOUL_YEYAK', targetTable: 'events' });
@@ -119,9 +138,11 @@ export class SeoulYeyakAdapter extends BaseCollectorAdapter {
         facilityType: tags.facility_type,
         targetAgeGroup: tags.target_age_group,
         venueName: item.PLACENM || null, // Task 9-1-1: 실측 확인된 실제 장소명 필드
-        // Task 9-1-3: 실측 확인된 실제 구 단위 지역명 필드(AREANM). Task 9-1-12: 이 API도 서울만
-        // 다루므로("서울시 공공서비스예약") 항상 "서울시 " 접두를 붙인다.
-        sigunguName: item.AREANM ? `서울시 ${item.AREANM}` : null,
+        // Task 9-1-3: 실측 확인된 실제 구 단위 지역명 필드(AREANM). Task 9-1-12에서 이 API가
+        // 서울만 다룬다고 가정해 항상 "서울시 " 접두를 붙였으나, Task 9-6-7 실측으로 서울시
+        // 기관이 운영하는 서울 밖 시설(과천시의 서울대공원 등)도 섞여 있음을 확인해
+        // buildSigunguName()이 실제 서울 자치구일 때만 접두를 붙이도록 정정했다.
+        sigunguName: buildSigunguName(item.AREANM),
       });
     });
   }

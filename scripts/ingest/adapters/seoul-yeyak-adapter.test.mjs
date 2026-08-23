@@ -5,7 +5,7 @@
 //   Task 8-4에서 이 필드들이 전혀 채워지지 않고 있었음을 발견해 새로 연결한 부분
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { SeoulYeyakAdapter } = await import('./seoul-yeyak-adapter.mjs');
+const { SeoulYeyakAdapter, buildSigunguName } = await import('./seoul-yeyak-adapter.mjs');
 
 function jsonResponse(body) {
   return { ok: true, text: async () => JSON.stringify(body) };
@@ -94,6 +94,24 @@ describe('SeoulYeyakAdapter', () => {
       expect(rows[0].reservation_url).toContain('rsv_svc_id=S260722093915914461');
     });
 
+    // Task 9-6-7(2026-08-23) 버그 수정: AREANM이 실제 서울 자치구일 때만 "서울시 " 접두를 붙여야
+    // 한다. 이전에는 무조건 접두를 붙여 "서울시 과천시"처럼 존재하지 않는 행정구역이 만들어졌다
+    // (실측 확인: 서울대공원/서울동물원처럼 서울시가 운영하지만 실제로는 경기도 과천시에 있는
+    // 시설, "상주서울농장"처럼 경상북도에 있는 시설도 이 API가 함께 내려줌).
+    it('AREANM이 실제 서울 자치구면 "서울시 " 접두를 붙인다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const [row] = adapter.transform([{ ...BASE_ITEM, AREANM: '종로구' }]);
+      expect(row.sigungu_name).toBe('서울시 종로구');
+    });
+
+    it('AREANM이 서울 자치구가 아니면(예: 과천시) 접두를 붙이지 않고 그대로 쓴다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const [row] = adapter.transform([
+        { ...BASE_ITEM, SVCID: 'S-gwacheon', SVCNM: '서울대공원 테마가든', AREANM: '과천시' },
+      ]);
+      expect(row.sigungu_name).toBe('과천시');
+    });
+
     it('DIV별로 UI 카테고리를 매핑한다(시설대관/진료는 ETC)', () => {
       const adapter = new SeoulYeyakAdapter();
       const [sports] = adapter.transform([{ ...BASE_ITEM, DIV: '체육시설' }]);
@@ -158,5 +176,23 @@ describe('SeoulYeyakAdapter', () => {
         expect(row.facility_type).toBe('복합');
       });
     });
+  });
+});
+
+describe('buildSigunguName', () => {
+  it('서울 25개 자치구 중 하나면 "서울시 " 접두를 붙인다', () => {
+    expect(buildSigunguName('강남구')).toBe('서울시 강남구');
+    expect(buildSigunguName('종로구')).toBe('서울시 종로구');
+  });
+
+  it('서울 자치구가 아니면(다른 시/도 소속 시/군) 원본 그대로 반환한다(상위 시/도를 추측하지 않음)', () => {
+    expect(buildSigunguName('과천시')).toBe('과천시');
+    expect(buildSigunguName('상주시')).toBe('상주시');
+    expect(buildSigunguName('남양주시')).toBe('남양주시');
+  });
+
+  it('AREANM이 없으면 null을 반환한다', () => {
+    expect(buildSigunguName(null)).toBeNull();
+    expect(buildSigunguName('')).toBeNull();
   });
 });

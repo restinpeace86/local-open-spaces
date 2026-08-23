@@ -29,7 +29,9 @@ export function HeroCarousel({
   items: NearbyItem[];
   onSelect: (item: NearbyItem) => void;
   // Task 9-1-9: 후보가 10개를 넘으면 마지막 슬라이드로 "전체 보기" CTA 카드를 노출한다.
-  // 실제 NearbyItem이 아니라 지도 화면(/nearby)으로 넘어가는 링크라 별도 prop으로 분리했다.
+  // 실제 NearbyItem이 아니라 "오늘 전체보기" 전용 화면(/events/today, Task 9-6-6)으로 넘어가는
+  // 링크라 별도 prop으로 분리했다. Task 9-6-7: 아래 Floating 버튼도 항목 10개 이하라 CTA 카드가
+  // 없을 때의 기본 목적지로 이 값을 재사용한다.
   moreHref?: string;
 }) {
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -166,11 +168,15 @@ export function HeroCarousel({
       {/* Task 9-4-2(2026-08-22): 스와이프 상태와 무관하게 항상 노출되는 Floating "오늘 전체보기"
           버튼. 마지막 슬라이드까지 넘겨야만 나오는 위 moreHref CTA 카드(10개 초과 시에만 존재)와
           달리, 이 버튼은 카드 개수와 무관하게 항상 눌러서 당일 전체 행사로 바로 이동할 수 있다.
-          링크 값은 map-explorer.tsx의 QuickFilterKey와 정확히 일치해야 자동 필터가 걸린다
-          (지시된 "today"는 실제 QuickFilterKey에 없는 값이라 필터가 걸리지 않아, 위 moreHref와
-          동일하게 이미 검증된 'TODAY_WEEKEND'를 그대로 사용함). */}
+          Task 9-6-7(2026-08-23) 버그 근본 원인: 이 버튼이 home-view.tsx가 넘기는 moreHref prop과
+          완전히 무관하게 자체 href를 하드코딩하고 있었다("/nearby?filter=TODAY_WEEKEND") — Task
+          9-6-6에서 moreHref만 /events/today로 고쳤을 때 이 파일을 놓쳐, 카드가 10개 이하라
+          moreHref CTA 카드가 아예 없을 때도 항상 보이는 이 Floating 버튼이 여전히 지도로 이동하는
+          실제 원인이었다(실측 확인). moreHref가 없을 때(항목 10개 이하)는 기본 목적지
+          '/events/today'로 고정한다 — 이 버튼은 원래 카드 개수와 무관하게 항상 노출되어야 하므로
+          moreHref 유무에 따라 버튼 자체를 숨기지 않는다. */}
       <Link
-        href="/nearby?filter=TODAY_WEEKEND"
+        href={moreHref ?? '/events/today'}
         className="absolute bottom-4 right-4 z-20 flex items-center gap-1 rounded-full bg-white/70 backdrop-blur-md border border-white/40 px-3 py-1.5 text-xs font-semibold text-gray-800 shadow-md hover:bg-white/90 transition-colors"
       >
         ⚡ 오늘 전체보기 +

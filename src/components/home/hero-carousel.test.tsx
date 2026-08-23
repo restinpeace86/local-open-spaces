@@ -157,7 +157,10 @@ describe('HeroCarousel "전체 보기" CTA (Task 9-1-9)', () => {
 });
 
 // Task 9-4-2(2026-08-22): 카드 개수/스와이프 상태와 무관하게 항상 노출되는 Floating 버튼.
-describe('HeroCarousel Floating "오늘 전체보기" 버튼 (Task 9-4-2)', () => {
+// Task 9-6-7(2026-08-23) 버그 수정: 이 버튼이 moreHref prop과 무관하게 자체 href를
+// "/nearby?filter=TODAY_WEEKEND"로 하드코딩하고 있어, Task 9-6-6에서 moreHref를 /events/today로
+// 바꿔도 이 Floating 버튼(카드 10개 이하일 때도 항상 보임)은 여전히 지도로 이동하던 실제 원인이었다.
+describe('HeroCarousel Floating "오늘 전체보기" 버튼 (Task 9-4-2/9-6-7)', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     Element.prototype.scrollIntoView = vi.fn();
@@ -167,12 +170,25 @@ describe('HeroCarousel Floating "오늘 전체보기" 버튼 (Task 9-4-2)', () =
     vi.useRealTimers();
   });
 
-  it('아이템이 10개 이하라도(moreHref 없이도) Floating 버튼은 항상 노출된다', () => {
+  it('아이템이 10개 이하라도(moreHref 없이도) Floating 버튼은 항상 노출되고, 기본 목적지는 /events/today다', () => {
     render(<HeroCarousel items={[makeItem('1', '행사1')]} onSelect={() => {}} />);
 
     const link = screen.getByText('⚡ 오늘 전체보기 +').closest('a');
-    // map-explorer.tsx가 실제로 인식하는 QuickFilterKey 값과 일치해야 자동 필터가 걸린다.
-    expect(link).toHaveAttribute('href', '/nearby?filter=TODAY_WEEKEND');
+    expect(link).toHaveAttribute('href', '/events/today');
+  });
+
+  it('moreHref가 있으면 Floating 버튼도 자체 하드코딩 값이 아니라 moreHref를 그대로 따른다', () => {
+    render(
+      <HeroCarousel
+        items={[makeItem('1', '행사1')]}
+        onSelect={() => {}}
+        moreHref="/events/today?region=seoul-seocho"
+      />
+    );
+
+    const link = screen.getByText('⚡ 오늘 전체보기 +').closest('a');
+    expect(link).toHaveAttribute('href', '/events/today?region=seoul-seocho');
+    expect(link).not.toHaveAttribute('href', '/nearby?filter=TODAY_WEEKEND');
   });
 });
 
