@@ -35,8 +35,20 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
     : null;
 
   const directionsUrl = buildNaverMapDirectionsUrl({ name: item.name, lat: item.lat, lng: item.lng }, userLocation);
-  const externalUrl = isEvent ? item.reservation_url : item.info_url;
-  const externalLabel = isEvent ? '예약하기' : '상세 정보 보기';
+  // Task 9-6-11(2026-08-25, Decision 011): 상세 CTA 조건부 3분류 —
+  // 1) 공공/무료(is_free=true 또는 reservation_url 존재) → 공공 예약하기
+  // 2) 유료/민간 제휴(is_free=false 및 affiliate_url 존재) → 할인 예매하기
+  // 3) 그 외(위 링크 미존재) → 길찾기(정확한 좌표가 있을 때만)
+  // 공간은 reservation_url 컬럼이 없어(project/database_schema.md 3.1) 늘 null이므로,
+  // is_free=true인데 reservation_url이 없는 공간은 기존처럼 info_url을 공식 링크로 대신 쓴다.
+  const publicReservationUrl = item.reservation_url ?? (isEvent ? null : item.info_url);
+  const cta = (item.is_free === true || !!item.reservation_url) && publicReservationUrl
+    ? { label: '🏛️ 공공 예약하기', href: publicReservationUrl }
+    : item.is_free === false && item.affiliate_url
+    ? { label: '🎟️ 할인 예매하기', href: item.affiliate_url }
+    : hasExactLocation
+    ? { label: '🗺️ 길찾기', href: directionsUrl }
+    : null;
 
   async function handleCopyAddress() {
     if (!item.address) return;
@@ -168,25 +180,15 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
           )}
 
           <div className="mt-5 flex gap-2">
-            {hasExactLocation && (
+            {cta && (
               <a
-                href={directionsUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 text-center rounded-lg bg-gray-900 text-white text-sm font-medium py-2.5 hover:bg-gray-800"
-              >
-                🚗 네이버 지도로 길안내
-              </a>
-            )}
-            {externalUrl && (
-              <a
-                href={externalUrl}
+                href={cta.href}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex-1 text-center rounded-lg text-white text-sm font-medium py-2.5"
                 style={{ backgroundColor: meta.color }}
               >
-                {externalLabel}
+                {cta.label}
               </a>
             )}
           </div>

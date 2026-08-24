@@ -15,10 +15,13 @@
 
 ### Task 목록
 
-- [ ] **[Task 9-6-11] 상세 페이지 조건부 예약 UI 및 링크 처리 정밀화** 🔗
+- [x] **[Task 9-6-11] 상세 페이지 조건부 예약 UI 및 링크 처리 정밀화** 🔗
   - **선행 조치 완료**: Decision 011 기록 및 `spec/space/space-detail.md`, `spec/event/event-detail.md` 3분류 CTA 명세 갱신 완료 (Spec 충돌 해소).
   - **세부 작업 지시**:
     1. **공공/무료 장소·행사** (`is_free=true` 또는 `reservation_url` 존재): `[🏛️ 공공 예약하기]` ➔ 공식 URL/지자체 예약 연동
     2. **유료/민간 제휴 장소·행사** (`is_free=false` 및 `affiliate_url` 존재): `[🎟️ 할인 예매하기]` ➔ 커머스 제휴 딥링크 연동
     3. **기타 장소·행사** (위 예약/예매 URL 미존재 시): `[🗺️ 길찾기]` ➔ 카카오맵/네이버지도/T맵 딥링크 연동
     4. **상세 모달 UI 및 예외 처리**: URL 누락/Null 처리 점검 및 테스트 패스(312/312) 패리티 유지.
+  - **구현 완료 (2026-08-25)**: `src/components/map/detail-modal.tsx`에 3분류 조건부 CTA(단일 버튼) 로직 적용, `src/lib/spaces/get-nearby.ts`의 `NearbyItem`에 `affiliate_url?: string | null` 필드 추가.
+    - **참고(범위 경계)**: `affiliate_url`을 채우는 커머스 제휴 API 연동(쿠팡 파트너스 등) 자체는 Decision 008 영향란 3번 항목으로 **별도 승인 대기 중인 미착수 과제**라 이번 Task 범위에 포함하지 않았다 — DB/RPC에 해당 컬럼이 없어 프론트엔드는 항상 `undefined`로 받고, 이 경우 CTA는 스펙대로 "길찾기"로 자연 폴백한다. DB 컬럼 추가/RPC 확장은 제5장 제3조(DB 구조 임의 변경 금지)에 따라 별도 Decision 없이 이번 Task에서 임의로 진행하지 않았다.
+    - `src/components/map/detail-modal.test.tsx`에 조건부 CTA 3분류 케이스(공공 예약/할인 예매/길찾기 폴백/CTA 없음) 테스트 추가.

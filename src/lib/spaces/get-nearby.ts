@@ -36,6 +36,12 @@ export type NearbyItem = {
   // 이 필드가 없고(undefined), open_spaces도 컬럼 자체가 없어 undefined다 — undefined는 EXACT로
   // 간주한다(DetailModal 등 소비 측 규약). get-home-feed.ts의 events 조회 경로만 실제 값을 채운다.
   location_precision?: 'EXACT' | 'CITY_APPROX' | 'UNKNOWN' | null;
+  // Task 9-6-11(2026-08-25, Decision 011): 유료/민간 제휴 CTA("🎟️ 할인 예매하기") 판별용.
+  // 커머스 제휴(쿠팡 파트너스 등) 데이터 파이프라인은 Decision 008 영향란에서 별도 승인 대기 중인
+  // 미착수 항목이라 DB/RPC에 아직 컬럼이 없다 — 항상 undefined(=미존재)로 들어오며, 파이프라인이
+  // 붙으면 값이 채워진다. 그 전까지 DetailModal의 조건부 CTA는 이 필드가 비어 있으므로 자동으로
+  // "길찾기" 등 다른 분류로 폴백한다.
+  affiliate_url?: string | null;
 };
 
 // Task 9-6-10(2026-08-23): itemType을 넘기면 RPC가 해당 타입만 반환한다(예: '/nearby' 지도는
