@@ -141,7 +141,8 @@ Supabase Auth 계정 권한 관리는 `user_metadata.role` 기반의 RBAC(Role-B
 ## 결정 내용
 - 서비스 모토를 "오늘/이번 주말, 아이·가족과 가성비 있게(0원~1만 원) 뭐 하고 놀지?"로 재정의한다.
 - 데이터 수집 범위를 기존 7대 공공 API 중심에서 **80% 공식/공공 API + 20% 보완 크롤링/제휴 API(쿠팡 파트너스, 네이버 쇼핑 등 커머스 핫딜 포함)** 구조로 확장한다.
-- 화면 구조를 기존 상단 탭(지도/도감/캘린더)에서 **하단 5탭 고정 내비게이션([카테고리]-[내주변(지도)]-[홈(디폴트)]-[찜]-[마이])** 중심으로 재편한다. 기존 지도/도감/캘린더 뷰는 폐기가 아니라 새 탭 구조 안으로 재배치한다 (내주변=지도, 카테고리=기존 도감 그리드 개념 확장).
+- 화면 구조를 기존 상단 탭(지도/도감/캘린더)에서 **하단 5탭 고정 내비게이션([추천픽]-[스팟픽]-[이벤트픽]-[찜]-[마이])** 중심으로 재편한다. 기존 지도/도감/캘린더 뷰는 폐기가 아니라 새 탭 구조 안으로 재배치한다 (내주변=지도, 카테고리=기존 도감 그리드 개념 확장).
+- 추후 하단 고정 네비게이션 항목은 사용자의 지시로 변동될 수 있음을 명시한다.
 - AI 태깅 표준 카테고리를 기존 `PARK/SPORTS/CULTURE`(공간), `FESTIVAL/EXHIBITION/PERFORMANCE/POPUP/RESERVATION`(이벤트) 체계에서 **5대 핵심 카테고리(체험·클래스/야외·자연/전시·박물관/공연·축제/키즈·액티비티)** 로 확장하며, 기존 세부 카테고리는 DB 원본값으로 유지하고 신규 5대 카테고리는 그 위에 얹는 **UI 표시용 매핑 레이어**로 도입한다 (`spec/data/ai-rule.md` 3.3 참고).
 - 예약 마감건은 메인 노출에서 제외하고, 오늘/주말 당일 즉시 이용 가능한 정보를 우선 노출한다.
 
@@ -184,3 +185,13 @@ Supabase Auth 계정 권한 관리는 `user_metadata.role` 기반의 RBAC(Role-B
 - **마이그레이션:** `scripts/migrations/2026-08-23-*.sql`로 `location` NOT NULL 해제, `location_precision` 컬럼/CHECK 제약 추가, `get_nearby_spaces_and_events` RPC에 `location_precision = 'EXACT'` 필터 추가.
 - **코드 영향 범위:** `scripts/ingest/adapters/lib/schema-mapper.mjs`(`buildEventRow` 가드 완화), `scripts/ingest/adapters/gg-culture-events-adapter.mjs`(API1 시/군명 매칭 로직), `src/lib/home/get-home-feed.ts`(위치 미상 이벤트 조회 함수 신설), `src/components/home/home-view.tsx`(신규 섹션), `src/components/map/detail-modal.tsx`(비-EXACT 항목 지도 UI 숨김), `src/types/database.types.ts`.
 - 다른 기존 어댑터(seoul-culture-events.mjs, tour-api-festival.mjs 등)는 이미 실제 주소로 좌표를 확보하므로 변경 불필요 — `location_precision` 컬럼 기본값(`EXACT`)이 그대로 적용된다.
+
+- ## Decision 010
+### 제목
+하단 5대 탭 브랜드 구조 개편('추천픽 - 스팟픽 - 이벤트픽') 및 스팟픽 지도 상시 공간 전용 단일화 승인
+
+### 결정 내용
+- Decision 008의 하단 탭 구조를 브랜드 정체성에 맞게 **[추천픽] - [스팟픽] - [이벤트픽] - [찜] - [마이]** 5대 탭 구조로 최종 확정한다.
+- **[추천픽]**: 3조건(카테고리+가격+거리) 필터 기반 1차 DB 스크리닝 및 2차 AI TOP 3 추천 레이아웃.
+- **[스팟픽] (`/nearby`)**: 상시 공간(open_spaces) 전용 지도 탐색 뷰로 단일화하며, 파란 원/고정 반경 칩을 제거하고 줌 레벨별 계층 클러스터링 및 실시간 `panTo` 연동을 적용한다.
+- **[이벤트픽] (`/events/today`)**: 시한성 행사(events) 전용 피드로 분리하여 오늘 마감/당일 한정 이벤트를 엄격 피딩한다.
