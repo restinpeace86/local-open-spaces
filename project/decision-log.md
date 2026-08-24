@@ -186,7 +186,7 @@ Supabase Auth 계정 권한 관리는 `user_metadata.role` 기반의 RBAC(Role-B
 - **코드 영향 범위:** `scripts/ingest/adapters/lib/schema-mapper.mjs`(`buildEventRow` 가드 완화), `scripts/ingest/adapters/gg-culture-events-adapter.mjs`(API1 시/군명 매칭 로직), `src/lib/home/get-home-feed.ts`(위치 미상 이벤트 조회 함수 신설), `src/components/home/home-view.tsx`(신규 섹션), `src/components/map/detail-modal.tsx`(비-EXACT 항목 지도 UI 숨김), `src/types/database.types.ts`.
 - 다른 기존 어댑터(seoul-culture-events.mjs, tour-api-festival.mjs 등)는 이미 실제 주소로 좌표를 확보하므로 변경 불필요 — `location_precision` 컬럼 기본값(`EXACT`)이 그대로 적용된다.
 
-- ## Decision 010
+## Decision 010
 ### 제목
 하단 5대 탭 브랜드 구조 개편('추천픽 - 스팟픽 - 이벤트픽') 및 스팟픽 지도 상시 공간 전용 단일화 승인
 
@@ -195,3 +195,11 @@ Supabase Auth 계정 권한 관리는 `user_metadata.role` 기반의 RBAC(Role-B
 - **[추천픽]**: 3조건(카테고리+가격+거리) 필터 기반 1차 DB 스크리닝 및 2차 AI TOP 3 추천 레이아웃.
 - **[스팟픽] (`/nearby`)**: 상시 공간(open_spaces) 전용 지도 탐색 뷰로 단일화하며, 파란 원/고정 반경 칩을 제거하고 줌 레벨별 계층 클러스터링 및 실시간 `panTo` 연동을 적용한다.
 - **[이벤트픽] (`/events/today`)**: 시한성 행사(events) 전용 피드로 분리하여 오늘 마감/당일 한정 이벤트를 엄격 피딩한다.
+
+## Decision 011
+### 제목
+상세페이지 CTA 버튼 3분류(`공공 예약` / `할인 예매` / `길찾기`) 및 조건부 연동 승인
+
+### 결정 내용
+- 상세페이지 하단 CTA 버튼을 단순 2버튼에서 장소/행사 성격에 따른 **3분류 조건부 CTA 체계**로 확장 적용한다.
+- `is_free` 및 예약/제휴 URL 유무에 따라 [공공 예약하기], [할인 예매하기], [길찾기]로 라벨 및 연결 딥링크를 유연하게 전환한다.
