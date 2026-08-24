@@ -15,34 +15,10 @@ declare namespace kakao.maps {
     relayout(): void;
     setLevel(level: number): void;
     getLevel(): number;
-    getBounds(): LatLngBounds;
-    setBounds(bounds: LatLngBounds): void;
     // Task 9-5-1(2026-08-22): 미니맵(mini-map.tsx)에서 콤팩트 위젯 모드일 때 확대/이동
     // 상호작용을 꺼두기 위해 추가 — 카카오 맵 JS SDK v2 공식 API에 실제로 존재하는 메서드다.
     setDraggable(draggable: boolean): void;
     setZoomable(zoomable: boolean): void;
-  }
-
-  class LatLngBounds {
-    getSouthWest(): LatLng;
-    getNorthEast(): LatLng;
-  }
-
-  class Circle {
-    constructor(options: {
-      center: LatLng;
-      radius: number;
-      strokeWeight?: number;
-      strokeColor?: string;
-      strokeOpacity?: number;
-      strokeStyle?: string;
-      fillColor?: string;
-      fillOpacity?: number;
-    });
-    setMap(map: Map | null): void;
-    setPosition(latlng: LatLng): void;
-    setRadius(radius: number): void;
-    getBounds(): LatLngBounds;
   }
 
   class CustomOverlay {
@@ -89,6 +65,9 @@ declare namespace kakao.maps {
       map: Map;
       averageCenter?: boolean;
       minLevel?: number;
+      // Task 9-6-10(2026-08-23): 계층별(시/군→구/동→개별 마커) 클러스터링 튜닝에 사용 —
+      // 카카오 맵 JS SDK v2 공식 API에 실제로 존재하는 옵션이다(격자 셀 픽셀 크기).
+      gridSize?: number;
       markers?: Marker[];
       styles?: Record<string, string>[];
     });

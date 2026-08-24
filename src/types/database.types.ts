@@ -526,7 +526,12 @@ export type Database = {
       }
       geomfromewkt: { Args: { "": string }; Returns: unknown }
       get_nearby_spaces_and_events: {
-        Args: { radius_meters?: number; user_lat: number; user_lng: number }
+        Args: {
+          p_item_type?: string
+          radius_meters?: number
+          user_lat: number
+          user_lng: number
+        }
         Returns: {
           address: string
           booking_status: string
@@ -548,6 +553,7 @@ export type Database = {
           reservation_end_date: string
           reservation_start_date: string
           reservation_url: string
+          source_type: string
           start_date: string
           stroller_accessible: boolean
           target_age_group: string

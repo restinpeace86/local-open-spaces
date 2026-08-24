@@ -38,10 +38,15 @@ export type NearbyItem = {
   location_precision?: 'EXACT' | 'CITY_APPROX' | 'UNKNOWN' | null;
 };
 
+// Task 9-6-10(2026-08-23): itemType을 넘기면 RPC가 해당 타입만 반환한다(예: '/nearby' 지도는
+// 상시 공간 전용이라 'SPACE'만 넘김). 생략하면 기존과 동일하게 SPACE+EVENT를 모두 반환한다 —
+// generate-notifications.ts(D-1 예약 마감 알림, EVENT만 걸러 씀)가 이 함수를 인자 없이 그대로
+// 호출하므로 하위 호환이 깨지면 안 된다.
 export async function getNearbySpacesAndEvents(
   lng: number,
   lat: number,
-  radiusMeters: number
+  radiusMeters: number,
+  itemType?: 'SPACE' | 'EVENT'
 ): Promise<NearbyItem[]> {
   const supabase = createClient();
 
@@ -49,6 +54,7 @@ export async function getNearbySpacesAndEvents(
     user_lng: lng,
     user_lat: lat,
     radius_meters: radiusMeters,
+    ...(itemType ? { p_item_type: itemType } : {}),
   });
 
   if (error) {

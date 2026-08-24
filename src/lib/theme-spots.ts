@@ -27,6 +27,20 @@ export const THEME_SPOT_OPTIONS: { key: ThemeSpotKey; label: string; emoji: stri
   { key: 'EXPERIENCE_NATURE', label: '체험·자연', emoji: '🌿' },
 ];
 
+// Task 9-6-10(2026-08-23): "/nearby" 지도 화면 전용 카테고리 칩 — 상시 공간(open_spaces) 전용
+// 화면으로 단일화되면서 기존 5대 UI 카테고리(체험·클래스 등, events와 공유하던 축) 대신 이
+// 화면 목적("지금 이 근처에서 뭘 할 수 있지")에 맞는 목적별 테마 축(ThemeSpotKey)을 그대로
+// 재사용한다(제5장 제4조 기존 구조 우선 — 새 분류 로직을 만들지 않음). 표시 라벨만 지도 화면
+// 지시서 문구에 맞춰 새로 지었고, 7개 테마 중 이 화면에 자연스러운 5개만 추린다(유원지·
+// 액티비티/체험·자연은 지도보다 홈 화면 큐레이션에 더 맞는 축이라 제외 — 추측으로 포함하지 않음).
+export const NEARBY_CATEGORY_FILTER_OPTIONS: { category: ThemeSpotKey; label: string; color: string }[] = [
+  { category: 'PARK_WALK', label: '공원·광장', color: '#16a34a' },
+  { category: 'PLAYGROUND_KIDS', label: '어린이 놀이터', color: '#f59e0b' },
+  { category: 'SWIMMING', label: '야외 수영장·물놀이터', color: '#0ea5e9' },
+  { category: 'FOREST_RECREATION', label: '국립공원·수목원·휴양림', color: '#15803d' },
+  { category: 'CULTURE_SPORTS', label: '박물관·미술관·체육시설', color: '#8b5cf6' },
+];
+
 export function isThemeSpotKey(value: string): value is ThemeSpotKey {
   return THEME_SPOT_OPTIONS.some((opt) => opt.key === value);
 }

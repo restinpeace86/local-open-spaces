@@ -4,7 +4,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { KakaoMapView } from '@/components/map/kakao-map-view';
 import { RadiusSelector } from '@/components/map/radius-selector';
-import { LayerToggle } from '@/components/map/layer-toggle';
 import { SearchBar } from '@/components/map/search-bar';
 import { CategoryFilter, ALL_CATEGORY } from '@/components/map/category-filter';
 import { QuickFilters } from '@/components/map/quick-filters';
@@ -16,8 +15,10 @@ import { GridViewPrompt } from '@/components/map/grid-view-prompt';
 import { LocationHeader } from '@/components/map/location-header';
 import { LocationOnboardingModal } from '@/components/map/location-onboarding-modal';
 import { RecenterButton } from '@/components/map/recenter-button';
+import { MyLocationButton } from '@/components/map/my-location-button';
 import { getNearbySpacesAndEvents, NearbyItem } from '@/lib/spaces/get-nearby';
 import { matchesQuickFilters, QuickFilterKey, QUICK_FILTER_OPTIONS } from '@/lib/spaces/quick-filters';
+import { classifyThemeSpot, NEARBY_CATEGORY_FILTER_OPTIONS } from '@/lib/theme-spots';
 import { useUserLocation } from '@/hooks/use-user-location';
 
 // Task 9-1-9: 유효한 QuickFilterKey인지 확인(URL에서 임의 값이 들어와도 안전하게 무시).
@@ -44,7 +45,6 @@ export function MapExplorer() {
   // 없다 — 다만 범용 기능이라 제거하지 않고 남겨둔다(향후 다른 진입점이 재사용할 수 있음).
   const searchParams = useSearchParams();
   const [radius, setRadius] = useState(5000);
-  const [showSpaces, setShowSpaces] = useState(false);
   const [keyword, setKeyword] = useState(() => searchParams.get('q') ?? '');
   const [category, setCategory] = useState(ALL_CATEGORY);
   const [activeQuickFilters, setActiveQuickFilters] = useState<QuickFilterKey[]>(() => {
@@ -70,7 +70,9 @@ export function MapExplorer() {
     setIsLoading(true);
     setErrorMessage(null);
 
-    getNearbySpacesAndEvents(effectiveCenter.lng, effectiveCenter.lat, radius)
+    // Task 9-6-10(2026-08-23): /nearby를 상시 공간(open_spaces) 전용으로 단일화 — RPC에
+    // item_type='SPACE'를 명시해 이벤트는 애초에 서버에서부터 받아오지 않는다.
+    getNearbySpacesAndEvents(effectiveCenter.lng, effectiveCenter.lat, radius, 'SPACE')
       .then((result) => {
         if (!cancelled) setItems(result);
       })
@@ -108,6 +110,15 @@ export function MapExplorer() {
     setPendingRecenter(null);
   }, [pendingRecenter]);
 
+  // Task 9-6-10(2026-08-23): "내 위치/설정위치 이동" 버튼 — 드래그/재검색으로 탐색 기준점이
+  // 실제 설정 위치(useUserLocation의 center)에서 벗어나 있어도, 클릭 한 번으로 원래 설정
+  // 위치로 되돌린다. searchOverrideCenter를 지우면 effectiveCenter가 다시 center로 돌아가고,
+  // 이미 있는 데이터 재조회 effect(deps: effectiveCenter)가 자동으로 그 위치 기준으로 재조회한다.
+  const handleMoveToMyLocation = useCallback(() => {
+    setSearchOverrideCenter(null);
+    setPendingRecenter(null);
+  }, []);
+
   const resetFilters = useCallback(() => {
     setKeyword('');
     setCategory(ALL_CATEGORY);
@@ -122,15 +133,14 @@ export function MapExplorer() {
   }, []);
 
   // spec/common/search.md 2.3: 카테고리 선택 시 지도 마커와 리스트가 즉시 동기화되어 렌더링
-  // 특정 카테고리를 선택하면 상시시설 On/Off 토글과 무관하게 해당 카테고리 결과를 그대로 보여준다.
-  // "전체" 상태일 때만 spec/map/spatial-search.md 2.2의 기본 레이어 정책(EVENT 기본 On, SPACE 토글)을 적용한다.
+  // Task 9-6-10(2026-08-23): /nearby가 상시 공간 전용으로 단일화되면서(RPC가 이미 SPACE만
+  // 반환) EVENT/showSpaces 토글 분기가 필요 없어졌다. 카테고리 칩도 5대 UI 카테고리가 아니라
+  // 목적별 테마(classifyThemeSpot, NEARBY_CATEGORY_FILTER_OPTIONS)로 거른다.
   const filteredItems = useMemo(() => {
     let result = items;
 
     if (category !== ALL_CATEGORY) {
-      result = result.filter((item) => item.category === category);
-    } else {
-      result = result.filter((item) => item.item_type === 'EVENT' || showSpaces);
+      result = result.filter((item) => classifyThemeSpot(item) === category);
     }
 
     const trimmedKeyword = keyword.trim().toLowerCase();
@@ -143,7 +153,7 @@ export function MapExplorer() {
     }
 
     return result;
-  }, [items, category, showSpaces, keyword, activeQuickFilters]);
+  }, [items, category, keyword, activeQuickFilters]);
 
   // spec/common/search.md 2.2: 카테고리 또는 Quick 필터 중 1개 이상 활성화 시에만 20km/30km 광역 반경 선택을 해금한다.
   const isWideRadiusUnlocked = category !== ALL_CATEGORY || activeQuickFilters.length > 0;
@@ -172,8 +182,7 @@ export function MapExplorer() {
             isWideRadiusUnlocked={isWideRadiusUnlocked}
             onBlockedWideRadiusSelect={() => setShowGridViewPrompt(true)}
           />
-          <LayerToggle showSpaces={showSpaces} onChange={setShowSpaces} />
-          <CategoryFilter value={category} onChange={setCategory} />
+          <CategoryFilter value={category} onChange={setCategory} options={NEARBY_CATEGORY_FILTER_OPTIONS} />
           <QuickFilters value={activeQuickFilters} onToggle={handleToggleQuickFilter} />
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -208,20 +217,23 @@ export function MapExplorer() {
           </div>
         )}
 
+        {/* Task 9-6-10(2026-08-23): "내 위치/설정위치로 이동" 버튼 — 지도 우하단, 뷰포트/기기와
+            무관하게 항상 노출(RecenterButton과 달리 pendingRecenter 여부에 의존하지 않음). */}
+        <div className="absolute bottom-4 right-4 z-20">
+          <MyLocationButton onClick={handleMoveToMyLocation} />
+        </div>
+
         {/* 모바일 플로팅 헤더 (spec/common/search.md 2.1) */}
         <div className="md:hidden absolute top-3 left-3 right-3 flex flex-col gap-2 z-10">
           <LocationHeader addressName={addressName} onClick={openOnboarding} />
           <SearchBar value={keyword} onChange={setKeyword} />
-          <div className="flex items-center gap-2 overflow-x-auto">
-            <RadiusSelector
-              value={radius}
-              onChange={setRadius}
-              isWideRadiusUnlocked={isWideRadiusUnlocked}
-              onBlockedWideRadiusSelect={() => setShowGridViewPrompt(true)}
-            />
-            <LayerToggle showSpaces={showSpaces} onChange={setShowSpaces} />
-          </div>
-          <CategoryFilter value={category} onChange={setCategory} />
+          <RadiusSelector
+            value={radius}
+            onChange={setRadius}
+            isWideRadiusUnlocked={isWideRadiusUnlocked}
+            onBlockedWideRadiusSelect={() => setShowGridViewPrompt(true)}
+          />
+          <CategoryFilter value={category} onChange={setCategory} options={NEARBY_CATEGORY_FILTER_OPTIONS} />
           <QuickFilters value={activeQuickFilters} onToggle={handleToggleQuickFilter} />
           {/* implementation/todo.md: 지도 드래그 후 재검색 버튼 - 모바일에서는 필터 스택 하단에 노출해 겹침 방지 */}
           {pendingRecenter && (

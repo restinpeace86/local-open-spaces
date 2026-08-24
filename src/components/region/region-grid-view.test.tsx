@@ -52,6 +52,11 @@ function makeSpaceItem(overrides: Partial<NearbyItem> = {}): NearbyItem {
 
 // Task 9-6-4/9-6-6: 홈 Hero Carousel "전체 보기"(?homeCategory=EVENTS&category=TODAY_WEEKEND)
 // 검증용 이벤트 표본.
+// Task 9-6-10(2026-08-23): 하드코딩된 과거 날짜 리터럴은 세션이 길어져 실제 시스템 날짜가
+// 넘어가면(quick-filters.ts의 TODAY_WEEKEND가 실제 오늘 날짜와 비교) 우연히 깨진다 — 실행
+// 시점의 실제 오늘 날짜를 기본값으로 써서 날짜에 무관하게 안정적으로 통과하게 한다.
+const TODAY_STR = new Date().toISOString().slice(0, 10);
+
 function makeEventItem(overrides: Partial<NearbyItem> = {}): NearbyItem {
   return {
     id: 'event-1',
@@ -64,8 +69,8 @@ function makeEventItem(overrides: Partial<NearbyItem> = {}): NearbyItem {
     address: '테스트 장소',
     sigungu_name: '강남구',
     thumbnail_url: null,
-    start_date: '2026-08-23',
-    end_date: '2026-08-23',
+    start_date: TODAY_STR,
+    end_date: TODAY_STR,
     reservation_start_date: null,
     reservation_end_date: null,
     reservation_url: null,
@@ -373,7 +378,7 @@ describe('RegionGridView 홈 "전체 보기" 진입(?homeCategory=EVENTS&categor
 
   it('homeCategory=EVENTS면 1단계를 건너뛰고 바로 행사 카드 그리드를 보여준다', async () => {
     mockSearchParams = new URLSearchParams('homeCategory=EVENTS&category=TODAY_WEEKEND');
-    const today = makeEventItem({ id: 'today-1', name: '오늘 행사', start_date: '2026-08-23', end_date: '2026-08-23' });
+    const today = makeEventItem({ id: 'today-1', name: '오늘 행사' });
 
     vi.doMock('@/lib/spaces/get-all-spaces', () => ({ getAllOpenSpaces: () => Promise.resolve([]) }));
     vi.doMock('@/lib/spaces/get-all-events', () => ({ getAllEvents: () => Promise.resolve([today]) }));
@@ -387,7 +392,7 @@ describe('RegionGridView 홈 "전체 보기" 진입(?homeCategory=EVENTS&categor
 
   it('TODAY_WEEKEND는 예약 필수면서 기간이 지난 행사를 제외한다(quick-filters.ts 기준)', async () => {
     mockSearchParams = new URLSearchParams('homeCategory=EVENTS&category=TODAY_WEEKEND');
-    const today = makeEventItem({ id: 'today-1', name: '오늘 행사', start_date: '2026-08-23', end_date: '2026-08-23' });
+    const today = makeEventItem({ id: 'today-1', name: '오늘 행사' });
     const past = makeEventItem({ id: 'past-1', name: '지난 행사', start_date: '2026-01-01', end_date: '2026-01-02' });
 
     vi.doMock('@/lib/spaces/get-all-spaces', () => ({ getAllOpenSpaces: () => Promise.resolve([]) }));
