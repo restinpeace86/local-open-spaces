@@ -5,14 +5,23 @@ import { useRouter, usePathname } from 'next/navigation';
 import { FEATURE_FLAGS } from '@/lib/feature-flags';
 import { BrandSplash } from '@/components/common/brand-splash';
 
-// docs/spec.md 2.3 / project/overview.md: 하단 5탭 고정 내비게이션.
+// Task 9-6-10(2026-08-23): 나드리픽 하단 5대 탭 구조 개편 — [카테고리-내주변-홈-찜-마이]에서
+// [추천픽-스팟픽-이벤트픽-찜-마이]로 재정립한다.
+//   - 추천픽(/recommend): 카테고리+가격+거리 3조건 DB 필터 + AI TOP3 추천(신규 기능, 아직
+//     미구현 — 사용자 지시에 따라 이번 턴은 탭 구조/라벨만 정립하고 화면은 뒤로 미룬다).
+//   - 스팟픽(/nearby): 기존 "내주변" 지도 화면 — 이미 상시 공간(open_spaces) 전용으로
+//     단일화돼 있다(Task 9-6-10 지도 작업). 라벨만 변경.
+//   - 이벤트픽(/): 기존 "홈" 화면 — 라벨만 변경하고 화면 자체를 이벤트(events) 전용으로
+//     단일화한다(home-view.tsx의 상시 공간 대분류 토글 제거).
+//   - "카테고리"(/region) 탭은 5개 슬롯에서 빠진다 — 화면 자체는 삭제하지 않았고(다른 경로로는
+//     여전히 접근 가능), 하단 탭에서만 제외한다.
 // [찜]/[마이]는 Decision 003(찜 비노출)·인증 시스템 부재(마이)로 아직 열 수 없어
 // spec/common/feature-flags.md 원칙대로 화면은 노출하되 비활성화 처리한다(숨기지 않음 —
-// 탭 구조 자체는 항상 5개로 고정돼야 하므로).
+// 탭 구조 자체는 항상 5개로 고정돼야 하므로). 추천픽도 같은 원칙으로 비활성화 처리한다.
 const TABS = [
-  { href: '/region', label: '카테고리', icon: '🏷️' },
-  { href: '/nearby', label: '내주변', icon: '📍' },
-  { href: '/', label: '홈', icon: '🏠' },
+  { href: '/recommend', label: '추천픽', icon: '✨', flag: FEATURE_FLAGS.ENABLE_RECOMMEND_TAB },
+  { href: '/nearby', label: '스팟픽', icon: '📍' },
+  { href: '/', label: '이벤트픽', icon: '🎪' },
   { href: '/favorites', label: '찜', icon: '❤️', flag: FEATURE_FLAGS.ENABLE_USER_BOOKMARK },
   { href: '/my', label: '마이', icon: '👤', flag: FEATURE_FLAGS.ENABLE_MY_PAGE },
 ] as const;

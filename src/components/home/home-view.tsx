@@ -10,7 +10,7 @@ import { HeroCarousel } from '@/components/home/hero-carousel';
 import { QuickCategoryGrid } from '@/components/home/quick-category-grid';
 import { FreeFeedSkeleton } from '@/components/home/free-feed-skeleton';
 import { ThemeSpotKey } from '@/lib/theme-spots';
-import { HOME_CATEGORY_OPTIONS, HomeCategory, dataTypeFor, themeOptionsFor } from '@/lib/home-categories';
+import { themeOptionsFor } from '@/lib/home-categories';
 import { SpaceGridCard } from '@/components/region/space-grid-card';
 import { EventCard } from '@/components/cards/event-card';
 import { EmptyState } from '@/components/map/empty-state';
@@ -170,10 +170,12 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
   const [heroEvents, setHeroEvents] = useState<NearbyItem[]>(initialHeroEvents);
   const [freeFeedFilter, setFreeFeedFilter] = useState<FreeFeedFilterKey>('ALL');
-  // Task 9-6-4(2026-08-23): 최상위 대분류 — "🎪 행사·축제"가 기본(get-home-feed.ts의 events
-  // 기본값과 일치). 상시 공간(open_spaces)은 유저가 명시적으로 전환할 때만 보여준다.
-  const [homeCategory, setHomeCategory] = useState<HomeCategory>('EVENTS');
-  const dataType = dataTypeFor(homeCategory);
+  // Task 9-6-10(2026-08-23): 하단 탭 재편으로 이 화면이 "이벤트픽"(시한성 이벤트 전용)이
+  // 됐다 — 상시 공간(open_spaces)은 이제 "스팟픽"(/nearby) 탭이 전담하므로, 이 화면에서는
+  // 더 이상 대분류 토글 없이 항상 events만 조회한다(Task 9-6-4에서 도입한 EVENTS/SPACES
+  // 토글을 제거 — home-categories.ts의 SPACES 관련 export는 /region 화면이 아직 쓰므로
+  // 그대로 둔다, 이 화면의 사용만 정리).
+  const dataType = 'events' as const;
 
   const region = { sigunguName, lat: addressName ? center.lat : undefined, lng: addressName ? center.lng : undefined };
   // 순서 주의: home-view.test.tsx의 FakeIntersectionObserver.instances.at(-1) 관례(가장 최근
@@ -188,17 +190,7 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
     items: themeSpotItems,
     isLoading: isThemeSpotLoading,
     selectTheme,
-    reset: resetThemeSpotFeed,
   } = useThemeSpotFeed(region, dataType);
-
-  // 대분류를 전환하면 이전 칩 선택 결과를 지운다(다른 dataType으로 조회된 결과가 남지 않도록).
-  const handleCategoryChange = useCallback(
-    (next: HomeCategory) => {
-      setHomeCategory(next);
-      resetThemeSpotFeed();
-    },
-    [resetThemeSpotFeed]
-  );
 
   // Task 9-1-1: Server Component는 기본 지역(성남시 분당구)으로만 렌더링할 수 있으므로,
   // 유저가 실제로 위치를 설정한 경우(addressName이 채워짐)에만 그 지역으로 재조회한다.
@@ -264,34 +256,13 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
       <div className="flex-1 overflow-y-auto py-4 flex flex-col gap-5">
         {activeTab === 'home' && (
           <>
-            {/* Task 9-6-4(2026-08-23): 최상위 대분류 토글 — "🎪 행사·축제"가 기본이고, 유저가
-                명시적으로 전환해야만 상시 공간(open_spaces)이 보인다. */}
-            <section aria-label="대분류" className="px-4">
-              <div className="flex gap-2">
-                {HOME_CATEGORY_OPTIONS.map((option) => {
-                  const isActive = homeCategory === option.key;
-                  return (
-                    <button
-                      key={option.key}
-                      type="button"
-                      onClick={() => handleCategoryChange(option.key)}
-                      className={`flex-1 rounded-lg px-3 py-2 text-sm font-semibold transition-colors ${
-                        isActive ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      {option.label}
-                    </button>
-                  );
-                })}
-              </div>
-            </section>
-
-            {/* 상시 공간(open_spaces)은 "오늘의 추천"이라는 시한성 개념이 없어(항상 이용 가능)
-                이벤트 대분류에서만 Hero Carousel을 보여준다.
+            {/* Task 9-6-10(2026-08-23): 하단 탭 재편으로 이 화면("이벤트픽")은 항상 events만
+                보여준다 — 이전의 EVENTS/SPACES 대분류 토글 섹션은 제거했다(상시 공간은
+                "스팟픽"(/nearby) 탭이 전담).
                 Task 9-6-9(2026-08-23): getTodayEvents가 "당일 한정"(end_date=오늘)으로만 좁혀져
-                0건인 날도 흔해졌다 — 이제 빈 상태 안내 문구 대신 섹션 자체를 아예 숨긴다(가변
+                0건인 날도 흔해졌다 — 빈 상태 안내 문구 대신 섹션 자체를 아예 숨긴다(가변
                 노출: N건이면 N개 그대로, 0건이면 비노출, 10개로 억지로 채우지 않음). */}
-            {homeCategory === 'EVENTS' && heroEvents.length > 0 && (
+            {heroEvents.length > 0 && (
               <section aria-label="오늘의 추천 행사">
                 <HeroCarousel items={visibleHeroEvents} onSelect={setSelectedItem} moreHref={heroMoreHref} />
               </section>
@@ -299,14 +270,13 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
 
             <QuickCategoryGrid />
 
-            {/* Task 9-5-1(2026-08-22)/9-6-4(2026-08-23): 대분류별 5개 하위 테마 칩 — 기본 선택
-                테마가 없어(임의로 하나를 고를 근거가 없음) 칩을 직접 누를 때만 지연 페칭한다. */}
+            {/* Task 9-5-1(2026-08-22)/9-6-10(2026-08-23): 이벤트 목적별 5개 하위 테마 칩 — 기본
+                선택 테마가 없어(임의로 하나를 고를 근거가 없음) 칩을 직접 누를 때만 지연
+                페칭한다. */}
             <section aria-label="테마별 추천" className="px-4">
-              <h2 className="text-base font-bold text-gray-900 mb-3">
-                {homeCategory === 'EVENTS' ? '🎪 테마별 행사' : '🏞️ 테마별 장소'}
-              </h2>
+              <h2 className="text-base font-bold text-gray-900 mb-3">🎪 테마별 행사</h2>
               <div className="flex gap-1.5 overflow-x-auto pb-2">
-                {themeOptionsFor(homeCategory).map((theme) => {
+                {themeOptionsFor('EVENTS').map((theme) => {
                   const isActive = selectedTheme === theme.key;
                   return (
                     <button
@@ -377,9 +347,10 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
 
             {/* Task 9-6-2(2026-08-23, Decision 009): 위치 정보가 전혀 없는(location_precision=
                 'UNKNOWN') 경기도권 행사 — 지도/주변에는 노출되지 않고 메인 페이지에서만 볼 수 있다.
-                events 전용 콘텐츠라 상시 장소 대분류에서는 보이지 않는다. 항목이 없으면 섹션
-                자체를 숨긴다(다른 섹션과 달리 "찾는 중" 안내를 굳이 보여줄 핵심 콘텐츠가 아님). */}
-            {homeCategory === 'EVENTS' && (provinceWideEvents === null || provinceWideEvents.length > 0) ? (
+                events 전용 콘텐츠다(Task 9-6-10: 이 화면 자체가 이제 항상 events만 다룸). 항목이
+                없으면 섹션 자체를 숨긴다(다른 섹션과 달리 "찾는 중" 안내를 굳이 보여줄 핵심
+                콘텐츠가 아님). */}
+            {provinceWideEvents === null || provinceWideEvents.length > 0 ? (
               <section aria-label="경기도권 기타" className="px-4" ref={provinceWideSectionRef}>
                 <h2 className="text-base font-bold text-gray-900 mb-3">🗺️ 경기도권 기타</h2>
                 {provinceWideEvents === null ? (

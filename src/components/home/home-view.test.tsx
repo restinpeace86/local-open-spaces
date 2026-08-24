@@ -327,21 +327,14 @@ describe('HomeView', () => {
       expect(screen.queryByText('분당 수영장')).not.toBeInTheDocument();
     });
 
-    it('최상위 대분류를 "🏞️ 상시 장소"로 전환하면 공간 전용 테마 칩(5개)이 보이고 이전 선택은 초기화된다', async () => {
-      stubFetchFreeFeed([], [makeSpaceItem({ id: 'pool-1', name: '분당 수영장' })]);
+    // Task 9-6-10(2026-08-23): 하단 탭 재편으로 이 화면("이벤트픽")이 항상 events만 다루게
+    // 되면서 EVENTS/SPACES 대분류 토글 자체가 사라졌다 — 상시 공간은 이제 "스팟픽"(/nearby)
+    // 탭이 전담한다. 이 토글 전환 시나리오를 검증하던 테스트는 더 이상 존재하지 않는 UI를
+    // 다루므로 제거한다(대신 아래에서 대분류 토글이 실제로 렌더링되지 않음을 검증).
+    it('EVENTS/SPACES 대분류 토글은 더 이상 렌더링되지 않는다(이 화면은 항상 events)', () => {
       render(<HomeView initialHeroEvents={[]} />);
-
-      fireEvent.click(screen.getByText('🏊 물놀이·수영'));
-      expect(await screen.findByText('분당 수영장')).toBeInTheDocument();
-
-      fireEvent.click(screen.getByText('🏞️ 상시 장소'));
-
-      expect(screen.getByText('🏞️ 테마별 장소')).toBeInTheDocument();
-      expect(screen.getByText('🌳 공원·광장')).toBeInTheDocument();
-      expect(screen.getByText('🏊 야외 수영장·물놀이터')).toBeInTheDocument();
-      // 이전 대분류(EVENTS)의 칩 선택/결과는 초기화된다.
-      expect(screen.queryByText('분당 수영장')).not.toBeInTheDocument();
-      expect(screen.getByText('테마를 선택하면 관련 스팟을 보여드려요.')).toBeInTheDocument();
+      expect(screen.queryByText('🎪 행사·축제')).not.toBeInTheDocument();
+      expect(screen.queryByText('🏞️ 상시 장소')).not.toBeInTheDocument();
     });
   });
 
