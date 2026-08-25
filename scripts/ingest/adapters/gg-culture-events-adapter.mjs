@@ -269,38 +269,46 @@ export class GgCultureEventsAdapter extends BaseCollectorAdapter {
   // 텍스트에서 경기도 시/군명이 매칭되면 CITY_APPROX(시/군 중심좌표 근사)로, 매칭 안 되면
   // UNKNOWN(location=null, "경기도권 기타" 전용)으로 행을 만든다 — 어느 경우든 좌표를 지어내지
   // 않는다(추측 금지 원칙 유지).
+  // Task 9-6-14(Decision 012) Graceful Parsing: 한 건에서 예기치 못한 오류(원본 API 필드 형식이
+  // 표본 실측과 다른 극히 일부 행 등)가 나도 그 건만 로그로 남기고 건너뛴다 — 이미 알려진 케이스
+  // (제목/날짜 누락, 지오코딩 실패)는 기존처럼 continue로 조용히 스킵하고, try/catch는 그 외의
+  // 진짜 예외 상황(전체 배치를 중단시킬 뻔한 버그)에 대한 안전망이다.
   async transformCultureEvents(items) {
     const rows = [];
 
     for (const item of items) {
-      const title = cleanText(item.TITLE);
-      const startDate = formatYyyymmdd(item.BEGIN_DE);
-      const endDate = formatYyyymmdd(item.END_DE);
-      if (!title || !startDate || !endDate) continue;
+      try {
+        const title = cleanText(item.TITLE);
+        const startDate = formatYyyymmdd(item.BEGIN_DE);
+        const endDate = formatYyyymmdd(item.END_DE);
+        if (!title || !startDate || !endDate) continue;
 
-      const matchedSigun = matchGyeonggiSigunName(title) ?? matchGyeonggiSigunName(item.HOST_INST_NM);
-      const coords = matchedSigun ? await this.geocodeCityCenterOrNull(matchedSigun) : null;
+        const matchedSigun = matchGyeonggiSigunName(title) ?? matchGyeonggiSigunName(item.HOST_INST_NM);
+        const coords = matchedSigun ? await this.geocodeCityCenterOrNull(matchedSigun) : null;
 
-      const uiCategory = API1_CATEGORY_MAP[item.CATEGORY_NM]
-        ?? (await classifyEventTypeWithAI({ title, rawLabel: item.CATEGORY_NM, apiKey: this.geminiApiKey }));
+        const uiCategory = API1_CATEGORY_MAP[item.CATEGORY_NM]
+          ?? (await classifyEventTypeWithAI({ title, rawLabel: item.CATEGORY_NM, apiKey: this.geminiApiKey }));
 
-      const row = buildEventRow({
-        externalId: this.buildExternalId('GG_CULTURE_EVENT', item.URL || `${title}|${startDate}`),
-        title,
-        uiCategory,
-        startDate,
-        endDate,
-        lng: coords?.lng,
-        lat: coords?.lat,
-        locationPrecision: coords ? 'CITY_APPROX' : 'UNKNOWN',
-        thumbnailUrl: item.IMAGE_URL || null,
-        venueName: item.INST_NM || null,
-        // 좌표 지오코딩에 실패해도(coords===null) 매칭된 시/군명 자체는 알고 있으므로 남겨둔다
-        // (좌표 없이도 "어느 시/군"인지는 표시 가능 — 추측이 아니라 이미 매칭된 사실).
-        sigunguName: matchedSigun,
-      });
+        const row = buildEventRow({
+          externalId: this.buildExternalId('GG_CULTURE_EVENT', item.URL || `${title}|${startDate}`),
+          title,
+          uiCategory,
+          startDate,
+          endDate,
+          lng: coords?.lng,
+          lat: coords?.lat,
+          locationPrecision: coords ? 'CITY_APPROX' : 'UNKNOWN',
+          thumbnailUrl: item.IMAGE_URL || null,
+          venueName: item.INST_NM || null,
+          // 좌표 지오코딩에 실패해도(coords===null) 매칭된 시/군명 자체는 알고 있으므로 남겨둔다
+          // (좌표 없이도 "어느 시/군"인지는 표시 가능 — 추측이 아니라 이미 매칭된 사실).
+          sigunguName: matchedSigun,
+        });
 
-      if (row) rows.push(row);
+        if (row) rows.push(row);
+      } catch (err) {
+        console.warn(`⚠️ [GGCULTUREVENTSTUS] 행 파싱 오류 [${item?.TITLE ?? '(제목 없음)'}]: ${err.message} — 건너뜀`);
+      }
     }
 
     return rows;
@@ -310,47 +318,51 @@ export class GgCultureEventsAdapter extends BaseCollectorAdapter {
     const rows = [];
 
     for (const item of items) {
-      const title = cleanText(item.TITLE_NM);
-      const startDate = item.BGNG_NM?.slice(0, 10) ?? null;
-      const endDate = item.END_NM?.slice(0, 10) ?? null;
-      if (!title || !startDate || !endDate) continue;
+      try {
+        const title = cleanText(item.TITLE_NM);
+        const startDate = item.BGNG_NM?.slice(0, 10) ?? null;
+        const endDate = item.END_NM?.slice(0, 10) ?? null;
+        if (!title || !startDate || !endDate) continue;
 
-      // 콤마로 여러 장소가 나열된 경우 첫 번째만 대표 장소로 지오코딩한다
-      // (national-park-ecotour-adapter.mjs와 동일한 정책).
-      const primaryLocation = item.LOC_NM?.split(',')[0]?.trim();
-      if (!primaryLocation) continue;
+        // 콤마로 여러 장소가 나열된 경우 첫 번째만 대표 장소로 지오코딩한다
+        // (national-park-ecotour-adapter.mjs와 동일한 정책).
+        const primaryLocation = item.LOC_NM?.split(',')[0]?.trim();
+        if (!primaryLocation) continue;
 
-      const coords = await this.geocodeOrSkip(title, primaryLocation);
-      if (!coords) continue;
+        const coords = await this.geocodeOrSkip(title, primaryLocation);
+        if (!coords) continue;
 
-      const tags = deriveParentalTags(JSON.stringify(item));
-      const bookingStatus = deriveBookingStatus({
-        isReservationRequired: false,
-        reservationEndDate: null,
-        startDate,
-        endDate,
-      });
+        const tags = deriveParentalTags(JSON.stringify(item));
+        const bookingStatus = deriveBookingStatus({
+          isReservationRequired: false,
+          reservationEndDate: null,
+          startDate,
+          endDate,
+        });
 
-      const row = buildEventRow({
-        externalId: this.buildExternalId('GG_FOUNDATION_EVENT', item.DIV_NM || `${title}|${startDate}`),
-        title,
-        uiCategory: await classifyEventTypeWithAI({
+        const row = buildEventRow({
+          externalId: this.buildExternalId('GG_FOUNDATION_EVENT', item.DIV_NM || `${title}|${startDate}`),
           title,
-          rawLabel: item.CLASS_NM,
-          apiKey: this.geminiApiKey,
-        }),
-        startDate,
-        endDate,
-        lng: coords.lng,
-        lat: coords.lat,
-        thumbnailUrl: null, // 실측 확인: API2에는 이미지 필드가 없음
-        bookingStatus,
-        venueName: item.LOC_NM || null,
-        sigunguName: extractSigunguName(primaryLocation),
-        ...tags,
-      });
+          uiCategory: await classifyEventTypeWithAI({
+            title,
+            rawLabel: item.CLASS_NM,
+            apiKey: this.geminiApiKey,
+          }),
+          startDate,
+          endDate,
+          lng: coords.lng,
+          lat: coords.lat,
+          thumbnailUrl: null, // 실측 확인: API2에는 이미지 필드가 없음
+          bookingStatus,
+          venueName: item.LOC_NM || null,
+          sigunguName: extractSigunguName(primaryLocation),
+          ...tags,
+        });
 
-      if (row) rows.push(row);
+        if (row) rows.push(row);
+      } catch (err) {
+        console.warn(`⚠️ [GGCULFOUEVENSTM] 행 파싱 오류 [${item?.TITLE_NM ?? '(제목 없음)'}]: ${err.message} — 건너뜀`);
+      }
     }
 
     return rows;

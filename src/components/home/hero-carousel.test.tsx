@@ -166,8 +166,9 @@ describe('HeroCarousel', () => {
   });
 });
 
-// Task 9-1-9: 당일 진행 중인 항목과, 부족분을 채운 "이번 주 마감임박" 항목을 뱃지로 구분 표시.
-describe('HeroCarousel 뱃지 구분 (Task 9-1-9)', () => {
+// Task 9-6-13(Decision 012): 다일간 행사가 오늘 끝나는 "오늘 마감"과 원래 하루짜리인 "오늘
+// 한정"을 뱃지로 구분 표시(event-status.ts의 getDateBannerBadge, EventCard와 동일 기준).
+describe('HeroCarousel 뱃지 구분 (Task 9-6-13)', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-22T12:00:00+09:00'));
@@ -178,26 +179,26 @@ describe('HeroCarousel 뱃지 구분 (Task 9-1-9)', () => {
     vi.useRealTimers();
   });
 
-  it('오늘 진행 중인 항목(start_date<=오늘<=end_date)은 "오늘 당일 입장" 뱃지를 보여준다', () => {
+  it('오늘 단 하루만 진행되는 행사(start_date===end_date===오늘)는 "오늘 한정" 뱃지를 보여준다', () => {
     const item = makeItem('1', '오늘 행사');
     item.start_date = '2026-08-22';
     item.end_date = '2026-08-22';
 
     render(<HeroCarousel items={[item]} onSelect={() => {}} />);
 
-    expect(screen.getByText('⚡ 오늘 당일 입장 가능')).toBeInTheDocument();
-    expect(screen.queryByText('🔥 D-DAY 마감임박')).not.toBeInTheDocument();
+    expect(screen.getByText('⚡ 오늘 한정')).toBeInTheDocument();
+    expect(screen.queryByText('⏰ 오늘 마감')).not.toBeInTheDocument();
   });
 
-  it('오늘 진행 중이 아닌(이번 주 시작 예정) 항목은 "D-DAY 마감임박" 뱃지를 보여준다', () => {
-    const item = makeItem('2', '다음 주 행사');
-    item.start_date = '2026-08-25';
-    item.end_date = '2026-08-27';
+  it('여러 날 진행되다 오늘이 종료일인 행사는 "오늘 마감" 뱃지를 보여준다', () => {
+    const item = makeItem('2', '여러 날 행사');
+    item.start_date = '2026-08-20';
+    item.end_date = '2026-08-22';
 
     render(<HeroCarousel items={[item]} onSelect={() => {}} />);
 
-    expect(screen.getByText('🔥 D-DAY 마감임박')).toBeInTheDocument();
-    expect(screen.queryByText('⚡ 오늘 당일 입장 가능')).not.toBeInTheDocument();
+    expect(screen.getByText('⏰ 오늘 마감')).toBeInTheDocument();
+    expect(screen.queryByText('⚡ 오늘 한정')).not.toBeInTheDocument();
   });
 });
 

@@ -5,21 +5,20 @@ import Link from 'next/link';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
 import { getParentalBadges } from '@/lib/spaces/parental-badges';
+import { getDateBannerBadge } from '@/lib/spaces/event-status';
 import { formatVenueLine } from '@/lib/spaces/format';
 
 const AUTOPLAY_INTERVAL_MS = 5000;
 
 // docs/spec.md 2.2 ①: "메인 비주얼 카드 슬라이더 (Hero Carousel)"
 // 데이터 조건: 당일 진행 중인 행사/이벤트 중 추천 5~10개 동적 페칭
-// UI 카드 내용: 대형 썸네일 + [⚡ 오늘 당일 입장] / [🎁 무료] 뱃지 + 행사명 + 장소/거리
 // Task 9-1-1: 5초 간격 Auto-play + 터치/호버 시 일시정지.
-// Task 9-1-9: 당일 진행 중이 아니라 "이번 주 시작 예정 마감임박"으로 채워진 항목은
-// [⚡ 오늘 당일 입장] 대신 [🔥 D-DAY 마감임박] 뱃지로 구분 표시한다.
+// Task 9-6-13(Decision 012)/9-6-9 후속: getTodayEvents가 이제 end_date=오늘인 행사만 내려주므로
+// (9-6-9), 옛 [⚡ 오늘 당일 입장]/[🔥 D-DAY 마감임박] 2분기는 항상 전자만 나오는 죽은 분기가
+// 됐다 — event-status.ts의 getDateBannerBadge(다일간 행사가 오늘 끝나는 "오늘 마감" vs 원래
+// 하루짜리인 "오늘 한정")로 교체해 EventCard(그리드 카드)와 동일한 배너 기준을 쓴다.
 // Task 9-1-8(2026-08-22 후속): snap-center만으로는 빠르게 스와이프할 때 두 장 이상 건너뛰기도
 // 해서, 카드마다 [scroll-snap-stop:always]를 추가해 한 번 드래그에 정확히 1장씩만 멈추게 한다.
-function isTodayActive(item: NearbyItem, todayStr: string): boolean {
-  return !!item.start_date && !!item.end_date && item.start_date <= todayStr && todayStr <= item.end_date;
-}
 
 export function HeroCarousel({
   items,
@@ -76,8 +75,6 @@ export function HeroCarousel({
 
   if (items.length === 0) return null;
 
-  const todayStr = new Date().toISOString().slice(0, 10);
-
   return (
     // Task 9-4-2(2026-08-22): Floating 버튼이 가로 스크롤 내용과 무관하게 프레임 우측 하단에
     // 고정되도록, 스크롤되는 슬라이드 컨테이너와 버튼을 감싸는 relative 래퍼를 하나 둔다.
@@ -94,7 +91,7 @@ export function HeroCarousel({
         const meta = getCategoryMeta(item.category);
         // Task 9-1-3: "[장소명] · [시/군/구]"로 통일 표시(거리 계산 제거).
         const venueLine = formatVenueLine(item.address, item.sigungu_name);
-        const todayActive = isTodayActive(item, todayStr);
+        const dateBanner = getDateBannerBadge(item);
         // Task 9-1-4: 4대 핵심 뱃지(가성비/실내외/아이동반/방문시점) 중 가성비·방문시점은 이미
         // 위 썸네일 오버레이(오늘당일·D-DAY / 무료)로 노출되므로, 여기서는 중복 없이 나머지
         // 두 개(실내외·아이동반)만 보완해 4개 전부 빠짐없이 드러나게 한다.
@@ -139,13 +136,13 @@ export function HeroCarousel({
                 </div>
               )}
               <div className="absolute top-2 left-2 flex gap-1">
-                {todayActive ? (
-                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-600 text-white">
-                    ⚡ 오늘 당일 입장 가능
-                  </span>
-                ) : (
-                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-600 text-white">
-                    🔥 D-DAY 마감임박
+                {dateBanner && (
+                  <span
+                    className={`text-[11px] font-bold px-2 py-0.5 rounded-full text-white ${
+                      dateBanner.kind === 'today_only' ? 'bg-amber-500' : 'bg-rose-600'
+                    }`}
+                  >
+                    {dateBanner.label}
                   </span>
                 )}
                 {item.is_free === true && (

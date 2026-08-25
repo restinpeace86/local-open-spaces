@@ -1,4 +1,5 @@
 import { createAdminClient, upsertRows } from '../lib/supabase-admin.mjs';
+import { countRawItems, recordPipelineRun } from '../lib/pipeline-log.mjs';
 
 // 모든 소스 어댑터가 상속받는 추상 베이스 클래스.
 // fetch()/transform()은 서브클래스가 반드시 구현해야 하며, run()이 공통 오케스트레이션
@@ -35,25 +36,35 @@ export class BaseCollectorAdapter {
   async run({ dryRun = false } = {}) {
     console.log(`▶ [${this.sourceKey}] 수집 시작 (dry-run: ${dryRun})`);
 
-    const raw = await this.fetch();
-    console.log(`  raw 데이터 ${Array.isArray(raw) ? raw.length : '?'}건 수신`);
+    try {
+      const raw = await this.fetch();
+      const rawCount = countRawItems(raw);
+      console.log(`  raw 데이터 ${rawCount ?? '?'}건 수신`);
 
-    const rows = (await this.transform(raw)).filter(Boolean);
-    console.log(`  표준 스키마 변환 완료: ${rows.length}건 (유효성 검증 통과분만)`);
+      const rows = (await this.transform(raw)).filter(Boolean);
+      console.log(`  표준 스키마 변환 완료: ${rows.length}건 (유효성 검증 통과분만)`);
 
-    if (dryRun) {
-      console.log(JSON.stringify(rows.slice(0, 3), null, 2));
-      return { count: rows.length, upserted: false };
+      if (dryRun) {
+        console.log(JSON.stringify(rows.slice(0, 3), null, 2));
+        return { count: rows.length, upserted: false };
+      }
+
+      if (rows.length === 0) {
+        console.log('  upsert할 유효 행이 없어 종료합니다.');
+        recordPipelineRun({ sourceKey: this.sourceKey, rawCount, count: 0, status: 'OK', note: '유효 행 0건' });
+        return { count: 0, upserted: true };
+      }
+
+      const client = createAdminClient();
+      const { count } = await upsertRows(client, this.targetTable, rows);
+      console.log(`✅ [${this.sourceKey}] Supabase ${this.targetTable} upsert 완료: ${count}건`);
+      recordPipelineRun({ sourceKey: this.sourceKey, rawCount, count, status: 'OK' });
+      return { count, upserted: true };
+    } catch (err) {
+      if (!dryRun) {
+        recordPipelineRun({ sourceKey: this.sourceKey, rawCount: null, count: 0, status: 'FAILED', note: err.message });
+      }
+      throw err;
     }
-
-    if (rows.length === 0) {
-      console.log('  upsert할 유효 행이 없어 종료합니다.');
-      return { count: 0, upserted: true };
-    }
-
-    const client = createAdminClient();
-    const { count } = await upsertRows(client, this.targetTable, rows);
-    console.log(`✅ [${this.sourceKey}] Supabase ${this.targetTable} upsert 완료: ${count}건`);
-    return { count, upserted: true };
   }
 }
