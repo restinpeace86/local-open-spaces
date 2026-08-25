@@ -17,6 +17,7 @@ import { deriveParentalTags } from '../lib/ai-tagging.mjs';
 
 const BASE_URL = 'http://api.data.go.kr/openapi/tn_pubr_public_cty_park_info_api';
 const PAGE_SIZE = 100;
+const SOURCE = 'city_park';
 
 export class CityParkAdapter extends BaseCollectorAdapter {
   constructor() {
@@ -26,6 +27,13 @@ export class CityParkAdapter extends BaseCollectorAdapter {
     if (!this.apiKey) {
       throw new Error('PUBLIC_DATA_API_KEY 환경변수가 설정되지 않았습니다.');
     }
+  }
+
+  // [전체 파이프라인 일괄 가동] RAW 레이어 opt-in. manageNo가 external_id 구성에도 쓰이는
+  // 지자체별 공원 고유 관리번호라 그대로 재사용한다.
+  // eslint-disable-next-line class-methods-use-this
+  getRawRows(rawItems) {
+    return rawItems.filter((item) => item.manageNo).map((item) => ({ sourceId: item.manageNo, payload: item }));
   }
 
   async fetchPage(pageNo) {
@@ -94,6 +102,7 @@ export class CityParkAdapter extends BaseCollectorAdapter {
         return buildOpenSpaceRow({
           externalId: `CITY_PARK_${item.manageNo}`,
           sourceType: 'CITY_PARK',
+          source: SOURCE,
           name,
           uiCategory: UI_CATEGORY.OUTDOOR_NATURE,
           address,

@@ -2,13 +2,17 @@
 // spec/data/data_sources.md #05 참조
 import crypto from 'crypto';
 import { loadEnv } from '../lib/load-env.mjs';
-import { createAdminClient, upsertRows } from './lib/supabase-admin.mjs';
+import { createAdminClient, upsertRawIngestData, upsertRowsSafeMerge } from './lib/supabase-admin.mjs';
 import { toPointWKT } from './lib/geometry.mjs';
 import { classifySeoulCultureEvent } from './lib/category-map.mjs';
 import { cleanText, deriveParentalTags, deriveBookingStatus } from './lib/ai-tagging.mjs';
 
 const env = loadEnv();
 const dryRun = process.argv.includes('--dry-run');
+// [전체 파이프라인 일괄 가동](2026-08-25): BaseCollectorAdapter를 쓰지 않는 레거시 구조라
+// RAW 레이어/source/Safe UPSERT를 인라인으로 추가한다.
+const SOURCE_KEY = 'SEOUL_CULTURE_EVENTS';
+const SOURCE = 'seoul_public_culture';
 
 // 원본 API에 안정적인 고유 ID 필드가 없어 TITLE+STRTDATE+PLACE 조합의 결정적 해시를
 // external_id로 사용한다 (project/database_schema.md의 Upsert 기준 키 요건 충족 목적).
@@ -39,6 +43,7 @@ async function mapToEventRow(item, { apiKey }) {
   return {
     external_id: buildExternalId(item),
     title,
+    source: SOURCE,
     event_type: await classifySeoulCultureEvent(item.CODENAME, { title, apiKey }),
     start_date: startDate,
     end_date: endDate,
@@ -127,7 +132,12 @@ async function main() {
   }
 
   const client = createAdminClient();
-  const { count } = await upsertRows(client, 'events', rows);
+  await upsertRawIngestData(
+    client,
+    SOURCE_KEY,
+    items.map((item) => ({ sourceId: buildExternalId(item), payload: item }))
+  );
+  const { count } = await upsertRowsSafeMerge(client, 'events', rows);
   console.log(`✅ Supabase events 테이블 upsert 완료: ${count}건`);
 }
 

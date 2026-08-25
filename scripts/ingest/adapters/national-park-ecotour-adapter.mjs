@@ -16,6 +16,11 @@ import { deriveIsFreeFallback } from '../lib/ai-tagging.mjs';
 const BASE_URL =
   'https://api.odcloud.kr/api/3068312/v1/uddi:d529eac9-fcbb-468a-81f8-eacb1d9568e2_201808161131';
 const PAGE_SIZE = 100;
+const SOURCE = 'national_park_ecotour';
+
+function hashKey(name, region) {
+  return crypto.createHash('sha1').update(`${name}|${region}`).digest('hex').slice(0, 16);
+}
 
 export class NationalParkEcotourAdapter extends BaseCollectorAdapter {
   constructor() {
@@ -59,6 +64,16 @@ export class NationalParkEcotourAdapter extends BaseCollectorAdapter {
     return items;
   }
 
+  // [전체 파이프라인 일괄 가동] RAW 레이어 opt-in. 원본에 고유 ID가 없어 external_id와 동일하게
+  // 프로그램명+서비스지역 해시를 sourceId로 쓴다.
+  // eslint-disable-next-line class-methods-use-this
+  getRawRows(rawItems) {
+    return rawItems
+      .map((item) => ({ item, name: item['프로그램명'], region: item['서비스 지역']?.trim() }))
+      .filter(({ name, region }) => name && region)
+      .map(({ item, name, region }) => ({ sourceId: hashKey(name, region), payload: item }));
+  }
+
   // 지오코딩은 비동기 네트워크 호출이라 base의 동기 transform()과 별도로 오버라이드한다.
   async transform(rawItems) {
     const rows = [];
@@ -86,11 +101,12 @@ export class NationalParkEcotourAdapter extends BaseCollectorAdapter {
         continue;
       }
 
-      const hash = crypto.createHash('sha1').update(`${name}|${region}`).digest('hex').slice(0, 16);
+      const hash = hashKey(name, region);
 
       const row = buildOpenSpaceRow({
         externalId: `NATIONAL_PARK_ECOTOUR_${hash}`,
         sourceType: 'NATIONAL_PARK_ECOTOUR',
+        source: SOURCE,
         name,
         uiCategory: UI_CATEGORY.EXPERIENCE_CLASS,
         address: region,

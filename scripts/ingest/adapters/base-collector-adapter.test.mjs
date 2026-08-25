@@ -4,7 +4,6 @@
 // 로직에 집중한다.
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const upsertRowsMock = vi.fn(() => Promise.resolve({ count: 1 }));
 const upsertRowsSafeMergeMock = vi.fn(() => Promise.resolve({ count: 1 }));
 const upsertRawIngestDataMock = vi.fn(() => Promise.resolve({ count: 2 }));
 const fetchRawIngestDataMock = vi.fn(() => Promise.resolve([]));
@@ -12,7 +11,6 @@ const createAdminClientMock = vi.fn(() => ({ from: vi.fn() }));
 
 vi.mock('../lib/supabase-admin.mjs', () => ({
   createAdminClient: () => createAdminClientMock(),
-  upsertRows: (...args) => upsertRowsMock(...args),
   upsertRowsSafeMerge: (...args) => upsertRowsSafeMergeMock(...args),
   upsertRawIngestData: (...args) => upsertRawIngestDataMock(...args),
   fetchRawIngestData: (...args) => fetchRawIngestDataMock(...args),
@@ -55,7 +53,7 @@ class RawOptInAdapter extends BaseCollectorAdapter {
 
 describe('BaseCollectorAdapter.run() — RAW 레이어 opt-in', () => {
   beforeEach(() => {
-    upsertRowsMock.mockClear();
+    upsertRowsSafeMergeMock.mockClear();
     upsertRawIngestDataMock.mockClear();
   });
 
@@ -68,7 +66,7 @@ describe('BaseCollectorAdapter.run() — RAW 레이어 opt-in', () => {
     await adapter.run();
 
     expect(upsertRawIngestDataMock).not.toHaveBeenCalled();
-    expect(upsertRowsMock).toHaveBeenCalledWith(expect.anything(), 'events', [
+    expect(upsertRowsSafeMergeMock).toHaveBeenCalledWith(expect.anything(), 'events', [
       { external_id: 'id-1' },
       { external_id: 'id-2' },
     ]);
@@ -82,7 +80,7 @@ describe('BaseCollectorAdapter.run() — RAW 레이어 opt-in', () => {
       { sourceId: 'S1', payload: { SVCID: 'S1' } },
       { sourceId: 'S2', payload: { SVCID: 'S2' } },
     ]);
-    expect(upsertRowsMock).toHaveBeenCalledWith(expect.anything(), 'events', [
+    expect(upsertRowsSafeMergeMock).toHaveBeenCalledWith(expect.anything(), 'events', [
       { external_id: 'S1' },
       { external_id: 'S2' },
     ]);
@@ -93,15 +91,15 @@ describe('BaseCollectorAdapter.run() — RAW 레이어 opt-in', () => {
     await adapter.run({ dryRun: true });
 
     expect(upsertRawIngestDataMock).not.toHaveBeenCalled();
-    expect(upsertRowsMock).not.toHaveBeenCalled();
+    expect(upsertRowsSafeMergeMock).not.toHaveBeenCalled();
   });
 
   it('RAW 적재 건수를 recordPipelineRun에 rawArchivedCount로 전달한다', async () => {
     const adapter = new RawOptInAdapter();
     await adapter.run();
 
-    // upsertRowsMock은 실제 입력과 무관하게 항상 { count: 1 }을 반환하도록 스텁돼 있다(위
-    // 모듈 상단 정의) — 최종 count는 그 스텁값을 그대로 반영한다.
+    // upsertRowsSafeMergeMock은 실제 입력과 무관하게 항상 { count: 1 }을 반환하도록 스텁돼
+    // 있다(위 모듈 상단 정의) — 최종 count는 그 스텁값을 그대로 반영한다.
     expect(recordPipelineRun).toHaveBeenCalledWith(
       expect.objectContaining({ sourceKey: 'RAW_OPT_IN', rawArchivedCount: 2, count: 1 })
     );
@@ -132,9 +130,6 @@ describe('BaseCollectorAdapter.runServiceTransformFromRaw()', () => {
 
     const result = await adapter.runServiceTransformFromRaw();
 
-    // upsertRows()가 아니라 upsertRowsSafeMerge()를 써야 한다 — RAW 재가공 결과는 기존 실데이터를
-    // 덮어쓰지 않고 기존 NULL 컬럼만 채우는 Safe UPSERT여야 하기 때문이다.
-    expect(upsertRowsMock).not.toHaveBeenCalled();
     expect(upsertRowsSafeMergeMock).toHaveBeenCalledWith(expect.anything(), 'events', [
       { external_id: 'S1' },
       { external_id: 'S2' },
@@ -208,7 +203,6 @@ describe("BaseCollectorAdapter — targetTable: 'multi' (Decision 017 다중 테
 
     expect(upsertRowsSafeMergeMock).toHaveBeenCalledWith(expect.anything(), 'open_spaces', [{ external_id: 'S1' }]);
     expect(upsertRowsSafeMergeMock).toHaveBeenCalledWith(expect.anything(), 'events', [{ external_id: 'S2' }]);
-    expect(upsertRowsMock).not.toHaveBeenCalled();
   });
 
   it('한쪽 테이블이 비어있으면 그 테이블은 upsert 호출을 아예 스킵한다', async () => {

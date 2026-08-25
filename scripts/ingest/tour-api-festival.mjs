@@ -1,7 +1,7 @@
 // Source 06: 한국관광공사 국문 관광정보 TourAPI 4.0 (searchFestival2)
 // spec/data/data_sources.md #06 참조
 import { loadEnv } from '../lib/load-env.mjs';
-import { createAdminClient, upsertRows } from './lib/supabase-admin.mjs';
+import { createAdminClient, upsertRawIngestData, upsertRowsSafeMerge } from './lib/supabase-admin.mjs';
 import { toPointWKT } from './lib/geometry.mjs';
 import { classifyTourApiFestival } from './lib/category-map.mjs';
 import { deriveParentalTags, deriveBookingStatus } from './lib/ai-tagging.mjs';
@@ -11,6 +11,10 @@ const env = loadEnv();
 const dryRun = process.argv.includes('--dry-run');
 
 const BASE_URL = 'https://apis.data.go.kr/B551011/KorService2/searchFestival2';
+// [전체 파이프라인 일괄 가동](2026-08-25): BaseCollectorAdapter를 쓰지 않는 레거시 구조라
+// RAW 레이어/source/Safe UPSERT를 인라인으로 추가한다.
+const SOURCE_KEY = 'TOUR_API_FESTIVAL';
+const SOURCE = 'tourapi_4.0';
 
 function todayYYYYMMDD() {
   const d = new Date();
@@ -103,6 +107,7 @@ function mapToEventRow(item) {
   return {
     external_id: `TOUR_API_${item.contentid}`,
     title: item.title,
+    source: SOURCE,
     event_type: classifyTourApiFestival(),
     start_date: startDate,
     end_date: endDate,
@@ -133,7 +138,12 @@ async function main() {
   }
 
   const client = createAdminClient();
-  const { count } = await upsertRows(client, 'events', rows);
+  await upsertRawIngestData(
+    client,
+    SOURCE_KEY,
+    items.filter((item) => item.contentid).map((item) => ({ sourceId: String(item.contentid), payload: item }))
+  );
+  const { count } = await upsertRowsSafeMerge(client, 'events', rows);
   console.log(`✅ Supabase events 테이블 upsert 완료: ${count}건`);
 }
 

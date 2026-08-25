@@ -636,15 +636,25 @@ export type Database = {
         Args: never
         Returns: {
           categories: string[]
-          source_types: string[]
         }[]
       }
       get_open_spaces_seoul_yeyak_options: {
         Args: never
         Returns: {
           min_class_names: string[]
-          sources: string[]
           svc_stat_nms: string[]
+        }[]
+      }
+      get_open_spaces_source_options: {
+        Args: never
+        Returns: {
+          sources: string[]
+        }[]
+      }
+      get_open_spaces_source_type_options: {
+        Args: never
+        Returns: {
+          source_types: string[]
         }[]
       }
       get_raw_ingest_data_filter_options: {

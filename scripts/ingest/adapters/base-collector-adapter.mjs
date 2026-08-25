@@ -1,6 +1,5 @@
 import {
   createAdminClient,
-  upsertRows,
   upsertRowsSafeMerge,
   upsertRawIngestData,
   fetchRawIngestData,
@@ -110,7 +109,12 @@ export class BaseCollectorAdapter {
       }
 
       const client = createAdminClient();
-      const { count } = await upsertRows(client, this.targetTable, rows);
+      // [전체 파이프라인 일괄 가동](2026-08-25): 서울시 수집기(SeoulYeyakAdapter)에서 검증된
+      // COALESCE Safe UPSERT를 모든 소스 공통 기본값으로 승격한다. 기존 upsertRows()는 충돌 시
+      // 새 값으로 무조건 덮어썼는데, 재수집 때 원본 API가 일시적으로 일부 필드를 비워 보내면
+      // 이미 채워져 있던 실데이터가 NULL로 되돌아가는 문제가 있었다 — upsertRowsSafeMerge()는
+      // 기존 행의 컬럼이 NULL일 때만 새 값으로 채우고 이미 값이 있으면 보존한다.
+      const { count } = await upsertRowsSafeMerge(client, this.targetTable, rows);
       console.log(`✅ [${this.sourceKey}] Supabase ${this.targetTable} upsert 완료: ${count}건`);
       recordPipelineRun({ sourceKey: this.sourceKey, rawCount, rawArchivedCount, count, status: 'OK' });
       return { count, upserted: true };

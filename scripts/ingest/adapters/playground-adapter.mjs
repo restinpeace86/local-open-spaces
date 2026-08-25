@@ -49,6 +49,7 @@ const BASE_URL = 'https://apis.data.go.kr/1741000/pfc3/getPfctInfo3';
 const PAGE_SIZE = 1000;
 const SUCCESS_RESULT_CODE = '00';
 const CLOSED_FLAG = 'Y';
+const SOURCE = 'localdata_playground';
 
 export class PlaygroundAdapter extends BaseCollectorAdapter {
   constructor() {
@@ -58,6 +59,13 @@ export class PlaygroundAdapter extends BaseCollectorAdapter {
     if (!this.apiKey) {
       throw new Error('PUBLIC_DATA_API_KEY 환경변수가 설정되지 않았습니다.');
     }
+  }
+
+  // [전체 파이프라인 일괄 가동] RAW 레이어 opt-in. pfctSn(시설일련번호)은 전국 단위로 유일함을
+  // 실측 확인했다(위 헤더 주석) — external_id와 동일하게 그대로 사용한다.
+  // eslint-disable-next-line class-methods-use-this
+  getRawRows(rawItems) {
+    return rawItems.filter((item) => item.pfctSn).map((item) => ({ sourceId: String(item.pfctSn), payload: item }));
   }
 
   async fetchPage(pageIndex) {
@@ -133,6 +141,7 @@ export class PlaygroundAdapter extends BaseCollectorAdapter {
         return buildOpenSpaceRow({
           externalId: `LOCALDATA_PLAYGROUND_${item.pfctSn}`,
           sourceType: 'LOCALDATA_PLAYGROUND',
+          source: SOURCE,
           name,
           uiCategory: 'KIDS_ACTIVITY',
           address,

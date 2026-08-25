@@ -71,6 +71,7 @@ const API1_SUCCESS_RESULT_CODE = '00';
 const API2_SUCCESS_RESULT_CODE = '0';
 const API1_ACTIVE_STATUS = '정상운영';
 const API2_ACTIVE_STATUS = '영업/정상';
+const SOURCE = 'swimming_pool';
 
 export function normalizeForDedup(value) {
   return (value || '').replace(/\s+/g, '');
@@ -194,6 +195,21 @@ export class SwimmingPoolAdapter extends BaseCollectorAdapter {
     return { api1Items, api2Items };
   }
 
+  // [전체 파이프라인 일괄 가동] RAW 레이어 opt-in. API1은 faci_cd, API2는 이름+주소 해시를
+  // transform()과 동일하게 sourceId로 쓴다.
+  // eslint-disable-next-line class-methods-use-this
+  getRawRows({ api1Items, api2Items }) {
+    const api1Raw = api1Items.filter((item) => item.faci_cd).map((item) => ({ sourceId: `A1_${item.faci_cd}`, payload: item }));
+    const api2Raw = api2Items
+      .map((item) => ({ item, name: item.BPLC_NM, address: item.ROAD_NM_ADDR || item.LOTNO_ADDR || '' }))
+      .filter(({ name }) => name)
+      .map(({ item, name, address }) => ({
+        sourceId: `A2_${crypto.createHash('sha1').update(`${name}|${address}`).digest('hex').slice(0, 16)}`,
+        payload: item,
+      }));
+    return [...api1Raw, ...api2Raw];
+  }
+
   // eslint-disable-next-line class-methods-use-this
   transformApi1Item(item) {
     const name = item.faci_nm;
@@ -209,6 +225,7 @@ export class SwimmingPoolAdapter extends BaseCollectorAdapter {
     return buildOpenSpaceRow({
       externalId: `SWIMMING_POOL_A1_${item.faci_cd}`,
       sourceType: 'SWIMMING_POOL',
+      source: SOURCE,
       name,
       uiCategory: UI_CATEGORY.KIDS_ACTIVITY,
       address,
@@ -238,6 +255,7 @@ export class SwimmingPoolAdapter extends BaseCollectorAdapter {
     return buildOpenSpaceRow({
       externalId: `SWIMMING_POOL_A2_${hash}`,
       sourceType: 'SWIMMING_POOL',
+      source: SOURCE,
       name,
       uiCategory: UI_CATEGORY.KIDS_ACTIVITY,
       address,

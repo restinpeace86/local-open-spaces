@@ -2,7 +2,7 @@
 // 주의: 응답 필드명 X_COORD/Y_COORD가 실제로는 위도/경도가 뒤바뀌어 있음을 실제 응답으로 확인함
 // (X_COORD ≈ 37.x = 위도, Y_COORD ≈ 127.x = 경도). 필드명을 그대로 믿지 않고 값 범위로 검증함.
 import { loadEnv } from '../lib/load-env.mjs';
-import { createAdminClient, upsertRows } from './lib/supabase-admin.mjs';
+import { createAdminClient, upsertRawIngestData, upsertRowsSafeMerge } from './lib/supabase-admin.mjs';
 import { toPointWKT } from './lib/geometry.mjs';
 import { deriveParentalTags } from './lib/ai-tagging.mjs';
 
@@ -12,6 +12,12 @@ const dryRun = process.argv.includes('--dry-run');
 const BASE = 'http://openapi.seoul.go.kr:8088';
 const SERVICE_NAME = 'culturalSpaceInfo';
 const PAGE_SIZE = 100;
+// [전체 파이프라인 일괄 가동](2026-08-25): 이 스크립트는 BaseCollectorAdapter를 쓰지 않는
+// 레거시 구조라(schema-mapper.mjs도 거치지 않고 행을 직접 구성) RAW 레이어/source/Safe UPSERT를
+// 여기 인라인으로 추가한다. 소스 식별자는 sourceKey('CULTURE_SPACE')와 별개로 관리자 화면
+// 필터용 원천 식별자(source 컬럼)다.
+const SOURCE_KEY = 'CULTURE_SPACE';
+const SOURCE = 'seoul_public_culture';
 
 async function fetchPage(startIdx, endIdx) {
   const url = `${BASE}/${env.SEOUL_OPEN_DATA_KEY}/json/${SERVICE_NAME}/${startIdx}/${endIdx}/`;
@@ -48,6 +54,7 @@ function mapToOpenSpaceRow(item) {
   return {
     external_id: `CULTURE_SPACE_${item.NUM}`,
     source_type: 'CULTURE_FACILITY',
+    source: SOURCE,
     name: item.FAC_NAME,
     // Task 9-1-4: ai-rule.md 3.3(Decision 008) 공식 매핑표에 따라 레거시 'CULTURE' 대신
     // 5대 UI 카테고리 EXHIBITION_MUSEUM(전시·박물관)으로 직접 태깅한다.
@@ -80,9 +87,18 @@ async function main() {
 
     if (dryRun) {
       sample.push(...rows.slice(0, 3 - sample.length));
-    } else if (rows.length > 0) {
-      const { count } = await upsertRows(client, 'open_spaces', rows);
-      totalUpserted += count;
+    } else {
+      if (items.length > 0) {
+        await upsertRawIngestData(
+          client,
+          SOURCE_KEY,
+          items.filter((item) => item.NUM).map((item) => ({ sourceId: String(item.NUM), payload: item }))
+        );
+      }
+      if (rows.length > 0) {
+        const { count } = await upsertRowsSafeMerge(client, 'open_spaces', rows);
+        totalUpserted += count;
+      }
     }
 
     console.log(`  ${startIdx}~${endIdx}: ${items.length}건 수신 (전체 ${totalCount}건 중)`);

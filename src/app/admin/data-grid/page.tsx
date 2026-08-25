@@ -23,14 +23,19 @@ function firstRow<T>(result: RpcResult<T[]>, label: string): T | undefined {
 export default async function AdminDataGridPage() {
   const supabase = await createClient();
 
-  const [categoryOptions, seoulYeyakOptions, eventsOptions, rawIngestOptions] = await Promise.all([
-    supabase.rpc('get_open_spaces_category_options'),
-    supabase.rpc('get_open_spaces_seoul_yeyak_options'),
-    supabase.rpc('get_events_filter_options'),
-    supabase.rpc('get_raw_ingest_data_filter_options'),
-  ]);
+  const [sourceTypeOptions, categoryOptions, sourceOptions, seoulYeyakOptions, eventsOptions, rawIngestOptions] =
+    await Promise.all([
+      supabase.rpc('get_open_spaces_source_type_options'),
+      supabase.rpc('get_open_spaces_category_options'),
+      supabase.rpc('get_open_spaces_source_options'),
+      supabase.rpc('get_open_spaces_seoul_yeyak_options'),
+      supabase.rpc('get_events_filter_options'),
+      supabase.rpc('get_raw_ingest_data_filter_options'),
+    ]);
 
+  const stRow = firstRow(sourceTypeOptions, 'get_open_spaces_source_type_options');
   const catRow = firstRow(categoryOptions, 'get_open_spaces_category_options');
+  const srcRow = firstRow(sourceOptions, 'get_open_spaces_source_options');
   const yeyakRow = firstRow(seoulYeyakOptions, 'get_open_spaces_seoul_yeyak_options');
   const ev = firstRow(eventsOptions, 'get_events_filter_options');
   const raw = firstRow(rawIngestOptions, 'get_raw_ingest_data_filter_options');
@@ -39,9 +44,9 @@ export default async function AdminDataGridPage() {
     <AdminDataGridClient
       filterOptions={{
         open_spaces: {
-          sourceTypes: catRow?.source_types ?? [],
+          sourceTypes: stRow?.source_types ?? [],
           categories: catRow?.categories ?? [],
-          sources: yeyakRow?.sources ?? [],
+          sources: srcRow?.sources ?? [],
           minClassNames: yeyakRow?.min_class_names ?? [],
           svcStatNms: yeyakRow?.svc_stat_nms ?? [],
         },

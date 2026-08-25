@@ -58,6 +58,7 @@ const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const GEOCODE_PACING_MS = 250;
 const GEOCODE_MAX_ATTEMPTS = 3;
+const SOURCE = 'gg_public';
 
 // 실측으로 발견한 버그(2026-08-22 dry-run): LOC_NM이 "삼남길 제6길 화성효행길, 평해길 제7길
 // 지평향교길, ..."처럼 단일 장소가 아니라 도보 코스/구간 이름을 나열한 경우, VWorld가 그 문자열을
@@ -219,6 +220,21 @@ export class GgCultureEventsAdapter extends BaseCollectorAdapter {
     return `${prefix}_${hash}`;
   }
 
+  // [전체 파이프라인 일괄 가동] RAW 레이어 opt-in. fetch()가 { cultureEventItems,
+  // foundationEventItems } 복합 객체를 반환하므로 두 배열을 합쳐 처리하고, transform()과 동일한
+  // 키(URL/DIV_NM 우선, 없으면 제목+시작일)로 external_id와 1:1 대응하는 sourceId를 만든다.
+  getRawRows({ cultureEventItems, foundationEventItems }) {
+    const cultureRaw = cultureEventItems.map((item) => ({
+      sourceId: this.buildExternalId('GG_CULTURE_EVENT', item.URL || `${item.TITLE}|${item.BEGIN_DE}`),
+      payload: item,
+    }));
+    const foundationRaw = foundationEventItems.map((item) => ({
+      sourceId: this.buildExternalId('GG_FOUNDATION_EVENT', item.DIV_NM || `${item.TITLE_NM}|${item.BGNG_NM}`),
+      payload: item,
+    }));
+    return [...cultureRaw, ...foundationRaw];
+  }
+
   async geocodeOrSkip(name, address) {
     for (let attempt = 1; attempt <= GEOCODE_MAX_ATTEMPTS; attempt += 1) {
       try {
@@ -292,6 +308,7 @@ export class GgCultureEventsAdapter extends BaseCollectorAdapter {
         const row = buildEventRow({
           externalId: this.buildExternalId('GG_CULTURE_EVENT', item.URL || `${title}|${startDate}`),
           title,
+          source: SOURCE,
           uiCategory,
           startDate,
           endDate,
@@ -343,6 +360,7 @@ export class GgCultureEventsAdapter extends BaseCollectorAdapter {
         const row = buildEventRow({
           externalId: this.buildExternalId('GG_FOUNDATION_EVENT', item.DIV_NM || `${title}|${startDate}`),
           title,
+          source: SOURCE,
           uiCategory: await classifyEventTypeWithAI({
             title,
             rawLabel: item.CLASS_NM,

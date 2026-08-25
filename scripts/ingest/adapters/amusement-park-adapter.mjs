@@ -40,6 +40,13 @@ import { deriveParentalTags } from '../lib/ai-tagging.mjs';
 const BASE_URL = 'https://apis.data.go.kr/1741000/amusement_facilities_other/info';
 const PAGE_SIZE = 100;
 const ACTIVE_STATUS_NAME = '영업중';
+const SOURCE = 'localdata_amusement';
+
+// MNG_NO(관리번호)는 실측 결과 고유하지 않아(위 주석 참고) external_id와 동일하게 사업장명+
+// 주소의 결정적 해시를 식별자로 쓴다 — transform()/getRawRows() 양쪽에서 재사용한다.
+function hashKey(name, address) {
+  return crypto.createHash('sha1').update(`${name}|${address}`).digest('hex').slice(0, 16);
+}
 
 export class AmusementParkAdapter extends BaseCollectorAdapter {
   constructor() {
@@ -49,6 +56,17 @@ export class AmusementParkAdapter extends BaseCollectorAdapter {
     if (!this.apiKey) {
       throw new Error('PUBLIC_DATA_API_KEY 환경변수가 설정되지 않았습니다.');
     }
+  }
+
+  // [전체 파이프라인 일괄 가동] RAW 레이어 opt-in. 원본에 고유 ID가 없어(MNG_NO 중복) 이름+주소
+  // 해시를 sourceId로 쓴다 — external_id 생성 로직과 동일한 키다. 이름/주소가 전혀 없는 항목만
+  // 제외한다(복합키 구성 불가 — transform()의 좌표 필수 검증과 달리 RAW 레이어는 좌표 없이도 보존).
+  // eslint-disable-next-line class-methods-use-this
+  getRawRows(rawItems) {
+    return rawItems
+      .map((item) => ({ item, name: item.BPLC_NM, address: item.ROAD_NM_ADDR || item.LOTNO_ADDR || '' }))
+      .filter(({ name, address }) => name && address)
+      .map(({ item, name, address }) => ({ sourceId: hashKey(name, address), payload: item }));
   }
 
   async fetchPage(pageNo) {
@@ -122,7 +140,7 @@ export class AmusementParkAdapter extends BaseCollectorAdapter {
         const coords = convertEpsg5174ToWgs84(Number(item.CRD_INFO_X), Number(item.CRD_INFO_Y));
         if (!coords) return null;
 
-        const hash = crypto.createHash('sha1').update(`${name}|${address}`).digest('hex').slice(0, 16);
+        const hash = hashKey(name, address);
 
         // ai-rule.md 5.1: 원본 API 응답의 실제 텍스트를 근거로만 태깅한다.
         const tags = deriveParentalTags(JSON.stringify(item));
@@ -130,6 +148,7 @@ export class AmusementParkAdapter extends BaseCollectorAdapter {
         return buildOpenSpaceRow({
           externalId: `LOCALDATA_AMUSEMENT_${hash}`,
           sourceType: 'LOCALDATA_AMUSEMENT',
+          source: SOURCE,
           name,
           // ai-rule.md 3.1/3.3/4.1: 유원시설업은 PARK/SPORTS/CULTURE 어디에도 명확히 해당하지
           // 않아 임의 매핑하지 않고 schema-mapper 기본값(ETC)에 맡긴다.

@@ -69,6 +69,7 @@ const USER_AGENT =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 const GEOCODE_PACING_MS = 250;
 const GEOCODE_MAX_ATTEMPTS = 3;
+const SOURCE = 'gg_public';
 
 // Task 9-6-4/9-6-6에서 gg-culture-events-adapter.mjs 계열 어댑터에 도입했던 오매칭 방지
 // 검증을 복귀 시점에 함께 적용한다 — 이 소스도 경기데이터드림(경기도 전용)이라 반환 좌표가
@@ -172,6 +173,30 @@ export class GgEventsAdapter extends BaseCollectorAdapter {
     return `GG_EVENTS_${hash}`;
   }
 
+  // [전체 파이프라인 일괄 가동] RAW 레이어 opt-in. fetch()가 { poolItems, splashItems } 복합
+  // 객체를 반환하므로 두 배열을 합쳐 처리한다. 원본에 고유 ID가 없어 external_id와 동일하게
+  // 이름+주소 해시를 sourceId로 재사용한다(SHA1 자체가 sourceId 역할, GG_EVENTS_ 접두 불필요).
+  buildRawRows(items, nameField, addressFields) {
+    return items
+      .map((item) => ({
+        item,
+        name: item[nameField],
+        address: addressFields.map((f) => item[f]).find(Boolean) || '',
+      }))
+      .filter(({ name, address }) => name && address)
+      .map(({ item, name, address }) => ({
+        sourceId: crypto.createHash('sha1').update(`${name}|${address}`).digest('hex').slice(0, 16),
+        payload: item,
+      }));
+  }
+
+  getRawRows({ poolItems, splashItems }) {
+    return [
+      ...this.buildRawRows(poolItems, 'FACLT_NM', ['REFINE_ROADNM_ADDR', 'REFINE_LOTNO_ADDR']),
+      ...this.buildRawRows(splashItems, 'HYDR_NM', ['HYDR_ADDR']),
+    ];
+  }
+
   async geocodeOrSkip(name, address) {
     for (let attempt = 1; attempt <= GEOCODE_MAX_ATTEMPTS; attempt += 1) {
       try {
@@ -219,6 +244,7 @@ export class GgEventsAdapter extends BaseCollectorAdapter {
     return buildOpenSpaceRow({
       externalId: this.buildExternalId(name, address),
       sourceType: 'GG_EVENTS',
+      source: SOURCE,
       name,
       uiCategory: UI_CATEGORY.KIDS_ACTIVITY,
       address,
@@ -242,6 +268,7 @@ export class GgEventsAdapter extends BaseCollectorAdapter {
     return buildOpenSpaceRow({
       externalId: this.buildExternalId(name, address),
       sourceType: 'GG_EVENTS',
+      source: SOURCE,
       name,
       uiCategory: UI_CATEGORY.OUTDOOR_NATURE,
       address,

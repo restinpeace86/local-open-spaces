@@ -15,6 +15,7 @@ import { deriveIsFreeFromFeeText } from '../../lib/ai-tagging.mjs';
 
 const PAGE_SIZE = 100;
 export const TOUR_API_V4_SOURCE_TYPE = 'KOR_TOUR_API_V4';
+const SOURCE = 'tourapi_4.0';
 
 // Task 1: contentTypeId=14(문화시설)/28(레포츠)만 detailIntro2 요금 필드명이 다르다
 // (실제 호출로 확인함, 2026-08-21: 14→usefee, 28→usefeeleports). 다른 contentTypeId는
@@ -112,6 +113,14 @@ export class TourApiV4AreaBasedAdapter extends BaseCollectorAdapter {
     return items;
   }
 
+  // [전체 파이프라인 일괄 가동] RAW 레이어 opt-in. contentid가 external_id 구성에도 쓰이는
+  // TourAPI 4.0 공통 콘텐츠 ID다. KorTour/KorWithTour/KorPetTour가 이 베이스를 공유하므로
+  // 한 곳만 고치면 세 어댑터 모두에 적용된다(제5장 제4조 기존 구조 우선).
+  // eslint-disable-next-line class-methods-use-this
+  getRawRows(rawItems) {
+    return rawItems.filter((item) => item.contentid).map((item) => ({ sourceId: String(item.contentid), payload: item }));
+  }
+
   async fetchDetailIntro(contentId, contentTypeId) {
     const params = new URLSearchParams({
       MobileOS: 'ETC',
@@ -207,6 +216,7 @@ export class TourApiV4AreaBasedAdapter extends BaseCollectorAdapter {
         return buildOpenSpaceRow({
           externalId: `${TOUR_API_V4_SOURCE_TYPE}_${item.contentid}`,
           sourceType: TOUR_API_V4_SOURCE_TYPE,
+          source: SOURCE,
           name: item.title,
           uiCategory,
           address: item.addr1 || '',

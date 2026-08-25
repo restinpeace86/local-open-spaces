@@ -14,6 +14,7 @@ import { deriveParentalTags } from '../lib/ai-tagging.mjs';
 const BASE_URL = 'https://apis.data.go.kr/B553457/rgnCltrFcltExmnv1';
 const PAGE_SIZE = 100;
 const YEAR_FALLBACK_CANDIDATES = [2024, 2023, 2022];
+const SOURCE = 'cultural_facility_summary';
 
 // 8개 수집 대상 엔드포인트 (지방문화원/지역문화재단 2종은 행정/법인 사무소 성격으로 제외 —
 // implementation/todo.md Task 1 범위 정의 기준).
@@ -110,6 +111,16 @@ export class CulturalFacilitySummaryAdapter extends BaseCollectorAdapter {
     return perEndpoint.flat();
   }
 
+  // [전체 파이프라인 일괄 가동] RAW 레이어 opt-in. fetch()가 { endpoint, item } 쌍 배열을
+  // 반환하므로, external_id 구성과 동일하게 endpoint.typeKey + instId로 8개 시설유형 간
+  // 충돌 없는 sourceId를 만든다. payload는 원본 item만 보존한다(endpoint는 라우팅 메타일 뿐).
+  // eslint-disable-next-line class-methods-use-this
+  getRawRows(rawItems) {
+    return rawItems
+      .filter(({ item }) => item.instId)
+      .map(({ endpoint, item }) => ({ sourceId: `${endpoint.typeKey}_${item.instId}`, payload: item }));
+  }
+
   // 지오코딩은 비동기 네트워크 호출이라 base의 동기 transform()과 별도로 오버라이드한다.
   async transform(rawItems) {
     if (!hasVworldApiKey()) {
@@ -149,6 +160,7 @@ export class CulturalFacilitySummaryAdapter extends BaseCollectorAdapter {
       const row = buildOpenSpaceRow({
         externalId: `CULTURAL_FACILITY_SUMMARY_${endpoint.typeKey}_${instId}`,
         sourceType: 'CULTURAL_FACILITY_SUMMARY',
+        source: SOURCE,
         name,
         uiCategory: UI_CATEGORY.EXHIBITION_MUSEUM,
         address,

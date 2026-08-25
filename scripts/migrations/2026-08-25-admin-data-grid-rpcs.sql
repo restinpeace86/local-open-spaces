@@ -14,40 +14,47 @@
 -- 지시문의 use_pay/payatnm/svcurl은 원천 API 필드명이고, 그 값들은 최종적으로 is_free/
 -- info_url/reservation_url 컬럼에 매핑돼 저장된다(신규 컬럼을 만들지 않고 기존 스키마 사용).
 
--- source_type/category는 저카디널리티라 전체 스캔에 array_agg를 얹어도 비용이 크지 않지만,
--- raw_data->>'MINCLASSNM'/'SVCSTATNM'는 아직 SEOUL_YEYAK(source IS NOT NULL)에서만 채워져
--- 있고 open_spaces에는 idx_open_spaces_source 인덱스가 있어 `WHERE source IS NOT NULL`은
--- Index Only Scan으로 즉시 처리된다(실측: 전체 스캔 대비 수백 배 빠름).
---
--- 실측 추가 확인(2026-08-25): 위 두 조회를 하나의 RPC(get_open_spaces_filter_options, CROSS
--- JOIN 서브쿼리 2개)로 합쳤더니 재호출 시 4.8초~타임아웃(8초 초과) 사이를 오갔다 — 전체 스캔
--- 1회분 비용만으로도 8초 한도에 아슬아슬하게 걸쳐 있어, 두 번째(필터링된) 서브쿼리가 조금만
--- 얹혀도 넘겨버린다. 각각 별도 RPC로 쪼개 병렬 호출하면 개별 호출은 한도 안에서 여유 있게
--- 끝난다(page.tsx에서 Promise.all로 병렬 호출 + 개별 실패는 빈 배열로 무중단 처리).
-create or replace function public.get_open_spaces_category_options()
-returns table (
-  source_types text[],
-  categories text[]
-) as $$
-  select
-    array_agg(distinct source_type order by source_type) filter (where source_type is not null),
-    array_agg(distinct category order by category) filter (where category is not null)
-  from public.open_spaces;
+-- 실측 확인(2026-08-25, [전체 파이프라인 일괄 가동] 후속): source_type+category 2개 컬럼을
+-- 한 RPC로 묶었던 버전이 테이블이 12만→13.9만 건으로 늘어난 뒤 재현성 있게 8초 타임아웃을
+-- 넘기기 시작했다(반복 실측 2회 모두 8.2초) — array_agg(DISTINCT ...)는 컬럼마다 내부 정렬이
+-- 필요해 컬럼 수가 늘수록 비용이 선형 이상으로 증가하고, 이 테이블은 8초 한도에 항상
+-- 아슬아슬하게 걸쳐 있어(이전 실측들 참고) 컬럼을 하나만 늘려도 쉽게 넘긴다. 컬럼당 완전히
+-- 독립된 단일 컬럼 RPC로 쪼개 각각 한도 안에서 확실히 끝나도록 한다(page.tsx에서 Promise.all
+-- 병렬 호출 + 개별 실패는 빈 배열로 무중단 처리 — 이미 그렇게 구현돼 있음).
+drop function if exists public.get_open_spaces_category_options();
+create or replace function public.get_open_spaces_source_type_options()
+returns table (source_types text[]) as $$
+  select array_agg(distinct source_type order by source_type) filter (where source_type is not null) from public.open_spaces;
 $$ language sql stable;
 
+create or replace function public.get_open_spaces_category_options()
+returns table (categories text[]) as $$
+  select array_agg(distinct category order by category) filter (where category is not null) from public.open_spaces;
+$$ language sql stable;
+
+create or replace function public.get_open_spaces_source_options()
+returns table (sources text[]) as $$
+  select array_agg(distinct source order by source) filter (where source is not null) from public.open_spaces;
+$$ language sql stable;
+
+-- raw_data->>'MINCLASSNM'/'SVCSTATNM'는 서울시 예약 API(SEOUL_YEYAK, source='seoul_public_
+-- reservation') 원본 필드라 다른 출처에는 없다. [전체 파이프라인 일괄 가동](2026-08-25)으로
+-- 17개 어댑터 전부가 source 컬럼을 채우게 되면서 `WHERE source IS NOT NULL`의 선택도가
+-- 1%→97%로 뒤집혀 idx_open_spaces_source의 Index Only Scan 이점이 사라졌다(실측: 5.1초로
+-- 급증). source 값을 'seoul_public_reservation'로 정확히 지정하면 다시 선택적인 동등 비교가
+-- 되어 인덱스가 빠르게 쓰인다(실측: 4ms).
+drop function if exists public.get_open_spaces_seoul_yeyak_options();
 create or replace function public.get_open_spaces_seoul_yeyak_options()
 returns table (
-  sources text[],
   min_class_names text[],
   svc_stat_nms text[]
 ) as $$
   select
-    array_agg(distinct source order by source),
     array_agg(distinct raw_data->>'MINCLASSNM' order by raw_data->>'MINCLASSNM')
       filter (where raw_data->>'MINCLASSNM' is not null),
     array_agg(distinct raw_data->>'SVCSTATNM' order by raw_data->>'SVCSTATNM')
       filter (where raw_data->>'SVCSTATNM' is not null)
-  from public.open_spaces where source is not null;
+  from public.open_spaces where source = 'seoul_public_reservation';
 $$ language sql stable;
 
 drop function if exists public.get_open_spaces_filter_options();

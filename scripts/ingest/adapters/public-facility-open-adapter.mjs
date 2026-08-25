@@ -21,6 +21,15 @@ import { deriveParentalTags, deriveIsFreeFromFeeText } from '../lib/ai-tagging.m
 
 const BASE_URL = 'https://api.data.go.kr/openapi/tn_pubr_public_pblfclt_opn_info_api';
 const PAGE_SIZE = 100;
+const SOURCE = 'public_facility_open';
+
+function hashKey(item, name, address) {
+  return crypto
+    .createHash('sha1')
+    .update(`${item.insttCode || ''}|${name}|${address}`)
+    .digest('hex')
+    .slice(0, 16);
+}
 
 // pchrgUseYn(유료사용여부)이 원본 데이터의 명시적 Y/N 플래그라 이를 1차 근거로 쓰고,
 // 플래그가 없는 예외적인 경우에만 rntfee(대여료) 텍스트를 파싱해 보조 판별한다
@@ -103,6 +112,16 @@ export class PublicFacilityOpenAdapter extends BaseCollectorAdapter {
     return items;
   }
 
+  // [전체 파이프라인 일괄 가동] RAW 레이어 opt-in. 원본에 고유 ID가 없어 external_id와 동일하게
+  // 기관코드+시설명+주소 해시를 sourceId로 쓴다.
+  // eslint-disable-next-line class-methods-use-this
+  getRawRows(rawItems) {
+    return rawItems
+      .map((item) => ({ item, name: item.openFcltyNm, address: item.rdnmadr || item.lnmadr || '' }))
+      .filter(({ name }) => name)
+      .map(({ item, name, address }) => ({ sourceId: hashKey(item, name, address), payload: item }));
+  }
+
   // eslint-disable-next-line class-methods-use-this
   transform(rawItems) {
     return rawItems
@@ -114,11 +133,7 @@ export class PublicFacilityOpenAdapter extends BaseCollectorAdapter {
 
         if (!name || !lng || !lat) return null;
 
-        const hash = crypto
-          .createHash('sha1')
-          .update(`${item.insttCode || ''}|${name}|${address}`)
-          .digest('hex')
-          .slice(0, 16);
+        const hash = hashKey(item, name, address);
 
         // ai-rule.md 5.1: 원본 API 응답의 실제 텍스트를 근거로만 태깅한다.
         const tags = deriveParentalTags(JSON.stringify(item));
@@ -126,6 +141,7 @@ export class PublicFacilityOpenAdapter extends BaseCollectorAdapter {
         return buildOpenSpaceRow({
           externalId: `PUBLIC_FACILITY_OPEN_${hash}`,
           sourceType: 'PUBLIC_FACILITY_OPEN',
+          source: SOURCE,
           name,
           uiCategory: UI_CATEGORY.KIDS_ACTIVITY,
           address,

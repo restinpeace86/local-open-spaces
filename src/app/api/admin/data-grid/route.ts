@@ -41,16 +41,22 @@ const EVENTS_COLUMNS =
 
 const RAW_INGEST_COLUMNS = 'source, source_id, fetched_at, raw_payload';
 
+// raw_data->>'MINCLASSNM'/'SVCSTATNM'는 서울시 예약 API(SeoulYeyakAdapter) 원본 필드라 다른
+// 출처의 raw_data에는 없다.
+const SEOUL_YEYAK_SOURCE = 'seoul_public_reservation';
+
 type Ctx = Awaited<ReturnType<typeof createClient>>;
 
-// 실측 확인(2026-08-25): open_spaces(12만 건)에서 raw_data->>'MINCLASSNM'/'SVCSTATNM' 같은
-// JSONB 경로 조건은 옵티마이저가 idx_open_spaces_source 인덱스를 신뢰하지 못해(추정 비용
-// 오차) 매번 전체 시퀀셜 스캔을 선택해 8초 타임아웃을 넘긴다(EXPLAIN ANALYZE로 확인 —
-// Seq Scan 예상 비용이 Index Scan보다 낮게 잘못 추정됨). 반면 `source IS NOT NULL` 단독
-// 조건은 인덱스만으로 즉시 처리된다(현재 이 조건을 만족하는 행은 SEOUL_YEYAK 소스뿐이라
-// 1천여 건). 그래서 MINCLASSNM/SVCSTATNM 필터가 걸리면 먼저 `source IS NOT NULL`로 좁힌
-// 작은 결과 집합을 통째로 가져온 뒤, 나머지 모든 필터/검색/페이지네이션을 애플리케이션
-// 코드(JS)에서 처리한다 — 이 경로에서는 SQL에 JSONB 조건을 절대 넣지 않는다.
+// 실측 확인(2026-08-25): open_spaces(12만~13만 건)에서 raw_data->>'MINCLASSNM'/'SVCSTATNM'
+// 같은 JSONB 경로 조건은 옵티마이저가 idx_open_spaces_source 인덱스를 신뢰하지 못해(추정
+// 비용 오차) 매번 전체 시퀀셜 스캔을 선택해 8초 타임아웃을 넘긴다(EXPLAIN ANALYZE로 확인 —
+// Seq Scan 예상 비용이 Index Scan보다 낮게 잘못 추정됨). MINCLASSNM/SVCSTATNM은 SeoulYeyak
+// 소스에만 존재하는 필드라 `source = SEOUL_YEYAK_SOURCE`(동등 비교, 실측 4ms)로 정확히
+// 좁힌 뒤 나머지 모든 필터/검색/페이지네이션을 애플리케이션 코드(JS)에서 처리한다 — 이
+// 경로에서는 SQL에 JSONB 조건을 절대 넣지 않는다.
+// [전체 파이프라인 일괄 가동] 후속 수정(2026-08-25): 원래는 `source IS NOT NULL`로 좁혔으나,
+// 17개 어댑터 전부가 source를 채우게 되면서 그 조건의 선택도가 1%→97%로 뒤집혀 인덱스
+// 이점이 사라졌다(실측 5.1초로 급증) — 정확한 출처값으로 동등 비교하도록 정정했다.
 async function queryOpenSpacesViaSourceSubset(
   supabase: Ctx,
   params: {
@@ -70,7 +76,7 @@ async function queryOpenSpacesViaSourceSubset(
     pageSize: number;
   }
 ) {
-  const { data, error } = await supabase.from('open_spaces').select(OPEN_SPACES_COLUMNS).not('source', 'is', null);
+  const { data, error } = await supabase.from('open_spaces').select(OPEN_SPACES_COLUMNS).eq('source', SEOUL_YEYAK_SOURCE);
   if (error) return { error };
 
   type Row = NonNullable<typeof data>[number];
@@ -141,9 +147,17 @@ async function queryOpenSpaces(supabase: Ctx, searchParams: URLSearchParams, pag
     const escaped = escapeIlikePattern(q);
     query = query.or(`name.ilike.%${escaped}%,address.ilike.%${escaped}%`);
   }
-  if (sourceTypes.length > 0) query = query.in('source_type', sourceTypes);
-  if (sources.length > 0) query = query.in('source', sources);
-  if (categories.length > 0) query = query.in('category', categories);
+  if (sourceTypes.length === 1) query = query.eq('source_type', sourceTypes[0]);
+  else if (sourceTypes.length > 1) query = query.in('source_type', sourceTypes);
+  // 실측 확인(2026-08-25, [전체 파이프라인 일괄 가동] 후속): .in()이 컴파일하는
+  // `source = ANY(array[...])` 형태는 옵티마이저가 idx_open_spaces_source_created_at 복합
+  // 인덱스를 무시하고 매번 created_at 인덱스만 타 관련 없는 행을 수만 건 걸러내는 별개의
+  // 플래너 버그성 동작을 보였다(단일 값 `=` 비교로는 문제없이 인덱스를 씀 — 실측: 16초→11ms).
+  // 단일 값 선택이 흔한 이 관리자 그리드 UX에서는 값이 하나면 .eq()로 우회한다.
+  if (sources.length === 1) query = query.eq('source', sources[0]);
+  else if (sources.length > 1) query = query.in('source', sources);
+  if (categories.length === 1) query = query.eq('category', categories[0]);
+  else if (categories.length > 1) query = query.in('category', categories);
   if (isFree !== null) query = query.eq('is_free', isFree);
   if (hasParking !== null) query = query.eq('has_parking', hasParking);
   if (strollerAccessible !== null) query = query.eq('stroller_accessible', strollerAccessible);

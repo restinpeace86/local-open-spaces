@@ -8,6 +8,7 @@ import { buildOpenSpaceRow, UI_CATEGORY } from './lib/schema-mapper.mjs';
 
 const BASE_URL = 'https://apis.data.go.kr/B551011/GoCamping/basedList';
 const PAGE_SIZE = 100;
+const SOURCE = 'tourapi_4.0';
 
 export class GoCampingAdapter extends BaseCollectorAdapter {
   constructor() {
@@ -17,6 +18,13 @@ export class GoCampingAdapter extends BaseCollectorAdapter {
     if (!this.apiKey) {
       throw new Error('PUBLIC_DATA_API_KEY 환경변수가 설정되지 않았습니다.');
     }
+  }
+
+  // [전체 파이프라인 일괄 가동] RAW 레이어 opt-in. contentId가 external_id 구성에도 쓰이는
+  // TourAPI 계열 공통 고유 콘텐츠 ID다.
+  // eslint-disable-next-line class-methods-use-this
+  getRawRows(rawItems) {
+    return rawItems.filter((item) => item.contentId).map((item) => ({ sourceId: String(item.contentId), payload: item }));
   }
 
   async fetchPage(pageNo) {
@@ -81,6 +89,7 @@ export class GoCampingAdapter extends BaseCollectorAdapter {
         return buildOpenSpaceRow({
           externalId: `GO_CAMPING_${item.contentId}`,
           sourceType: 'GO_CAMPING',
+          source: SOURCE,
           name: item.facltNm,
           uiCategory: UI_CATEGORY.OUTDOOR_NATURE,
           address: item.addr1 || '',
