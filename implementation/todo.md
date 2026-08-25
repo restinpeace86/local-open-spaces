@@ -16,9 +16,11 @@
 ### Task 목록
 - [ ] **[Task 9-6-18] 5대 카테고리 인라인 피딩 전환 & 가성비 행복 섹션 제거 & 모바일 뒤로가기 모달 제어** 📱🎪
   - **세부 작업 지시**:
-    1. **5대 카테고리 인라인 피딩 구현**:
+    1. **5대 카테고리 인라인 피딩 구현**: ✅ **완료 (2026-08-25)**
        - `docs/spec.md` 개정 기준에 따라 `quick-category-grid.tsx` 클릭 시 라우팅 이동 대신 이벤트픽 메인 내부 카드 피드가 해당 카테고리로 즉시 교체·노출되도록 처리.
-    2. **가성비 행복 섹션 완전히 제거**:
+       - 구현: `quick-category-grid.tsx`를 `Link` 라우팅에서 `selected`/`onSelect` 콜백 기반 버튼으로 전환. `home-view.tsx`에 `useThemeSpotFeed`와 동일 패턴의 `useCategoryFeed` 훅을 추가해 그리드 바로 아래에 선택된 카테고리의 카드 피드를 인라인 렌더링. 서버 측은 `get-home-feed.ts`에 `getCategoryFeed()`(event_type 필터 + 오늘 진행 중 + 지역 우선 정렬)를 추가하고 `src/app/api/home/category-feed/route.ts` 신규 라우트로 노출(`isUiCategory` 가드는 `category-meta.ts`에 추가). 이전 세션에 `docs/spec.md` 2.2절이 "인라인 피딩"으로 개정(commit `71a7a44`)되며 이전 스킵 사유가 해소됨.
+    2. **가성비 행복 섹션 완전히 제거**: (진행 예정)
        - 메인 화면의 '가성비 행복' 섹션 UI 및 관련 데이터 호출 로직 전면 제거.
-    3. **모바일 뒤로가기(PopState) 모달 제어**:
+    3. **모바일 뒤로가기(PopState) 모달 제어**: ✅ **완료(이전 세션 구현 재확인)**
        - 상세 모달(크게 보기/길찾기 레이어) 오픈 시 `popstate` 연동을 통해 모바일 폰 뒤로가기 실행 시 이전 페이지로 이동하지 않고 모달만 깔끔하게 닫히도록 처리.
+       - 구현: `src/hooks/use-modal-back-close.ts` 훅 — 모달 오픈 시 `history.pushState`로 더미 state를 쌓고 `popstate` 발생 시 `onClose` 호출, 다른 방식(X/배경 클릭)으로 닫힐 때는 `history.back()`으로 더미 state를 회수. `DetailModal`/`MapPreviewModal`에 각각 독립 적용됨(이전 세션에 이미 구현·검증 완료, 이번 세션에 코드 재확인만 수행).
