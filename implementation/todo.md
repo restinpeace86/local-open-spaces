@@ -15,18 +15,28 @@
 
 ### Task 목록
 
-- [x] **[Task 9-6-13] 이벤트픽(`/events/today`) 메인카드 배너 분리 및 상세 CTA/태그 정밀화** 🎪 (완료 2026-08-25)
-  - **🚨 실행 전 필수 선행 작업**: 본 작업 착수 직전 `git pull`을 실행하여 최신 코드를 로컬 워킹 트리에 동기화할 것. → 수행 완료(Already up to date).
+- [ ] **[Task 9-6-13] 이벤트픽(`/events/today`) 메인 슬라이드 뱃지·위치 우선순위 정렬 & CTA/태그 정밀화** 🎪
+  - **🚨 실행 전 필수 선행 작업**: 본 작업 착수 직전 `git pull origin main`을 실행하여 Decision 012 및 최신 코드를 로컬 워킹 트리에 동기화할 것.
+  - **선행 조치 완료**: Decision 012 기록 완료 (메인 슬라이드 뱃지 2종 및 위치 정렬 승인).
   - **세부 작업 지시**:
-    1. **메인카드 배너 2종 유형 분리**: ✅ 완료
-       - **오늘 마감**: 수요일~일요일 등 다일간 진행되는 행사 중 '오늘이 종료일(`end_date == today`)'인 이벤트.
-       - **오늘 한정**: 시작일과 종료일이 '오늘 단 하루(`start_date == end_date == today`)'인 이벤트.
-       - 메인 카드 상단 배너/칩에 `[⏰ 오늘 마감]` vs `[⚡ 오늘 한정]` 시각적 뱃지 구분 표기.
-       - 구현: `src/lib/spaces/event-status.ts`의 신규 `getDateBannerBadge()` — `/events/today`(`getTodayEvents`)는 이미 `end_date=오늘`만 조회하므로 `start_date === end_date` 여부로 두 배너를 가른다. `src/components/cards/event-card.tsx` 상단에 리본 배너로 노출.
-    2. **예약 버튼 미존재 시 예약 필요/불필요 태그 안내 강화**: ✅ 완료
-       - `reservation_url`이 없는 경우, 단순 길찾기 폴백 외에 카드/상세 모달 내 `[예약불필요 / 현장방문]` 또는 `[사전예약필요 (링크미제공)]` 안내 태그/칩을 명확하게 노출할 것.
-       - 구현: `src/lib/spaces/event-status.ts`의 신규 `getReservationAvailabilityTag()` — `reservation_url`이 없을 때 `is_reservation_required` 값에 따라 두 태그로 분기. `EventCard`(카드)와 `DetailModal`(상세, `src/components/map/detail-modal.tsx` 예약 안내 `dl` 행)에 모두 반영.
-    3. **이벤트 5대 카테고리 매핑 검증**: ✅ 검증 완료(코드 변경 없음)
-       - 실제 운영 DB 쿼리로 확인(2026-08-25): `/events/today` 후보(27건) 카테고리 분포 `KIDS_ACTIVITY:14, EXPERIENCE_CLASS:8, PERFORMANCE_FESTIVAL:5`. `is_active=true` 전체(샘플 5000건)에서는 `PERFORMANCE_FESTIVAL:547, EXHIBITION_MUSEUM:220, EXPERIENCE_CLASS:227, KIDS_ACTIVITY:4, OUTDOOR_NATURE:1, ETC:1` — 5대 카테고리 모두 1건 이상 존재.
-       - `src/lib/spaces/category-meta.ts`의 `DEFAULT_META`(라벨 '기타') 폴백이 이미 존재해, 5대 카테고리에 속하지 않는 레거시 `ETC` 1건도 빈 뱃지 없이 항상 카테고리 태그가 표시됨을 확인 — Spec(`spec/data/ai-rule.md` 3.3)에 `ETC` 전용 라벨이 정의돼 있지 않아 임의로 새 라벨을 만들지 않고 기존 폴백 동작을 그대로 유지(제3장 제4조 추측 금지).
-    4. **테스트 패스 검증**: ✅ 완료 — `npx tsc --noEmit` 통과, `npm run test` 325/325 통과(신규 `event-status.test.ts` 13건 추가로 기존 312건에서 증가, 회귀 없음), `npm run build` 프로덕션 빌드 성공.
+    1. **메인 카드 슬라이드 뱃지 2종 분리**:
+       - 메인 카드 슬라이드의 기존 고정 라벨을 제거하고 개별 데이터 기준 뱃지 분리 노출:
+         - **[⏰ 오늘 마감]**: 다일간 진행 행사 중 오늘이 종료일인 경우 (`end_date == today`)
+         - **[⚡ 오늘 한정]**: 오늘 단 하루만 진행되는 행사일 경우 (`start_date == end_date == today`)
+    2. **유저 위치 기반 지역 우선순위 정렬 (서울 vs 경기)**:
+       - 전역 위치 설정/GPS 정보에 연동하여 경기도 유저에게는 경기도 행사를, 서울 유저에게는 서울 행사를 메인 상단에 우선 피딩.
+    3. **예약 버튼 미존재 시 태그 안내 강화**:
+       - `reservation_url` 미존재 시 `[현장방문/예약불필요]` 또는 `[사전예약필요]` 안내 태그/칩 명확 노출.
+
+- [ ] **[Task 9-6-14] ETL 파이프라인 수리 및 `docs/pipeline-log.md` 일간 모니터링 체계 구축** ⚙️📊
+  - **🚨 실행 전 필수 선행 작업**: 본 작업 착수 직전 `git pull origin main`을 실행하여 Decision 012 및 최신 코드를 로컬 워킹 트리에 동기화할 것.
+  - **선행 조치 완료**: Decision 012 기록 및 `docs/pipeline-log.md` 초기 파일 생성 완료.
+  - **세부 작업 지시**:
+    1. **`docs/pipeline-log.md` 일간 파이프라인 기록 프로세스 구현**:
+       - 수집 워크플로우 실행 시 수집 건수 및 파싱 에러 내역을 `docs/pipeline-log.md`에 기록/갱신하는 스크립트 구축.
+       - 수집 건수 0건 또는 실패 시 최상단에 `🚨 [CRITICAL]` 경고 뱃지 자동 표기.
+    2. **ETL 파이프라인 예외 처리 및 견고화**:
+       - **원자성 보장**: 수집 검증 전 기존 데이터 TRUNCATE 방지.
+       - **Graceful Parsing**: 단일 건 파싱 에러 발생 시 에러 로그 기록 후 전체 중단 없이 진행.
+    3. **`ingest-gg-culture-events` 경기도 크롤러 수리**:
+       - 날짜/장소 필드 파싱 에러 원인 해결 및 경기도 당일/마감 이벤트 데이터 정상 수집·적재.
