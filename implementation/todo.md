@@ -16,8 +16,7 @@
 ### Task 목록
 
 - [ ] **[Task 9-6-13] 이벤트픽(`/events/today`) 메인 슬라이드 뱃지·위치 우선순위 정렬 & CTA/태그 정밀화** 🎪
-  - **🚨 실행 전 필수 선행 작업**: 본 작업 착수 직전 `git pull origin main`을 실행하여 Decision 012 및 최신 코드를 로컬 워킹 트리에 동기화할 것.
-  - **선행 조치 완료**: Decision 012 기록 완료 (메인 슬라이드 뱃지 2종 및 위치 정렬 승인).
+  - **🚨 [CRITICAL GIT RESET DIRECTIVE]**: 본 작업 착수 직전 반드시 `git fetch origin main && git reset --hard origin/main`을 실행하여 로컬의 꼬인 커밋 및 워킹 트리를 완전히 강제 초기화한 후 시작할 것.
   - **세부 작업 지시**:
     1. **메인 카드 슬라이드 뱃지 2종 분리**:
        - 메인 카드 슬라이드의 기존 고정 라벨을 제거하고 개별 데이터 기준 뱃지 분리 노출:
@@ -28,15 +27,13 @@
     3. **예약 버튼 미존재 시 태그 안내 강화**:
        - `reservation_url` 미존재 시 `[현장방문/예약불필요]` 또는 `[사전예약필요]` 안내 태그/칩 명확 노출.
 
-- [ ] **[Task 9-6-14] ETL 파이프라인 수리 및 `docs/pipeline-log.md` 일간 모니터링 체계 구축** ⚙️📊
-  - **🚨 실행 전 필수 선행 작업**: 본 작업 착수 직전 `git pull origin main`을 실행하여 Decision 012 및 최신 코드를 로컬 워킹 트리에 동기화할 것.
-  - **선행 조치 완료**: Decision 012 기록 및 `docs/pipeline-log.md` 초기 파일 생성 완료.
+- [ ] **[Task 9-6-14] ETL 파이프라인 수리 및 docs/pipeline-log.md 일간 모니터링 체계 구축** ⚙️📊
+  - **🚨 [CRITICAL GIT RESET DIRECTIVE]**: 본 작업 착수 직전 반드시 `git fetch origin main && git reset --hard origin/main`을 실행하여 로컬 워킹 트리를 최신화할 것.
   - **세부 작업 지시**:
-    1. **`docs/pipeline-log.md` 일간 파이프라인 기록 프로세스 구현**:
-       - 수집 워크플로우 실행 시 수집 건수 및 파싱 에러 내역을 `docs/pipeline-log.md`에 기록/갱신하는 스크립트 구축.
-       - 수집 건수 0건 또는 실패 시 최상단에 `🚨 [CRITICAL]` 경고 뱃지 자동 표기.
+    1. **`ingest-gg-culture-events` 경기도 크롤러 수리**:
+       - 날짜/장소 필드 파싱 에러 원인 해결 및 경기도 당일/마감 이벤트 데이터 정상 수집·적재.
     2. **ETL 파이프라인 예외 처리 및 견고화**:
        - **원자성 보장**: 수집 검증 전 기존 데이터 TRUNCATE 방지.
        - **Graceful Parsing**: 단일 건 파싱 에러 발생 시 에러 로그 기록 후 전체 중단 없이 진행.
-    3. **`ingest-gg-culture-events` 경기도 크롤러 수리**:
-       - 날짜/장소 필드 파싱 에러 원인 해결 및 경기도 당일/마감 이벤트 데이터 정상 수집·적재.
+    3. **`docs/pipeline-log.md` 일간 파이프라인 기록 프로세스 구현**:
+       - 수집 워크플로우 실행 시 수집 건수 및 파싱 에러 내역을 `docs/pipeline-log.md`에 기록/갱신하고, 수집 건수 0건 또는 실패 발생 시 최상단에 `🚨 [CRITICAL]` 경고 뱃지 자동 표기.
