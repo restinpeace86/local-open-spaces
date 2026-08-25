@@ -101,6 +101,17 @@ export class SeoulYeyakAdapter extends BaseCollectorAdapter {
     return items;
   }
 
+  // [긴급 아키텍처 개편] RAW 레이어 opt-in 첫 적용 사례. fetch()가 반환하는 각 항목은 이미
+  // SVCID를 고유 식별자로 갖는 평범한 객체라 transform()의 유효성 검증(경위도/필수 필드 누락 시
+  // drop) 이전 단계에서 원본 그대로 raw_ingest_data에 보존한다 — SVCID가 없는 극히 드문 항목만
+  // 제외한다(복합키인 source_id 자체가 없으면 애초에 적재가 불가능하므로).
+  // eslint-disable-next-line class-methods-use-this
+  getRawRows(rawItems) {
+    return rawItems
+      .filter((item) => item.SVCID)
+      .map((item) => ({ sourceId: item.SVCID, payload: item }));
+  }
+
   // eslint-disable-next-line class-methods-use-this
   transform(rawItems) {
     return rawItems.map((item) => {

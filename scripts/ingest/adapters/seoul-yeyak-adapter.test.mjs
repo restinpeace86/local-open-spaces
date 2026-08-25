@@ -76,6 +76,29 @@ describe('SeoulYeyakAdapter', () => {
     });
   });
 
+  // [긴급 아키텍처 개편] RAW 레이어 opt-in 검증. transform()의 유효성 검증(경위도 등 누락 시
+  // drop)과 달리 getRawRows()는 무오염 보존이 목적이므로 SVCID만 있으면 그대로 통과시켜야 한다.
+  describe('getRawRows (RAW 레이어 opt-in)', () => {
+    it('SVCID를 source_id로, 원본 항목 전체를 payload로 하는 쌍을 만든다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const rawRows = adapter.getRawRows([BASE_ITEM]);
+      expect(rawRows).toEqual([{ sourceId: BASE_ITEM.SVCID, payload: BASE_ITEM }]);
+    });
+
+    it('transform()이 drop하는 항목(경위도 누락 등)도 SVCID만 있으면 무오염 보존한다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const noGeoItem = { ...BASE_ITEM, X: '', Y: '' };
+      const rawRows = adapter.getRawRows([noGeoItem]);
+      expect(rawRows).toEqual([{ sourceId: BASE_ITEM.SVCID, payload: noGeoItem }]);
+    });
+
+    it('SVCID가 없는 항목은 제외한다(복합키 구성 불가)', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const rawRows = adapter.getRawRows([{ ...BASE_ITEM, SVCID: '' }]);
+      expect(rawRows).toEqual([]);
+    });
+  });
+
   describe('transform', () => {
     it('정상 항목을 events 표준 스키마 행으로 변환한다', () => {
       const adapter = new SeoulYeyakAdapter();
