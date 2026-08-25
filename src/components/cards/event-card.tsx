@@ -3,7 +3,7 @@
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
 import { getParentalBadges } from '@/lib/spaces/parental-badges';
-import { getEventStatus } from '@/lib/spaces/event-status';
+import { getEventStatus, getDateBannerBadge, getReservationAvailabilityTag } from '@/lib/spaces/event-status';
 import { formatDateRange, formatVenueLine } from '@/lib/spaces/format';
 
 // spec/event/event-card.md 준용 신규 카드 (Task 9-1) — 기존에는 이벤트 전용 카드가 없었고
@@ -13,6 +13,8 @@ export function EventCard({ item, onSelect }: { item: NearbyItem; onSelect: (ite
   const meta = getCategoryMeta(item.category);
   const badges = getParentalBadges(item);
   const status = getEventStatus(item);
+  const dateBanner = getDateBannerBadge(item);
+  const reservationTag = getReservationAvailabilityTag(item);
   const period = formatDateRange(item.start_date, item.end_date);
   // Task 9-1-3: "[장소명] · [시/군/구]" (예: "율동공원 야외무대 · 성남시 분당구")
   const venueLine = formatVenueLine(item.address, item.sigungu_name);
@@ -26,6 +28,15 @@ export function EventCard({ item, onSelect }: { item: NearbyItem; onSelect: (ite
       onClick={() => onSelect(item)}
       className="text-left rounded-2xl border border-gray-200 bg-white overflow-hidden hover:shadow-md transition-shadow flex flex-col"
     >
+      {dateBanner && (
+        <div
+          className={`px-2 py-1 text-[11px] font-bold text-white text-center ${
+            dateBanner.kind === 'today_only' ? 'bg-amber-500' : 'bg-rose-600'
+          }`}
+        >
+          {dateBanner.label}
+        </div>
+      )}
       <div className="relative aspect-[16/9] bg-gray-100">
         {item.thumbnail_url ? (
           // Task 9-3-1(2026-08-22): 이 카드는 항상 하단 피드(가성비 행복/무료·공공)에서만 쓰여
@@ -61,6 +72,15 @@ export function EventCard({ item, onSelect }: { item: NearbyItem; onSelect: (ite
         <p className="text-sm font-medium text-gray-900 line-clamp-2">{item.name}</p>
         {venueLine && <p className="text-xs text-gray-400 line-clamp-1">{venueLine}</p>}
         {period && <p className="text-xs text-gray-400 line-clamp-1">{period}</p>}
+        {reservationTag && (
+          <span
+            className={`text-[11px] font-semibold px-2 py-0.5 rounded-full self-start ${
+              reservationTag.tone === 'warn' ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-600'
+            }`}
+          >
+            {reservationTag.label}
+          </span>
+        )}
         {badges.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {badges.map((badge) => (

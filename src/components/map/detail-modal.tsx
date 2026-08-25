@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
 import { formatDDay } from '@/lib/spaces/d-day';
+import { getReservationAvailabilityTag } from '@/lib/spaces/event-status';
 import { formatDistance, formatDateRange, formatDateTime } from '@/lib/spaces/format';
 import { buildNaverMapDirectionsUrl } from '@/lib/navigation';
 import { useUserLocation } from '@/hooks/use-user-location';
@@ -33,6 +34,9 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
   const reservationDeadline = isEvent && item.is_reservation_required
     ? formatDateTime(item.reservation_end_date)
     : null;
+  // Task 9-6-13: reservation_url이 없는 이벤트는 무조건 "길찾기"로만 폴백되어 예약 필요
+  // 여부를 알 수 없었다 — 예약불필요/현장방문 vs 사전예약필요(링크미제공)를 구분해 안내한다.
+  const reservationTag = isEvent ? getReservationAvailabilityTag(item) : null;
 
   const directionsUrl = buildNaverMapDirectionsUrl({ name: item.name, lat: item.lat, lng: item.lng }, userLocation);
   // Task 9-6-11(2026-08-25, Decision 011): 상세 CTA 조건부 3분류 —
@@ -143,11 +147,17 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
               </div>
             )}
 
-            {isEvent && item.is_reservation_required && (
+            {isEvent && (item.is_reservation_required || reservationTag) && (
               <div className="flex items-start justify-between gap-2">
                 <dt className="text-gray-500 shrink-0">예약 안내</dt>
                 <dd className="text-right text-gray-900">
-                  사전 예약 필수
+                  {reservationTag ? (
+                    <span className={reservationTag.tone === 'warn' ? 'text-amber-600 font-medium' : 'text-gray-700'}>
+                      {reservationTag.label}
+                    </span>
+                  ) : (
+                    '사전 예약 필수'
+                  )}
                   {reservationDeadline && (
                     <span className="block text-red-600 font-medium">
                       마감: {reservationDeadline}

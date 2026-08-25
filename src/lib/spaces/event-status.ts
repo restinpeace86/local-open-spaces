@@ -28,3 +28,38 @@ export function getEventStatus(item: NearbyItem, today: Date = new Date()): Even
 
   return { label: '진행중', tone: 'active' };
 }
+
+export type DateBannerBadge = { label: string; kind: 'today_only' | 'ending_today' };
+
+// Task 9-6-13: 메인카드 배너 2종 유형 분리 — 다일간 행사가 오늘로 끝나는 "오늘 마감"과
+// 원래 하루짜리 행사인 "오늘 한정"은 사용자에게 다른 긴급성을 의미한다. getEventStatus의
+// '오늘 마감'은 예약 접수 마감(reservation_end_date) 기준이라 별개 개념 — 이 배너는 행사
+// 자체의 시작/종료일(start_date/end_date)만 본다. /events/today 피드는 이미 end_date=오늘인
+// 행사만 내려주므로(get-home-feed.ts getTodayEvents), 실질적으로 start_date===end_date 여부만
+// 갈라주면 된다.
+export function getDateBannerBadge(item: NearbyItem, today: Date = new Date()): DateBannerBadge | null {
+  if (item.item_type !== 'EVENT' || !item.start_date || !item.end_date) return null;
+
+  const t = new Date(today);
+  t.setHours(0, 0, 0, 0);
+  const end = new Date(item.end_date);
+  end.setHours(0, 0, 0, 0);
+  if (end.getTime() !== t.getTime()) return null;
+
+  return item.start_date === item.end_date
+    ? { label: '⚡ 오늘 한정', kind: 'today_only' }
+    : { label: '⏰ 오늘 마감', kind: 'ending_today' };
+}
+
+export type ReservationAvailabilityTag = { label: string; tone: 'neutral' | 'warn' };
+
+// Task 9-6-13: reservation_url이 없는 이벤트를 무조건 "길찾기"로만 폴백시키면 예약이 필요한
+// 행사인지 현장에서 바로 참여 가능한 행사인지 구분이 안 된다. is_reservation_required로 두
+// 경우를 나눠 안내한다 — 링크가 없다고 무조건 "현장방문 가능"으로 오인시키지 않기 위함.
+export function getReservationAvailabilityTag(item: NearbyItem): ReservationAvailabilityTag | null {
+  if (item.item_type !== 'EVENT' || item.reservation_url) return null;
+
+  return item.is_reservation_required
+    ? { label: '📋 사전예약필요 (링크미제공)', tone: 'warn' }
+    : { label: '✅ 예약불필요 / 현장방문', tone: 'neutral' };
+}
