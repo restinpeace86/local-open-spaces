@@ -30,35 +30,10 @@ function FeedCard({ item, onSelect }: { item: NearbyItem; onSelect: (item: Nearb
 // "전체 보기" CTA 카드(/events/today 연동, Task 9-6-6)로 대체한다.
 const HERO_VISIBLE_COUNT = 10;
 
-// Task 9-1-11(2026-08-22): "0원의 행복" → "가성비 행복" 서브탭 개편.
-// freeFeed(is_free:true로 이미 걸러진 데이터)를 실제 존재하는 필드로 다시 세분화한다 — 가격
-// 등급(price tier) 데이터가 없어 "가성비"의 유일한 데이터 근거는 여전히 is_free이므로
-// "완전무료"와 "전체"는 현재로선 같은 결과를 보여준다(추측으로 임의 등급을 만들지 않음).
-type FreeFeedFilterKey = 'COMPLETELY_FREE' | 'TODAY_ENTRY' | 'KIDS_SPECIAL' | 'ALL';
-const FREE_FEED_FILTERS: { key: FreeFeedFilterKey; label: string }[] = [
-  { key: 'COMPLETELY_FREE', label: '🎁 완전무료' },
-  { key: 'TODAY_ENTRY', label: '⚡ 당일 바로입장' },
-  { key: 'KIDS_SPECIAL', label: '👶 키즈특화' },
-  { key: 'ALL', label: '🎟️ 전체' },
-];
-
-// SPACE(상시 개방 공간)는 예약/기간 개념이 없어 항상 "바로입장" 가능으로 취급하고,
-// EVENT는 오늘이 진행 기간(start_date~end_date)에 포함될 때만 통과시킨다.
-function isTodayEntryPossible(item: NearbyItem, todayStr: string): boolean {
-  if (item.item_type === 'SPACE') return true;
-  return !!item.start_date && !!item.end_date && item.start_date <= todayStr && todayStr <= item.end_date;
-}
-
-const FREE_FEED_PREDICATES: Record<FreeFeedFilterKey, (item: NearbyItem, todayStr: string) => boolean> = {
-  COMPLETELY_FREE: (item) => item.is_free === true,
-  TODAY_ENTRY: (item, todayStr) => isTodayEntryPossible(item, todayStr),
-  KIDS_SPECIAL: (item) => item.is_kids_friendly === true,
-  ALL: () => true,
-};
-
-// Task 9-3-1(2026-08-22): "가성비 행복" 하단 피드는 더 이상 초기 페칭에 포함되지 않고,
-// 화면에 스크롤로 들어오거나 "무료·공공" 탭이 선택될 때 /api/home/free-feed로 지연 페칭한다.
-// freeFeed === null은 "아직 로드 전"(Skeleton 노출), 배열이면 로드 완료(빈 배열도 포함)를 뜻한다.
+// Task 9-3-1(2026-08-22)/9-6-18(2026-08-25, docs/spec.md 3.2 "화면 구성 및 UI 간소화"): 메인
+// 홈의 "가성비 행복" 필터 섹션은 완전히 제거됐다(해당 정보는 5대 카테고리 및 카드 뱃지로 통합
+// 노출). 이 훅은 이제 "🎁 무료·공공" 서브탭 전용으로만 쓰인다 — 탭이 선택될 때 /api/home/free-feed로
+// 지연 페칭한다. freeFeed === null은 "아직 로드 전"(Skeleton 노출), 배열이면 로드 완료(빈 배열도 포함)를 뜻한다.
 // region(sigunguName/lat/lng)이 바뀌면(위치 재설정) 이미 로드된 상태라도 새 지역으로 다시
 // 페칭하도록, 마지막으로 로드를 시작한 region 키를 기억해뒀다가 달라지면 재요청한다.
 // Task 9-6-4(2026-08-23): 최상위 대분류(🎪 행사·축제/🏞️ 상시 장소)에 따라 dataType이 바뀌므로
@@ -122,9 +97,9 @@ function useProvinceWideEvents() {
   return { items, ensureLoaded };
 }
 
-// Task 9-5-1(2026-08-22): "🏞️ 목적별 추천 스팟" 칩 — 가성비 행복과 달리 기본으로 선택된 테마가
-// 없어(6개 중 임의로 하나를 고를 근거가 없음) 스크롤 진입이 아니라 칩을 직접 눌렀을 때만
-// /api/home/theme-feed를 호출한다. 테마를 바꿔 누르면 그 즉시 새로 페칭한다.
+// Task 9-5-1(2026-08-22): "🏞️ 목적별 추천 스팟" 칩 — 기본으로 선택된 테마가 없어(6개 중
+// 임의로 하나를 고를 근거가 없음) 칩을 직접 눌렀을 때만 /api/home/theme-feed를 호출한다.
+// 테마를 바꿔 누르면 그 즉시 새로 페칭한다.
 function useThemeSpotFeed(region: { sigunguName: string | null; lat?: number; lng?: number }, dataType: 'events' | 'open_spaces') {
   const [selectedTheme, setSelectedTheme] = useState<ThemeSpotKey | null>(null);
   const [items, setItems] = useState<NearbyItem[] | null>(null);
@@ -201,7 +176,6 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
   const [activeTab, setActiveTab] = useState<HomeSubTab>('home');
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
   const [heroEvents, setHeroEvents] = useState<NearbyItem[]>(initialHeroEvents);
-  const [freeFeedFilter, setFreeFeedFilter] = useState<FreeFeedFilterKey>('ALL');
   // Task 9-6-10(2026-08-23): 하단 탭 재편으로 이 화면이 "이벤트픽"(시한성 이벤트 전용)이
   // 됐다 — 상시 공간(open_spaces)은 이제 "스팟픽"(/nearby) 탭이 전담하므로, 이 화면에서는
   // 더 이상 대분류 토글 없이 항상 events만 조회한다(Task 9-6-4에서 도입한 EVENTS/SPACES
@@ -210,13 +184,10 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
   const dataType = 'events' as const;
 
   const region = { sigunguName, lat: addressName ? center.lat : undefined, lng: addressName ? center.lng : undefined };
-  // 순서 주의: home-view.test.tsx의 FakeIntersectionObserver.instances.at(-1) 관례(가장 최근
-  // 생성된 옵저버 = 화면상 가장 마지막(아래) 섹션)를 유지하기 위해, "경기도권 기타"(가성비 행복보다
-  // 아래 섹션)의 useInView를 먼저 선언해 인스턴스 배열에서 가성비 행복보다 앞에 오도록 한다.
   const { items: provinceWideEvents, ensureLoaded: ensureProvinceWideLoaded } = useProvinceWideEvents();
   const { ref: provinceWideSectionRef, isInView: isProvinceWideSectionInView } = useInView<HTMLDivElement>();
+  // Task 9-6-18: 홈 탭의 "가성비 행복" 섹션이 제거되어 이제 "🎁 무료·공공" 서브탭 전용이다.
   const { freeFeed, ensureLoaded } = useFreeFeed(region, dataType);
-  const { ref: freeFeedSectionRef, isInView: isFreeFeedSectionInView } = useInView<HTMLDivElement>();
   const {
     selectedTheme,
     items: themeSpotItems,
@@ -237,8 +208,8 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
   // 피드를 불러올 때마다(요청마다) 주소 문자열을 다시 파싱하지 않는다.
   // 사용자 피드백(2026-08-22): 위치가 설정/재설정되면(addressName 변경) 실제 좌표(center)도
   // 함께 넘겨, 서버가 이미 걸러둔 후보군 안에서 가까운 순서로 재정렬하도록 한다.
-  // Task 9-3-1: 재조회 대상은 Hero뿐이다 — 가성비 행복 피드는 useFreeFeed가 region 변경을
-  // 직접 감지해(정확히는 아래 effect가 이미 로드됐거나 화면에 보이는 경우에만) 별도로 다시 페칭한다.
+  // Task 9-3-1: 재조회 대상은 Hero뿐이다 — 무료·공공 피드는 useFreeFeed가 region 변경을
+  // 직접 감지해(정확히는 아래 effect가 이미 로드된 경우에만) 별도로 다시 페칭한다.
   useEffect(() => {
     if (!addressName) return;
 
@@ -262,13 +233,13 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
     };
   }, [addressName, sigunguName, center.lat, center.lng]);
 
-  // "가성비 행복" 섹션이 화면에 들어왔거나(스크롤) "무료·공공" 탭이 선택되면 로드를 시작한다.
-  // region이 바뀐 뒤에도 이미 보이는/선택된 상태라면 ensureLoaded가 새 region으로 다시 페칭한다.
+  // "🎁 무료·공공" 탭이 선택되면 로드를 시작한다. region이 바뀐 뒤에도 이미 선택된 상태라면
+  // ensureLoaded가 새 region으로 다시 페칭한다.
   useEffect(() => {
-    if (isFreeFeedSectionInView || activeTab === 'free') ensureLoaded();
-  }, [isFreeFeedSectionInView, activeTab, ensureLoaded]);
+    if (activeTab === 'free') ensureLoaded();
+  }, [activeTab, ensureLoaded]);
 
-  // Task 9-6-2: "경기도권 기타" 섹션이 화면에 들어오면 지연 페칭한다(가성비 행복과 동일한 패턴).
+  // Task 9-6-2: "경기도권 기타" 섹션이 화면에 들어오면 지연 페칭한다.
   useEffect(() => {
     if (isProvinceWideSectionInView) ensureProvinceWideLoaded();
   }, [isProvinceWideSectionInView, ensureProvinceWideLoaded]);
@@ -279,10 +250,6 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
   // 진행 중인 행사만 모아 보여주는 전용 카드 그리드 페이지(/events/today)로 이동한다 —
   // 거리(GPS) 기반 정렬 없이 행정구역 계층(구/시 → 도, 타 지자체 완전 차단)으로만 피딩된다.
   const heroMoreHref = heroEvents.length > HERO_VISIBLE_COUNT ? '/events/today' : undefined;
-
-  // Task 9-1-11: "가성비 행복" 서브탭 선택에 따라 freeFeed를 다시 걸러낸다.
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const filteredFreeFeed = (freeFeed ?? []).filter((item) => FREE_FEED_PREDICATES[freeFeedFilter](item, todayStr));
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -363,42 +330,6 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
                 </div>
               ) : (
                 <p className="text-sm text-gray-400 mt-3">조건에 맞는 스팟을 찾는 중입니다.</p>
-              )}
-            </section>
-
-            {/* Task 9-3-1: 이 섹션이 화면에 처음 들어올 때 useInView가 감지해 가성비 행복
-                피드를 지연 페칭한다 — 그 전/로딩 중에는 Skeleton UI로 레이아웃을 미리 확보한다. */}
-            <section aria-label="가성비 행복" className="px-4" ref={freeFeedSectionRef}>
-              <h2 className="text-base font-bold text-gray-900 mb-3">💰 가성비 행복</h2>
-              <div className="flex gap-1.5 overflow-x-auto pb-2">
-                {FREE_FEED_FILTERS.map((f) => {
-                  const isActive = freeFeedFilter === f.key;
-                  return (
-                    <button
-                      key={f.key}
-                      type="button"
-                      onClick={() => setFreeFeedFilter(f.key)}
-                      className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                        isActive
-                          ? 'bg-gray-900 text-white'
-                          : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                      }`}
-                    >
-                      {f.label}
-                    </button>
-                  );
-                })}
-              </div>
-              {freeFeed === null ? (
-                <FreeFeedSkeleton />
-              ) : filteredFreeFeed.length > 0 ? (
-                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mt-3">
-                  {filteredFreeFeed.map((item) => (
-                    <FeedCard key={item.id} item={item} onSelect={setSelectedItem} />
-                  ))}
-                </div>
-              ) : (
-                <p className="text-sm text-gray-400 mt-3">조건에 맞는 공간/행사를 찾는 중입니다.</p>
               )}
             </section>
 

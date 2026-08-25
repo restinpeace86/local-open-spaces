@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HomeView } from './home-view';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
@@ -7,10 +7,8 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: () => {} }),
 }));
 
-// Task 9-3-1(2026-08-22): jsdom에는 IntersectionObserver가 없어, "가성비 행복" 섹션의 지연
-// 페칭을 테스트에서 직접 통제하기 위한 가짜 구현. 콜백을 저장해뒀다가 테스트에서 원하는
-// 시점에 "화면에 들어옴"을 시뮬레이션한다(observe()를 실제로 호출하지 않으면 데이터는
-// 영원히 Skeleton 상태로 남는다 — 실제 lazy-loading 동작을 그대로 검증하기 위함).
+// Task 9-3-1(2026-08-22): jsdom에는 IntersectionObserver가 없어, "경기도권 기타" 섹션(useInView
+// 사용처)이 렌더링될 때 크래시하지 않도록 가짜 구현을 전역에 등록해둔다.
 class FakeIntersectionObserver {
   static instances: FakeIntersectionObserver[] = [];
   callback: IntersectionObserverCallback;
@@ -26,16 +24,6 @@ class FakeIntersectionObserver {
   unobserve = vi.fn();
   disconnect = vi.fn();
   takeRecords = () => [];
-}
-
-function simulateFreeFeedInView() {
-  const instance = FakeIntersectionObserver.instances.at(-1);
-  act(() => {
-    instance?.callback(
-      [{ isIntersecting: true } as unknown as IntersectionObserverEntry],
-      instance as unknown as IntersectionObserver
-    );
-  });
 }
 
 function stubFetchFreeFeed(
@@ -139,28 +127,17 @@ describe('HomeView', () => {
     expect(screen.getByText('오늘의 추천 행사')).toBeInTheDocument();
     // 5대 카테고리 Quick 그리드
     expect(screen.getByText('키즈·액티비티')).toBeInTheDocument();
-    expect(screen.getByText('💰 가성비 행복')).toBeInTheDocument();
   });
 
-  // Task 9-3-1: "가성비 행복" 섹션은 화면에 스크롤로 들어오기 전까지 Skeleton UI만 보여주고,
-  // 실제 데이터를 페칭하지 않는다.
-  it('"가성비 행복" 섹션은 화면에 보이기 전까지 Skeleton만 노출하고 데이터를 페칭하지 않는다', () => {
-    const fetchMock = stubFetchFreeFeed([makeSpaceItem()]);
+  // Task 9-6-18(2026-08-25, docs/spec.md 3.2 "화면 구성 및 UI 간소화"): "가성비 행복" 필터
+  // 섹션은 메인 화면에서 완전히 제거됐다(정보는 5대 카테고리/카드 뱃지로 통합 노출).
+  it('"가성비 행복" 섹션은 더 이상 홈 탭에 렌더링되지 않는다', () => {
+    stubFetchFreeFeed([makeSpaceItem()]);
     render(<HomeView initialHeroEvents={[]} />);
 
-    expect(screen.getByRole('status', { name: '가성비 행복 피드 불러오는 중' })).toBeInTheDocument();
-    expect(screen.queryByText('무료 공공 공원')).not.toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-
-  it('"가성비 행복" 섹션이 화면에 들어오면 /api/home/free-feed로 지연 페칭해 카드로 보여준다', async () => {
-    const fetchMock = stubFetchFreeFeed([makeSpaceItem()]);
-    render(<HomeView initialHeroEvents={[]} />);
-
-    simulateFreeFeedInView();
-
-    expect(await screen.findByText('무료 공공 공원')).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/api/home/free-feed'));
+    expect(screen.queryByText('💰 가성비 행복')).not.toBeInTheDocument();
+    expect(screen.queryByText('🎁 완전무료')).not.toBeInTheDocument();
+    expect(screen.queryByText('👶 키즈특화')).not.toBeInTheDocument();
   });
 
   // Task 9-6-9(2026-08-23): 당일 한정 조건 강화로 0건인 날이 흔해져, 빈 상태 안내 문구 대신
@@ -206,8 +183,8 @@ describe('HomeView', () => {
 
     fireEvent.click(screen.getByText('🎁 무료·공공'));
 
-    // 홈 탭 전용 섹션(가성비 행복 헤더, 퀵그리드)은 사라지고 피드 항목만 남는다
-    expect(screen.queryByText('💰 가성비 행복')).not.toBeInTheDocument();
+    // 홈 탭 전용 섹션(퀵그리드/테마별 행사)은 사라지고 피드 항목만 남는다
+    expect(screen.queryByText('키즈·액티비티')).not.toBeInTheDocument();
     expect(await screen.findByText('무료 공공 공원')).toBeInTheDocument();
   });
 
@@ -367,66 +344,4 @@ describe('HomeView', () => {
     });
   });
 
-  // Task 9-1-11: "0원의 행복" → "가성비 행복" 서브탭 개편 검증
-  describe('가성비 행복 서브탭 (Task 9-1-11)', () => {
-    it('기본으로 "전체" 탭이 선택돼 있어 모든 항목을 보여준다', async () => {
-      stubFetchFreeFeed([
-        makeSpaceItem({ id: 'a', name: '무료 공원', is_free: true, is_kids_friendly: false }),
-        makeSpaceItem({ id: 'b', name: '유료지만 무료피드에 있는 곳', is_free: false }),
-      ]);
-      render(<HomeView initialHeroEvents={[]} />);
-      simulateFreeFeedInView();
-
-      expect(await screen.findByText('무료 공원')).toBeInTheDocument();
-      expect(screen.getByText('유료지만 무료피드에 있는 곳')).toBeInTheDocument();
-    });
-
-    it('"👶 키즈특화" 탭을 누르면 is_kids_friendly인 항목만 보여준다', async () => {
-      stubFetchFreeFeed([
-        makeSpaceItem({ id: 'kids', name: '키즈 전용 공간', is_kids_friendly: true }),
-        makeSpaceItem({ id: 'general', name: '일반 공간', is_kids_friendly: false }),
-      ]);
-      render(<HomeView initialHeroEvents={[]} />);
-      simulateFreeFeedInView();
-      await screen.findByText('키즈 전용 공간');
-
-      fireEvent.click(screen.getByText('👶 키즈특화'));
-
-      expect(screen.getByText('키즈 전용 공간')).toBeInTheDocument();
-      expect(screen.queryByText('일반 공간')).not.toBeInTheDocument();
-    });
-
-    it('"🎁 완전무료" 탭을 누르면 is_free===true인 항목만 보여준다', async () => {
-      stubFetchFreeFeed([
-        makeSpaceItem({ id: 'free', name: '완전 무료 공간', is_free: true }),
-        makeSpaceItem({ id: 'paid', name: '유료 공간', is_free: false }),
-      ]);
-      render(<HomeView initialHeroEvents={[]} />);
-      simulateFreeFeedInView();
-      await screen.findByText('완전 무료 공간');
-
-      fireEvent.click(screen.getByText('🎁 완전무료'));
-
-      expect(screen.getByText('완전 무료 공간')).toBeInTheDocument();
-      expect(screen.queryByText('유료 공간')).not.toBeInTheDocument();
-    });
-
-    it('"⚡ 당일 바로입장" 탭을 누르면 SPACE는 항상 통과하고 EVENT는 오늘 기간에 포함될 때만 통과한다', async () => {
-      const todayStr = new Date().toISOString().slice(0, 10);
-      stubFetchFreeFeed([
-        makeSpaceItem({ id: 'space', name: '상시 개방 공간' }),
-        makeEventItem({ id: 'today-event', name: '오늘 진행 행사', start_date: todayStr, end_date: todayStr }),
-        makeEventItem({ id: 'future-event', name: '다음 주 행사', start_date: '2099-01-01', end_date: '2099-01-02' }),
-      ]);
-      render(<HomeView initialHeroEvents={[]} />);
-      simulateFreeFeedInView();
-      await screen.findByText('상시 개방 공간');
-
-      fireEvent.click(screen.getByText('⚡ 당일 바로입장'));
-
-      expect(screen.getByText('상시 개방 공간')).toBeInTheDocument();
-      expect(screen.getByText('오늘 진행 행사')).toBeInTheDocument();
-      expect(screen.queryByText('다음 주 행사')).not.toBeInTheDocument();
-    });
-  });
 });
