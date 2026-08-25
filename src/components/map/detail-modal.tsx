@@ -8,6 +8,7 @@ import { getReservationAvailabilityTag } from '@/lib/spaces/event-status';
 import { formatDistance, formatDateRange, formatDateTime } from '@/lib/spaces/format';
 import { buildNaverMapDirectionsUrl } from '@/lib/navigation';
 import { useUserLocation } from '@/hooks/use-user-location';
+import { useModalBackClose } from '@/hooks/use-modal-back-close';
 import { MiniMap } from '@/components/map/mini-map';
 import { MapPreviewModal } from '@/components/map/map-preview-modal';
 
@@ -18,6 +19,7 @@ const NO_INFO_TEXT = '정보 준비 중 (공공 기관 문의)';
 export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
   const [isMapPreviewOpen, setIsMapPreviewOpen] = useState(false);
+  useModalBackClose(onClose);
   // Task 9-5-1(2026-08-22): 유저가 이미 설정해 둔 전역 위치(온보딩에서 저장한 좌표, 미설정
   // 시 기본값)를 그대로 "내 위치" 출발지로 쓴다 — 별도 GPS 권한 요청 없이 서비스가 이미 아는
   // 값을 재사용해, 네이버 지도 앱이 열리자마자 출발지 ➔ 목적지 경로가 바로 뜨도록 한다.
