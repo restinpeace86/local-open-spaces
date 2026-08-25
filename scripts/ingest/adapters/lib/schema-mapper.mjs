@@ -88,14 +88,20 @@ export function extractSigunguName(address) {
 }
 
 // open_spaces 스키마 행 빌더 (project/database_schema.md 3.1 + Parental 컬럼)
+// Decision 017(2026-08-25): locationPrecision/source 지원 추가. 좌표가 없는 원본도 드롭하지
+// 않고 location_precision='UNKNOWN'(location=NULL)으로 보존한다 — events의 buildEventRow가
+// Decision 009로 이미 지원하던 것과 동일한 패턴. locationPrecision을 넘기지 않는 기존 호출부는
+// 기본값 'EXACT'로 lng/lat 필수 검증이 그대로 유지되어 동작이 전혀 바뀌지 않는다.
 export function buildOpenSpaceRow({
   externalId,
   sourceType,
+  source = null,
   name,
   uiCategory,
   address,
   lng,
   lat,
+  locationPrecision = 'EXACT',
   isFree = null,
   operatingHours = null,
   infoUrl = null,
@@ -107,15 +113,22 @@ export function buildOpenSpaceRow({
   rawData = null,
   sigunguName = undefined,
 }) {
-  if (!externalId || !sourceType || !name || !lng || !lat) return null;
+  if (!externalId || !sourceType || !name) return null;
+  if (locationPrecision === 'UNKNOWN') {
+    if (lng || lat) return null;
+  } else if (!lng || !lat) {
+    return null;
+  }
 
   return {
     external_id: externalId,
     source_type: sourceType,
+    source,
     name,
     category: resolveUiCategory(uiCategory) ?? 'ETC',
     address: address || '',
-    location: `SRID=4326;POINT(${lng} ${lat})`,
+    location: locationPrecision === 'UNKNOWN' ? null : `SRID=4326;POINT(${lng} ${lat})`,
+    location_precision: locationPrecision,
     is_free: isFree,
     operating_hours: operatingHours,
     info_url: infoUrl,
@@ -148,6 +161,7 @@ export function buildEventRow({
   externalId,
   title,
   uiCategory,
+  source = null,
   startDate,
   endDate,
   lng,
@@ -168,6 +182,7 @@ export function buildEventRow({
   isActive = true,
   venueName = null,
   sigunguName = null,
+  rawData = null,
 }) {
   if (!externalId || !title || !startDate || !endDate) return null;
   if (locationPrecision === 'UNKNOWN') {
@@ -180,6 +195,7 @@ export function buildEventRow({
     external_id: externalId,
     title,
     event_type: resolveUiCategory(uiCategory) ?? 'ETC',
+    source,
     start_date: startDate,
     end_date: endDate,
     location: locationPrecision === 'UNKNOWN' ? null : `SRID=4326;POINT(${lng} ${lat})`,
@@ -204,5 +220,7 @@ export function buildEventRow({
     // Task 9-6-8(2026-08-23): 호출부가 넘긴 값에 광역 지자체 접두가 빠져 있으면 여기서 한 번에
     // 보완한다(모든 events 어댑터 공용 — 개별 어댑터 수정 불필요).
     sigungu_name: normalizeSigunguProvince(sigunguName),
+    // Decision 017: 원천 메타필드(MAXCLASSNM/MINCLASSNM 등)를 무손실 보존하기 위한 원본 객체.
+    raw_data: rawData,
   };
 }

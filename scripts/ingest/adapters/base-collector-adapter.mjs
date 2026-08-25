@@ -18,8 +18,8 @@ export class BaseCollectorAdapter {
     if (!sourceKey || !targetTable) {
       throw new Error('sourceKey와 targetTable은 필수입니다.');
     }
-    if (targetTable !== 'open_spaces' && targetTable !== 'events') {
-      throw new Error(`targetTable은 'open_spaces' 또는 'events'여야 합니다: ${targetTable}`);
+    if (!['open_spaces', 'events', 'multi'].includes(targetTable)) {
+      throw new Error(`targetTable은 'open_spaces', 'events' 또는 'multi'여야 합니다: ${targetTable}`);
     }
 
     this.sourceKey = sourceKey;
@@ -32,11 +32,26 @@ export class BaseCollectorAdapter {
     throw new Error(`${this.constructor.name}.fetch()가 구현되지 않았습니다.`);
   }
 
-  // raw 데이터를 표준 스키마 행 배열로 변환한다 (schema-mapper.mjs 사용). 서브클래스 필수 구현.
+  // raw 데이터를 표준 스키마 행 배열로 변환한다 (schema-mapper.mjs 사용). targetTable이
+  // 'open_spaces'/'events'인 어댑터는 필수 구현. targetTable: 'multi'인 어댑터는 이 대신
+  // transformSplit()을 구현한다(테이블별로 행을 나눠야 하므로 단일 배열 반환으로는 부족함).
   // 지오코딩 등 네트워크 보강이 필요한 경우 async로 구현해도 된다 (run()이 await로 처리).
   // eslint-disable-next-line class-methods-use-this
   transform(_rawItems) {
     throw new Error(`${this.constructor.name}.transform()이 구현되지 않았습니다.`);
+  }
+
+  // Decision 017(2026-08-25): targetTable이 'multi'인 어댑터가 구현하는 훅. 하나의 원본
+  // 엔드포인트가 성격이 다른 데이터(예: 서울시 예약 통합 API의 체육시설/공간시설 ↔ open_spaces,
+  // 문화체험/교육강좌 ↔ events)를 함께 내려줄 때, transform() 하나로는 두 테이블에 나눠 적재할
+  // 수 없어 별도 훅으로 분리했다. 항목 1건 단위 try-catch로 무중단 수집을 보장해야 하고
+  // (제7항 무중단 예외 처리), 위치/요금/URL 등이 없다는 이유로 행을 드롭해서는 안 된다(제4항
+  // Null-safe 원본 적재) — 진짜로 적재 불가능한 경우(식별자 없음, DB NOT NULL 제약을 만족할
+  // 실데이터가 없는 경우)만 errorCounts에 원인별로 집계하고 skip한다.
+  // 반환 형태: { open_spaces: Row[], events: Row[], errorCounts: {TYPE: count}, excludedCount }
+  // eslint-disable-next-line class-methods-use-this
+  transformSplit(_rawItems) {
+    throw new Error(`${this.constructor.name}.transformSplit()이 구현되지 않았습니다.`);
   }
 
   // [긴급 아키텍처 개편] RAW 레이어 opt-in 훅. 서브클래스가 구현하면(선택) fetch()가 반환한
@@ -76,6 +91,10 @@ export class BaseCollectorAdapter {
         console.log(`  RAW 레이어(raw_ingest_data) 무오염 보존 완료: ${rawArchivedCount}건`);
       }
 
+      if (this.targetTable === 'multi') {
+        return await this.runMultiTableUpsert({ raw, rawCount, rawArchivedCount, dryRun });
+      }
+
       const rows = (await this.transform(raw)).filter(Boolean);
       console.log(`  표준 스키마 변환 완료: ${rows.length}건 (유효성 검증 통과분만)`);
 
@@ -103,11 +122,97 @@ export class BaseCollectorAdapter {
     }
   }
 
+  // Decision 017: targetTable === 'multi' 어댑터 전용 오케스트레이션. transformSplit()의
+  // { open_spaces, events } 각각을 upsertRowsSafeMerge()로 적재한다 — SVCID 중복 시 컬럼별
+  // NULL 병합이 이 요구사항의 핵심이라(제3항), 일반 upsertRows()가 아니라 처음부터
+  // upsertRowsSafeMerge()를 쓴다(단일 테이블 어댑터 25종의 run()은 이 메서드를 타지 않으므로
+  // 기존 동작에 영향 없음).
+  async runMultiTableUpsert({ raw, rawCount, rawArchivedCount, dryRun }) {
+    const {
+      open_spaces: spaceRows = [],
+      events: eventRows = [],
+      errorCounts = {},
+      excludedCount = 0,
+    } = await this.transformSplit(raw);
+
+    const totalErrorCount = Object.values(errorCounts).reduce((sum, n) => sum + n, 0);
+    console.log(
+      `  표준 스키마 변환 완료: open_spaces ${spaceRows.length}건 / events ${eventRows.length}건 ` +
+        `(범위 제외 ${excludedCount}건, 에러 ${totalErrorCount}건)`
+    );
+
+    if (dryRun) {
+      console.log(JSON.stringify({ open_spaces: spaceRows.slice(0, 2), events: eventRows.slice(0, 2) }, null, 2));
+      return {
+        count: spaceRows.length + eventRows.length,
+        upserted: false,
+        perTable: { open_spaces: spaceRows.length, events: eventRows.length },
+        errorCounts,
+        excludedCount,
+      };
+    }
+
+    const client = createAdminClient();
+    const perTableResult = {};
+    if (spaceRows.length > 0) {
+      perTableResult.open_spaces = await upsertRowsSafeMerge(client, 'open_spaces', spaceRows);
+    }
+    if (eventRows.length > 0) {
+      perTableResult.events = await upsertRowsSafeMerge(client, 'events', eventRows);
+    }
+
+    const totalCount = (perTableResult.open_spaces?.count ?? 0) + (perTableResult.events?.count ?? 0);
+    console.log(
+      `✅ [${this.sourceKey}] 다중 테이블 upsert 완료: open_spaces ${perTableResult.open_spaces?.count ?? 0}건 / ` +
+        `events ${perTableResult.events?.count ?? 0}건`
+    );
+
+    recordPipelineRun({
+      sourceKey: this.sourceKey,
+      rawCount,
+      rawArchivedCount,
+      count: totalCount,
+      status: 'OK',
+      detail: {
+        perTable: {
+          open_spaces: {
+            fetched: spaceRows.length,
+            inserted: perTableResult.open_spaces?.count ?? 0,
+            duplicateWithinBatch: perTableResult.open_spaces?.duplicateWithinBatch ?? 0,
+            mergedWithExisting: perTableResult.open_spaces?.mergedWithExisting ?? 0,
+          },
+          events: {
+            fetched: eventRows.length,
+            inserted: perTableResult.events?.count ?? 0,
+            duplicateWithinBatch: perTableResult.events?.duplicateWithinBatch ?? 0,
+            mergedWithExisting: perTableResult.events?.mergedWithExisting ?? 0,
+          },
+        },
+        excludedCount,
+        errorCounts,
+      },
+    });
+
+    return {
+      count: totalCount,
+      upserted: true,
+      perTable: { open_spaces: perTableResult.open_spaces?.count ?? 0, events: perTableResult.events?.count ?? 0 },
+      errorCounts,
+      excludedCount,
+    };
+  }
+
   // [긴급 아키텍처 개편] 2단계 단독 재실행 — fetch()를 다시 호출하지 않고 이미 raw_ingest_data에
   // 보존된 원본을 읽어 transform()만 다시 돌린다. 원본 API가 일시 장애거나 파서 로직만 고쳤을
   // 때 재수집 없이 재가공할 수 있다는 게 RAW 레이어를 두는 핵심 이유다. getRawRows()를 구현한
   // 어댑터만 의미가 있다(구현 안 했으면 raw_ingest_data에 애초에 아무것도 없으므로 0건 반환).
   async runServiceTransformFromRaw({ dryRun = false } = {}) {
+    if (this.targetTable === 'multi') {
+      throw new Error(
+        `${this.constructor.name}: targetTable 'multi' 어댑터는 runServiceTransformFromRaw()를 아직 지원하지 않습니다(transformSplit() 기반 재가공은 별도 구현 필요).`
+      );
+    }
+
     console.log(`▶ [${this.sourceKey}] RAW→Service 재가공 시작 (dry-run: ${dryRun})`);
     const client = createAdminClient();
     const rawRows = await fetchRawIngestData(client, this.sourceKey);

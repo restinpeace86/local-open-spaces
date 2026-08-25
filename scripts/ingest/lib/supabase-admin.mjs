@@ -83,6 +83,40 @@ export async function upsertRawIngestData(client, source, rawRows) {
   return { count: dedupedRows.length };
 }
 
+// Decision 017(2026-08-25) 3항: 같은 수집 배치 안에 동일 external_id(SVCID)가 여러 번 나오면
+// (upsertRows의 dedupeByExternalId처럼) 마지막 값이 무조건 이기는 게 아니라, 컬럼 단위로 값이
+// 있는 쪽을 채택한다 — 앞선 항목에만 있던 컬럼값을 뒤 항목의 NULL이 되돌리지 않게 하기 위함.
+// ''(빈 문자열)도 "값 없음"으로 취급한다(buildOpenSpaceRow의 address: address || '' 같은
+// 폴백이 있어 단순 null/undefined 체크만으로는 부족함).
+function isEmptyValue(value) {
+  return value === null || value === undefined || value === '';
+}
+
+function dedupeByExternalIdMergeNulls(rows) {
+  const byId = new Map();
+  let duplicateCount = 0;
+
+  for (const row of rows) {
+    const existing = byId.get(row.external_id);
+    if (!existing) {
+      byId.set(row.external_id, row);
+      continue;
+    }
+
+    duplicateCount += 1;
+    const merged = { ...row };
+    const keys = new Set([...Object.keys(existing), ...Object.keys(row)]);
+    for (const key of keys) {
+      if (isEmptyValue(merged[key]) && !isEmptyValue(existing[key])) {
+        merged[key] = existing[key];
+      }
+    }
+    byId.set(row.external_id, merged);
+  }
+
+  return { rows: [...byId.values()], duplicateCount };
+}
+
 // [긴급 아키텍처 개편] 2단계(RAW→Service 재가공) 전용 Safe UPSERT. 일반 upsertRows()는 충돌 시
 // 새 값으로 무조건 덮어쓰지만, RAW 재가공 시점의 파서가 일부 컬럼을 못 채워 NULL로 보낼 수
 // 있으므로 그 값으로 기존에 이미 채워진 실데이터를 되돌리면 안 된다 — 기존 행의 컬럼이 NULL일
@@ -90,29 +124,44 @@ export async function upsertRawIngestData(client, source, rawRows) {
 // 컬럼 목록을 하드코딩한 SQL(RPC 함수)을 새로 만드는 대신(제5장 제6조/제4조 — 스키마가 계속
 // 바뀌는데 SQL이 따로 있으면 컬럼 추가 때마다 둘 다 고쳐야 함) 기존 행을 조회해 JS에서
 // 일반적으로 병합한다. 기존 25개 어댑터가 쓰는 run()/upsertRows()는 그대로 두고, 새로 만든
-// runServiceTransformFromRaw()에서만 이 함수를 쓴다 — 기존 동작에 영향 없음.
-export async function upsertRowsSafeMerge(client, table, rows) {
-  if (rows.length === 0) return { count: 0 };
+// runServiceTransformFromRaw()와 Decision 017의 다중 테이블 어댑터에서만 이 함수를 쓴다 —
+// 기존 동작에 영향 없음.
+// Decision 017(2026-08-25) 3항: 배치 내 중복(같은 external_id가 이번 수집 결과에 여러 번
+// 등장)도 마지막 값 우선이 아니라 컬럼별 NULL 병합으로 처리하도록 dedupeByExternalIdMergeNulls로
+// 교체했다. duplicateWithinBatch(배치 내 병합 건수)/mergedWithExisting(기존 DB 행과 병합된
+// 건수)를 반환해 파이프라인 로그에 "중복/병합 건수"를 정밀 기록할 수 있게 한다.
+// 실측 확인(2026-08-25, Decision 017 실적용 중): select().in('external_id', ids)는 GET 요청
+// 쿼리스트링에 id 목록을 그대로 실어 보내는데, 500개(UPSERT_BATCH_SIZE)를 한 번에 넣으면
+// "TypeError: fetch failed"로 요청 자체가 실패한다(400개는 성공, 500개는 실패 — URL 길이
+// 제한). upsert()는 POST 본문이라 500건이 문제없어 UPSERT_BATCH_SIZE는 그대로 두고, 조회만
+// 더 작은 단위로 쪼갠다.
+const SELECT_LOOKUP_BATCH_SIZE = 200;
 
-  const dedupedRows = dedupeByExternalId(rows);
+export async function upsertRowsSafeMerge(client, table, rows) {
+  if (rows.length === 0) return { count: 0, duplicateWithinBatch: 0, mergedWithExisting: 0 };
+
+  const { rows: dedupedRows, duplicateCount } = dedupeByExternalIdMergeNulls(rows);
   let totalCount = 0;
+  let mergedWithExisting = 0;
 
   for (let i = 0; i < dedupedRows.length; i += UPSERT_BATCH_SIZE) {
     const batch = dedupedRows.slice(i, i + UPSERT_BATCH_SIZE);
-    const externalIds = batch.map((row) => row.external_id);
 
-    const { data: existingRows, error: selectError } = await client
-      .from(table)
-      .select('*')
-      .in('external_id', externalIds);
-    if (selectError) throw new Error(`${table} 기존 행 조회 실패: ${selectError.message}`);
-
-    const existingById = new Map((existingRows ?? []).map((row) => [row.external_id, row]));
+    const existingById = new Map();
+    for (let j = 0; j < batch.length; j += SELECT_LOOKUP_BATCH_SIZE) {
+      const idsChunk = batch.slice(j, j + SELECT_LOOKUP_BATCH_SIZE).map((row) => row.external_id);
+      const { data: existingRows, error: selectError } = await client.from(table).select('*').in('external_id', idsChunk);
+      if (selectError) throw new Error(`${table} 기존 행 조회 실패: ${selectError.message}`);
+      for (const existingRow of existingRows ?? []) {
+        existingById.set(existingRow.external_id, existingRow);
+      }
+    }
 
     const mergedBatch = batch.map((row) => {
       const existing = existingById.get(row.external_id);
       if (!existing) return row;
 
+      mergedWithExisting += 1;
       const merged = { ...row };
       for (const key of Object.keys(row)) {
         if (existing[key] !== null && existing[key] !== undefined) {
@@ -127,7 +176,7 @@ export async function upsertRowsSafeMerge(client, table, rows) {
     totalCount += mergedBatch.length;
   }
 
-  return { count: totalCount };
+  return { count: totalCount, duplicateWithinBatch: duplicateCount, mergedWithExisting };
 }
 
 // [긴급 아키텍처 개편] RAW 레이어 재가공(2단계 단독 재실행)용 — 원본 API를 다시 호출하지 않고

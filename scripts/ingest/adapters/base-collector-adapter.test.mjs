@@ -153,3 +153,116 @@ describe('BaseCollectorAdapter.runServiceTransformFromRaw()', () => {
     expect(result).toEqual({ count: 1, upserted: false });
   });
 });
+
+// Decision 017(2026-08-25): targetTable: 'multi' — 하나의 원본이 open_spaces/events 두 테이블로
+// 나뉘어 적재되는 어댑터(예: 서울시 예약 통합 API)의 오케스트레이션을 검증한다.
+class MultiTableAdapter extends BaseCollectorAdapter {
+  constructor() {
+    super({ sourceKey: 'MULTI_SOURCE', targetTable: 'multi' });
+  }
+  async fetch() {
+    return [
+      { SVCID: 'S1', MAXCLASSNM: '체육시설' },
+      { SVCID: 'S2', MAXCLASSNM: '문화체험' },
+      { SVCID: 'S3', MAXCLASSNM: '진료복지' },
+    ];
+  }
+  transformSplit(raw) {
+    const openSpaces = raw.filter((item) => item.MAXCLASSNM === '체육시설').map((item) => ({ external_id: item.SVCID }));
+    const events = raw.filter((item) => item.MAXCLASSNM === '문화체험').map((item) => ({ external_id: item.SVCID }));
+    return { open_spaces: openSpaces, events, errorCounts: { DATE_PARSE_FAIL: 1 }, excludedCount: 1 };
+  }
+}
+
+class MultiTableSpacesOnlyAdapter extends BaseCollectorAdapter {
+  constructor() {
+    super({ sourceKey: 'MULTI_SPACES_ONLY', targetTable: 'multi' });
+  }
+  async fetch() {
+    return [{ SVCID: 'S1' }];
+  }
+  transformSplit(raw) {
+    return { open_spaces: raw.map((item) => ({ external_id: item.SVCID })), events: [], errorCounts: {}, excludedCount: 0 };
+  }
+}
+
+describe("BaseCollectorAdapter — targetTable: 'multi' (Decision 017 다중 테이블 분리 적재)", () => {
+  beforeEach(() => {
+    upsertRowsSafeMergeMock.mockClear();
+    upsertRowsSafeMergeMock.mockImplementation(() =>
+      Promise.resolve({ count: 1, duplicateWithinBatch: 0, mergedWithExisting: 0 })
+    );
+  });
+
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("targetTable: 'multi'로 생성해도 에러를 던지지 않는다(생성자 검증 완화)", () => {
+    expect(() => new MultiTableAdapter()).not.toThrow();
+  });
+
+  it('transformSplit()이 나눈 open_spaces/events 각각을 upsertRowsSafeMerge로 별도 적재한다', async () => {
+    const adapter = new MultiTableAdapter();
+    await adapter.run();
+
+    expect(upsertRowsSafeMergeMock).toHaveBeenCalledWith(expect.anything(), 'open_spaces', [{ external_id: 'S1' }]);
+    expect(upsertRowsSafeMergeMock).toHaveBeenCalledWith(expect.anything(), 'events', [{ external_id: 'S2' }]);
+    expect(upsertRowsMock).not.toHaveBeenCalled();
+  });
+
+  it('한쪽 테이블이 비어있으면 그 테이블은 upsert 호출을 아예 스킵한다', async () => {
+    const adapter = new MultiTableSpacesOnlyAdapter();
+    await adapter.run();
+
+    expect(upsertRowsSafeMergeMock).toHaveBeenCalledTimes(1);
+    expect(upsertRowsSafeMergeMock).toHaveBeenCalledWith(expect.anything(), 'open_spaces', [{ external_id: 'S1' }]);
+  });
+
+  it('dry-run이면 upsert 없이 두 테이블 건수 합계만 반환한다', async () => {
+    const adapter = new MultiTableAdapter();
+    const result = await adapter.run({ dryRun: true });
+
+    expect(upsertRowsSafeMergeMock).not.toHaveBeenCalled();
+    expect(result).toEqual({
+      count: 2,
+      upserted: false,
+      perTable: { open_spaces: 1, events: 1 },
+      errorCounts: { DATE_PARSE_FAIL: 1 },
+      excludedCount: 1,
+    });
+  });
+
+  it('recordPipelineRun에 테이블별 건수/중복·병합 건수/범위제외/에러 상세를 detail로 전달한다', async () => {
+    upsertRowsSafeMergeMock.mockImplementation((_client, table) =>
+      Promise.resolve(
+        table === 'open_spaces'
+          ? { count: 1, duplicateWithinBatch: 2, mergedWithExisting: 5 }
+          : { count: 1, duplicateWithinBatch: 3, mergedWithExisting: 10 }
+      )
+    );
+    const adapter = new MultiTableAdapter();
+    await adapter.run();
+
+    expect(recordPipelineRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceKey: 'MULTI_SOURCE',
+        count: 2,
+        status: 'OK',
+        detail: {
+          perTable: {
+            open_spaces: { fetched: 1, inserted: 1, duplicateWithinBatch: 2, mergedWithExisting: 5 },
+            events: { fetched: 1, inserted: 1, duplicateWithinBatch: 3, mergedWithExisting: 10 },
+          },
+          excludedCount: 1,
+          errorCounts: { DATE_PARSE_FAIL: 1 },
+        },
+      })
+    );
+  });
+
+  it("runServiceTransformFromRaw()는 'multi' 모드를 아직 지원하지 않아 명시적으로 에러를 던진다", async () => {
+    const adapter = new MultiTableAdapter();
+    await expect(adapter.runServiceTransformFromRaw()).rejects.toThrow("targetTable 'multi'");
+  });
+});

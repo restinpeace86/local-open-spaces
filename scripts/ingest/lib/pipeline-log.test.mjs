@@ -46,4 +46,41 @@ describe('recordPipelineRun', () => {
     expect(fs.writeFileSync).not.toHaveBeenCalled();
     expect(fs.appendFileSync).not.toHaveBeenCalled();
   });
+
+  // Decision 017(2026-08-25) 8항: 다중 테이블 어댑터는 detail을 넘겨 테이블별 건수/중복·병합
+  // 건수/원인별 에러 건수를 접이식 상세 블록으로 남긴다.
+  describe('detail (Decision 017 정밀 리포트)', () => {
+    it('detail을 넘기면 표 아래에 <details> 상세 블록을 추가한다', () => {
+      recordPipelineRun({
+        sourceKey: 'SEOUL_YEYAK',
+        rawCount: 500,
+        rawArchivedCount: 500,
+        count: 413,
+        status: 'OK',
+        detail: {
+          perTable: {
+            open_spaces: { fetched: 120, inserted: 118, duplicateWithinBatch: 2, mergedWithExisting: 5 },
+            events: { fetched: 300, inserted: 295, duplicateWithinBatch: 3, mergedWithExisting: 10 },
+          },
+          excludedCount: 45,
+          errorCounts: { DATE_PARSE_FAIL: 2, MISSING_SVCID: 0 },
+        },
+      });
+
+      expect(writtenContent).toContain('<details>');
+      expect(writtenContent).toContain('SEOUL_YEYAK 상세 리포트');
+      expect(writtenContent).toContain('| open_spaces | 120 | 118 | 2 | 5 |');
+      expect(writtenContent).toContain('| events | 300 | 295 | 3 | 10 |');
+      expect(writtenContent).toContain('**범위 제외**: 45건');
+      expect(writtenContent).toContain('| DATE_PARSE_FAIL | 2 |');
+      // 0건인 에러 유형은 상세 블록에서 생략한다(노이즈 방지).
+      expect(writtenContent).not.toContain('MISSING_SVCID');
+      expect(writtenContent).toContain('</details>');
+    });
+
+    it('detail을 넘기지 않으면(기존 24개 어댑터) 상세 블록이 전혀 추가되지 않는다', () => {
+      recordPipelineRun({ sourceKey: 'GG_CULTURE_EVENTS', rawCount: 3000, count: 2955, status: 'OK' });
+      expect(writtenContent).not.toContain('<details>');
+    });
+  });
 });

@@ -53,6 +53,21 @@ export function deriveParentalTags(sourceText) {
   };
 }
 
+// Decision 017(2026-08-25) 9항: 체육/공간시설(open_spaces)에 오매핑된 '키즈' 뱃지를 정화한다.
+// deriveParentalTags처럼 원본 전체(JSON.stringify)를 넓게 키워드 스캔하면 무관한 필드(예:
+// 시설명에 우연히 들어간 지명)까지 걸려 성인 대상 체육시설에도 키즈 뱃지가 오매핑될 수 있다.
+// 이용대상(USETGTINFO)에 유아/어린이/초등학생/가족이 명시되거나, 중분류(MINCLASSNM)가 키즈/
+// 체험 전용 시설로 확인될 때만 부여한다(사용자 지시 원문 그대로 — 임의 확장 없음).
+export function deriveSpaceKidsFriendly({ useTargetInfo, minClassName }) {
+  const targetText = useTargetInfo || '';
+  const isFromTarget = ['유아', '어린이', '초등학생', '가족'].some((keyword) => targetText.includes(keyword));
+
+  const classText = minClassName || '';
+  const isFromMinClass = ['키즈', '체험'].some((keyword) => classText.includes(keyword));
+
+  return isFromTarget || isFromMinClass;
+}
+
 // swimming-pool-adapter.mjs(Task 7-3)에서 사용자가 지정한 고정 키워드 목록(2026-08-21).
 // deriveParentalTags의 넓은 키워드 세트('아이'/'가족' 포함)와 달리, 시설명/사업장명 등
 // "명칭"에만 적용하도록 좁게 지정된 키워드다 — 두 어댑터 이상이 동일 목록을 쓰게 되어

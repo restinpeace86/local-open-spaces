@@ -33,25 +33,67 @@ function countRawItems(raw) {
 // 표 최상단(헤더 바로 아래)에 한 줄씩 추가한다. BaseCollectorAdapter.run()이 모든 어댑터의 공통
 // 진입점이라 여기 한 곳만 연결하면 개별 어댑터를 고치지 않아도 전체 소스에 자동 적용된다
 // (제5장 제4조 기존 구조 우선). 로그 파일이 없는 환경(단위 테스트 등)에서는 조용히 건너뛴다.
-export function recordPipelineRun({ sourceKey, rawCount, rawArchivedCount, count, status, note }) {
+// Decision 017(2026-08-25) 8항: API별 상세 리포트(테이블별 가져온/적재 건수, 배치 내 중복+
+// NULL 병합 건수, 기존 DB와 병합된 건수, 범위 제외 건수, 원인별 에러 건수)를 마크다운
+// <details> 접이식 블록으로 남긴다. 기존 24개 어댑터가 쓰는 표 1행 형식은 그대로 두고(단순
+// 헬스체크 용도), detail을 넘긴 호출부(Decision 017 다중 테이블 어댑터)만 이 블록이 추가된다.
+function buildDetailBlock(timestamp, sourceKey, { perTable = {}, excludedCount = 0, errorCounts = {} } = {}) {
+  const tableRows = Object.entries(perTable)
+    .map(
+      ([table, s]) =>
+        `| ${table} | ${s.fetched ?? '-'} | ${s.inserted ?? '-'} | ${s.duplicateWithinBatch ?? 0} | ${s.mergedWithExisting ?? 0} |`
+    )
+    .join('\n');
+
+  const errorEntries = Object.entries(errorCounts).filter(([, c]) => c > 0);
+  const errorRows = errorEntries.map(([type, c]) => `| ${type} | ${c} |`).join('\n');
+
+  return [
+    '',
+    '<details>',
+    `<summary>${timestamp} ${sourceKey} 상세 리포트</summary>`,
+    '',
+    '**테이블별 적재**',
+    '',
+    '| 테이블 | 가져온 건수 | DB 적재 건수 | 배치 내 중복(NULL 병합) | 기존 DB 병합 |',
+    '| :--- | ---: | ---: | ---: | ---: |',
+    tableRows || '| - | - | - | - | - |',
+    '',
+    `**범위 제외**: ${excludedCount}건`,
+    '',
+    '**에러 상세**',
+    '',
+    '| 원인 | 건수 |',
+    '| :--- | ---: |',
+    errorRows || '| (없음) | 0 |',
+    '',
+    '</details>',
+    '',
+  ].join('\n');
+}
+
+export function recordPipelineRun({ sourceKey, rawCount, rawArchivedCount, count, status, note, detail }) {
   if (!fs.existsSync(LOG_PATH)) return;
 
   const errorCount = typeof rawCount === 'number' ? Math.max(0, rawCount - count) : 'N/A';
   const isCritical = status === 'FAILED' || count === 0;
   const statusBadge = isCritical ? '🚨 [CRITICAL]' : '✅ [OK]';
   const rawArchivedCell = typeof rawArchivedCount === 'number' ? rawArchivedCount : '-';
-  const row = `| ${formatKstTimestamp()} | ${sourceKey} | ${rawArchivedCell} | ${count} | ${errorCount} | ${statusBadge} | ${note ?? ''} |`;
+  const timestamp = formatKstTimestamp();
+  const row = `| ${timestamp} | ${sourceKey} | ${rawArchivedCell} | ${count} | ${errorCount} | ${statusBadge} | ${note ?? ''} |`;
+  const detailBlock = detail ? buildDetailBlock(timestamp, sourceKey, detail) : '';
 
   const lines = fs.readFileSync(LOG_PATH, 'utf8').split('\n');
   const separatorIndex = lines.findIndex((line) => line.trim() === SEPARATOR_ROW);
 
   if (separatorIndex === -1) {
-    fs.appendFileSync(LOG_PATH, `${row}\n`);
+    fs.appendFileSync(LOG_PATH, `${row}\n${detailBlock}`);
     return;
   }
 
   lines.splice(separatorIndex + 1, 0, row);
   fs.writeFileSync(LOG_PATH, lines.join('\n'));
+  if (detailBlock) fs.appendFileSync(LOG_PATH, detailBlock);
 }
 
 export { countRawItems };

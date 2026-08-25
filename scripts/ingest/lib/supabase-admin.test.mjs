@@ -101,7 +101,7 @@ describe('upsertRowsSafeMerge', () => {
     const result = await upsertRowsSafeMerge(client, 'events', []);
     expect(select).not.toHaveBeenCalled();
     expect(upsert).not.toHaveBeenCalled();
-    expect(result).toEqual({ count: 0 });
+    expect(result).toEqual({ count: 0, duplicateWithinBatch: 0, mergedWithExisting: 0 });
   });
 
   it('기존 행이 없으면(신규) incoming 행을 그대로 upsert한다', async () => {
@@ -110,7 +110,7 @@ describe('upsertRowsSafeMerge', () => {
 
     const [sentRows] = upsert.mock.calls[0];
     expect(sentRows).toEqual([{ external_id: 'A', title: '새 행', venue_name: null }]);
-    expect(result).toEqual({ count: 1 });
+    expect(result).toEqual({ count: 1, duplicateWithinBatch: 0, mergedWithExisting: 0 });
   });
 
   it('기존 행의 컬럼이 NULL이 아니면 incoming 값으로 덮어쓰지 않고 기존 값을 보존한다', async () => {
@@ -118,13 +118,41 @@ describe('upsertRowsSafeMerge', () => {
       existingRows: [{ external_id: 'A', title: '기존 제목(실데이터)', venue_name: null }],
     });
 
-    await upsertRowsSafeMerge(client, 'events', [
+    const result = await upsertRowsSafeMerge(client, 'events', [
       { external_id: 'A', title: '재가공된 새 제목', venue_name: '재가공된 장소명' },
     ]);
 
     const [sentRows] = upsert.mock.calls[0];
     // title은 기존에 이미 실데이터가 있었으므로 보존, venue_name은 기존이 NULL이었으므로 새 값으로 채워진다.
     expect(sentRows).toEqual([{ external_id: 'A', title: '기존 제목(실데이터)', venue_name: '재가공된 장소명' }]);
+    expect(result.mergedWithExisting).toBe(1);
+  });
+
+  // Decision 017(2026-08-25) 3항: 같은 배치(같은 fetch 결과) 안에서 동일 SVCID(external_id)가
+  // 중복되는 경우도 마지막 값 우선이 아니라 컬럼별 NULL 병합이어야 한다.
+  it('배치 내 동일 external_id 중복도 컬럼별 NULL 병합한다(마지막 값 우선 아님)', async () => {
+    const { client, upsert } = makeSafeMergeMockClient({ existingRows: [] });
+
+    const result = await upsertRowsSafeMerge(client, 'events', [
+      { external_id: 'A', title: '첫 번째(실데이터)', venue_name: null },
+      { external_id: 'A', title: null, venue_name: '두 번째에만 있는 장소명' },
+    ]);
+
+    const [sentRows] = upsert.mock.calls[0];
+    expect(sentRows).toEqual([{ external_id: 'A', title: '첫 번째(실데이터)', venue_name: '두 번째에만 있는 장소명' }]);
+    expect(result).toEqual({ count: 1, duplicateWithinBatch: 1, mergedWithExisting: 0 });
+  });
+
+  it("배치 내 중복 시 빈 문자열('')도 '값 없음'으로 취급해 다른 항목의 실데이터로 채운다", async () => {
+    const { client, upsert } = makeSafeMergeMockClient({ existingRows: [] });
+
+    await upsertRowsSafeMerge(client, 'open_spaces', [
+      { external_id: 'A', address: '서울시 종로구' },
+      { external_id: 'A', address: '' },
+    ]);
+
+    const [sentRows] = upsert.mock.calls[0];
+    expect(sentRows).toEqual([{ external_id: 'A', address: '서울시 종로구' }]);
   });
 
   it('external_id로 select().in()을 호출해 기존 행을 조회한다', async () => {
@@ -157,15 +185,19 @@ describe('upsertRowsSafeMerge', () => {
     );
   });
 
-  it('행이 500건을 넘으면 배치로 나눠 여러 번 조회/upsert를 호출한다', async () => {
+  it('행이 500건을 넘으면 upsert는 500건 단위로 나누고, 조회(.in())는 그보다 더 잘게 나눈다', async () => {
     const { client, upsert, inFn } = makeSafeMergeMockClient({ existingRows: [] });
     const rows = Array.from({ length: 1200 }, (_, i) => ({ external_id: `id-${i}` }));
 
     const result = await upsertRowsSafeMerge(client, 'open_spaces', rows);
 
-    expect(inFn).toHaveBeenCalledTimes(3);
+    // upsert(POST 본문)는 500/500/200 3배치. 조회(.in(), GET 쿼리스트링)는 500건을 한 번에
+    // 넣으면 "fetch failed"가 실측 확인돼(2026-08-25) 200건 단위로 더 쪼갠다:
+    // 500→200+200+100(3회), 500→200+200+100(3회), 200→200(1회) = 총 7회.
     expect(upsert).toHaveBeenCalledTimes(3);
-    expect(result).toEqual({ count: 1200 });
+    expect(inFn).toHaveBeenCalledTimes(7);
+    expect(inFn.mock.calls.every(([, ids]) => ids.length <= 200)).toBe(true);
+    expect(result).toEqual({ count: 1200, duplicateWithinBatch: 0, mergedWithExisting: 0 });
   });
 });
 

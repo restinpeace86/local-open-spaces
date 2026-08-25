@@ -1,8 +1,7 @@
-// Task 8-4 정밀 검증에서 seoul-yeyak-adapter.mjs에 기존 테스트가 없었음을 확인해 신설.
-// - tvYeyakCOllect 페이지네이션/에러 처리
-// - DIV → UI 카테고리 매핑, PAYATNM 기준 is_free, SVCSTATNM 기준 is_active
-// - deriveParentalTags 연동(is_kids_friendly/has_parking/stroller_accessible/facility_type/target_age_group) —
-//   Task 8-4에서 이 필드들이 전혀 채워지지 않고 있었음을 발견해 새로 연결한 부분
+// Decision 017(2026-08-25) 전면 재작성: 기존에는 DIV 필드 기준으로 events 테이블에만 단일
+// 적재했으나, 이제 MAXCLASSNM(대분류) 기준으로 체육시설/공간시설 → open_spaces, 문화체험/
+// 교육강좌 → events로 분리 적재하고(진료복지 제외), Null-safe 원본 적재/항목 단위 무중단 처리/
+// 에러 원인별 집계를 검증한다. (이전 DIV 기반 transform() 테스트는 이번에 전면 교체됨)
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { SeoulYeyakAdapter, buildSigunguName } = await import('./seoul-yeyak-adapter.mjs');
@@ -18,6 +17,7 @@ function tvYeyakBody({ code = 'INFO-000', message = '정상 처리되었습니�
 }
 
 // 실측 표본(서울역사박물관 백인제가옥 온라인교육): USETGTINFO에 "가족" 키워드 포함.
+// MAXCLASSNM/MINCLASSNM은 Decision 017이 실제 분류 기준으로 지정한 대분류/중분류 필드.
 const BASE_ITEM = {
   GUBUN: '자체',
   SVCID: 'S260722093915914461',
@@ -38,7 +38,6 @@ const BASE_ITEM = {
   AREANM: '종로구',
   IMGURL: 'https://yeyak.seoul.go.kr/web/common/file/FileDown.do?file_id=1',
   DTLCONT: '실내 교육 프로그램입니다. 주차장 있음. 유모차 접근 가능.',
-  DIV: '문화행사',
 };
 
 describe('SeoulYeyakAdapter', () => {
@@ -52,14 +51,19 @@ describe('SeoulYeyakAdapter', () => {
       delete process.env.SEOUL_OPEN_DATA_KEY;
       expect(() => new SeoulYeyakAdapter()).toThrow('SEOUL_OPEN_DATA_KEY');
     });
+
+    it("targetTable이 'multi'로 설정된다(open_spaces/events 분리 적재)", () => {
+      const adapter = new SeoulYeyakAdapter();
+      expect(adapter.targetTable).toBe('multi');
+    });
   });
 
-  describe('fetch (페이지네이션)', () => {
-    it('list_total_count에 도달할 때까지 반복 호출한다', async () => {
+  describe('fetch (페이지네이션, Decision 017 6항: 1000건 단위)', () => {
+    it('list_total_count에 도달할 때까지 1000건 단위로 반복 호출한다', async () => {
       const fetchMock = vi.fn((url) => {
         const startIdx = Number(url.split('/').at(-3));
-        if (startIdx === 1) return Promise.resolve(jsonResponse(tvYeyakBody({ rows: [BASE_ITEM], totalCount: 101 })));
-        if (startIdx === 101) return Promise.resolve(jsonResponse(tvYeyakBody({ rows: [{ ...BASE_ITEM, SVCID: 'S2' }], totalCount: 101 })));
+        if (startIdx === 1) return Promise.resolve(jsonResponse(tvYeyakBody({ rows: [BASE_ITEM], totalCount: 1001 })));
+        if (startIdx === 1001) return Promise.resolve(jsonResponse(tvYeyakBody({ rows: [{ ...BASE_ITEM, SVCID: 'S2' }], totalCount: 1001 })));
         throw new Error(`unexpected startIdx ${startIdx}`);
       });
       vi.stubGlobal('fetch', fetchMock);
@@ -76,8 +80,6 @@ describe('SeoulYeyakAdapter', () => {
     });
   });
 
-  // [긴급 아키텍처 개편] RAW 레이어 opt-in 검증. transform()의 유효성 검증(경위도 등 누락 시
-  // drop)과 달리 getRawRows()는 무오염 보존이 목적이므로 SVCID만 있으면 그대로 통과시켜야 한다.
   describe('getRawRows (RAW 레이어 opt-in)', () => {
     it('SVCID를 source_id로, 원본 항목 전체를 payload로 하는 쌍을 만든다', () => {
       const adapter = new SeoulYeyakAdapter();
@@ -85,7 +87,7 @@ describe('SeoulYeyakAdapter', () => {
       expect(rawRows).toEqual([{ sourceId: BASE_ITEM.SVCID, payload: BASE_ITEM }]);
     });
 
-    it('transform()이 drop하는 항목(경위도 누락 등)도 SVCID만 있으면 무오염 보존한다', () => {
+    it('transformSplit이 drop하는 항목(좌표 누락 등)도 SVCID만 있으면 무오염 보존한다', () => {
       const adapter = new SeoulYeyakAdapter();
       const noGeoItem = { ...BASE_ITEM, X: '', Y: '' };
       const rawRows = adapter.getRawRows([noGeoItem]);
@@ -94,113 +96,176 @@ describe('SeoulYeyakAdapter', () => {
 
     it('SVCID가 없는 항목은 제외한다(복합키 구성 불가)', () => {
       const adapter = new SeoulYeyakAdapter();
-      const rawRows = adapter.getRawRows([{ ...BASE_ITEM, SVCID: '' }]);
-      expect(rawRows).toEqual([]);
+      expect(adapter.getRawRows([{ ...BASE_ITEM, SVCID: '' }])).toEqual([]);
+    });
+
+    it("Decision 017 1항: MAXCLASSNM이 '진료복지'인 항목은 RAW 레이어에도 남기지 않는다(수집 범위 제외)", () => {
+      const adapter = new SeoulYeyakAdapter();
+      expect(adapter.getRawRows([{ ...BASE_ITEM, MAXCLASSNM: '진료복지' }])).toEqual([]);
     });
   });
 
-  describe('transform', () => {
-    it('정상 항목을 events 표준 스키마 행으로 변환한다', () => {
+  describe('transformSplit — 테이블 분리 (Decision 017 1항/4항)', () => {
+    it('MAXCLASSNM이 문화체험/교육강좌면 events로 분류한다', () => {
       const adapter = new SeoulYeyakAdapter();
-      const rows = adapter.transform([BASE_ITEM]);
-
-      expect(rows).toHaveLength(1);
-      expect(rows[0]).toMatchObject({
-        external_id: 'SEOUL_YEYAK_S260722093915914461',
-        title: BASE_ITEM.SVCNM,
-        event_type: 'PERFORMANCE_FESTIVAL',
-        is_reservation_required: true,
-        is_free: true,
-        is_active: true,
-        venue_name: '서울역사박물관', // Task 9-1-1: PLACENM 매핑
-      });
-      expect(rows[0].reservation_url).toContain('rsv_svc_id=S260722093915914461');
-    });
-
-    // Task 9-6-7(2026-08-23) 버그 수정: AREANM이 실제 서울 자치구일 때만 "서울시 " 접두를 붙여야
-    // 한다. 이전에는 무조건 접두를 붙여 "서울시 과천시"처럼 존재하지 않는 행정구역이 만들어졌다
-    // (실측 확인: 서울대공원/서울동물원처럼 서울시가 운영하지만 실제로는 경기도 과천시에 있는
-    // 시설, "상주서울농장"처럼 경상북도에 있는 시설도 이 API가 함께 내려줌).
-    it('AREANM이 실제 서울 자치구면 "서울시 " 접두를 붙인다', () => {
-      const adapter = new SeoulYeyakAdapter();
-      const [row] = adapter.transform([{ ...BASE_ITEM, AREANM: '종로구' }]);
-      expect(row.sigungu_name).toBe('서울시 종로구');
-    });
-
-    // Task 9-6-8(2026-08-23): buildEventRow가 이제 normalizeSigunguProvince로 광역 접두를
-    // 자동 보완한다 — buildSigunguName은 "서울시 " 오접두만 안 붙이면 되고(Task 9-6-7),
-    // 실제 올바른 광역 지자체(경기도) 접두는 그 다음 단계에서 붙는다.
-    it('AREANM이 서울 자치구가 아니면(예: 과천시) "서울시" 접두는 안 붙이지만, 실제 광역 지자체(경기도) 접두는 붙는다', () => {
-      const adapter = new SeoulYeyakAdapter();
-      const [row] = adapter.transform([
-        { ...BASE_ITEM, SVCID: 'S-gwacheon', SVCNM: '서울대공원 테마가든', AREANM: '과천시' },
+      const result = adapter.transformSplit([
+        { ...BASE_ITEM, SVCID: 'S1', MAXCLASSNM: '문화체험' },
+        { ...BASE_ITEM, SVCID: 'S2', MAXCLASSNM: '교육강좌' },
       ]);
-      expect(row.sigungu_name).toBe('경기도 과천시');
+      expect(result.events).toHaveLength(2);
+      expect(result.open_spaces).toHaveLength(0);
+      expect(result.events.map((r) => r.external_id)).toEqual(['SEOUL_YEYAK_S1', 'SEOUL_YEYAK_S2']);
     });
 
-    it('DIV별로 UI 카테고리를 매핑한다(시설대관/진료는 ETC)', () => {
+    it('MAXCLASSNM이 체육시설/공간시설이면 open_spaces로 분류한다', () => {
       const adapter = new SeoulYeyakAdapter();
-      const [sports] = adapter.transform([{ ...BASE_ITEM, DIV: '체육시설' }]);
-      const [edu] = adapter.transform([{ ...BASE_ITEM, DIV: '교육' }]);
-      const [rental] = adapter.transform([{ ...BASE_ITEM, DIV: '시설대관' }]);
-      const [medical] = adapter.transform([{ ...BASE_ITEM, DIV: '진료' }]);
-
-      expect(sports.event_type).toBe('KIDS_ACTIVITY');
-      expect(edu.event_type).toBe('EXPERIENCE_CLASS');
-      expect(rental.event_type).toBe('ETC');
-      expect(medical.event_type).toBe('ETC');
+      const result = adapter.transformSplit([
+        { ...BASE_ITEM, SVCID: 'S1', MAXCLASSNM: '체육시설' },
+        { ...BASE_ITEM, SVCID: 'S2', MAXCLASSNM: '공간시설' },
+      ]);
+      expect(result.open_spaces).toHaveLength(2);
+      expect(result.events).toHaveLength(0);
     });
 
-    it('PAYATNM이 무료가 아니면 is_free를 false로 판별한다', () => {
+    it("MAXCLASSNM이 '진료복지'면 어느 테이블에도 넣지 않고 excludedCount로만 집계한다", () => {
       const adapter = new SeoulYeyakAdapter();
-      const [row] = adapter.transform([{ ...BASE_ITEM, PAYATNM: '유료' }]);
+      const result = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '진료복지' }]);
+      expect(result.open_spaces).toHaveLength(0);
+      expect(result.events).toHaveLength(0);
+      expect(result.excludedCount).toBe(1);
+      expect(result.errorCounts).toEqual({});
+    });
+
+    it('알 수 없는 MAXCLASSNM은 UNKNOWN_MAXCLASSNM 에러로 집계하고 skip한다(무중단)', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const result = adapter.transformSplit([
+        { ...BASE_ITEM, SVCID: 'S1', MAXCLASSNM: '알수없는분류' },
+        { ...BASE_ITEM, SVCID: 'S2', MAXCLASSNM: '문화체험' },
+      ]);
+      expect(result.errorCounts.UNKNOWN_MAXCLASSNM).toBe(1);
+      expect(result.events).toHaveLength(1); // 뒤 항목은 정상 처리(무중단)
+    });
+
+    it('강제 카테고리 매핑을 제거했다: open_spaces(체육시설)는 UI 카테고리를 억지로 채우지 않고 ETC로 남긴다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const [row] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '체육시설' }]).open_spaces;
+      expect(row.category).toBe('ETC');
+    });
+
+    it('events(문화체험/교육강좌)는 EXPERIENCE_CLASS로 매핑한다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const [row] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '문화체험' }]).events;
+      expect(row.event_type).toBe('EXPERIENCE_CLASS');
+    });
+
+    it('source 컬럼에 seoul_public_reservation을 담는다(양쪽 테이블 공통)', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const [eventRow] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '문화체험' }]).events;
+      const [spaceRow] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '체육시설' }]).open_spaces;
+      expect(eventRow.source).toBe('seoul_public_reservation');
+      expect(spaceRow.source).toBe('seoul_public_reservation');
+    });
+
+    it('원본 메타필드(MAXCLASSNM/MINCLASSNM 등)를 raw_data에 그대로 보존한다(양쪽 테이블 공통)', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const item = { ...BASE_ITEM, MAXCLASSNM: '체육시설' };
+      const [spaceRow] = adapter.transformSplit([item]).open_spaces;
+      expect(spaceRow.raw_data).toEqual(item);
+    });
+  });
+
+  describe('transformSplit — Null-safe 원본 적재 (Decision 017 4항: 드롭 금지)', () => {
+    it('좌표가 없어도 드롭하지 않고 location_precision=UNKNOWN으로 적재한다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const [row] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '체육시설', X: '', Y: '' }]).open_spaces;
+      expect(row).toBeTruthy();
+      expect(row.location).toBeNull();
+      expect(row.location_precision).toBe('UNKNOWN');
+    });
+
+    it('좌표 필드가 있는데 숫자로 파싱되지 않으면 COORDINATE_PARSE_FAIL로 집계하되 여전히 드롭하지 않는다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const result = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '체육시설', X: '잘못된값', Y: '잘못된값' }]);
+      expect(result.errorCounts.COORDINATE_PARSE_FAIL).toBe(1);
+      expect(result.open_spaces).toHaveLength(1);
+      expect(result.open_spaces[0].location_precision).toBe('UNKNOWN');
+    });
+
+    it('요금 정보(PAYATNM)가 없어도 드롭하지 않고 is_free만 false로 남는다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const [row] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '문화체험', PAYATNM: '' }]).events;
+      expect(row).toBeTruthy();
       expect(row.is_free).toBe(false);
     });
+  });
 
-    it('SVCSTATNM에 종료/마감이 포함되면 is_active를 false로 판별한다', () => {
+  describe('transformSplit — 무중단 예외 처리 및 에러 분류 (Decision 017 7항/8항)', () => {
+    it('SVCID가 없는 항목은 MISSING_SVCID로 집계하고 skip하되 나머지는 계속 처리한다', () => {
       const adapter = new SeoulYeyakAdapter();
-      const [ended] = adapter.transform([{ ...BASE_ITEM, SVCSTATNM: '접수종료' }]);
-      const [closed] = adapter.transform([{ ...BASE_ITEM, SVCSTATNM: '모집마감' }]);
-      expect(ended.is_active).toBe(false);
-      expect(closed.is_active).toBe(false);
-    });
-
-    it('경도/위도/필수 필드 중 하나라도 없으면 해당 항목을 건너뛴다', () => {
-      const adapter = new SeoulYeyakAdapter();
-      const rows = adapter.transform([
-        { ...BASE_ITEM, X: '', Y: '' },
-        { ...BASE_ITEM, SVCID: '' },
-        { ...BASE_ITEM, SVCNM: '' },
+      const result = adapter.transformSplit([
+        { ...BASE_ITEM, SVCID: '', MAXCLASSNM: '문화체험' },
+        { ...BASE_ITEM, SVCID: 'S2', MAXCLASSNM: '문화체험' },
       ]);
-      expect(rows).toEqual([null, null, null]);
+      expect(result.errorCounts.MISSING_SVCID).toBe(1);
+      expect(result.events).toHaveLength(1);
     });
 
-    describe('deriveParentalTags 연동 (Task 8-4에서 신규 연결)', () => {
-      it('USETGTINFO/DTLCONT의 실제 텍스트를 근거로 is_kids_friendly/has_parking/stroller_accessible을 판별한다', () => {
-        const adapter = new SeoulYeyakAdapter();
-        const [row] = adapter.transform([BASE_ITEM]);
+    it('SVCNM(제목/이름)이 없는 항목은 MISSING_NAME으로 집계하고 skip한다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const result = adapter.transformSplit([{ ...BASE_ITEM, SVCNM: '', MAXCLASSNM: '체육시설' }]);
+      expect(result.errorCounts.MISSING_NAME).toBe(1);
+      expect(result.open_spaces).toHaveLength(0);
+    });
 
-        expect(row.is_kids_friendly).toBe(true); // USETGTINFO: "가족(학부모 1인, 자녀 1인)"
-        expect(row.has_parking).toBe(true); // DTLCONT: "주차장 있음"
-        expect(row.stroller_accessible).toBe(true); // DTLCONT: "유모차 접근 가능"
-      });
+    it('events는 시작/종료일이 없으면 DATE_PARSE_FAIL로 집계하고 skip한다(events.start_date/end_date DB NOT NULL)', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const result = adapter.transformSplit([
+        { ...BASE_ITEM, MAXCLASSNM: '문화체험', SVCOPNBGNDT: '', SVCOPNENDDT: '' },
+      ]);
+      expect(result.errorCounts.DATE_PARSE_FAIL).toBe(1);
+      expect(result.events).toHaveLength(0);
+    });
 
-      it('실내/실외 키워드가 DTLCONT에 있으면 facility_type을 매핑한다', () => {
-        const adapter = new SeoulYeyakAdapter();
-        const [row] = adapter.transform([BASE_ITEM]);
-        expect(row.facility_type).toBe('실내'); // DTLCONT: "실내 교육 프로그램입니다"
-      });
+    it('한 항목 처리 중 예상치 못한 예외가 나도 전체가 중단되지 않고 UNEXPECTED_ERROR로 집계 후 계속한다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const result = adapter.transformSplit([
+        null, // 접근 시 예외를 유발하는 방어적 케이스
+        { ...BASE_ITEM, SVCID: 'S2', MAXCLASSNM: '문화체험' },
+      ]);
+      expect(result.errorCounts.UNEXPECTED_ERROR).toBe(1);
+      expect(result.events).toHaveLength(1); // 무중단 확인
+    });
+  });
 
-      it('키워드 근거가 전혀 없으면 기본값(false/복합)을 유지한다', () => {
-        const adapter = new SeoulYeyakAdapter();
-        const [row] = adapter.transform([
-          { ...BASE_ITEM, USETGTINFO: '성인', DTLCONT: '유의사항을 확인하세요.', PLACENM: '테스트장소' },
-        ]);
-        expect(row.is_kids_friendly).toBe(false);
-        expect(row.has_parking).toBe(false);
-        expect(row.stroller_accessible).toBe(false);
-        expect(row.facility_type).toBe('복합');
-      });
+  describe('deriveParentalTags/deriveSpaceKidsFriendly 연동 (Decision 017 9항: 키즈 뱃지 오매핑 정화)', () => {
+    it('events(문화체험/교육강좌)는 기존과 동일하게 원본 전체 텍스트 기반 태깅을 유지한다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const [row] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '문화체험' }]).events;
+      expect(row.is_kids_friendly).toBe(true); // USETGTINFO: "가족(학부모 1인, 자녀 1인)"
+      expect(row.has_parking).toBe(true); // DTLCONT: "주차장 있음"
+      expect(row.facility_type).toBe('실내'); // DTLCONT: "실내 교육 프로그램입니다"
+    });
+
+    it('open_spaces(체육/공간시설)는 USETGTINFO에 키즈 신호가 없으면 키즈 뱃지를 부여하지 않는다(오매핑 정화 확인)', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const [row] = adapter
+        .transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '체육시설', USETGTINFO: '성인', MINCLASSNM: '체육관' }])
+        .open_spaces;
+      expect(row.is_kids_friendly).toBe(false);
+    });
+
+    it('open_spaces는 USETGTINFO에 가족/어린이 등이 명시되면 키즈 뱃지를 부여한다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const [row] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '체육시설' }]).open_spaces; // USETGTINFO: "가족..."
+      expect(row.is_kids_friendly).toBe(true);
+    });
+
+    it('open_spaces는 MINCLASSNM이 키즈/체험 전용 시설이면 USETGTINFO와 무관하게 키즈 뱃지를 부여한다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const [row] = adapter
+        .transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '공간시설', USETGTINFO: '성인', MINCLASSNM: '서울형키즈카페' }])
+        .open_spaces;
+      expect(row.is_kids_friendly).toBe(true);
     });
   });
 });
