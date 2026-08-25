@@ -23,15 +23,25 @@ function firstRow<T>(result: RpcResult<T[]>, label: string): T | undefined {
 export default async function AdminDataGridPage() {
   const supabase = await createClient();
 
-  const [sourceTypeOptions, categoryOptions, sourceOptions, seoulYeyakOptions, eventsOptions, rawIngestOptions] =
-    await Promise.all([
-      supabase.rpc('get_open_spaces_source_type_options'),
-      supabase.rpc('get_open_spaces_category_options'),
-      supabase.rpc('get_open_spaces_source_options'),
-      supabase.rpc('get_open_spaces_seoul_yeyak_options'),
-      supabase.rpc('get_events_filter_options'),
-      supabase.rpc('get_raw_ingest_data_filter_options'),
-    ]);
+  const [
+    sourceTypeOptions,
+    categoryOptions,
+    sourceOptions,
+    seoulYeyakOptions,
+    eventsOptions,
+    rawIngestOptions,
+    openSpacesCategoryMinOptions,
+    eventsCategoryMinOptions,
+  ] = await Promise.all([
+    supabase.rpc('get_open_spaces_source_type_options'),
+    supabase.rpc('get_open_spaces_category_options'),
+    supabase.rpc('get_open_spaces_source_options'),
+    supabase.rpc('get_open_spaces_seoul_yeyak_options'),
+    supabase.rpc('get_events_filter_options'),
+    supabase.rpc('get_raw_ingest_data_filter_options'),
+    supabase.rpc('get_category_min_options', { p_target_table: 'open_spaces' }),
+    supabase.rpc('get_category_min_options', { p_target_table: 'events' }),
+  ]);
 
   const stRow = firstRow(sourceTypeOptions, 'get_open_spaces_source_type_options');
   const catRow = firstRow(categoryOptions, 'get_open_spaces_category_options');
@@ -39,6 +49,17 @@ export default async function AdminDataGridPage() {
   const yeyakRow = firstRow(seoulYeyakOptions, 'get_open_spaces_seoul_yeyak_options');
   const ev = firstRow(eventsOptions, 'get_events_filter_options');
   const raw = firstRow(rawIngestOptions, 'get_raw_ingest_data_filter_options');
+
+  // [카테고리 정제 & 어드민 확장](2026-08-26): get_category_min_options는 (RPC 관례상) 행마다
+  // 하나의 category_min을 돌려주는 테이블 함수라 firstRow가 아니라 전체 행을 그대로 매핑한다.
+  if (openSpacesCategoryMinOptions.error) {
+    console.error('[admin/data-grid] get_category_min_options(open_spaces) 조회 실패:', openSpacesCategoryMinOptions.error.message);
+  }
+  if (eventsCategoryMinOptions.error) {
+    console.error('[admin/data-grid] get_category_min_options(events) 조회 실패:', eventsCategoryMinOptions.error.message);
+  }
+  const openSpacesCategoryMins = (openSpacesCategoryMinOptions.data ?? []).map((r) => r.category_min);
+  const eventsCategoryMins = (eventsCategoryMinOptions.data ?? []).map((r) => r.category_min);
 
   return (
     <AdminDataGridClient
@@ -49,12 +70,14 @@ export default async function AdminDataGridPage() {
           sources: srcRow?.sources ?? [],
           minClassNames: yeyakRow?.min_class_names ?? [],
           svcStatNms: yeyakRow?.svc_stat_nms ?? [],
+          categoryMins: openSpacesCategoryMins,
         },
         events: {
           sources: ev?.sources ?? [],
           categories: ev?.event_types ?? [],
           minClassNames: ev?.min_class_names ?? [],
           svcStatNms: ev?.svc_stat_nms ?? [],
+          categoryMins: eventsCategoryMins,
         },
         raw_ingest_data: {
           sources: raw?.sources ?? [],

@@ -19,7 +19,9 @@
 // 순차 실행(레이트리밋/DB 커넥션 과부하 방지) 후 docs/pipeline-log.md에 배치 리포트를 남긴다.
 import { pathToFileURL } from 'url';
 import { loadEnv } from '../lib/load-env.mjs';
+import { createAdminClient } from './lib/supabase-admin.mjs';
 import { recordBatchRun } from './lib/batch-log.mjs';
+import { applyCategoryRules } from './lib/category-rules.mjs';
 import { CityParkAdapter } from './adapters/city-park-adapter.mjs';
 import { CulturalFacilitySummaryAdapter } from './adapters/cultural-facility-summary-adapter.mjs';
 import { AmusementParkAdapter } from './adapters/amusement-park-adapter.mjs';
@@ -54,8 +56,43 @@ const STEPS = [
   { label: 'KOR_PET_TOUR', run: ({ dryRun }) => new KorPetTourAdapter().run({ dryRun }) },
 ];
 
+// [카테고리 정제 & 어드민 확장](2026-08-26): run-daily.mjs와 동일한 후처리 — category_min
+// IS NULL 행에 최신 category_rules를 적용한다. open_spaces는 대부분 이 배치(월간)를 통해서만
+// 적재되므로, 여기서도 반드시 실행해야 신규 수집분의 category_min이 채워진다.
+async function runCategoryRulesApplication({ dryRun }) {
+  if (dryRun) {
+    return {
+      sourceKey: 'CATEGORY_RULES_APPLICATION',
+      source: null,
+      targetTable: 'open_spaces',
+      rawCount: 0,
+      count: 0,
+      upserted: false,
+      safeMergeCount: 0,
+      errorCount: 0,
+      excludeFromVerification: true,
+      note: 'dry-run: 실제 재분류는 실행하지 않음',
+    };
+  }
+
+  const client = createAdminClient();
+  const result = await applyCategoryRules(client);
+  return {
+    sourceKey: 'CATEGORY_RULES_APPLICATION',
+    source: null,
+    targetTable: 'open_spaces',
+    rawCount: result.open_spaces.scanned + result.events.scanned,
+    count: result.open_spaces.matched + result.events.matched,
+    upserted: true,
+    safeMergeCount: 0,
+    errorCount: 0,
+    excludeFromVerification: true,
+    note: `category_min 신규 룰 매칭 후처리(신규 적재 아님) — open_spaces ${result.open_spaces.matched}/${result.open_spaces.scanned}건, events ${result.events.matched}/${result.events.scanned}건`,
+  };
+}
+
 export async function runMonthlyBatch({ dryRun = false } = {}) {
-  console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length}개 단계\n`);
+  console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length + 1}개 단계\n`);
 
   const results = [];
 
@@ -68,6 +105,14 @@ export async function runMonthlyBatch({ dryRun = false } = {}) {
       console.error(`❌ [${step.label}] 실패: ${err.message}`);
       results.push({ failed: true, sourceKey: step.label, source: step.label, note: err.message });
     }
+  }
+
+  console.log('\n=== [CATEGORY_RULES_APPLICATION] ===');
+  try {
+    results.push(await runCategoryRulesApplication({ dryRun }));
+  } catch (err) {
+    console.error(`❌ [CATEGORY_RULES_APPLICATION] 실패: ${err.message}`);
+    results.push({ failed: true, sourceKey: 'CATEGORY_RULES_APPLICATION', source: null, note: err.message });
   }
 
   if (!dryRun) {

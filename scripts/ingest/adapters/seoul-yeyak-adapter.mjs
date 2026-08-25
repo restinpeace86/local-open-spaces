@@ -180,6 +180,11 @@ export class SeoulYeyakAdapter extends BaseCollectorAdapter {
         const reservationUrl = `${OUTLINK_BASE}?rsv_svc_id=${item.SVCID}`;
         const broadTags = deriveParentalTags(JSON.stringify(item));
         const sigunguName = buildSigunguName(item.AREANM);
+        // [카테고리 정제 & 어드민 확장](2026-08-26): MINCLASSNM은 이 소스만 갖고 있는 서울시
+        // 표준 원본 필드다 — 다른 어댑터처럼 이름 키워드로 추론할 필요 없이 곧바로 RAW로
+        // 태깅한다(scripts/migrations/2026-08-26-category-rules-engine.sql 4절과 동일 규약).
+        const categoryMin = item.MINCLASSNM || null;
+        const categoryMinSource = categoryMin ? 'RAW' : null;
 
         if (table === 'events') {
           const startDate = toDateOnly(item.SVCOPNBGNDT);
@@ -214,6 +219,8 @@ export class SeoulYeyakAdapter extends BaseCollectorAdapter {
             venueName: item.PLACENM || null,
             sigunguName,
             rawData: item,
+            categoryMin,
+            categoryMinSource,
           });
           if (!row) {
             bumpError(errorCounts, 'SCHEMA_BUILD_FAIL');
@@ -242,6 +249,8 @@ export class SeoulYeyakAdapter extends BaseCollectorAdapter {
             targetAgeGroup: broadTags.target_age_group,
             rawData: item,
             sigunguName,
+            categoryMin,
+            categoryMinSource,
           });
           if (!row) {
             bumpError(errorCounts, 'SCHEMA_BUILD_FAIL');

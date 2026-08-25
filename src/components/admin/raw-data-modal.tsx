@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { AdminTable, AdminRow, AdminOpenSpaceRow, AdminEventRow, AdminRawIngestRow } from '@/components/admin/data-grid-client';
 
 // [개편] 행 클릭 시 해당 행의 전체 원천 컬럼(구조화된 값) + raw_data/raw_payload 원문 JSON을
@@ -19,7 +20,93 @@ function getModalContent(table: AdminTable, row: AdminRow): { title: string; sub
   return { title: r.name, subtitle: `${r.source_type} · ${r.external_id}`, raw: r.raw_data };
 }
 
-export function RawDataModal({ table, row, onClose }: { table: AdminTable; row: AdminRow; onClose: () => void }) {
+// [카테고리 정제 & 어드민 확장](2026-08-26): 상세 모달에서 category_min을 직접 선택해
+// 수동 수정할 수 있다(open_spaces/events 탭 전용, raw_ingest_data에는 이 컬럼 자체가 없음).
+// 저장 시 category_min_source가 항상 'MANUAL'로 바뀐다(서버 규약 — PATCH /api/admin/data-grid/category-min).
+function CategoryMinEditor({
+  table,
+  row,
+  categoryMinOptions,
+  onUpdated,
+}: {
+  table: 'open_spaces' | 'events';
+  row: AdminOpenSpaceRow | AdminEventRow;
+  categoryMinOptions: string[];
+  onUpdated: (id: string, nextCategoryMin: string | null, nextSource: string | null) => void;
+}) {
+  const [value, setValue] = useState(row.category_min ?? '');
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setErrorMessage(null);
+    try {
+      const res = await fetch('/api/admin/data-grid/category-min', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ table, id: row.id, category_min: value || null }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? '수동 수정 실패');
+      onUpdated(row.id, json.row.category_min, json.row.category_min_source);
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : '수동 수정 실패');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-4 rounded-xl border border-gray-200 p-3">
+      <h3 className="text-xs font-semibold text-gray-500 mb-2">
+        표준 중분류(category_min) 수동 수정
+        {row.category_min_source && (
+          <span className="ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
+            현재: {row.category_min_source}
+          </span>
+        )}
+      </h3>
+      <div className="flex items-center gap-2">
+        <select
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs flex-1"
+        >
+          <option value="">(미분류)</option>
+          {categoryMinOptions.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={isSaving}
+          className="rounded-full bg-purple-600 text-white text-xs font-semibold px-3 py-1.5 disabled:opacity-40 hover:bg-purple-700"
+        >
+          {isSaving ? '저장 중...' : '저장(MANUAL)'}
+        </button>
+      </div>
+      {errorMessage && <p className="mt-1.5 text-xs text-red-500">{errorMessage}</p>}
+    </div>
+  );
+}
+
+export function RawDataModal({
+  table,
+  row,
+  categoryMinOptions,
+  onClose,
+  onCategoryMinUpdated,
+}: {
+  table: AdminTable;
+  row: AdminRow;
+  categoryMinOptions: string[];
+  onClose: () => void;
+  onCategoryMinUpdated?: (id: string, nextCategoryMin: string | null, nextSource: string | null) => void;
+}) {
   const { title, subtitle, raw } = getModalContent(table, row);
   const prettyJson = JSON.stringify(raw ?? null, null, 2);
 
@@ -41,6 +128,15 @@ export function RawDataModal({ table, row, onClose }: { table: AdminTable; row: 
               ✕
             </button>
           </div>
+
+          {table !== 'raw_ingest_data' && onCategoryMinUpdated && (
+            <CategoryMinEditor
+              table={table}
+              row={row as AdminOpenSpaceRow | AdminEventRow}
+              categoryMinOptions={categoryMinOptions}
+              onUpdated={onCategoryMinUpdated}
+            />
+          )}
 
           <h3 className="mt-4 text-xs font-semibold text-gray-500">전체 컬럼</h3>
           <div className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">

@@ -26,6 +26,7 @@ import { SeoulYeyakAdapter } from './adapters/seoul-yeyak-adapter.mjs';
 import { enrichGgCultureEventLocations } from './adapters/gg-culture-location-enrichment.mjs';
 import { run as runSeoulCultureEvents } from './seoul-culture-events.mjs';
 import { run as runTourApiFestival } from './tour-api-festival.mjs';
+import { applyCategoryRules } from './lib/category-rules.mjs';
 
 loadEnv();
 
@@ -38,6 +39,43 @@ const STEPS = [
   { label: 'TOUR_API_FESTIVAL', run: ({ dryRun }) => runTourApiFestival({ dryRun }) },
   { label: 'SEOUL_YEYAK', run: ({ dryRun }) => new SeoulYeyakAdapter().run({ dryRun }) },
 ];
+
+// [카테고리 정제 & 어드민 확장](2026-08-26): 이번 배치에서 새로 적재된(또는 아직 미분류인)
+// category_min IS NULL 행에 DB의 최신 category_rules 키워드 규칙을 적용해 RULE로 채운다.
+// GG_CULTURE_LOCATION_ENRICHMENT와 달리 특정 단계의 성공 여부에 의존하지 않는다(전체 events
+// 테이블의 미분류 행을 대상으로 하는 독립적인 후처리라 앞선 개별 단계 실패와 무관하게 항상
+// 실행할 가치가 있음).
+async function runCategoryRulesApplication({ dryRun }) {
+  if (dryRun) {
+    return {
+      sourceKey: 'CATEGORY_RULES_APPLICATION',
+      source: null,
+      targetTable: 'events',
+      rawCount: 0,
+      count: 0,
+      upserted: false,
+      safeMergeCount: 0,
+      errorCount: 0,
+      excludeFromVerification: true,
+      note: 'dry-run: 실제 재분류는 실행하지 않음',
+    };
+  }
+
+  const client = createAdminClient();
+  const result = await applyCategoryRules(client);
+  return {
+    sourceKey: 'CATEGORY_RULES_APPLICATION',
+    source: null,
+    targetTable: 'events',
+    rawCount: result.open_spaces.scanned + result.events.scanned,
+    count: result.open_spaces.matched + result.events.matched,
+    upserted: true,
+    safeMergeCount: 0,
+    errorCount: 0,
+    excludeFromVerification: true,
+    note: `category_min 신규 룰 매칭 후처리(신규 적재 아님) — open_spaces ${result.open_spaces.matched}/${result.open_spaces.scanned}건, events ${result.events.matched}/${result.events.scanned}건`,
+  };
+}
 
 async function runLocationEnrichment({ dryRun }) {
   const client = createAdminClient();
@@ -58,7 +96,7 @@ async function runLocationEnrichment({ dryRun }) {
 }
 
 export async function runDailyBatch({ dryRun = false } = {}) {
-  console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length + 1}개 단계\n`);
+  console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length + 2}개 단계\n`);
 
   const results = [];
 
@@ -94,6 +132,14 @@ export async function runDailyBatch({ dryRun = false } = {}) {
       source: 'gg_public',
       note: 'GG_CULTURE_EVENTS 실패로 건너뜀',
     });
+  }
+
+  console.log('\n=== [CATEGORY_RULES_APPLICATION] ===');
+  try {
+    results.push(await runCategoryRulesApplication({ dryRun }));
+  } catch (err) {
+    console.error(`❌ [CATEGORY_RULES_APPLICATION] 실패: ${err.message}`);
+    results.push({ failed: true, sourceKey: 'CATEGORY_RULES_APPLICATION', source: null, note: err.message });
   }
 
   if (!dryRun) {

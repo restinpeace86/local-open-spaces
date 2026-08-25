@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
 import { RawDataModal } from '@/components/admin/raw-data-modal';
+import { CategoryRulesModal } from '@/components/admin/category-rules-modal';
 
 export type AdminTable = 'open_spaces' | 'events' | 'raw_ingest_data';
 
@@ -13,6 +14,8 @@ export type AdminOpenSpaceRow = {
   source: string | null;
   name: string;
   category: string;
+  category_min: string | null;
+  category_min_source: string | null;
   address: string;
   location: unknown;
   location_precision: string;
@@ -36,6 +39,8 @@ export type AdminEventRow = {
   source: string | null;
   title: string;
   event_type: string;
+  category_min: string | null;
+  category_min_source: string | null;
   venue_name: string | null;
   sigungu_name: string | null;
   start_date: string;
@@ -69,8 +74,21 @@ export type AdminRawIngestRow = {
 export type AdminRow = AdminOpenSpaceRow | AdminEventRow | AdminRawIngestRow;
 
 type FilterOptions = {
-  open_spaces: { sourceTypes: string[]; sources: string[]; categories: string[]; minClassNames: string[]; svcStatNms: string[] };
-  events: { sources: string[]; categories: string[]; minClassNames: string[]; svcStatNms: string[] };
+  open_spaces: {
+    sourceTypes: string[];
+    sources: string[];
+    categories: string[];
+    minClassNames: string[];
+    svcStatNms: string[];
+    categoryMins: string[];
+  };
+  events: {
+    sources: string[];
+    categories: string[];
+    minClassNames: string[];
+    svcStatNms: string[];
+    categoryMins: string[];
+  };
   raw_ingest_data: { sources: string[] };
 };
 
@@ -165,6 +183,27 @@ function ChipMultiSelect({
   );
 }
 
+// [카테고리 정제 & 어드민 확장](2026-08-26): category_min_source(RAW/RULE/MANUAL) 출처 뱃지.
+const CATEGORY_MIN_SOURCE_STYLE: Record<string, string> = {
+  RAW: 'bg-emerald-100 text-emerald-700',
+  RULE: 'bg-blue-100 text-blue-700',
+  MANUAL: 'bg-purple-100 text-purple-700',
+};
+
+function CategoryMinBadge({ categoryMin, source }: { categoryMin: string | null; source: string | null }) {
+  if (!categoryMin) return <span className="text-xs text-gray-300">NULL</span>;
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className="text-xs text-gray-700">{categoryMin}</span>
+      {source && (
+        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${CATEGORY_MIN_SOURCE_STYLE[source] ?? 'bg-gray-100 text-gray-600'}`}>
+          {source}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function MetricCard({ label, value, sub }: { label: string; value: number | null; sub?: string }) {
   return (
     <div className="rounded-xl border border-gray-200 px-3 py-2 min-w-[110px]">
@@ -203,6 +242,9 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
   const [categories, setCategories] = useState<string[]>([]);
   const [minClassName, setMinClassName] = useState('');
   const [svcStatNm, setSvcStatNm] = useState('');
+  const [categoryMin, setCategoryMin] = useState('');
+  const [missingCategoryMin, setMissingCategoryMin] = useState(false);
+  const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
   const [isFree, setIsFree] = useState<TriState>('all');
   const [hasParking, setHasParking] = useState<TriState>('all');
   const [strollerAccessible, setStrollerAccessible] = useState<TriState>('all');
@@ -225,6 +267,8 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     setCategories([]);
     setMinClassName('');
     setSvcStatNm('');
+    setCategoryMin('');
+    setMissingCategoryMin(false);
     setIsFree('all');
     setHasParking('all');
     setStrollerAccessible('all');
@@ -246,7 +290,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedQ, sourceTypes, sources, categories, minClassName, svcStatNm, isFree, hasParking, strollerAccessible, isKidsFriendly, missingLocation, missingFee]);
+  }, [debouncedQ, sourceTypes, sources, categories, minClassName, svcStatNm, categoryMin, missingCategoryMin, isFree, hasParking, strollerAccessible, isKidsFriendly, missingLocation, missingFee]);
 
   useEffect(() => {
     let cancelled = false;
@@ -261,6 +305,8 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     if (categories.length > 0) params.set('category', categories.join(','));
     if (minClassName) params.set('min_class_name', minClassName);
     if (svcStatNm) params.set('svc_stat_nm', svcStatNm);
+    if (categoryMin) params.set('category_min', categoryMin);
+    if (missingCategoryMin) params.set('missing_category_min', 'true');
     if (isFree !== 'all') params.set('is_free', isFree);
     if (hasParking !== 'all') params.set('has_parking', hasParking);
     if (strollerAccessible !== 'all') params.set('stroller_accessible', strollerAccessible);
@@ -292,7 +338,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, debouncedQ, sourceTypes, sources, categories, minClassName, svcStatNm, isFree, hasParking, strollerAccessible, isKidsFriendly, missingLocation, missingFee, page, pageSize]);
+  }, [tab, debouncedQ, sourceTypes, sources, categories, minClassName, svcStatNm, categoryMin, missingCategoryMin, isFree, hasParking, strollerAccessible, isKidsFriendly, missingLocation, missingFee, page, pageSize]);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
   const currentOptions = filterOptions[tab];
@@ -302,9 +348,18 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
       <div className="shrink-0 p-4 border-b border-gray-100 flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-sm font-bold text-gray-900">Admin Data Grid</h1>
-          <button type="button" onClick={resetFilters} className="text-xs text-gray-500 hover:text-gray-800 underline">
-            필터 초기화
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setIsRulesModalOpen(true)}
+              className="text-xs font-semibold text-white bg-gray-900 rounded-full px-3 py-1.5 hover:bg-gray-700"
+            >
+              카테고리 키워드 규칙 관리
+            </button>
+            <button type="button" onClick={resetFilters} className="text-xs text-gray-500 hover:text-gray-800 underline">
+              필터 초기화
+            </button>
+          </div>
         </div>
 
         {/* 1. 요약 메트릭 카드 */}
@@ -365,6 +420,34 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
             onToggle={(v) => setCategories((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]))}
             colorFor={(v) => getCategoryMeta(v).color}
           />
+        )}
+
+        {tab !== 'raw_ingest_data' && 'categoryMins' in currentOptions && (
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-1.5 text-xs text-gray-500">
+              표준 중분류(category_min)
+              <select
+                value={categoryMin}
+                onChange={(e) => setCategoryMin(e.target.value)}
+                className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
+              >
+                <option value="">전체</option>
+                {currentOptions.categoryMins.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-gray-500">
+              <input
+                type="checkbox"
+                checked={missingCategoryMin}
+                onChange={(e) => setMissingCategoryMin(e.target.checked)}
+              />
+              중분류 NULL만 보기
+            </label>
+          </div>
         )}
 
         {tab !== 'raw_ingest_data' && 'minClassNames' in currentOptions && (
@@ -433,6 +516,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                 <th className="py-2 pr-3">ID</th>
                 <th className="py-2 pr-3">출처</th>
                 {tab !== 'raw_ingest_data' && <th className="py-2 pr-3">원천 대/중분류</th>}
+                {tab !== 'raw_ingest_data' && <th className="py-2 pr-3">표준 중분류</th>}
                 <th className="py-2 pr-3">{tab === 'raw_ingest_data' ? '수집 시각' : '제목/명칭'}</th>
                 {tab !== 'raw_ingest_data' && <th className="py-2 pr-3">장소/시설명</th>}
                 {tab !== 'raw_ingest_data' && <th className="py-2 pr-3">주소</th>}
@@ -488,6 +572,9 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                           {meta.label}
                         </span>
                       )}
+                    </td>
+                    <td className="py-2 pr-3 whitespace-nowrap">
+                      <CategoryMinBadge categoryMin={r.category_min} source={r.category_min_source} />
                     </td>
                     <td className="py-2 pr-3 font-medium text-gray-900 max-w-[220px] truncate">{titleText}</td>
                     <td className="py-2 pr-3 text-gray-600 max-w-[160px] truncate">{venueText}</td>
@@ -554,7 +641,33 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
         </div>
       </div>
 
-      {selectedRow && <RawDataModal table={tab} row={selectedRow} onClose={() => setSelectedRow(null)} />}
+      {selectedRow && tab !== 'raw_ingest_data' && (
+        <RawDataModal
+          table={tab}
+          row={selectedRow}
+          categoryMinOptions={currentOptions && 'categoryMins' in currentOptions ? currentOptions.categoryMins : []}
+          onClose={() => setSelectedRow(null)}
+          onCategoryMinUpdated={(id, nextCategoryMin, nextSource) => {
+            setRows((prev) =>
+              prev.map((row) =>
+                'id' in row && row.id === id
+                  ? { ...row, category_min: nextCategoryMin, category_min_source: nextSource }
+                  : row
+              )
+            );
+            setSelectedRow((prev) =>
+              prev && 'id' in prev && prev.id === id
+                ? { ...prev, category_min: nextCategoryMin, category_min_source: nextSource }
+                : prev
+            );
+          }}
+        />
+      )}
+      {selectedRow && tab === 'raw_ingest_data' && (
+        <RawDataModal table={tab} row={selectedRow} categoryMinOptions={[]} onClose={() => setSelectedRow(null)} />
+      )}
+
+      {isRulesModalOpen && <CategoryRulesModal onClose={() => setIsRulesModalOpen(false)} />}
     </div>
   );
 }

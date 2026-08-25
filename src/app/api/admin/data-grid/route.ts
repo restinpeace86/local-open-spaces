@@ -34,10 +34,10 @@ function escapeIlikePattern(value: string): string {
 }
 
 const OPEN_SPACES_COLUMNS =
-  'id, external_id, source_type, source, name, category, address, location, location_precision, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, raw_data, sigungu_name, created_at, updated_at';
+  'id, external_id, source_type, source, name, category, category_min, category_min_source, address, location, location_precision, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, raw_data, sigungu_name, created_at, updated_at';
 
 const EVENTS_COLUMNS =
-  'id, external_id, source, title, event_type, venue_name, sigungu_name, start_date, end_date, location, location_precision, is_reservation_required, reservation_url, reservation_start_date, reservation_end_date, is_free, thumbnail_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, is_active, raw_data, created_at';
+  'id, external_id, source, title, event_type, category_min, category_min_source, venue_name, sigungu_name, start_date, end_date, location, location_precision, is_reservation_required, reservation_url, reservation_start_date, reservation_end_date, is_free, thumbnail_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, is_active, raw_data, created_at';
 
 const RAW_INGEST_COLUMNS = 'source, source_id, fetched_at, raw_payload';
 
@@ -66,6 +66,8 @@ async function queryOpenSpacesViaSourceSubset(
     categories: string[];
     minClassName: string | null;
     svcStatNm: string | null;
+    categoryMin: string | null;
+    missingCategoryMin: boolean;
     isFree: boolean | null;
     hasParking: boolean | null;
     strollerAccessible: boolean | null;
@@ -90,6 +92,8 @@ async function queryOpenSpacesViaSourceSubset(
     const rawData = row.raw_data as Record<string, unknown> | null;
     if (params.minClassName && rawData?.MINCLASSNM !== params.minClassName) return false;
     if (params.svcStatNm && rawData?.SVCSTATNM !== params.svcStatNm) return false;
+    if (params.categoryMin && row.category_min !== params.categoryMin) return false;
+    if (params.missingCategoryMin && row.category_min !== null) return false;
     if (params.isFree !== null && row.is_free !== params.isFree) return false;
     if (params.hasParking !== null && row.has_parking !== params.hasParking) return false;
     if (params.strollerAccessible !== null && row.stroller_accessible !== params.strollerAccessible) return false;
@@ -111,6 +115,8 @@ async function queryOpenSpaces(supabase: Ctx, searchParams: URLSearchParams, pag
   const categories = parseListFilter(searchParams.get('category'));
   const minClassName = searchParams.get('min_class_name');
   const svcStatNm = searchParams.get('svc_stat_nm');
+  const categoryMin = searchParams.get('category_min');
+  const missingCategoryMin = searchParams.get('missing_category_min') === 'true';
   const isFree = parseBoolFilter(searchParams.get('is_free'));
   const hasParking = parseBoolFilter(searchParams.get('has_parking'));
   const strollerAccessible = parseBoolFilter(searchParams.get('stroller_accessible'));
@@ -126,6 +132,8 @@ async function queryOpenSpaces(supabase: Ctx, searchParams: URLSearchParams, pag
       categories,
       minClassName,
       svcStatNm,
+      categoryMin,
+      missingCategoryMin,
       isFree,
       hasParking,
       strollerAccessible,
@@ -158,6 +166,8 @@ async function queryOpenSpaces(supabase: Ctx, searchParams: URLSearchParams, pag
   else if (sources.length > 1) query = query.in('source', sources);
   if (categories.length === 1) query = query.eq('category', categories[0]);
   else if (categories.length > 1) query = query.in('category', categories);
+  if (categoryMin) query = query.eq('category_min', categoryMin);
+  if (missingCategoryMin) query = query.is('category_min', null);
   if (isFree !== null) query = query.eq('is_free', isFree);
   if (hasParking !== null) query = query.eq('has_parking', hasParking);
   if (strollerAccessible !== null) query = query.eq('stroller_accessible', strollerAccessible);
@@ -180,6 +190,8 @@ async function queryEvents(supabase: Ctx, searchParams: URLSearchParams, page: n
   const eventTypes = parseListFilter(searchParams.get('category'));
   const minClassName = searchParams.get('min_class_name');
   const svcStatNm = searchParams.get('svc_stat_nm');
+  const categoryMin = searchParams.get('category_min');
+  const missingCategoryMin = searchParams.get('missing_category_min') === 'true';
   const isFree = parseBoolFilter(searchParams.get('is_free'));
   const hasParking = parseBoolFilter(searchParams.get('has_parking'));
   const strollerAccessible = parseBoolFilter(searchParams.get('stroller_accessible'));
@@ -199,6 +211,8 @@ async function queryEvents(supabase: Ctx, searchParams: URLSearchParams, page: n
   if (eventTypes.length > 0) query = query.in('event_type', eventTypes);
   if (minClassName) query = query.filter('raw_data->>MINCLASSNM', 'eq', minClassName);
   if (svcStatNm) query = query.filter('raw_data->>SVCSTATNM', 'eq', svcStatNm);
+  if (categoryMin) query = query.eq('category_min', categoryMin);
+  if (missingCategoryMin) query = query.is('category_min', null);
   if (isFree !== null) query = query.eq('is_free', isFree);
   if (hasParking !== null) query = query.eq('has_parking', hasParking);
   if (strollerAccessible !== null) query = query.eq('stroller_accessible', strollerAccessible);

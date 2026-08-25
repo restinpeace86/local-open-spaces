@@ -112,6 +112,11 @@ export function buildOpenSpaceRow({
   targetAgeGroup = null,
   rawData = null,
   sigunguName = undefined,
+  // [카테고리 정제 & 어드민 확장](2026-08-26): 원본이 표준 중분류(예: SEOUL_YEYAK의
+  // MINCLASSNM)를 직접 갖고 있으면 여기서 RAW로 태깅한다. 넘기지 않으면 둘 다 null로 남아
+  // 배치 후처리(scripts/ingest/lib/category-rules.mjs)가 이름 키워드로 RULE 태깅한다.
+  categoryMin = null,
+  categoryMinSource = null,
 }) {
   if (!externalId || !sourceType || !name) return null;
   if (locationPrecision === 'UNKNOWN') {
@@ -138,6 +143,8 @@ export function buildOpenSpaceRow({
     facility_type: normalizeFacilityType(facilityType),
     target_age_group: targetAgeGroup,
     raw_data: rawData,
+    category_min: categoryMin,
+    category_min_source: categoryMinSource,
     // Task 9-1-3: 명시적으로 넘어온 값이 없으면 address에서 자동 추출한다(모든 open_spaces
     // 어댑터가 address를 이미 갖고 있으므로 각 어댑터를 개별 수정할 필요가 없다).
     // Task 9-6-8(2026-08-23): 어느 경로로 얻어졌든(명시적 전달 또는 자동 추출) 최종값에
@@ -183,6 +190,10 @@ export function buildEventRow({
   venueName = null,
   sigunguName = null,
   rawData = null,
+  // [카테고리 정제 & 어드민 확장](2026-08-26): buildOpenSpaceRow와 동일한 규약 — 원본이
+  // 표준 중분류를 직접 갖고 있으면 RAW로 태깅, 없으면 null로 남겨 배치 후처리가 RULE 태깅한다.
+  categoryMin = null,
+  categoryMinSource = null,
 }) {
   if (!externalId || !title || !startDate || !endDate) return null;
   if (locationPrecision === 'UNKNOWN') {
@@ -222,5 +233,7 @@ export function buildEventRow({
     sigungu_name: normalizeSigunguProvince(sigunguName),
     // Decision 017: 원천 메타필드(MAXCLASSNM/MINCLASSNM 등)를 무손실 보존하기 위한 원본 객체.
     raw_data: rawData,
+    category_min: categoryMin,
+    category_min_source: categoryMinSource,
   };
 }

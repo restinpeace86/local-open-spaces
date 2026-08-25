@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.15"
+    PostgrestVersion: "14.17"
   }
   graphql_public: {
     Tables: {
@@ -39,9 +39,38 @@ export type Database = {
   }
   public: {
     Tables: {
+      category_rules: {
+        Row: {
+          category_min: string
+          created_at: string
+          id: number
+          is_exclude: boolean
+          keyword: string
+          target_table: string
+        }
+        Insert: {
+          category_min: string
+          created_at?: string
+          id?: never
+          is_exclude?: boolean
+          keyword: string
+          target_table: string
+        }
+        Update: {
+          category_min?: string
+          created_at?: string
+          id?: never
+          is_exclude?: boolean
+          keyword?: string
+          target_table?: string
+        }
+        Relationships: []
+      }
       events: {
         Row: {
           booking_status: string | null
+          category_min: string | null
+          category_min_source: string | null
           created_at: string | null
           end_date: string
           event_type: string
@@ -71,6 +100,8 @@ export type Database = {
         }
         Insert: {
           booking_status?: string | null
+          category_min?: string | null
+          category_min_source?: string | null
           created_at?: string | null
           end_date: string
           event_type: string
@@ -100,6 +131,8 @@ export type Database = {
         }
         Update: {
           booking_status?: string | null
+          category_min?: string | null
+          category_min_source?: string | null
           created_at?: string | null
           end_date?: string
           event_type?: string
@@ -141,6 +174,8 @@ export type Database = {
         Row: {
           address: string
           category: string
+          category_min: string | null
+          category_min_source: string | null
           created_at: string | null
           external_id: string
           facility_type: string
@@ -164,6 +199,8 @@ export type Database = {
         Insert: {
           address: string
           category: string
+          category_min?: string | null
+          category_min_source?: string | null
           created_at?: string | null
           external_id: string
           facility_type?: string
@@ -187,6 +224,8 @@ export type Database = {
         Update: {
           address?: string
           category?: string
+          category_min?: string | null
+          category_min_source?: string | null
           created_at?: string | null
           external_id?: string
           facility_type?: string
@@ -558,6 +597,12 @@ export type Database = {
         Returns: boolean
       }
       geomfromewkt: { Args: { "": string }; Returns: unknown }
+      get_category_min_options: {
+        Args: { p_target_table: string }
+        Returns: {
+          category_min: string
+        }[]
+      }
       get_events_filter_options: {
         Args: never
         Returns: {
