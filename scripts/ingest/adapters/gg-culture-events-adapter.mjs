@@ -132,7 +132,7 @@ const API1_CATEGORY_MAP = {
 
 export class GgCultureEventsAdapter extends BaseCollectorAdapter {
   constructor() {
-    super({ sourceKey: 'GG_CULTURE_EVENTS', targetTable: 'events' });
+    super({ sourceKey: 'GG_CULTURE_EVENTS', targetTable: 'events', source: SOURCE });
 
     this.apiKey = process.env.GG_DATA_API_KEY;
     if (!this.apiKey) {

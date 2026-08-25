@@ -83,7 +83,7 @@ export function buildDedupKey(name, address) {
 
 export class SwimmingPoolAdapter extends BaseCollectorAdapter {
   constructor() {
-    super({ sourceKey: 'SWIMMING_POOL', targetTable: 'open_spaces' });
+    super({ sourceKey: 'SWIMMING_POOL', targetTable: 'open_spaces', source: SOURCE });
 
     this.apiKey = process.env.PUBLIC_DATA_API_KEY;
     if (!this.apiKey) {

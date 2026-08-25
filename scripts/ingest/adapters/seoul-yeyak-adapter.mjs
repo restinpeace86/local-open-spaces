@@ -78,7 +78,7 @@ function bumpError(errorCounts, type) {
 
 export class SeoulYeyakAdapter extends BaseCollectorAdapter {
   constructor() {
-    super({ sourceKey: 'SEOUL_YEYAK', targetTable: 'multi' });
+    super({ sourceKey: 'SEOUL_YEYAK', targetTable: 'multi', source: SOURCE });
 
     this.apiKey = process.env.SEOUL_OPEN_DATA_KEY;
     if (!this.apiKey) {

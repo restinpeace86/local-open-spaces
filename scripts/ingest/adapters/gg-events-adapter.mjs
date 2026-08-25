@@ -91,7 +91,7 @@ function sleep(ms) {
 
 export class GgEventsAdapter extends BaseCollectorAdapter {
   constructor() {
-    super({ sourceKey: 'GG_EVENTS', targetTable: 'open_spaces' });
+    super({ sourceKey: 'GG_EVENTS', targetTable: 'open_spaces', source: SOURCE });
 
     this.apiKey = process.env.GG_DATA_API_KEY;
     if (!this.apiKey) {

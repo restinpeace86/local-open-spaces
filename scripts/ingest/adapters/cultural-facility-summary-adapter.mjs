@@ -31,7 +31,7 @@ const ENDPOINTS = [
 
 export class CulturalFacilitySummaryAdapter extends BaseCollectorAdapter {
   constructor() {
-    super({ sourceKey: 'CULTURAL_FACILITY_SUMMARY', targetTable: 'open_spaces' });
+    super({ sourceKey: 'CULTURAL_FACILITY_SUMMARY', targetTable: 'open_spaces', source: SOURCE });
 
     this.apiKey = process.env.PUBLIC_DATA_API_KEY;
     if (!this.apiKey) {

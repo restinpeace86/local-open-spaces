@@ -30,7 +30,7 @@ export class TourApiV4AreaBasedAdapter extends BaseCollectorAdapter {
     detailContentTypeIds = [],
     detailCallBudget = 900,
   }) {
-    super({ sourceKey, targetTable: 'open_spaces' });
+    super({ sourceKey, targetTable: 'open_spaces', source: SOURCE });
 
     this.apiKey = process.env.PUBLIC_DATA_API_KEY;
     if (!this.apiKey) {

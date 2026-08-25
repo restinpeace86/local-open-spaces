@@ -55,7 +55,7 @@ function buildOperatingHours(item) {
 
 export class PublicFacilityOpenAdapter extends BaseCollectorAdapter {
   constructor() {
-    super({ sourceKey: 'PUBLIC_FACILITY_OPEN', targetTable: 'open_spaces' });
+    super({ sourceKey: 'PUBLIC_FACILITY_OPEN', targetTable: 'open_spaces', source: SOURCE });
 
     this.apiKey = process.env.PUBLIC_DATA_API_KEY;
     if (!this.apiKey) {

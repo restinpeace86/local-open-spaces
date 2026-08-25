@@ -50,7 +50,7 @@ function hashKey(name, address) {
 
 export class AmusementParkAdapter extends BaseCollectorAdapter {
   constructor() {
-    super({ sourceKey: 'LOCALDATA_AMUSEMENT', targetTable: 'open_spaces' });
+    super({ sourceKey: 'LOCALDATA_AMUSEMENT', targetTable: 'open_spaces', source: SOURCE });
 
     this.apiKey = process.env.PUBLIC_DATA_API_KEY;
     if (!this.apiKey) {

@@ -104,6 +104,28 @@ describe('BaseCollectorAdapter.run() — RAW 레이어 opt-in', () => {
       expect.objectContaining({ sourceKey: 'RAW_OPT_IN', rawArchivedCount: 2, count: 1 })
     );
   });
+
+  // [배치 자동화 및 로깅 체계 확정](2026-08-25): run-daily.mjs/run-weekly.mjs 배치 오케스트레이터가
+  // docs/pipeline-log.md의 배치 리포트 표를 만들 때 이 반환값(rawCount/rawArchivedCount/
+  // safeMergeCount/errorCount)을 그대로 쓴다 — 반환 형태 자체를 직접 검증한다.
+  it('성공 시 배치 리포트에 필요한 rawCount/rawArchivedCount/safeMergeCount/errorCount를 함께 반환한다', async () => {
+    upsertRowsSafeMergeMock.mockResolvedValueOnce({ count: 2, duplicateWithinBatch: 1, mergedWithExisting: 3 });
+    const adapter = new RawOptInAdapter();
+
+    const result = await adapter.run();
+
+    expect(result).toEqual({
+      sourceKey: 'RAW_OPT_IN',
+      targetTable: 'events',
+      source: null,
+      count: 2,
+      upserted: true,
+      rawCount: 2,
+      rawArchivedCount: 2,
+      safeMergeCount: 4, // duplicateWithinBatch(1) + mergedWithExisting(3)
+      errorCount: 0, // rawCount(2) - count(2)
+    });
+  });
 });
 
 describe('BaseCollectorAdapter.runServiceTransformFromRaw()', () => {
@@ -219,8 +241,13 @@ describe("BaseCollectorAdapter — targetTable: 'multi' (Decision 017 다중 테
 
     expect(upsertRowsSafeMergeMock).not.toHaveBeenCalled();
     expect(result).toEqual({
+      sourceKey: 'MULTI_SOURCE',
+      targetTable: 'multi',
+      source: null,
       count: 2,
       upserted: false,
+      rawCount: 3,
+      rawArchivedCount: undefined,
       perTable: { open_spaces: 1, events: 1 },
       errorCounts: { DATE_PARSE_FAIL: 1 },
       excludedCount: 1,
@@ -253,6 +280,66 @@ describe("BaseCollectorAdapter — targetTable: 'multi' (Decision 017 다중 테
         },
       })
     );
+  });
+
+  it('성공 시 배치 리포트에 필요한 safeMergeCount/errorCount를 두 테이블 합산으로 반환한다', async () => {
+    upsertRowsSafeMergeMock.mockImplementation((_client, table) =>
+      Promise.resolve(
+        table === 'open_spaces'
+          ? { count: 1, duplicateWithinBatch: 2, mergedWithExisting: 5 }
+          : { count: 1, duplicateWithinBatch: 3, mergedWithExisting: 10 }
+      )
+    );
+    const adapter = new MultiTableAdapter();
+
+    const result = await adapter.run();
+
+    expect(result).toMatchObject({
+      sourceKey: 'MULTI_SOURCE',
+      targetTable: 'multi',
+      count: 2,
+      rawCount: 3,
+      safeMergeCount: 20, // (2+5) + (3+10)
+      // MultiTableAdapter의 3개 raw 항목(S1/S2/S3)은 open_spaces 1건 + events 1건 + 진료복지
+      // 제외 1건으로 전부 설명되므로(1+1+1=rawCount 3) 실제로는 드롭이 0건이다.
+      // errorCounts({DATE_PARSE_FAIL:1})는 세부 breakdown용 진단 정보일 뿐, "적재도 안 되고
+      // 제외도 아닌" 진짜 드롭 여부는 rawCount와 실제 출력 배열 길이를 직접 대조해 계산한다
+      // (아래 "실제로 드롭된 raw 항목이 있으면..." 테스트 참고 — 실측으로 발견한 버그 수정).
+      errorCount: 0,
+    });
+  });
+
+  // [배치 자동화 및 로깅 체계 확정](2026-08-25) 실측 중 발견해 수정한 버그: errorCounts를
+  // 그대로 합산하면 "적재는 됐지만 이상 신호만 남긴" 항목(예: 실제 SeoulYeyakAdapter의
+  // COORDINATE_PARSE_FAIL — 좌표 파싱 실패해도 UNKNOWN 정밀도로 행은 정상 적재됨)까지
+  // "드롭"으로 잘못 집계돼, 실제 배치 실행에서 "수신 vs 적재+에러+제외" 검증식이 음수로
+  // 어긋나는 것을 확인했다. errorCount는 이제 rawCount에서 실제 출력 배열 길이와 excludedCount를
+  // 뺀 값(진짜로 어디에도 안 들어간 raw 항목 수)으로 계산한다.
+  class MultiTablePartialDropAdapter extends BaseCollectorAdapter {
+    constructor() {
+      super({ sourceKey: 'MULTI_PARTIAL_DROP', targetTable: 'multi' });
+    }
+    async fetch() {
+      // S1→open_spaces, S2→events, S3은 errorCounts에 잡히지만 어느 배열에도 안 들어감(진짜 드롭).
+      return [{ SVCID: 'S1' }, { SVCID: 'S2' }, { SVCID: 'S3' }];
+    }
+    transformSplit(raw) {
+      return {
+        open_spaces: [{ external_id: raw[0].SVCID }],
+        events: [{ external_id: raw[1].SVCID }],
+        errorCounts: { DATE_PARSE_FAIL: 1 }, // S3가 여기 집계되지만 어느 출력 배열에도 없음
+        excludedCount: 0,
+      };
+    }
+  }
+
+  it('실제로 드롭된 raw 항목이 있으면(어느 테이블에도 안 들어가고 제외 대상도 아님) errorCount에 정확히 반영한다', async () => {
+    const adapter = new MultiTablePartialDropAdapter();
+
+    const result = await adapter.run();
+
+    // rawCount(3) - open_spaces(1) - events(1) - excludedCount(0) = 1건 진짜 드롭.
+    expect(result.errorCount).toBe(1);
   });
 
   it("runServiceTransformFromRaw()는 'multi' 모드를 아직 지원하지 않아 명시적으로 에러를 던진다", async () => {

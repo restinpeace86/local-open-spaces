@@ -1,13 +1,13 @@
 // Source 03: 서울시 문화공간 정보 (spec/data/data_sources.md #03 대체 — 사용자 확인 서비스명)
 // 주의: 응답 필드명 X_COORD/Y_COORD가 실제로는 위도/경도가 뒤바뀌어 있음을 실제 응답으로 확인함
 // (X_COORD ≈ 37.x = 위도, Y_COORD ≈ 127.x = 경도). 필드명을 그대로 믿지 않고 값 범위로 검증함.
+import { pathToFileURL } from 'url';
 import { loadEnv } from '../lib/load-env.mjs';
 import { createAdminClient, upsertRawIngestData, upsertRowsSafeMerge } from './lib/supabase-admin.mjs';
 import { toPointWKT } from './lib/geometry.mjs';
 import { deriveParentalTags } from './lib/ai-tagging.mjs';
 
 const env = loadEnv();
-const dryRun = process.argv.includes('--dry-run');
 
 const BASE = 'http://openapi.seoul.go.kr:8088';
 const SERVICE_NAME = 'culturalSpaceInfo';
@@ -18,6 +18,7 @@ const PAGE_SIZE = 100;
 // 필터용 원천 식별자(source 컬럼)다.
 const SOURCE_KEY = 'CULTURE_SPACE';
 const SOURCE = 'seoul_public_culture';
+const TARGET_TABLE = 'open_spaces';
 
 async function fetchPage(startIdx, endIdx) {
   const url = `${BASE}/${env.SEOUL_OPEN_DATA_KEY}/json/${SERVICE_NAME}/${startIdx}/${endIdx}/`;
@@ -69,13 +70,20 @@ function mapToOpenSpaceRow(item) {
   };
 }
 
-async function main() {
+// [배치 자동화 및 로깅 체계 확정](2026-08-25): run-daily.mjs/run-weekly.mjs 배치 오케스트레이터가
+// 직접 import해서 호출할 수 있도록 main()을 재사용 가능한 run() 함수로 분리하고, 반환값을
+// BaseCollectorAdapter.run()과 동일한 형태({sourceKey, targetTable, source, count, upserted,
+// rawCount, rawArchivedCount, safeMergeCount, errorCount})로 맞췄다 — 배치 리포트가 어댑터
+// 기반이든 레거시 스크립트든 동일한 코드로 집계할 수 있게 하기 위함이다.
+export async function run({ dryRun = false } = {}) {
   console.log(`▶ 서울시 문화공간 정보 수집 시작 (dry-run: ${dryRun})`);
 
   const client = dryRun ? null : createAdminClient();
   let startIdx = 1;
   let totalCount = Infinity;
   let totalUpserted = 0;
+  let totalRawArchived = 0;
+  let totalSafeMerge = 0;
   const sample = [];
 
   while (startIdx <= totalCount) {
@@ -89,15 +97,21 @@ async function main() {
       sample.push(...rows.slice(0, 3 - sample.length));
     } else {
       if (items.length > 0) {
-        await upsertRawIngestData(
+        const rawResult = await upsertRawIngestData(
           client,
           SOURCE_KEY,
           items.filter((item) => item.NUM).map((item) => ({ sourceId: String(item.NUM), payload: item }))
         );
+        totalRawArchived += rawResult.count;
       }
       if (rows.length > 0) {
-        const { count } = await upsertRowsSafeMerge(client, 'open_spaces', rows);
+        const { count, duplicateWithinBatch = 0, mergedWithExisting = 0 } = await upsertRowsSafeMerge(
+          client,
+          TARGET_TABLE,
+          rows
+        );
         totalUpserted += count;
+        totalSafeMerge += duplicateWithinBatch + mergedWithExisting;
       }
     }
 
@@ -105,15 +119,37 @@ async function main() {
     startIdx += PAGE_SIZE;
   }
 
+  const rawCount = Number.isFinite(totalCount) ? totalCount : null;
+
   if (dryRun) {
     console.log(JSON.stringify(sample, null, 2));
     console.log(`✅ dry-run 완료 (전체 ${totalCount}건 확인)`);
-  } else {
-    console.log(`✅ Supabase open_spaces 테이블 upsert 완료: 총 ${totalUpserted}건`);
+    return { sourceKey: SOURCE_KEY, targetTable: TARGET_TABLE, source: SOURCE, count: 0, upserted: false, rawCount, rawArchivedCount: undefined };
   }
+
+  console.log(`✅ Supabase open_spaces 테이블 upsert 완료: 총 ${totalUpserted}건`);
+  const errorCount = typeof rawCount === 'number' ? Math.max(0, rawCount - totalUpserted) : 0;
+  return {
+    sourceKey: SOURCE_KEY,
+    targetTable: TARGET_TABLE,
+    source: SOURCE,
+    count: totalUpserted,
+    upserted: true,
+    rawCount,
+    rawArchivedCount: totalRawArchived,
+    safeMergeCount: totalSafeMerge,
+    errorCount,
+  };
 }
 
-main().catch((err) => {
-  console.error('❌', err.message);
-  process.exitCode = 1;
-});
+// CLI 진입점 — `node scripts/ingest/cultural-spaces.mjs [--dry-run]`로 직접 실행할 때만 동작한다
+// (run-daily.mjs/run-weekly.mjs가 run()을 직접 import할 때는 이 블록이 실행되지 않는다).
+// Windows에서는 process.argv[1]이 백슬래시 경로("D:\...")라 import.meta.url(file:// URL,
+// 슬래시)과 문자열로 직접 비교하면 항상 false가 된다(실측 확인) — pathToFileURL로 변환해 비교한다.
+if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const dryRun = process.argv.includes('--dry-run');
+  run({ dryRun }).catch((err) => {
+    console.error('❌', err.message);
+    process.exitCode = 1;
+  });
+}

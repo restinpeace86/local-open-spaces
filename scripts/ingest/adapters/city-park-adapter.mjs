@@ -21,7 +21,7 @@ const SOURCE = 'city_park';
 
 export class CityParkAdapter extends BaseCollectorAdapter {
   constructor() {
-    super({ sourceKey: 'CITY_PARK', targetTable: 'open_spaces' });
+    super({ sourceKey: 'CITY_PARK', targetTable: 'open_spaces', source: SOURCE });
 
     this.apiKey = process.env.PUBLIC_DATA_API_KEY;
     if (!this.apiKey) {

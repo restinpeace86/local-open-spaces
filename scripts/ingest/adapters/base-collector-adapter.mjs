@@ -10,7 +10,12 @@ import { countRawItems, recordPipelineRun } from '../lib/pipeline-log.mjs';
 // fetch()/transform()은 서브클래스가 반드시 구현해야 하며, run()이 공통 오케스트레이션
 // (fetch → transform → 검증 로그 → upsert)을 담당한다.
 export class BaseCollectorAdapter {
-  constructor({ sourceKey, targetTable }) {
+  // source: [배치 자동화 및 로깅 체계 확정](2026-08-25) 선택 파라미터 — DB `source` 컬럼에
+  // 실제로 기록되는 값(예: 'seoul_public_reservation')을 인스턴스에도 노출해, 배치
+  // 오케스트레이터(run-daily.mjs/run-weekly.mjs)가 각 어댑터 내부의 SOURCE 상수를 다시
+  // 파싱하지 않고 `adapter.source`로 바로 pipeline-log.md 배치 리포트를 만들 수 있게 한다.
+  // 지정하지 않으면 null — 아직 source 태깅을 하지 않는 어댑터도 그대로 동작한다(하위 호환).
+  constructor({ sourceKey, targetTable, source = null }) {
     if (new.target === BaseCollectorAdapter) {
       throw new Error('BaseCollectorAdapter는 직접 인스턴스화할 수 없습니다. 서브클래스를 사용하세요.');
     }
@@ -23,6 +28,7 @@ export class BaseCollectorAdapter {
 
     this.sourceKey = sourceKey;
     this.targetTable = targetTable;
+    this.source = source;
   }
 
   // 원본 API/파일로부터 raw 데이터를 가져온다. 서브클래스 필수 구현.
@@ -99,13 +105,31 @@ export class BaseCollectorAdapter {
 
       if (dryRun) {
         console.log(JSON.stringify(rows.slice(0, 3), null, 2));
-        return { count: rows.length, upserted: false };
+        return {
+          sourceKey: this.sourceKey,
+          targetTable: this.targetTable,
+          source: this.source,
+          count: rows.length,
+          upserted: false,
+          rawCount,
+          rawArchivedCount,
+        };
       }
 
       if (rows.length === 0) {
         console.log('  upsert할 유효 행이 없어 종료합니다.');
         recordPipelineRun({ sourceKey: this.sourceKey, rawCount, rawArchivedCount, count: 0, status: 'OK', note: '유효 행 0건' });
-        return { count: 0, upserted: true };
+        return {
+          sourceKey: this.sourceKey,
+          targetTable: this.targetTable,
+          source: this.source,
+          count: 0,
+          upserted: true,
+          rawCount,
+          rawArchivedCount,
+          safeMergeCount: 0,
+          errorCount: typeof rawCount === 'number' ? rawCount : 0,
+        };
       }
 
       const client = createAdminClient();
@@ -114,10 +138,28 @@ export class BaseCollectorAdapter {
       // 새 값으로 무조건 덮어썼는데, 재수집 때 원본 API가 일시적으로 일부 필드를 비워 보내면
       // 이미 채워져 있던 실데이터가 NULL로 되돌아가는 문제가 있었다 — upsertRowsSafeMerge()는
       // 기존 행의 컬럼이 NULL일 때만 새 값으로 채우고 이미 값이 있으면 보존한다.
-      const { count } = await upsertRowsSafeMerge(client, this.targetTable, rows);
+      const { count, duplicateWithinBatch = 0, mergedWithExisting = 0 } = await upsertRowsSafeMerge(
+        client,
+        this.targetTable,
+        rows
+      );
       console.log(`✅ [${this.sourceKey}] Supabase ${this.targetTable} upsert 완료: ${count}건`);
       recordPipelineRun({ sourceKey: this.sourceKey, rawCount, rawArchivedCount, count, status: 'OK' });
-      return { count, upserted: true };
+      // [배치 자동화 및 로깅 체계 확정](2026-08-25): errorCount는 "수신했지만 DB에 적재되지
+      // 않은 건수"(유효성 검증 드롭분)다 — recordPipelineRun 내부의 동일 계산식과 일치시켜
+      // 배치 리포트와 개별 소스 로그 행이 서로 다른 숫자를 보여주지 않도록 한다.
+      const errorCount = typeof rawCount === 'number' ? Math.max(0, rawCount - count) : 0;
+      return {
+        sourceKey: this.sourceKey,
+        targetTable: this.targetTable,
+        source: this.source,
+        count,
+        upserted: true,
+        rawCount,
+        rawArchivedCount,
+        safeMergeCount: duplicateWithinBatch + mergedWithExisting,
+        errorCount,
+      };
     } catch (err) {
       if (!dryRun) {
         recordPipelineRun({ sourceKey: this.sourceKey, rawCount: null, count: 0, status: 'FAILED', note: err.message });
@@ -148,8 +190,13 @@ export class BaseCollectorAdapter {
     if (dryRun) {
       console.log(JSON.stringify({ open_spaces: spaceRows.slice(0, 2), events: eventRows.slice(0, 2) }, null, 2));
       return {
+        sourceKey: this.sourceKey,
+        targetTable: this.targetTable,
+        source: this.source,
         count: spaceRows.length + eventRows.length,
         upserted: false,
+        rawCount,
+        rawArchivedCount,
         perTable: { open_spaces: spaceRows.length, events: eventRows.length },
         errorCounts,
         excludedCount,
@@ -197,9 +244,32 @@ export class BaseCollectorAdapter {
       },
     });
 
+    const safeMergeCount =
+      (perTableResult.open_spaces?.duplicateWithinBatch ?? 0) +
+      (perTableResult.open_spaces?.mergedWithExisting ?? 0) +
+      (perTableResult.events?.duplicateWithinBatch ?? 0) +
+      (perTableResult.events?.mergedWithExisting ?? 0);
+    // [배치 자동화 및 로깅 체계 확정](2026-08-25) 실측 중 발견해 수정: errorCounts를 그대로
+    // 합산하면 "적재는 됐지만 이상 신호만 남긴" 항목(예: SeoulYeyakAdapter의
+    // COORDINATE_PARSE_FAIL — 좌표 파싱은 실패해도 UNKNOWN 정밀도로 행은 정상 적재됨,
+    // transformSplit() 주석 참고)까지 "드롭"으로 잘못 집계돼, 배치 리포트의 "수신 vs 적재+에러
+    // +제외" 검증식이 음수로 어긋나는 것을 실제 배치 실행으로 확인했다. 진짜 드롭 건수는
+    // "받았지만 어느 테이블에도 안 들어가고 범위 제외도 아닌" 항목만이다 — rawCount에서
+    // 실제로 적재된 행 수와 명시적 범위 제외 건수를 뺀 값으로 다시 계산한다(errorCounts
+    // 상세 breakdown 자체는 detail 로그에 그대로 남아 있어 원인 분석에는 지장 없음).
+    const errorCount =
+      typeof rawCount === 'number' ? Math.max(0, rawCount - spaceRows.length - eventRows.length - excludedCount) : 0;
+
     return {
+      sourceKey: this.sourceKey,
+      targetTable: this.targetTable,
+      source: this.source,
       count: totalCount,
       upserted: true,
+      rawCount,
+      rawArchivedCount,
+      safeMergeCount,
+      errorCount,
       perTable: { open_spaces: perTableResult.open_spaces?.count ?? 0, events: perTableResult.events?.count ?? 0 },
       errorCounts,
       excludedCount,

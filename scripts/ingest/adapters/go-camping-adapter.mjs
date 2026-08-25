@@ -12,7 +12,7 @@ const SOURCE = 'tourapi_4.0';
 
 export class GoCampingAdapter extends BaseCollectorAdapter {
   constructor() {
-    super({ sourceKey: 'GO_CAMPING', targetTable: 'open_spaces' });
+    super({ sourceKey: 'GO_CAMPING', targetTable: 'open_spaces', source: SOURCE });
 
     this.apiKey = process.env.PUBLIC_DATA_API_KEY;
     if (!this.apiKey) {

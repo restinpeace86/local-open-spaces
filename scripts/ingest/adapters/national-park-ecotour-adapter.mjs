@@ -24,7 +24,7 @@ function hashKey(name, region) {
 
 export class NationalParkEcotourAdapter extends BaseCollectorAdapter {
   constructor() {
-    super({ sourceKey: 'NATIONAL_PARK_ECOTOUR', targetTable: 'open_spaces' });
+    super({ sourceKey: 'NATIONAL_PARK_ECOTOUR', targetTable: 'open_spaces', source: SOURCE });
 
     this.apiKey = process.env.PUBLIC_DATA_API_KEY;
     if (!this.apiKey) {
