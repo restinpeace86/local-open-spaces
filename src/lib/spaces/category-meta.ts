@@ -29,3 +29,9 @@ export const UI_CATEGORY_FILTER_OPTIONS = UI_CATEGORIES.map((category) => ({
   category,
   ...CATEGORY_META[category],
 }));
+
+// docs/spec.md 2.2 ②(2026-08-25 개정): 홈 화면 Quick 그리드 인라인 피딩용 API가 요청받은
+// category 쿼리 파라미터를 검증할 때 쓴다(isThemeSpotKey와 동일한 패턴).
+export function isUiCategory(value: string): boolean {
+  return UI_CATEGORIES.includes(value);
+}

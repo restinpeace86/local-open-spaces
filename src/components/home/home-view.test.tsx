@@ -38,13 +38,20 @@ function simulateFreeFeedInView() {
   });
 }
 
-function stubFetchFreeFeed(freeFeed: NearbyItem[], themeItems: NearbyItem[] = []) {
+function stubFetchFreeFeed(
+  freeFeed: NearbyItem[],
+  themeItems: NearbyItem[] = [],
+  categoryItems: NearbyItem[] = []
+) {
   const fetchMock = vi.fn((url: string) => {
     if (url.startsWith('/api/home/free-feed')) {
       return Promise.resolve({ json: () => Promise.resolve({ freeFeed }) } as Response);
     }
     if (url.startsWith('/api/home/theme-feed')) {
       return Promise.resolve({ json: () => Promise.resolve({ items: themeItems }) } as Response);
+    }
+    if (url.startsWith('/api/home/category-feed')) {
+      return Promise.resolve({ json: () => Promise.resolve({ items: categoryItems }) } as Response);
     }
     return Promise.resolve({ json: () => Promise.resolve({ heroEvents: [] }) } as Response);
   });
@@ -162,6 +169,28 @@ describe('HomeView', () => {
     render(<HomeView initialHeroEvents={[]} />);
     expect(screen.queryByText('오늘 진행 중인 추천 행사가 아직 없습니다.')).not.toBeInTheDocument();
     expect(screen.queryByLabelText('오늘의 추천 행사')).not.toBeInTheDocument();
+  });
+
+  // Task 9-6-17(2026-08-25, docs/spec.md 2.2 ② 개정): "5대 카테고리 Quick 아이콘 그리드" 인라인
+  // 피딩 — 클릭 시 /region으로 라우팅하지 않고 이 화면 내부에서 /api/home/category-feed로
+  // 지연 페칭해 바로 아래에 카드 피드를 보여준다.
+  describe('5대 카테고리 인라인 피딩 (Task 9-6-17)', () => {
+    it('카테고리 클릭 시 /region으로 이동하지 않고 /api/home/category-feed를 호출해 카드로 보여준다', async () => {
+      const fetchMock = stubFetchFreeFeed(
+        [],
+        [],
+        [makeEventItem({ id: 'kids-1', name: '키즈 체험 행사' })]
+      );
+      render(<HomeView initialHeroEvents={[]} />);
+
+      fireEvent.click(screen.getByText('키즈·액티비티'));
+
+      expect(await screen.findByText('키즈 체험 행사')).toBeInTheDocument();
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/api/home/category-feed?category=KIDS_ACTIVITY')
+      );
+      expect(screen.getByText('키즈·액티비티').closest('a')).toBeNull();
+    });
   });
 
   it('특가·핫딜 서브탭은 비활성화 상태로 노출된다(커머스 API 미연동)', () => {

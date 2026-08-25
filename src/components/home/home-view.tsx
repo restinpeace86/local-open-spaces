@@ -163,6 +163,38 @@ function useThemeSpotFeed(region: { sigunguName: string | null; lat?: number; ln
   return { selectedTheme, items, isLoading, selectTheme, reset };
 }
 
+// Task 9-6-17(2026-08-25, docs/spec.md 2.2 ② 개정): "5대 카테고리 Quick 아이콘 그리드" 인라인
+// 피딩 — useThemeSpotFeed와 동일한 패턴(기본 선택 없음, 클릭 시에만 지연 페칭). 이 화면은 항상
+// events만 다루므로(Task 9-6-10) dataType 파라미터는 넘기지 않는다.
+function useCategoryFeed(region: { sigunguName: string | null; lat?: number; lng?: number }) {
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [items, setItems] = useState<NearbyItem[] | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  const selectCategory = useCallback(
+    (category: string) => {
+      setSelectedCategory(category);
+      setItems(null);
+      setIsLoading(true);
+
+      const params = new URLSearchParams({ category });
+      if (region.sigunguName) params.set('sigungu', region.sigunguName);
+      if (typeof region.lat === 'number') params.set('lat', String(region.lat));
+      if (typeof region.lng === 'number') params.set('lng', String(region.lng));
+
+      fetch(`/api/home/category-feed?${params.toString()}`)
+        .then((res) => res.json())
+        .then((data: { items?: NearbyItem[] }) => setItems(Array.isArray(data.items) ? data.items : []))
+        .catch(() => setItems([]))
+        .finally(() => setIsLoading(false));
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [region.sigunguName, region.lat, region.lng]
+  );
+
+  return { selectedCategory, items, isLoading, selectCategory };
+}
+
 export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[] }) {
   const { center, addressName, sigunguName, isOnboardingOpen, confirmLocation, openOnboarding, closeOnboarding } =
     useUserLocation();
@@ -191,6 +223,12 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
     isLoading: isThemeSpotLoading,
     selectTheme,
   } = useThemeSpotFeed(region, dataType);
+  const {
+    selectedCategory,
+    items: categoryFeedItems,
+    isLoading: isCategoryFeedLoading,
+    selectCategory,
+  } = useCategoryFeed(region);
 
   // Task 9-1-1: Server Component는 기본 지역(성남시 분당구)으로만 렌더링할 수 있으므로,
   // 유저가 실제로 위치를 설정한 경우(addressName이 채워짐)에만 그 지역으로 재조회한다.
@@ -268,7 +306,26 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
               </section>
             )}
 
-            <QuickCategoryGrid />
+            {/* Task 9-6-17(2026-08-25, docs/spec.md 2.2 ② 개정): 카테고리 클릭 시 라우팅 없이
+                이 화면 내부에서 바로 아래 카드 피드가 전환된다(인라인 피딩). */}
+            <section aria-label="카테고리별 행사">
+              <QuickCategoryGrid selected={selectedCategory} onSelect={selectCategory} />
+              {selectedCategory !== null && (
+                <div className="px-4 mt-3">
+                  {isCategoryFeedLoading || categoryFeedItems === null ? (
+                    <FreeFeedSkeleton />
+                  ) : categoryFeedItems.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                      {categoryFeedItems.map((item) => (
+                        <FeedCard key={item.id} item={item} onSelect={setSelectedItem} />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400">조건에 맞는 행사를 찾는 중입니다.</p>
+                  )}
+                </div>
+              )}
+            </section>
 
             {/* Task 9-5-1(2026-08-22)/9-6-10(2026-08-23): 이벤트 목적별 5개 하위 테마 칩 — 기본
                 선택 테마가 없어(임의로 하나를 고를 근거가 없음) 칩을 직접 누를 때만 지연

@@ -593,6 +593,38 @@ export async function getThemeSpotFeed(
   return ordered.sort(byRegionPriority(region)).slice(0, limit);
 }
 
+// docs/spec.md 2.2 ②(2026-08-25 개정, Task 9-6-17): "5대 카테고리 Quick 아이콘 그리드: 클릭 시
+// 라우팅 이동 없이 이벤트픽 메인 화면 내부에서 해당 카테고리 카드 피드로 즉시 전환(인라인 피딩)".
+// 이벤트픽(HomeView)은 항상 events만 다루므로(Task 9-6-10) dataType 분기 없이 events 테이블만
+// event_type(=5대 UI 카테고리 값)으로 필터링한다. "현재 진행 중"(오늘이 start~end 기간에 포함)
+// 조건은 getThemeSpotFeed의 events 조회와 동일하게 맞춘다.
+export async function getCategoryFeed(
+  category: string,
+  limit = 20,
+  region: HomeRegion = DEFAULT_HOME_REGION
+): Promise<NearbyItem[]> {
+  const supabase = await createClient();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const buildQuery = (token: string | readonly string[] | null) => {
+    let query = supabase
+      .from('events')
+      .select(EVENT_COLUMNS)
+      .eq('event_type', category)
+      .eq('is_active', true)
+      .lte('start_date', today)
+      .gte('end_date', today);
+    if (token) query = query.or(regionOrFilter(token, 'venue_name'));
+    return query.order('start_date', { ascending: false }).limit(500);
+  };
+
+  const data = await fetchRegionFirstRows<EventRow>(buildQuery, region, limit);
+
+  const items = dedupeAndMergeFree(data.map(toEventItem));
+  const ordered = sortByDistanceIfKnown(items, region);
+  return selectRegionFirst(ordered, region, limit);
+}
+
 export type HomeFeed = {
   heroEvents: NearbyItem[];
   freeFeed: NearbyItem[];

@@ -790,3 +790,29 @@ describe('getThemeSpotFeed (Task 9-5-1: 목적별 테마 스팟 통합 피딩)',
     expect(ids).not.toContain('other-event');
   });
 });
+
+describe('getCategoryFeed (Task 9-6-17: 5대 카테고리 인라인 피딩)', () => {
+  afterEach(() => {
+    vi.doUnmock('@/lib/supabase/server');
+    vi.resetModules();
+  });
+
+  it('event_type이 일치하고 오늘 진행 중인 이벤트만 반환한다', async () => {
+    const kidsEvent = eventRow({ id: 'kids-event', event_type: 'KIDS_ACTIVITY', is_active: true });
+    const otherCategoryEvent = eventRow({ id: 'other-category', event_type: 'OUTDOOR_NATURE', is_active: true });
+    const inactiveKidsEvent = eventRow({ id: 'inactive-kids', event_type: 'KIDS_ACTIVITY', is_active: false });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () =>
+        Promise.resolve({
+          from: () => makeFilteringChainable([kidsEvent, otherCategoryEvent, inactiveKidsEvent]),
+        }),
+    }));
+
+    const { getCategoryFeed } = await import('./get-home-feed');
+    const items = await getCategoryFeed('KIDS_ACTIVITY', 20, { sigunguName: '성남시 분당구' });
+
+    const ids = items.map((item) => item.id);
+    expect(ids).toEqual(['kids-event']);
+  });
+});

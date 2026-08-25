@@ -2,7 +2,6 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
-import Link from 'next/link';
 import { UI_CATEGORY_FILTER_OPTIONS } from '@/lib/spaces/category-meta';
 
 // Task 9-1-2: 5대 UI 카테고리 대표 이미지(원형 썸네일) — public/images/categories/*.svg
@@ -17,9 +16,10 @@ export const CATEGORY_IMAGE_SRC: Record<string, string> = {
 
 const THUMBNAIL_SIZE = 48;
 
-// docs/spec.md 2.2 ②: "5대 카테고리 Quick 아이콘 그리드: 클릭 시 하단 [🏷️ 카테고리] 탭 연동 및
-// 해당 카테고리 즉시 필터링" — /region이 [카테고리] 탭 목적지이므로 category 쿼리파라미터로 넘긴다
-// (src/components/region/region-grid-view.tsx가 이 파라미터를 초기 필터값으로 읽도록 Task 9-1에서 연동).
+// docs/spec.md 2.2 ②(2026-08-25 개정, Task 9-6-17): "5대 카테고리 Quick 아이콘 그리드: 클릭 시
+// 라우팅 이동 없이 이벤트픽 메인 화면 내부에서 해당 카테고리 카드 피드로 즉시 전환(인라인 피딩)"
+// — /region으로 라우팅하던 이전 동작을 걷어내고, 선택된 카테고리를 부모(HomeView)에 알려주는
+// 콜백으로 바꾼다("테마별 행사" 칩과 동일한 인터랙션 패턴, 제5장 제4조 기존 구조 우선).
 //
 // Task 9-1-2: 기존 이모지/단색 원 대신 카테고리별 대표 이미지(원형 썸네일)로 교체.
 // 이미지 로딩 실패 시(onError) 기존 단색 원 + 카테고리 색상으로 자동 대체한다(레이아웃 깨짐 방지).
@@ -53,19 +53,39 @@ function CategoryThumbnail({ category, color, label }: { category: string; color
   );
 }
 
-export function QuickCategoryGrid() {
+export function QuickCategoryGrid({
+  selected,
+  onSelect,
+}: {
+  selected: string | null;
+  onSelect: (category: string) => void;
+}) {
   return (
     <div className="grid grid-cols-5 gap-2 px-4">
-      {UI_CATEGORY_FILTER_OPTIONS.map((opt) => (
-        <Link
-          key={opt.category}
-          href={`/region?category=${opt.category}`}
-          className="flex flex-col items-center gap-1 text-center"
-        >
-          <CategoryThumbnail category={opt.category} color={opt.color} label={opt.label} />
-          <span className="text-[11px] font-medium text-gray-700 line-clamp-1">{opt.label}</span>
-        </Link>
-      ))}
+      {UI_CATEGORY_FILTER_OPTIONS.map((opt) => {
+        const isActive = selected === opt.category;
+        return (
+          <button
+            key={opt.category}
+            type="button"
+            aria-pressed={isActive}
+            onClick={() => onSelect(opt.category)}
+            className="flex flex-col items-center gap-1 text-center"
+          >
+            <span
+              className="rounded-full"
+              style={isActive ? { boxShadow: `0 0 0 2px ${opt.color}` } : undefined}
+            >
+              <CategoryThumbnail category={opt.category} color={opt.color} label={opt.label} />
+            </span>
+            <span
+              className={`text-[11px] line-clamp-1 ${isActive ? 'font-bold text-gray-900' : 'font-medium text-gray-700'}`}
+            >
+              {opt.label}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
