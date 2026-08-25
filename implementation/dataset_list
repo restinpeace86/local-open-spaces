@@ -132,6 +132,44 @@ a994ecd495214b91a1eb732f4a72f6d0
 0
 정상
 
+[긴급 아키텍처 개편] RAW 레이어(원천 JSONB 적재)와 Service 레이어(events/spaces) 2단계 파이프라인 분리 구축
+
+🚨 [목적]
+현재 단일 파이프라인 직수집 방식에서 발생할 수 있는 데이터 유실, 재가공 불가, 신규 API 확장성 저해 문제를 해결하기 위해,
+"RAW 데이터 100% 무오염 보존(Raw Layer)" ➔ "표준 매퍼를 통한 서비스 적재(Service Layer)" 2단계 ETL 아키텍처로 전환할 것.
+
+---
+
+### 1. 1단계: RAW 메타 테이블 구축 및 무오염 적재 (`raw_ingest_data`)
+
+- **테이블 스키마 생성**:
+  - `source` (VARCHAR): 원천 출처 및 엔드포인트 식별자 (`seoul_public_culture`, `seoul_public_facility`, `gg_public`, `tourapi_4.0` 등)
+  - `source_id` (VARCHAR): 원천 API 고유 ID (`SVCID`, `contentid` 등)
+  - `fetched_at` (TIMESTAMP): 수집 일시
+  - `raw_payload` (JSONB): API 원천 응답 JSON 객체 100% 통째 보존
+  - **PRIMARY KEY**: `(source, source_id)` 복합키 설정
+
+- **수집기(Ingester) 동작 지침**:
+  - Paging Loop 순회 시 가져온 API 응답 JSON을 어떠한 필터링, 가공, 드롭 없이 `raw_ingest_data` 테이블에 `raw_payload` (JSONB) 상태로 ON CONFLICT (`source`, `source_id`) DO UPDATE 구문으로 전수 적재.
+
+---
+
+### 2. 2단계: 서비스 표준 테이블 적재 파이프라인 (`events` / `spaces`)
+
+- **파서/매퍼(Parser/Mapper) 동작 지침**:
+  - `raw_ingest_data`에 적재된 JSONB 데이터를 읽어 출처(`source`)별 전용 파서를 거침.
+  - `events` (문화/교육/행사/축제) 및 `spaces` (체육/공간/시설/대관) 테이블의 표준 컬럼(`title`, `address`, `latitude`, `longitude`, `is_reservation_required`, `use_pay`, `target_info` 등)으로 변환 매핑.
+  - 위치, 요금 등 비어있는 컬럼은 `NULL`로 안전하게 원본 상태 유지적재.
+  - `ON CONFLICT (svcid/source_id)` 발생 시 `COALESCE` 기반 Safe UPSERT 구문을 적용하여 기존 `NULL` 항목만 실데이터로 병합(Merge) 적재.
+
+---
+
+### 3. 작업 지시
+1. DB 마이그레이션 파일에 `raw_ingest_data` 테이블 생성 DDL 추가.
+2. 수집 스크립트(`ingest`)를 1단계 Raw 수집 모듈과 2단계 Service 트랜스포머 모듈로 분리 작성.
+3. `docs/pipeline-log.md` 일간 정밀 로깅에 Raw 수집 건수 및 Service 매핑 적재 건수를 각각 구분하여 자동 기록하도록 업데이트할 것.
+
+
 [요구사항] 서울시 공공 API 원천 메타필드 무오염 전수 수집, Paging Loop 전수 순회, SVCID NULL 병합 및 파이프라인 정밀 로깅
 
 🎯 [핵심 타겟층 및 DB 적재 원칙]
