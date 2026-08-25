@@ -12,8 +12,3 @@
    - 작업 완료 시 관련 테스트/빌드를 검증하고 `todo.md` 내 체크박스(`[x]`) 및 진행 상태를 최신화한다.
 
 ---
-
-- [ ] **[Task 0-0-0] Workspace Git Sync & Normalization** 🛠️
-  - **작업 지시**:
-    1. 로컬의 미완성/충돌 워킹 트리를 완전히 비우기 위해 `git fetch origin main && git reset --hard origin/main`을 실행할 것.
-    2. GitHub `origin/main` 최신 커밋 상태와 100% 동일하게 로컬 브랜치를 일치시키고 작업 준비 상태로 대기할 것.
