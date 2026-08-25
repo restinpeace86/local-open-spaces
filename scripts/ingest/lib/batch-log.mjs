@@ -5,7 +5,7 @@ const LOG_PATH = path.resolve(process.cwd(), 'docs/pipeline-log.md');
 
 // [배치 자동화 및 로깅 체계 확정](2026-08-25): 기존 pipeline-log.mjs의 recordPipelineRun()은
 // "소스 1개 실행 1행"을 표 최상단에 끼워 넣는 형식이라(Decision 012부터 이어짐), 여러 소스를
-// 한 번에 묶어 실행하는 배치(run-daily.mjs/run-weekly.mjs) 단위의 리포트에는 맞지 않는다.
+// 한 번에 묶어 실행하는 배치(run-daily.mjs/run-monthly.mjs) 단위의 리포트에는 맞지 않는다.
 // 사용자가 지정한 새 포맷("## [타임스탬프] [배치명] Ingestion Log" 헤더 + 소스별 표 + 검증
 // 문구)은 완전히 별개의 로깅 단위라 별도 모듈로 분리했다 — 기존 recordPipelineRun()은 개별
 // 어댑터의 run() 내부에서 계속 그대로 호출되므로(변경 없음) 이 모듈은 그 위에 배치 단위

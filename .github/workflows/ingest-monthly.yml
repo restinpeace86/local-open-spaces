@@ -1,0 +1,43 @@
+name: Monthly Ingestion (Spaces Batch)
+
+# [배치 자동화 및 로깅 체계 확정](2026-08-25) → [배치 스케줄링 조정](2026-08-26): 코드 분석
+# 기반 분류 — open_spaces 테이블로만 적재하는(events와 무관한) API 전체를
+# scripts/ingest/run-monthly.mjs 한 번의 실행으로 순차 처리한다. 분류 근거(각 파일의
+# targetTable을 직접 조사)는 run-monthly.mjs 상단 주석 참고.
+#
+# 고정 장소/시설 데이터(open_spaces)는 변경 빈도가 매우 낮은 데이터 특성을 반영해, 최초
+# 구축한 Weekly(주간) 스케줄을 이번 지시로 Monthly(월 1회)로 전환한다 — API 호출 낭비와
+# DB 부하를 줄이는 것이 목적이며, 대상 API 목록/분류 기준 자체는 변경 없음.
+#
+# 사용자 지시 원문 그대로: 매월 1일 새벽 02:00 (Cron: `0 2 1 * *`). GitHub Actions의
+# schedule cron은 항상 UTC 기준으로 해석되므로, 이 값 그대로 등록하면 실제 실행 시각은
+# UTC 02:00(=KST 11:00)이다. KST 새벽 02:00에 정확히 맞추려면 `0 17 * * *`(전날 17:00
+# UTC)로 바꿔야 하나, 지시에 명시된 cron 값을 임의로 변경하지 않고 그대로 반영한다(제3장
+# 제5조 추측 금지 — 시간대 의도가 명확해지면 조정 요청 바람).
+on:
+  schedule:
+    - cron: '0 2 1 * *'
+  workflow_dispatch:
+
+jobs:
+  monthly-spaces-batch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Monthly Spaces Batch (CITY_PARK/CULTURE_FACILITY/CULTURAL_FACILITY_SUMMARY/LOCALDATA_AMUSEMENT/GG_EVENTS/GO_CAMPING/NATIONAL_PARK_ECOTOUR/LOCALDATA_PLAYGROUND/PUBLIC_FACILITY_OPEN/SWIMMING_POOL/KOR_TOUR/KOR_WITH_TOUR/KOR_PET_TOUR)
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SEOUL_OPEN_DATA_KEY: ${{ secrets.SEOUL_OPEN_DATA_KEY }}
+          PUBLIC_DATA_API_KEY: ${{ secrets.PUBLIC_DATA_API_KEY }}
+          GG_DATA_API_KEY: ${{ secrets.GG_DATA_API_KEY }}
+          VWORLD_API_KEY: ${{ secrets.VWORLD_API_KEY }}
+        run: node scripts/ingest/run-monthly.mjs

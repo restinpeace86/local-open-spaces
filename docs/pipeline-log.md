@@ -15,7 +15,7 @@
 
 [배치 자동화 및 로깅 체계 확정(2026-08-26)]: 위 표는 "소스 1개 실행 1행"이라 소스별
 개별 실행 기록에는 맞지만, 여러 소스를 한 번에 묶어 도는 배치(`scripts/ingest/run-daily.mjs`/
-`run-weekly.mjs`) 단위 기록에는 맞지 않아 이 문서 맨 아래에 `## [타임스탬프] [배치명]
+`run-monthly.mjs`) 단위 기록에는 맞지 않아 이 문서 맨 아래에 `## [타임스탬프] [배치명]
 Ingestion Log` 형식으로 별도 블록을 추가한다(기존 표는 그대로 유지, 대체 아님). 소스별
 `RAW 수신 건수`/`events 적재 건수`/`open_spaces 적재 건수`/`Safe Merge 건수`(배치 내 중복
 병합 + 기존 DB 행 병합 합계)/`에러 건수`(진짜로 어느 테이블에도 적재되지 않고 범위 제외
@@ -26,9 +26,18 @@ Ingestion Log` 형식으로 별도 블록을 추가한다(기존 표는 그대�
 않는다(같은 행이 이중 집계되는 것을 방지).
 분류 기준(코드 분석 기반, 임의 추측 아님 — 각 어댑터의 실제 `targetTable`을 직접 확인):
 Daily Events Batch = `events` 테이블 전용 API 전체 + `events`/`open_spaces` 양쪽에 적재하는
-복합 API(`SeoulYeyakAdapter`, `targetTable: 'multi'`). Weekly Spaces Batch = `open_spaces`
-테이블로만 적재하는 API 전체. 상세 근거는 `scripts/ingest/run-daily.mjs`/`run-weekly.mjs`
-상단 주석 참고.
+복합 API(`SeoulYeyakAdapter`, `targetTable: 'multi'`). Weekly/Monthly Spaces Batch =
+`open_spaces` 테이블로만 적재하는 API 전체. 상세 근거는 `scripts/ingest/run-daily.mjs`/
+`run-monthly.mjs` 상단 주석 참고.
+
+[배치 스케줄링 조정(2026-08-26)]: open_spaces 전용 배치(고정 장소/시설 데이터, 변경
+빈도가 매우 낮음)를 API 호출 낭비/DB 부하 절감을 위해 최초 구축한 Weekly(주간) 스케줄에서
+Monthly(월 1회, 매월 1일 새벽)로 전환했다. 파일명(`run-weekly.mjs`→`run-monthly.mjs`,
+`ingest-weekly.yml`→`ingest-monthly.yml`)과 헤더 배치명(`Weekly Spaces Batch`→
+`Monthly Spaces Batch`)만 바뀌고 대상 API 목록/분류 기준/드롭 검증 로직은 변경 없다.
+전환 이전에 이미 기록된 `[Weekly Spaces Batch]` 로그 블록은 소급 수정하지 않고 그대로
+보존한다(위 "과거 기록을 소급 수정하지 않음" 원칙 동일 적용) — 앞으로의 실행부터
+`[Monthly Spaces Batch]` 헤더로 기록된다.
 
 | 실행 일시 | 수집 권역 | RAW 적재 건수 | Service 적재 건수 | 파싱 에러 | 상태 | 비고 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |

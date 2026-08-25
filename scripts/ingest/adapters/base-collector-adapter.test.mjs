@@ -105,7 +105,7 @@ describe('BaseCollectorAdapter.run() — RAW 레이어 opt-in', () => {
     );
   });
 
-  // [배치 자동화 및 로깅 체계 확정](2026-08-25): run-daily.mjs/run-weekly.mjs 배치 오케스트레이터가
+  // [배치 자동화 및 로깅 체계 확정](2026-08-25): run-daily.mjs/run-monthly.mjs 배치 오케스트레이터가
   // docs/pipeline-log.md의 배치 리포트 표를 만들 때 이 반환값(rawCount/rawArchivedCount/
   // safeMergeCount/errorCount)을 그대로 쓴다 — 반환 형태 자체를 직접 검증한다.
   it('성공 시 배치 리포트에 필요한 rawCount/rawArchivedCount/safeMergeCount/errorCount를 함께 반환한다', async () => {

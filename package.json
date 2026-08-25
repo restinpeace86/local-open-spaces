@@ -34,7 +34,7 @@
     "ingest:gg-culture-events": "node scripts/ingest/gg-culture-events.mjs",
     "ingest:enrich-gg-culture-locations": "node scripts/ingest/enrich-gg-culture-event-locations.mjs",
     "ingest:daily": "node scripts/ingest/run-daily.mjs",
-    "ingest:weekly": "node scripts/ingest/run-weekly.mjs"
+    "ingest:monthly": "node scripts/ingest/run-monthly.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.4",

@@ -70,7 +70,7 @@ function mapToOpenSpaceRow(item) {
   };
 }
 
-// [배치 자동화 및 로깅 체계 확정](2026-08-25): run-daily.mjs/run-weekly.mjs 배치 오케스트레이터가
+// [배치 자동화 및 로깅 체계 확정](2026-08-25): run-daily.mjs/run-monthly.mjs 배치 오케스트레이터가
 // 직접 import해서 호출할 수 있도록 main()을 재사용 가능한 run() 함수로 분리하고, 반환값을
 // BaseCollectorAdapter.run()과 동일한 형태({sourceKey, targetTable, source, count, upserted,
 // rawCount, rawArchivedCount, safeMergeCount, errorCount})로 맞췄다 — 배치 리포트가 어댑터
@@ -143,7 +143,7 @@ export async function run({ dryRun = false } = {}) {
 }
 
 // CLI 진입점 — `node scripts/ingest/cultural-spaces.mjs [--dry-run]`로 직접 실행할 때만 동작한다
-// (run-daily.mjs/run-weekly.mjs가 run()을 직접 import할 때는 이 블록이 실행되지 않는다).
+// (run-daily.mjs/run-monthly.mjs가 run()을 직접 import할 때는 이 블록이 실행되지 않는다).
 // Windows에서는 process.argv[1]이 백슬래시 경로("D:\...")라 import.meta.url(file:// URL,
 // 슬래시)과 문자열로 직접 비교하면 항상 false가 된다(실측 확인) — pathToFileURL로 변환해 비교한다.
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {

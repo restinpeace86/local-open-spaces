@@ -12,7 +12,7 @@ import { countRawItems, recordPipelineRun } from '../lib/pipeline-log.mjs';
 export class BaseCollectorAdapter {
   // source: [배치 자동화 및 로깅 체계 확정](2026-08-25) 선택 파라미터 — DB `source` 컬럼에
   // 실제로 기록되는 값(예: 'seoul_public_reservation')을 인스턴스에도 노출해, 배치
-  // 오케스트레이터(run-daily.mjs/run-weekly.mjs)가 각 어댑터 내부의 SOURCE 상수를 다시
+  // 오케스트레이터(run-daily.mjs/run-monthly.mjs)가 각 어댑터 내부의 SOURCE 상수를 다시
   // 파싱하지 않고 `adapter.source`로 바로 pipeline-log.md 배치 리포트를 만들 수 있게 한다.
   // 지정하지 않으면 null — 아직 source 태깅을 하지 않는 어댑터도 그대로 동작한다(하위 호환).
   constructor({ sourceKey, targetTable, source = null }) {
