@@ -9,14 +9,19 @@ name: Monthly Ingestion (Spaces Batch)
 # 구축한 Weekly(주간) 스케줄을 이번 지시로 Monthly(월 1회)로 전환한다 — API 호출 낭비와
 # DB 부하를 줄이는 것이 목적이며, 대상 API 목록/분류 기준 자체는 변경 없음.
 #
-# 사용자 지시 원문 그대로: 매월 1일 새벽 02:00 (Cron: `0 2 1 * *`). GitHub Actions의
-# schedule cron은 항상 UTC 기준으로 해석되므로, 이 값 그대로 등록하면 실제 실행 시각은
-# UTC 02:00(=KST 11:00)이다. KST 새벽 02:00에 정확히 맞추려면 `0 17 * * *`(전날 17:00
-# UTC)로 바꿔야 하나, 지시에 명시된 cron 값을 임의로 변경하지 않고 그대로 반영한다(제3장
-# 제5조 추측 금지 — 시간대 의도가 명확해지면 조정 요청 바람).
+# [배치 스케줄링 조정 - cron 정밀화](2026-08-26): "KST 매월 1일 새벽 02:00에 정확히
+# 맞춰 실행"이 목표. GitHub Actions의 schedule cron은 Quartz가 아니라 표준 5필드 POSIX
+# cron(vixie-cron 방언)이라 'L'(마지막 날) 토큰을 지원하지 않는다 — `0 17 L * *`를 그대로
+# 쓰면 워크플로 자체가 파싱 실패하거나 트리거되지 않는다(실제 GitHub Actions 문서 기준
+# 사실 확인, 추측 아님). 대신 GitHub Actions에서 널리 쓰이는 표준 우회법을 적용한다:
+# 매월 28~31일 17:00 UTC(=KST 다음날 02:00)에 매일 후보로 깨어나되, 아래 "Check last day
+# of month" 스텝에서 "내일(UTC)이 1일인지"를 확인해 진짜 마지막 날에만 실제 배치를
+# 실행한다 — 28~31일 중 그 달의 마지막 날 단 하루만 조건이 참이 되므로 결과적으로
+# "매월 1일 KST 02:00 정확히 1회 실행"과 수학적으로 동일하다. workflow_dispatch(수동 실행)는
+# 이 가드를 건너뛰어 언제든 즉시 실행 가능하게 한다.
 on:
   schedule:
-    - cron: '0 2 1 * *'
+    - cron: '0 17 28-31 * *'
   workflow_dispatch:
 
 jobs:
@@ -32,7 +37,18 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Check last day of month (UTC)
+        id: last_day
+        run: |
+          tomorrow_day=$(date -u -d '+1 day' +%d)
+          if [ "$tomorrow_day" = "01" ]; then
+            echo "is_last_day=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_last_day=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Monthly Spaces Batch (CITY_PARK/CULTURE_FACILITY/CULTURAL_FACILITY_SUMMARY/LOCALDATA_AMUSEMENT/GG_EVENTS/GO_CAMPING/NATIONAL_PARK_ECOTOUR/LOCALDATA_PLAYGROUND/PUBLIC_FACILITY_OPEN/SWIMMING_POOL/KOR_TOUR/KOR_WITH_TOUR/KOR_PET_TOUR)
+        if: steps.last_day.outputs.is_last_day == 'true' || github.event_name == 'workflow_dispatch'
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
