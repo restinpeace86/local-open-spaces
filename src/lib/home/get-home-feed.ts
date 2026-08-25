@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { haversineDistanceMeters } from '@/lib/geo/haversine';
-import { resolveProvinceMembers } from '@/lib/geo/region-hierarchy';
+import { GYEONGGI_SIGUN_NAMES, resolveProvinceMembers, SEOUL_GU_NAMES } from '@/lib/geo/region-hierarchy';
 import {
   AMBIGUOUS_SPACE_SOURCE_TYPES,
   buildThemeKeywordFilter,
@@ -273,11 +273,46 @@ function regionTier(item: NearbyItem, region: HomeRegion): 0 | 1 | 2 {
 // 2순위로 먼저 채운 뒤에야 그 외 지역(3순위)으로 채운다. Array.sort는 안정 정렬이므로 각 순위
 // 그룹 내부의 기존 정렬(거리순 등)은 그대로 유지된다 — 1순위만으로 limit이 채워지면 정렬 후
 // slice 단계에서 2·3순위 항목은 자연히 결과에서 제외되어 기존 Strict 배제 동작도 유지된다.
-function selectRegionFirst(items: NearbyItem[], region: HomeRegion, limit: number): NearbyItem[] {
+// [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "Hero 카드 구역"): 호출부가 tierFn을
+// 넘기면 그 기준으로 순위를 매긴다(기본값은 기존 regionTier 그대로 — 다른 호출부의 동작은
+// 변경 없음). getTodayEvents만 heroRegionTier를 넘겨 "그 외 수도권" 안에서도 경기/서울 우선순위를
+// 추가로 가른다.
+function selectRegionFirst(
+  items: NearbyItem[],
+  region: HomeRegion,
+  limit: number,
+  tierFn: (item: NearbyItem, region: HomeRegion) => number = regionTier
+): NearbyItem[] {
   if (!region.sigunguName) return items.slice(0, limit);
 
-  const ranked = [...items].sort((a, b) => regionTier(a, region) - regionTier(b, region));
+  const ranked = [...items].sort((a, b) => tierFn(a, region) - tierFn(b, region));
   return ranked.slice(0, limit);
+}
+
+// [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "Hero 카드 구역"): "사용자 위치가
+// 경기도인 경우 경기도→서울시 순, 서울시인 경우 서울시→경기도 순" 정렬 요구사항. regionTier의
+// 2순위("그 외")는 이미 항상 수도권(경기+서울)으로만 좁혀져 있다(fetchRegionFirstRows 3단계가
+// resolveProvinceMembers로 CAPITAL_AREA_MEMBERS까지만 조회하기 때문) — 그 안에서 사용자 자신의
+// 도(경기/서울)에 속한 항목을 한 번 더 앞으로 당긴다. 0/1순위(정확 일치/상위 시 일치)는 기존과
+// 동일하게 최우선 유지한다(이 요구사항은 그 다음 단계에만 적용).
+function provinceOf(text: string | null | undefined): 'GYEONGGI' | 'SEOUL' | null {
+  if (!text) return null;
+  if (GYEONGGI_SIGUN_NAMES.some((name) => text.includes(name))) return 'GYEONGGI';
+  if (SEOUL_GU_NAMES.some((name) => text.includes(name))) return 'SEOUL';
+  return null;
+}
+
+function heroRegionTier(item: NearbyItem, region: HomeRegion): 0 | 1 | 2 | 3 {
+  const baseTier = regionTier(item, region);
+  if (baseTier < 2) return baseTier;
+
+  const userProvince = provinceOf(region.sigunguName);
+  if (!userProvince) return 2;
+
+  const itemProvince = provinceOf(item.sigungu_name) ?? provinceOf(item.address);
+  if (!itemProvince) return 3;
+
+  return itemProvince === userProvince ? 2 : 3;
 }
 
 // Task 9-4-4: sigungu_name과 주소 텍스트(events는 venue_name, open_spaces는 address) 양쪽에
@@ -393,7 +428,96 @@ export async function getTodayEvents(
 
   const items = dedupeAndMergeFree(data.map(toEventItem));
   const ordered = sortByDistanceIfKnown(items, region);
-  return selectRegionFirst(ordered, region, limit);
+  return selectRegionFirst(ordered, region, limit, heroRegionTier);
+}
+
+// [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "당일 예약 필요 카드 구역"): "당일
+// 기준 현재 예약 접수가 가능한(SVCSTATNM == '접수중') 이벤트/행사/클래스" 가로 스크롤 슬라이더.
+// booking_status 컬럼은 deriveBookingStatus()(ai-tagging.mjs)가 원문 그대로 '접수중' 문자열을
+// 쓰므로 SEOUL_CULTURE_EVENTS/TOUR_API_FESTIVAL/GG_CULTURE_EVENTS 3개 소스는 이 컬럼만 봐도
+// 된다. 다만 SEOUL_YEYAK(source='seoul_public_reservation')은 이 컬럼을 채우지 않고 대신
+// is_active를 원본 SVCSTATNM 기반으로만 세팅한다(seoul-yeyak-adapter.mjs 실측 확인) — 이
+// 소스에서 "접수중" 상태를 판별하려면 raw_data JSONB에 보존된 원본 SVCSTATNM을 직접 비교해야
+// 한다(admin-data-grid RPC가 이미 raw_data->>'SVCSTATNM'으로 같은 값을 추출해 쓰는 것과 동일한
+// 방식 — scripts/migrations/2026-08-25-admin-data-grid-rpcs.sql 참고). 두 조건을 각각 별도
+// 쿼리로 걸어 병합·중복 제거한다(하나의 필터로 합치면 PostgREST에서 컬럼명에 '->>'가 섞인
+// 조건과 일반 컬럼 조건을 안전하게 하나의 or() 문자열로 결합하기 까다롭다).
+export async function getReservationOpenEvents(
+  limit = 10,
+  region: HomeRegion = DEFAULT_HOME_REGION
+): Promise<NearbyItem[]> {
+  const supabase = await createClient();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const buildBookingStatusOpenQuery = (token: string | readonly string[] | null) => {
+    let query = supabase
+      .from('events')
+      .select(EVENT_COLUMNS)
+      .eq('booking_status', '접수중')
+      .eq('is_active', true)
+      .gte('end_date', today);
+    if (token) query = query.or(regionOrFilter(token, 'venue_name'));
+    return query.order('start_date', { ascending: false }).limit(500);
+  };
+
+  const buildSeoulYeyakOpenQuery = (token: string | readonly string[] | null) => {
+    let query = supabase
+      .from('events')
+      .select(EVENT_COLUMNS)
+      .eq('source', 'seoul_public_reservation')
+      .eq('raw_data->>SVCSTATNM', '접수중')
+      .eq('is_active', true)
+      .gte('end_date', today);
+    if (token) query = query.or(regionOrFilter(token, 'venue_name'));
+    return query.order('start_date', { ascending: false }).limit(500);
+  };
+
+  const buildQuery = async (token: string | readonly string[] | null) => {
+    const [statusResult, yeyakResult] = await Promise.all([
+      buildBookingStatusOpenQuery(token),
+      buildSeoulYeyakOpenQuery(token),
+    ]);
+    if (statusResult.error) return statusResult;
+    if (yeyakResult.error) return yeyakResult;
+
+    const seenIds = new Set<string>();
+    const merged: EventRow[] = [];
+    for (const row of [...(statusResult.data ?? []), ...(yeyakResult.data ?? [])]) {
+      if (!seenIds.has(row.id)) {
+        seenIds.add(row.id);
+        merged.push(row);
+      }
+    }
+    return { data: merged, error: null };
+  };
+
+  const data = await fetchRegionFirstRows<EventRow>(buildQuery, region, limit);
+
+  const items = dedupeAndMergeFree(data.map(toEventItem));
+  const ordered = sortByDistanceIfKnown(items, region);
+  return ordered.sort(byRegionPriority(region)).slice(0, limit);
+}
+
+// [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "GNB 헤더 & 글로벌 위치 상태 공유"):
+// 이벤트픽 검색은 events 테이블 전용으로 수행한다(스팟픽의 open_spaces 검색과 분리) — 검색은
+// 사용자가 이름을 직접 아는 상태로 찾는 행위라 지역 제한을 걸지 않는다(다른 피드 함수들과
+// 달리 region 파라미터 자체가 없음, 추측으로 지역 스코프를 넣지 않는다).
+export async function searchEvents(keyword: string, limit = 30): Promise<NearbyItem[]> {
+  const supabase = await createClient();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const { data, error } = await supabase
+    .from('events')
+    .select(EVENT_COLUMNS)
+    .ilike('title', `%${keyword}%`)
+    .eq('is_active', true)
+    .gte('end_date', today)
+    .order('start_date', { ascending: false })
+    .limit(limit);
+
+  if (error) throw new Error(error.message);
+
+  return ((data ?? []) as EventRow[]).map(toEventItem);
 }
 
 // Task 9-5-1(2026-08-22): source_type을 추가했다 — 목적별 테마 스팟 분류(src/lib/theme-spots.ts)에
@@ -628,6 +752,7 @@ export async function getCategoryFeed(
 export type HomeFeed = {
   heroEvents: NearbyItem[];
   freeFeed: NearbyItem[];
+  reservationOpenEvents: NearbyItem[];
 };
 
 // 사용자 피드백(2026-08-22): 메인 Hero Carousel은 처음엔 10개만 보여주되(HomeView가 화면에
@@ -638,10 +763,15 @@ export type HomeFeed = {
 // 같은 값을 쓰도록 export한다(하단 "가성비 행복" 피드는 더 이상 초기 페칭에 포함하지 않음).
 export const HERO_FETCH_LIMIT = 30;
 
+// [프론트엔드 UI/UX 개선](2026-08-26): "당일 예약 필요 카드" 가로 스크롤 슬라이더도 Hero처럼
+// 화면에 보여줄 개수(HomeView가 결정)보다 넉넉히 가져온다.
+export const RESERVATION_OPEN_FETCH_LIMIT = 20;
+
 export async function getHomeFeed(region: HomeRegion = DEFAULT_HOME_REGION): Promise<HomeFeed> {
-  const [heroEvents, freeFeed] = await Promise.all([
+  const [heroEvents, freeFeed, reservationOpenEvents] = await Promise.all([
     getTodayEvents(HERO_FETCH_LIMIT, region),
     getFreeFeed(12, region),
+    getReservationOpenEvents(RESERVATION_OPEN_FETCH_LIMIT, region),
   ]);
-  return { heroEvents, freeFeed };
+  return { heroEvents, freeFeed, reservationOpenEvents };
 }

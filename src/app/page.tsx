@@ -1,5 +1,10 @@
 import { HomeView } from '@/components/home/home-view';
-import { getTodayEvents, HERO_FETCH_LIMIT } from '@/lib/home/get-home-feed';
+import {
+  getReservationOpenEvents,
+  getTodayEvents,
+  HERO_FETCH_LIMIT,
+  RESERVATION_OPEN_FETCH_LIMIT,
+} from '@/lib/home/get-home-feed';
 
 // Task 9-1(2026-08-22): 신규 홈 화면 — docs/spec.md 2.2 메인 홈 레이아웃 스택.
 // Server Component에서 초기 피드를 직접 조회해 곧바로 렌더링한다(/api/home/feed는 클라이언트
@@ -19,5 +24,16 @@ export default async function HomePage() {
   } catch {
     // 폴백: 빈 배열이면 HomeView가 "오늘 진행 중인 추천 행사가 아직 없습니다" 안내를 보여준다.
   }
-  return <HomeView initialHeroEvents={heroEvents} />;
+
+  // [프론트엔드 UI/UX 개선](2026-08-26): "당일 예약 필요 카드" 슬라이더도 Hero와 동일하게
+  // 초기 SSR에서 함께 페칭한다 — 실패해도(DB 일시 오류 등) 홈 화면 전체가 죽지 않도록 Hero와
+  // 같은 방어적 폴백(빈 배열)을 적용한다.
+  let reservationOpenEvents: Awaited<ReturnType<typeof getReservationOpenEvents>> = [];
+  try {
+    reservationOpenEvents = await getReservationOpenEvents(RESERVATION_OPEN_FETCH_LIMIT);
+  } catch {
+    // 폴백: 빈 배열이면 HomeView가 해당 섹션을 숨긴다.
+  }
+
+  return <HomeView initialHeroEvents={heroEvents} initialReservationOpenEvents={reservationOpenEvents} />;
 }

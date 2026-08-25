@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { KakaoMapView } from '@/components/map/kakao-map-view';
-import { RadiusSelector } from '@/components/map/radius-selector';
 import { SearchBar } from '@/components/map/search-bar';
 import { CategoryFilter, ALL_CATEGORY } from '@/components/map/category-filter';
 import { QuickFilters } from '@/components/map/quick-filters';
@@ -11,7 +10,6 @@ import { ItemListPanel } from '@/components/map/item-list-panel';
 import { EmptyState } from '@/components/map/empty-state';
 import { DetailModal } from '@/components/map/detail-modal';
 import { Toast } from '@/components/map/toast';
-import { GridViewPrompt } from '@/components/map/grid-view-prompt';
 import { LocationHeader } from '@/components/map/location-header';
 import { LocationOnboardingModal } from '@/components/map/location-onboarding-modal';
 import { RecenterButton } from '@/components/map/recenter-button';
@@ -29,10 +27,16 @@ function isQuickFilterKey(value: string): value is QuickFilterKey {
 // spec/map/spatial-search.md 3.1: 반경 내 최대 200개 마커만 우선 렌더링
 const MARKER_LIMIT = 200;
 
+// [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 3): "지도 상단 Floating 1km/5km/10km
+// 반경 선택 버튼 전면 삭제"에 따라 사용자가 더 이상 반경을 고를 수 없다 — 이전 RadiusSelector의
+// 기본값(5km)을 그대로 고정값으로 승계한다(임의로 새 값을 고르지 않음, 기존 동작 최대한 보존).
+const FIXED_RADIUS_METERS = 5000;
+
 export function MapExplorer() {
   const {
     center,
     addressName,
+    sigunguName,
     isOnboardingOpen,
     confirmLocation,
     openOnboarding,
@@ -44,7 +48,7 @@ export function MapExplorer() {
   // 아니라 /events/today로 연결되므로, 이 쿼리 파라미터 처리는 현재 실제로 이걸 넘기는 진입점이
   // 없다 — 다만 범용 기능이라 제거하지 않고 남겨둔다(향후 다른 진입점이 재사용할 수 있음).
   const searchParams = useSearchParams();
-  const [radius, setRadius] = useState(5000);
+  const radius = FIXED_RADIUS_METERS;
   const [keyword, setKeyword] = useState(() => searchParams.get('q') ?? '');
   const [category, setCategory] = useState(ALL_CATEGORY);
   const [activeQuickFilters, setActiveQuickFilters] = useState<QuickFilterKey[]>(() => {
@@ -56,7 +60,6 @@ export function MapExplorer() {
   const [isSheetExpanded, setIsSheetExpanded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [showGridViewPrompt, setShowGridViewPrompt] = useState(false);
   // implementation/todo.md: 지도 드래그로 이동한 위치를 새로운 검색 기준점으로 지정하기 위한 override 상태.
   // '내 위치' 원본 좌표(useUserLocation)는 그대로 유지하고, 재검색 버튼 클릭 시에만 탐색 기준점을 갱신한다.
   const [searchOverrideCenter, setSearchOverrideCenter] = useState<{ lat: number; lng: number } | null>(
@@ -155,9 +158,6 @@ export function MapExplorer() {
     return result;
   }, [items, category, keyword, activeQuickFilters]);
 
-  // spec/common/search.md 2.2: 카테고리 또는 Quick 필터 중 1개 이상 활성화 시에만 20km/30km 광역 반경 선택을 해금한다.
-  const isWideRadiusUnlocked = category !== ALL_CATEGORY || activeQuickFilters.length > 0;
-
   const visibleItems = useMemo(() => filteredItems.slice(0, MARKER_LIMIT), [filteredItems]);
   const isOverLimit = filteredItems.length > MARKER_LIMIT;
   const isEmptyByFilter = !isLoading && !errorMessage && items.length > 0 && visibleItems.length === 0;
@@ -174,14 +174,8 @@ export function MapExplorer() {
       {/* 데스크톱 좌측 패널 (spec/common/responsive.md 2.2) */}
       <aside className="hidden md:flex md:w-[400px] md:shrink-0 flex-col border-r border-gray-200 bg-white overflow-hidden">
         <div className="p-4 border-b border-gray-100 flex flex-col gap-3">
-          <LocationHeader addressName={addressName} onClick={openOnboarding} />
+          <LocationHeader addressName={sigunguName ?? addressName} onClick={openOnboarding} />
           <SearchBar value={keyword} onChange={setKeyword} />
-          <RadiusSelector
-            value={radius}
-            onChange={setRadius}
-            isWideRadiusUnlocked={isWideRadiusUnlocked}
-            onBlockedWideRadiusSelect={() => setShowGridViewPrompt(true)}
-          />
           <CategoryFilter value={category} onChange={setCategory} options={NEARBY_CATEGORY_FILTER_OPTIONS} />
           <QuickFilters value={activeQuickFilters} onToggle={handleToggleQuickFilter} />
         </div>
@@ -225,14 +219,8 @@ export function MapExplorer() {
 
         {/* 모바일 플로팅 헤더 (spec/common/search.md 2.1) */}
         <div className="md:hidden absolute top-3 left-3 right-3 flex flex-col gap-2 z-10">
-          <LocationHeader addressName={addressName} onClick={openOnboarding} />
+          <LocationHeader addressName={sigunguName ?? addressName} onClick={openOnboarding} />
           <SearchBar value={keyword} onChange={setKeyword} />
-          <RadiusSelector
-            value={radius}
-            onChange={setRadius}
-            isWideRadiusUnlocked={isWideRadiusUnlocked}
-            onBlockedWideRadiusSelect={() => setShowGridViewPrompt(true)}
-          />
           <CategoryFilter value={category} onChange={setCategory} options={NEARBY_CATEGORY_FILTER_OPTIONS} />
           <QuickFilters value={activeQuickFilters} onToggle={handleToggleQuickFilter} />
           {/* implementation/todo.md: 지도 드래그 후 재검색 버튼 - 모바일에서는 필터 스택 하단에 노출해 겹침 방지 */}
@@ -283,16 +271,6 @@ export function MapExplorer() {
 
       {selectedItem && (
         <DetailModal item={selectedItem} onClose={() => setSelectedItem(null)} />
-      )}
-
-      {showGridViewPrompt && (
-        <GridViewPrompt
-          onConfirm={() => {
-            setRadius(10000);
-            setShowGridViewPrompt(false);
-          }}
-          onCancel={() => setShowGridViewPrompt(false)}
-        />
       )}
 
       {isOnboardingOpen && (

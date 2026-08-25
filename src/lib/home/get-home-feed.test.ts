@@ -816,3 +816,141 @@ describe('getCategoryFeed (Task 9-6-17: 5대 카테고리 인라인 피딩)', ()
     expect(ids).toEqual(['kids-event']);
   });
 });
+
+// [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "Hero 카드 구역 - 위치 기반 정렬 순서")
+describe('getTodayEvents 경기/서울 우선순위 정렬', () => {
+  afterEach(() => {
+    vi.doUnmock('@/lib/supabase/server');
+    vi.resetModules();
+  });
+
+  it('사용자 위치가 경기도면, 정확 일치 지역이 없을 때 경기도 항목을 서울시 항목보다 먼저 보여준다', async () => {
+    const seoulItem = eventRow({ id: 'seoul-1', title: '서울 행사', sigungu_name: '강남구', venue_name: '강남 문화센터' });
+    const gyeonggiItem = eventRow({ id: 'gyeonggi-1', title: '경기 행사', sigungu_name: '수원시', venue_name: '수원 문화센터' });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeChainable({ data: [seoulItem, gyeonggiItem], error: null }) }),
+    }));
+
+    const { getTodayEvents } = await import('./get-home-feed');
+    // 사용자가 "고양시"(경기도)에 있고, 정확 일치(고양시)/상위 시 일치 항목은 없어 두 항목 모두
+    // 기존 로직상 같은 "그 외 수도권" 순위로 떨어지는 상황을 재현한다.
+    const items = await getTodayEvents(10, { sigunguName: '고양시' });
+
+    expect(items.map((item) => item.id)).toEqual(['gyeonggi-1', 'seoul-1']);
+  });
+
+  it('사용자 위치가 서울시면, 서울시 항목을 경기도 항목보다 먼저 보여준다', async () => {
+    const seoulItem = eventRow({ id: 'seoul-1', title: '서울 행사', sigungu_name: '강남구', venue_name: '강남 문화센터' });
+    const gyeonggiItem = eventRow({ id: 'gyeonggi-1', title: '경기 행사', sigungu_name: '수원시', venue_name: '수원 문화센터' });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeChainable({ data: [seoulItem, gyeonggiItem], error: null }) }),
+    }));
+
+    const { getTodayEvents } = await import('./get-home-feed');
+    const items = await getTodayEvents(10, { sigunguName: '마포구' });
+
+    expect(items.map((item) => item.id)).toEqual(['seoul-1', 'gyeonggi-1']);
+  });
+});
+
+// [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "당일 예약 필요 카드 구역")
+describe('getReservationOpenEvents', () => {
+  afterEach(() => {
+    vi.doUnmock('@/lib/supabase/server');
+    vi.resetModules();
+  });
+
+  it('booking_status="접수중"인 이벤트를 반환한다', async () => {
+    const openEvent = eventRow({ id: 'open-1', booking_status: '접수중', is_active: true });
+    const closedEvent = eventRow({ id: 'closed-1', booking_status: '오늘방문', is_active: true });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeFilteringChainable([openEvent, closedEvent]) }),
+    }));
+
+    const { getReservationOpenEvents } = await import('./get-home-feed');
+    const items = await getReservationOpenEvents(10, { sigunguName: null });
+
+    expect(items.map((item) => item.id)).toEqual(['open-1']);
+  });
+
+  // SEOUL_YEYAK(source='seoul_public_reservation')은 booking_status 컬럼을 채우지 않고 원본
+  // SVCSTATNM만 raw_data JSONB에 보존한다(seoul-yeyak-adapter.mjs 실측 확인).
+  it('SEOUL_YEYAK 소스는 booking_status 대신 raw_data의 원본 SVCSTATNM="접수중"으로 판별한다', async () => {
+    const yeyakOpen = eventRow({
+      id: 'yeyak-open',
+      booking_status: null,
+      is_active: true,
+      source: 'seoul_public_reservation',
+      'raw_data->>SVCSTATNM': '접수중',
+    });
+    const yeyakClosed = eventRow({
+      id: 'yeyak-closed',
+      booking_status: null,
+      is_active: true,
+      source: 'seoul_public_reservation',
+      'raw_data->>SVCSTATNM': '접수마감',
+    });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeFilteringChainable([yeyakOpen, yeyakClosed]) }),
+    }));
+
+    const { getReservationOpenEvents } = await import('./get-home-feed');
+    const items = await getReservationOpenEvents(10, { sigunguName: null });
+
+    expect(items.map((item) => item.id)).toEqual(['yeyak-open']);
+  });
+
+  it('두 조건 모두에 해당하는 행이 있어도 중복 없이 한 번만 반환한다', async () => {
+    const dup = eventRow({
+      id: 'dup',
+      booking_status: '접수중',
+      is_active: true,
+      source: 'seoul_public_reservation',
+      'raw_data->>SVCSTATNM': '접수중',
+    });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeFilteringChainable([dup]) }),
+    }));
+
+    const { getReservationOpenEvents } = await import('./get-home-feed');
+    const items = await getReservationOpenEvents(10, { sigunguName: null });
+
+    expect(items.map((item) => item.id)).toEqual(['dup']);
+  });
+});
+
+// [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "GNB 헤더 & 검색")
+describe('searchEvents', () => {
+  afterEach(() => {
+    vi.doUnmock('@/lib/supabase/server');
+    vi.resetModules();
+  });
+
+  it('title에 ilike 검색 패턴("%keyword%")을 걸어 events만 조회한다', async () => {
+    const row = eventRow({ id: 'match-1', title: '분당 여름 물놀이 체험' });
+    const ilikeMock = vi.fn(() => builder);
+    const builder: Record<string, unknown> = {};
+    builder.select = () => builder;
+    builder.ilike = ilikeMock;
+    builder.eq = () => builder;
+    builder.gte = () => builder;
+    builder.order = () => builder;
+    builder.limit = () => Promise.resolve({ data: [row], error: null });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => builder }),
+    }));
+
+    const { searchEvents } = await import('./get-home-feed');
+    const items = await searchEvents('물놀이');
+
+    expect(ilikeMock).toHaveBeenCalledWith('title', '%물놀이%');
+    expect(items[0].id).toBe('match-1');
+    expect(items[0].name).toBe('분당 여름 물놀이 체험');
+  });
+});

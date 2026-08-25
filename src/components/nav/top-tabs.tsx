@@ -9,8 +9,12 @@ import { NotificationBell } from '@/components/notification/notification-bell';
 // 기존 지도/도감/캘린더 3뷰는 (explore) 라우트 그룹(/nearby, /region, /calendar) 안으로 재배치됨
 // (Decision 008: "기존 뷰는 폐기가 아니라 새 탭 구조 안으로 재배치"). 이 컴포넌트는 그 3뷰 사이의
 // 서브 내비게이션으로 (explore)/layout.tsx에서만 렌더된다(전역 아님).
+// [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판): 스팟픽(/nearby)이 "상단 헤더 이하
+// 전체 영역 지도 뷰 단일 레이아웃"으로 확정되면서 도감/캘린더 탭과 한 화면에 묶여 있으면 안 되게
+// 됐다 — /nearby를 (explore) 라우트 그룹 밖(src/app/nearby)으로 옮기고, 이 탭 바에서도 '지도'
+// 항목을 제거한다(Decision 008 원칙 그대로: /region·/calendar는 폐기가 아니라 남겨두고, 이
+// 서브 탭 바도 그 둘 사이의 내비게이션으로만 계속 쓰인다).
 const TABS = [
-  { href: '/nearby', label: '지도' },
   { href: '/region', label: '도감' },
   { href: '/calendar', label: '캘린더' },
 ];

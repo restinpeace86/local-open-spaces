@@ -21,9 +21,12 @@ vi.mock('next/navigation', () => ({
 describe('NearbyPage', () => {
   it('renders the map explorer controls', async () => {
     render(<NearbyPage />);
-    expect((await screen.findAllByText('5km')).length).toBeGreaterThan(0);
     // Task 9-6-10(2026-08-23): /nearby가 상시 공간 전용으로 단일화되면서 on/off 토글
     // ("상시 시설 보기")이 제거됐다 — 대신 상시 공간 목적별 카테고리 칩이 항상 노출된다.
-    expect(screen.getAllByText('공원·광장').length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('공원·광장')).length).toBeGreaterThan(0);
+    // [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판): 반경 선택 버튼(1km/5km/10km)이
+    // 전면 삭제됐다 — 더 이상 화면에 노출되지 않아야 한다.
+    expect(screen.queryByText('5km')).not.toBeInTheDocument();
+    expect(screen.queryByText('10km')).not.toBeInTheDocument();
   });
 });

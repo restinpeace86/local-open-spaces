@@ -7,6 +7,7 @@ import { useInView } from '@/hooks/use-in-view';
 import { HomeHeader } from '@/components/home/home-header';
 import { HomeSubTabs, HomeSubTab } from '@/components/home/home-sub-tabs';
 import { HeroCarousel } from '@/components/home/hero-carousel';
+import { ReservationOpenSlider } from '@/components/home/reservation-open-slider';
 import { QuickCategoryGrid } from '@/components/home/quick-category-grid';
 import { FreeFeedSkeleton } from '@/components/home/free-feed-skeleton';
 import { ThemeSpotKey } from '@/lib/theme-spots';
@@ -170,12 +171,50 @@ function useCategoryFeed(region: { sigunguName: string | null; lat?: number; lng
   return { selectedCategory, items, isLoading, selectCategory };
 }
 
-export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[] }) {
+// [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "GNB 헤더 & 글로벌 위치 상태 공유"):
+// GNB 검색은 events 테이블 전용 인라인 검색이다(스팟픽의 open_spaces 검색과 분리) — 검색어가
+// 있으면 이 화면 내부에서 바로 검색 결과 카드 그리드로 전환한다(라우팅 이동 없음, 카테고리
+// 인라인 피딩과 동일한 패턴). SearchBar 자체가 이미 300ms 디바운스를 적용하므로 여기서는
+// 추가 디바운스 없이 바로 페칭한다.
+function useEventSearch() {
+  const [keyword, setKeyword] = useState('');
+  const [results, setResults] = useState<NearbyItem[] | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+
+  const search = useCallback((nextKeyword: string) => {
+    setKeyword(nextKeyword);
+    const trimmed = nextKeyword.trim();
+    if (!trimmed) {
+      setResults(null);
+      return;
+    }
+
+    setIsSearching(true);
+    fetch(`/api/home/search?q=${encodeURIComponent(trimmed)}`)
+      .then((res) => res.json())
+      .then((data: { items?: NearbyItem[] }) => setResults(Array.isArray(data.items) ? data.items : []))
+      .catch(() => setResults([]))
+      .finally(() => setIsSearching(false));
+  }, []);
+
+  return { keyword, results, isSearching, search };
+}
+
+export function HomeView({
+  initialHeroEvents,
+  initialReservationOpenEvents = [],
+}: {
+  initialHeroEvents: NearbyItem[];
+  initialReservationOpenEvents?: NearbyItem[];
+}) {
   const { center, addressName, sigunguName, isOnboardingOpen, confirmLocation, openOnboarding, closeOnboarding } =
     useUserLocation();
   const [activeTab, setActiveTab] = useState<HomeSubTab>('home');
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
   const [heroEvents, setHeroEvents] = useState<NearbyItem[]>(initialHeroEvents);
+  const [reservationOpenEvents, setReservationOpenEvents] = useState<NearbyItem[]>(initialReservationOpenEvents);
+  const { keyword: searchKeyword, results: searchResults, isSearching, search: handleSearchChange } = useEventSearch();
+  const isSearchActive = searchKeyword.trim().length > 0;
   // Task 9-6-10(2026-08-23): 하단 탭 재편으로 이 화면이 "이벤트픽"(시한성 이벤트 전용)이
   // 됐다 — 상시 공간(open_spaces)은 이제 "스팟픽"(/nearby) 탭이 전담하므로, 이 화면에서는
   // 더 이상 대분류 토글 없이 항상 events만 조회한다(Task 9-6-4에서 도입한 EVENTS/SPACES
@@ -220,8 +259,11 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
       // 그대로 실행되므로(HTTP 상태와 무관하게 body만 있으면 resolve), heroEvents가 배열인지
       // 확인 없이 그대로 setHeroEvents에 넘기면 undefined가 들어가 이후 heroEvents.slice(...)가
       // 던지며 홈 화면이 통째로 크래시했다(실제 재현: sigungu 쿼리에 콤마가 섞이면 항상 발생).
-      .then((data: { heroEvents?: NearbyItem[] }) => {
+      .then((data: { heroEvents?: NearbyItem[]; reservationOpenEvents?: NearbyItem[] }) => {
         if (!cancelled && Array.isArray(data.heroEvents)) setHeroEvents(data.heroEvents);
+        if (!cancelled && Array.isArray(data.reservationOpenEvents)) {
+          setReservationOpenEvents(data.reservationOpenEvents);
+        }
         // 배열이 아니면(에러 응답 등) 기존 피드를 그대로 유지한다(Fail-Safe).
       })
       .catch(() => {
@@ -255,10 +297,33 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* 사용자 피드백(2026-08-22): 헤더에 상세 도로명주소가 그대로 나오면 검색바가 가려질
           정도로 좁아진다 — 시/군/구 단위 짧은 이름(sigunguName)을 우선 보여준다. */}
-      <HomeHeader locationLabel={sigunguName ?? addressName} onLocationClick={openOnboarding} />
+      <HomeHeader
+        locationLabel={sigunguName ?? addressName}
+        onLocationClick={openOnboarding}
+        searchValue={searchKeyword}
+        onSearchChange={handleSearchChange}
+      />
       <HomeSubTabs active={activeTab} onChange={setActiveTab} />
 
       <div className="flex-1 overflow-y-auto py-4 flex flex-col gap-5">
+        {/* [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "GNB 헤더 & 검색"): 검색어가
+            있으면 서브탭 콘텐츠 대신 events 전용 검색 결과를 보여준다(라우팅 이동 없음). */}
+        {isSearchActive ? (
+          <section aria-label="검색 결과" className="px-4">
+            {isSearching || searchResults === null ? (
+              <FreeFeedSkeleton label="검색 결과 불러오는 중" />
+            ) : searchResults.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {searchResults.map((item) => (
+                  <FeedCard key={item.id} item={item} onSelect={setSelectedItem} />
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400">&quot;{searchKeyword}&quot;에 해당하는 행사를 찾을 수 없습니다.</p>
+            )}
+          </section>
+        ) : (
+          <>
         {activeTab === 'home' && (
           <>
             {/* Task 9-6-10(2026-08-23): 하단 탭 재편으로 이 화면("이벤트픽")은 항상 events만
@@ -270,6 +335,15 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
             {heroEvents.length > 0 && (
               <section aria-label="오늘의 추천 행사">
                 <HeroCarousel items={visibleHeroEvents} onSelect={setSelectedItem} moreHref={heroMoreHref} />
+              </section>
+            )}
+
+            {/* [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "당일 예약 필요 카드
+                구역"): 접수중인 이벤트가 없으면 섹션 자체를 숨긴다(Hero와 동일한 가변 노출 원칙). */}
+            {reservationOpenEvents.length > 0 && (
+              <section aria-label="당일 예약 필요">
+                <h2 className="text-base font-bold text-gray-900 mb-3 px-4">📋 당일 예약 필요</h2>
+                <ReservationOpenSlider items={reservationOpenEvents} onSelect={setSelectedItem} />
               </section>
             )}
 
@@ -369,6 +443,8 @@ export function HomeView({ initialHeroEvents }: { initialHeroEvents: NearbyItem[
               <EmptyState onReset={() => setActiveTab('home')} />
             )}
           </section>
+        )}
+          </>
         )}
       </div>
 
