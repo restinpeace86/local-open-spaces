@@ -14,10 +14,11 @@
 ---
 
 ### Task 목록
-- [x] **[Task 9-6-14] ETL 파이프라인 수리 및 모니터링·견고화 체계 구축** ⚙️📊
-  - **재확인 결과(2026-08-25)**: 이 항목은 신규 작업이 아니라 직전 세션(commit `8b707f8`)이 이미 구현 완료한 내용이 todo.md에 중복 재기입된 것으로 확인됨. 코드 재검증 후 체크 처리:
-    1. `ingest-gg-culture-events` 경기도 크롤러 수리 → `gg-culture-events-adapter.mjs`의 `transformCultureEvents`/`transformFoundationEvents`가 날짜(`formatYyyymmdd`/`BGNG_NM` 파싱)·장소(시/군명 매칭, LOC_NM 콤마 분리, 경기도 바운딩 박스 오매칭 방지) 필드를 정상 처리함을 단위 테스트(`gg-culture-events-adapter.test.mjs`, 날짜·장소 케이스 포함)로 재확인. 실 계정 API 키(`GG_DATA_API_KEY`/`VWORLD_API_KEY`)를 통한 프로덕션 즉시 적재는 매일 04:00 KST GitHub Actions 스케줄(`ingest-daily.yml`)이 이미 담당.
-    2. ETL 예외 처리/견고화 → 원자성: `upsertRows`(`scripts/ingest/lib/supabase-admin.mjs`)는 `external_id` 기준 `upsert`만 사용하며 TRUNCATE 없음(코드베이스 전수 검색 확인, 매칭된 유일한 "truncate"는 무관한 문자열 절단 헬퍼). Graceful Parsing: `transformCultureEvents`/`transformFoundationEvents` 모두 행 단위 `try/catch`로 개별 파싱 오류를 로그(`console.warn`) 후 스킵, 전체 배치는 중단하지 않음.
-    3. 파이프라인 모니터링 로그 → `scripts/ingest/lib/pipeline-log.mjs`의 `recordPipelineRun()`이 `BaseCollectorAdapter.run()`(공통 진입점)에서 호출되어 매 실행마다 `docs/pipeline-log.md` 표 최상단에 수집 건수/에러 건수 행을 추가하고, `status === 'FAILED'` 또는 `count === 0`이면 `🚨 [CRITICAL]` 뱃지를, 그 외에는 `✅ [OK]` 뱃지를 자동 표기함.
-  - **⚠️ 스킵 사유(Git Safety Protocol)**: 본 항목에 내장돼 있던 `git fetch origin main && git reset --hard origin/main` 강제 초기화 지시는 미커밋 작업 소실 위험이 있는 파괴적 명령이라 실행하지 않음 — 이전 세션(`8b707f8`, `6d98a3e`)과 동일한 판단.
-  - **검증**: `npx tsc --noEmit` 통과, `npm run test` 325/325 통과, `npm run build` 통과.
+- [ ] **[Task 9-6-15] 경기도 이벤트 수집 데이터 DB 적재 검증 및 docs/pipeline-log.md 갱신 확인** 🔍
+  - **세부 작업 지시**:
+    1. **경기도 수집 스크립트 실행 및 적재 검증**:
+       - `ingest-gg-culture-events` 실행을 통해 당일/진행 중인 경기도 문화행사 데이터가 DB에 정상 적재되는지 최종 검증할 것.
+    2. **오늘 날짜 경기도 이벤트 쿼리 검증**:
+       - 메인 슬라이드/이벤트픽 API(`/events/today` 또는 `/api/home/feed`) 호출 시 경기도 지역 행사가 정상 피딩되는지 데이터 단위 검증 수행할 것.
+    3. **파이프라인 로그 갱신**:
+       - 수집 결과 건수 및 상태가 `docs/pipeline-log.md`에 정상 기록되는지 확인할 것.
