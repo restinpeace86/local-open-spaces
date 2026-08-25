@@ -55,10 +55,12 @@ export type Database = {
           is_reservation_required: boolean | null
           location: unknown
           location_precision: string
+          raw_data: Json | null
           reservation_end_date: string | null
           reservation_start_date: string | null
           reservation_url: string | null
           sigungu_name: string | null
+          source: string | null
           space_id: string | null
           start_date: string
           stroller_accessible: boolean
@@ -82,10 +84,12 @@ export type Database = {
           is_reservation_required?: boolean | null
           location?: unknown
           location_precision?: string
+          raw_data?: Json | null
           reservation_end_date?: string | null
           reservation_start_date?: string | null
           reservation_url?: string | null
           sigungu_name?: string | null
+          source?: string | null
           space_id?: string | null
           start_date: string
           stroller_accessible?: boolean
@@ -109,10 +113,12 @@ export type Database = {
           is_reservation_required?: boolean | null
           location?: unknown
           location_precision?: string
+          raw_data?: Json | null
           reservation_end_date?: string | null
           reservation_start_date?: string | null
           reservation_url?: string | null
           sigungu_name?: string | null
+          source?: string | null
           space_id?: string | null
           start_date?: string
           stroller_accessible?: boolean
@@ -144,10 +150,12 @@ export type Database = {
           is_free: boolean | null
           is_kids_friendly: boolean
           location: unknown
+          location_precision: string
           name: string
           operating_hours: string | null
           raw_data: Json | null
           sigungu_name: string | null
+          source: string | null
           source_type: string
           stroller_accessible: boolean
           target_age_group: string | null
@@ -164,11 +172,13 @@ export type Database = {
           info_url?: string | null
           is_free?: boolean | null
           is_kids_friendly?: boolean
-          location: unknown
+          location?: unknown
+          location_precision?: string
           name: string
           operating_hours?: string | null
           raw_data?: Json | null
           sigungu_name?: string | null
+          source?: string | null
           source_type: string
           stroller_accessible?: boolean
           target_age_group?: string | null
@@ -186,14 +196,37 @@ export type Database = {
           is_free?: boolean | null
           is_kids_friendly?: boolean
           location?: unknown
+          location_precision?: string
           name?: string
           operating_hours?: string | null
           raw_data?: Json | null
           sigungu_name?: string | null
+          source?: string | null
           source_type?: string
           stroller_accessible?: boolean
           target_age_group?: string | null
           updated_at?: string | null
+        }
+        Relationships: []
+      }
+      raw_ingest_data: {
+        Row: {
+          fetched_at: string
+          raw_payload: Json
+          source: string
+          source_id: string
+        }
+        Insert: {
+          fetched_at?: string
+          raw_payload: Json
+          source: string
+          source_id: string
+        }
+        Update: {
+          fetched_at?: string
+          raw_payload?: Json
+          source?: string
+          source_id?: string
         }
         Relationships: []
       }
@@ -525,39 +558,99 @@ export type Database = {
         Returns: boolean
       }
       geomfromewkt: { Args: { "": string }; Returns: unknown }
-      get_nearby_spaces_and_events: {
-        Args: {
-          p_item_type?: string
-          radius_meters?: number
-          user_lat: number
-          user_lng: number
-        }
+      get_events_filter_options: {
+        Args: never
         Returns: {
-          address: string
-          booking_status: string
-          category: string
-          distance_meters: number
-          end_date: string
-          facility_type: string
-          has_parking: boolean
-          id: string
-          info_url: string
-          is_free: boolean
-          is_kids_friendly: boolean
-          is_reservation_required: boolean
-          item_type: string
-          lat: number
-          lng: number
-          name: string
-          operating_hours: string
-          reservation_end_date: string
-          reservation_start_date: string
-          reservation_url: string
-          source_type: string
-          start_date: string
-          stroller_accessible: boolean
-          target_age_group: string
-          thumbnail_url: string
+          event_types: string[]
+          min_class_names: string[]
+          sources: string[]
+          svc_stat_nms: string[]
+        }[]
+      }
+      get_nearby_spaces_and_events:
+        | {
+            Args: { radius_meters?: number; user_lat: number; user_lng: number }
+            Returns: {
+              address: string
+              booking_status: string
+              category: string
+              distance_meters: number
+              end_date: string
+              facility_type: string
+              has_parking: boolean
+              id: string
+              info_url: string
+              is_free: boolean
+              is_kids_friendly: boolean
+              is_reservation_required: boolean
+              item_type: string
+              lat: number
+              lng: number
+              name: string
+              operating_hours: string
+              reservation_end_date: string
+              reservation_start_date: string
+              reservation_url: string
+              start_date: string
+              stroller_accessible: boolean
+              target_age_group: string
+              thumbnail_url: string
+            }[]
+          }
+        | {
+            Args: {
+              p_item_type?: string
+              radius_meters?: number
+              user_lat: number
+              user_lng: number
+            }
+            Returns: {
+              address: string
+              booking_status: string
+              category: string
+              distance_meters: number
+              end_date: string
+              facility_type: string
+              has_parking: boolean
+              id: string
+              info_url: string
+              is_free: boolean
+              is_kids_friendly: boolean
+              is_reservation_required: boolean
+              item_type: string
+              lat: number
+              lng: number
+              name: string
+              operating_hours: string
+              reservation_end_date: string
+              reservation_start_date: string
+              reservation_url: string
+              source_type: string
+              start_date: string
+              stroller_accessible: boolean
+              target_age_group: string
+              thumbnail_url: string
+            }[]
+          }
+      get_open_spaces_category_options: {
+        Args: never
+        Returns: {
+          categories: string[]
+          source_types: string[]
+        }[]
+      }
+      get_open_spaces_seoul_yeyak_options: {
+        Args: never
+        Returns: {
+          min_class_names: string[]
+          sources: string[]
+          svc_stat_nms: string[]
+        }[]
+      }
+      get_raw_ingest_data_filter_options: {
+        Args: never
+        Returns: {
+          sources: string[]
         }[]
       }
       get_sigungu_options: {

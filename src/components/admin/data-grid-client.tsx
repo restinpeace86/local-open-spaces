@@ -4,13 +4,18 @@ import { useEffect, useMemo, useState } from 'react';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
 import { RawDataModal } from '@/components/admin/raw-data-modal';
 
-export type AdminSpaceRow = {
+export type AdminTable = 'open_spaces' | 'events' | 'raw_ingest_data';
+
+export type AdminOpenSpaceRow = {
   id: string;
   external_id: string;
   source_type: string;
+  source: string | null;
   name: string;
   category: string;
   address: string;
+  location: unknown;
+  location_precision: string;
   is_free: boolean | null;
   operating_hours: string | null;
   info_url: string | null;
@@ -19,25 +24,82 @@ export type AdminSpaceRow = {
   stroller_accessible: boolean;
   facility_type: string;
   target_age_group: string | null;
-  location: unknown;
   raw_data: unknown;
+  sigungu_name: string | null;
   created_at: string | null;
   updated_at: string | null;
 };
 
-type TriState = 'all' | 'true' | 'false';
+export type AdminEventRow = {
+  id: string;
+  external_id: string;
+  source: string | null;
+  title: string;
+  event_type: string;
+  venue_name: string | null;
+  sigungu_name: string | null;
+  start_date: string;
+  end_date: string;
+  location: unknown;
+  location_precision: string;
+  is_reservation_required: boolean | null;
+  reservation_url: string | null;
+  reservation_start_date: string | null;
+  reservation_end_date: string | null;
+  is_free: boolean | null;
+  thumbnail_url: string | null;
+  is_kids_friendly: boolean;
+  has_parking: boolean;
+  stroller_accessible: boolean;
+  facility_type: string;
+  target_age_group: string | null;
+  booking_status: string | null;
+  is_active: boolean | null;
+  raw_data: unknown;
+  created_at: string | null;
+};
 
+export type AdminRawIngestRow = {
+  source: string;
+  source_id: string;
+  fetched_at: string;
+  raw_payload: unknown;
+};
+
+export type AdminRow = AdminOpenSpaceRow | AdminEventRow | AdminRawIngestRow;
+
+type FilterOptions = {
+  open_spaces: { sourceTypes: string[]; sources: string[]; categories: string[]; minClassNames: string[]; svcStatNms: string[] };
+  events: { sources: string[]; categories: string[]; minClassNames: string[]; svcStatNms: string[] };
+  raw_ingest_data: { sources: string[] };
+};
+
+type SummaryMetrics = Record<string, number | null>;
+
+type TriState = 'all' | 'true' | 'false';
 const TRI_STATE_LABEL: Record<TriState, string> = { all: '전체', true: '예', false: '아니오' };
 
-function TriStateToggle({
-  label,
-  value,
-  onChange,
-}: {
-  label: string;
-  value: TriState;
-  onChange: (next: TriState) => void;
-}) {
+const PAGE_SIZE_OPTIONS = [50, 100, 200];
+
+const TAB_LABEL: Record<AdminTable, string> = {
+  open_spaces: 'open_spaces (공간·시설)',
+  events: 'events (행사·체험)',
+  raw_ingest_data: 'raw_ingest_data (원천 보존)',
+};
+
+function extractLngLat(location: unknown): { lng: number; lat: number } | null {
+  const geometry = location as { coordinates?: [number, number] } | null;
+  if (!geometry?.coordinates) return null;
+  return { lng: geometry.coordinates[0], lat: geometry.coordinates[1] };
+}
+
+function rawField(raw: unknown, key: string): string | null {
+  const obj = raw as Record<string, unknown> | null;
+  const value = obj?.[key];
+  return typeof value === 'string' ? value : null;
+}
+
+function TriStateToggle({ label, value, onChange }: { label: string; value: TriState; onChange: (next: TriState) => void }) {
   return (
     <div className="flex items-center gap-1.5">
       <span className="text-xs text-gray-500 shrink-0">{label}</span>
@@ -59,48 +121,132 @@ function TriStateToggle({
   );
 }
 
-function toggleInList(list: string[], value: string): string[] {
-  return list.includes(value) ? list.filter((v) => v !== value) : [...list, value];
-}
-
-function triStateParam(value: TriState): string | undefined {
-  return value === 'all' ? undefined : value;
-}
-
-export function AdminDataGridClient({
-  sourceTypeOptions,
-  categoryOptions,
+function ChipMultiSelect({
+  label,
+  options,
+  selected,
+  onToggle,
+  colorFor,
 }: {
-  sourceTypeOptions: string[];
-  categoryOptions: string[];
+  label: string;
+  options: string[];
+  selected: string[];
+  onToggle: (value: string) => void;
+  colorFor?: (value: string) => string;
 }) {
+  if (options.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      <span className="text-xs text-gray-500 self-center shrink-0">{label}</span>
+      {options.map((opt) => {
+        const isActive = selected.includes(opt);
+        const color = colorFor?.(opt);
+        return (
+          <button
+            key={opt}
+            type="button"
+            onClick={() => onToggle(opt)}
+            className="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium border transition-colors"
+            style={
+              color
+                ? isActive
+                  ? { backgroundColor: color, borderColor: color, color: 'white' }
+                  : { borderColor: '#d1d5db', color: '#374151', backgroundColor: 'white' }
+                : isActive
+                  ? { backgroundColor: '#111827', borderColor: '#111827', color: 'white' }
+                  : { borderColor: '#d1d5db', color: '#374151', backgroundColor: 'white' }
+            }
+          >
+            {label === '카테고리' ? getCategoryMeta(opt).label : opt}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+function MetricCard({ label, value, sub }: { label: string; value: number | null; sub?: string }) {
+  return (
+    <div className="rounded-xl border border-gray-200 px-3 py-2 min-w-[110px]">
+      <p className="text-[11px] text-gray-500">{label}</p>
+      <p className="text-lg font-bold text-gray-900">
+        {value === null ? <span className="text-sm text-gray-300">집계 지연</span> : value.toLocaleString('ko-KR')}
+      </p>
+      {sub && <p className="text-[10px] text-gray-400">{sub}</p>}
+    </div>
+  );
+}
+
+export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOptions }) {
+  const [tab, setTab] = useState<AdminTable>('open_spaces');
+
+  const [summary, setSummary] = useState<SummaryMetrics | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/admin/data-grid/summary')
+      .then((res) => res.json())
+      .then((json: SummaryMetrics) => {
+        if (!cancelled) setSummary(json);
+      })
+      .catch(() => {
+        if (!cancelled) setSummary({});
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const [q, setQ] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
   const [sourceTypes, setSourceTypes] = useState<string[]>([]);
+  const [sources, setSources] = useState<string[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
+  const [minClassName, setMinClassName] = useState('');
+  const [svcStatNm, setSvcStatNm] = useState('');
   const [isFree, setIsFree] = useState<TriState>('all');
   const [hasParking, setHasParking] = useState<TriState>('all');
   const [strollerAccessible, setStrollerAccessible] = useState<TriState>('all');
   const [isKidsFriendly, setIsKidsFriendly] = useState<TriState>('all');
+  const [missingLocation, setMissingLocation] = useState(false);
+  const [missingFee, setMissingFee] = useState(false);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0]);
 
-  const [rows, setRows] = useState<AdminSpaceRow[]>([]);
+  const [rows, setRows] = useState<AdminRow[]>([]);
   const [total, setTotal] = useState(0);
-  const [pageSize, setPageSize] = useState(30);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [selectedRow, setSelectedRow] = useState<AdminSpaceRow | null>(null);
+  const [selectedRow, setSelectedRow] = useState<AdminRow | null>(null);
 
-  // 검색어는 300ms 디바운스 후 반영해 타이핑 중 과도한 재조회를 방지한다.
+  const resetFilters = () => {
+    setQ('');
+    setSourceTypes([]);
+    setSources([]);
+    setCategories([]);
+    setMinClassName('');
+    setSvcStatNm('');
+    setIsFree('all');
+    setHasParking('all');
+    setStrollerAccessible('all');
+    setIsKidsFriendly('all');
+    setMissingLocation(false);
+    setMissingFee(false);
+  };
+
+  const switchTab = (next: AdminTable) => {
+    setTab(next);
+    resetFilters();
+    setPage(1);
+  };
+
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQ(q.trim()), 300);
     return () => clearTimeout(timer);
   }, [q]);
 
-  // 검색/필터가 바뀌면 1페이지부터 다시 조회한다.
   useEffect(() => {
     setPage(1);
-  }, [debouncedQ, sourceTypes, categories, isFree, hasParking, strollerAccessible, isKidsFriendly]);
+  }, [debouncedQ, sourceTypes, sources, categories, minClassName, svcStatNm, isFree, hasParking, strollerAccessible, isKidsFriendly, missingLocation, missingFee]);
 
   useEffect(() => {
     let cancelled = false;
@@ -108,30 +254,32 @@ export function AdminDataGridClient({
     setErrorMessage(null);
 
     const params = new URLSearchParams();
+    params.set('table', tab);
     if (debouncedQ) params.set('q', debouncedQ);
     if (sourceTypes.length > 0) params.set('source_type', sourceTypes.join(','));
+    if (sources.length > 0) params.set('source', sources.join(','));
     if (categories.length > 0) params.set('category', categories.join(','));
-    const isFreeParam = triStateParam(isFree);
-    if (isFreeParam) params.set('is_free', isFreeParam);
-    const hasParkingParam = triStateParam(hasParking);
-    if (hasParkingParam) params.set('has_parking', hasParkingParam);
-    const strollerParam = triStateParam(strollerAccessible);
-    if (strollerParam) params.set('stroller_accessible', strollerParam);
-    const kidsParam = triStateParam(isKidsFriendly);
-    if (kidsParam) params.set('is_kids_friendly', kidsParam);
+    if (minClassName) params.set('min_class_name', minClassName);
+    if (svcStatNm) params.set('svc_stat_nm', svcStatNm);
+    if (isFree !== 'all') params.set('is_free', isFree);
+    if (hasParking !== 'all') params.set('has_parking', hasParking);
+    if (strollerAccessible !== 'all') params.set('stroller_accessible', strollerAccessible);
+    if (isKidsFriendly !== 'all') params.set('is_kids_friendly', isKidsFriendly);
+    if (missingLocation) params.set('missing_location', 'true');
+    if (missingFee) params.set('missing_fee', 'true');
     params.set('page', String(page));
+    params.set('page_size', String(pageSize));
 
     fetch(`/api/admin/data-grid?${params.toString()}`)
       .then(async (res) => {
         const json = await res.json();
         if (!res.ok) throw new Error(json.error ?? '데이터 조회 실패');
-        return json as { rows: AdminSpaceRow[]; total: number; pageSize: number };
+        return json as { rows: AdminRow[]; total: number };
       })
       .then((result) => {
         if (cancelled) return;
         setRows(result.rows);
         setTotal(result.total);
-        setPageSize(result.pageSize);
       })
       .catch((err: Error) => {
         if (!cancelled) setErrorMessage(err.message);
@@ -143,179 +291,218 @@ export function AdminDataGridClient({
     return () => {
       cancelled = true;
     };
-  }, [debouncedQ, sourceTypes, categories, isFree, hasParking, strollerAccessible, isKidsFriendly, page]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, debouncedQ, sourceTypes, sources, categories, minClassName, svcStatNm, isFree, hasParking, strollerAccessible, isKidsFriendly, missingLocation, missingFee, page, pageSize]);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
-
-  const resetFilters = () => {
-    setQ('');
-    setSourceTypes([]);
-    setCategories([]);
-    setIsFree('all');
-    setHasParking('all');
-    setStrollerAccessible('all');
-    setIsKidsFriendly('all');
-  };
+  const currentOptions = filterOptions[tab];
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="shrink-0 p-4 border-b border-gray-100 flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
-          <h1 className="text-sm font-bold text-gray-900">Admin Data Grid (open_spaces)</h1>
-          <button
-            type="button"
-            onClick={resetFilters}
-            className="text-xs text-gray-500 hover:text-gray-800 underline"
-          >
+          <h1 className="text-sm font-bold text-gray-900">Admin Data Grid</h1>
+          <button type="button" onClick={resetFilters} className="text-xs text-gray-500 hover:text-gray-800 underline">
             필터 초기화
           </button>
         </div>
 
-        <input
-          type="text"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="시설명, 주소 키워드 검색"
-          className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
-        />
+        {/* 1. 요약 메트릭 카드 */}
+        <div className="flex flex-wrap gap-2">
+          <MetricCard label="open_spaces 총 건수" value={summary?.open_spaces_count ?? null} />
+          <MetricCard label="events 총 건수" value={summary?.events_count ?? null} />
+          <MetricCard label="raw_ingest_data 총 건수" value={summary?.raw_ingest_data_count ?? null} />
+          <MetricCard label="위치/좌표 NULL" value={(summary?.open_spaces_missing_location ?? 0) + (summary?.events_missing_location ?? 0)} sub="open_spaces+events" />
+          <MetricCard label="주소 NULL(open_spaces)" value={summary?.open_spaces_missing_address ?? null} />
+          <MetricCard label="요금 NULL" value={(summary?.open_spaces_missing_fee ?? 0) + (summary?.events_missing_fee ?? 0)} sub="open_spaces+events" />
+          <MetricCard label="예약/정보 URL NULL" value={(summary?.open_spaces_missing_url ?? 0) + (summary?.events_missing_reservation_url ?? 0)} sub="open_spaces+events" />
+        </div>
 
-        <div className="flex flex-wrap gap-1.5">
-          <span className="text-xs text-gray-500 self-center shrink-0">출처</span>
-          {sourceTypeOptions.map((opt) => (
+        {/* 2. 탭 구성 */}
+        <div className="flex gap-1.5 border-b border-gray-100 -mb-3 pb-3">
+          {(Object.keys(TAB_LABEL) as AdminTable[]).map((t) => (
             <button
-              key={opt}
+              key={t}
               type="button"
-              onClick={() => setSourceTypes((prev) => toggleInList(prev, opt))}
-              className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium border transition-colors ${
-                sourceTypes.includes(opt)
-                  ? 'bg-gray-900 text-white border-gray-900'
-                  : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+              onClick={() => switchTab(t)}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition-colors ${
+                tab === t ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
-              {opt}
+              {TAB_LABEL[t]}
             </button>
           ))}
         </div>
 
-        <div className="flex flex-wrap gap-1.5">
-          <span className="text-xs text-gray-500 self-center shrink-0">카테고리</span>
-          {categoryOptions.map((opt) => {
-            const meta = getCategoryMeta(opt);
-            const isActive = categories.includes(opt);
-            return (
-              <button
-                key={opt}
-                type="button"
-                onClick={() => setCategories((prev) => toggleInList(prev, opt))}
-                className="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium border transition-colors"
-                style={
-                  isActive
-                    ? { backgroundColor: meta.color, borderColor: meta.color, color: 'white' }
-                    : { borderColor: '#d1d5db', color: '#374151', backgroundColor: 'white' }
-                }
-              >
-                {meta.label}
-              </button>
-            );
-          })}
-        </div>
+        {/* 3. 필터 및 검색 바 */}
+        <input
+          type="text"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder={tab === 'raw_ingest_data' ? 'source_id 검색' : '제목/시설명, 주소 키워드 검색'}
+          className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+        />
 
-        <div className="flex flex-wrap gap-x-4 gap-y-2">
-          <TriStateToggle label="무료" value={isFree} onChange={setIsFree} />
-          <TriStateToggle label="🅿️ 주차" value={hasParking} onChange={setHasParking} />
-          <TriStateToggle label="👶 유모차" value={strollerAccessible} onChange={setStrollerAccessible} />
-          <TriStateToggle label="🛝 키즈친화" value={isKidsFriendly} onChange={setIsKidsFriendly} />
-        </div>
+        {tab === 'open_spaces' && (
+          <ChipMultiSelect
+            label="출처(source_type)"
+            options={filterOptions.open_spaces.sourceTypes}
+            selected={sourceTypes}
+            onToggle={(v) => setSourceTypes((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]))}
+          />
+        )}
+        <ChipMultiSelect
+          label="출처(source)"
+          options={currentOptions.sources}
+          selected={sources}
+          onToggle={(v) => setSources((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]))}
+        />
+        {tab !== 'raw_ingest_data' && 'categories' in currentOptions && (
+          <ChipMultiSelect
+            label="카테고리"
+            options={currentOptions.categories}
+            selected={categories}
+            onToggle={(v) => setCategories((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]))}
+            colorFor={(v) => getCategoryMeta(v).color}
+          />
+        )}
+
+        {tab !== 'raw_ingest_data' && 'minClassNames' in currentOptions && (
+          <div className="flex flex-wrap gap-3">
+            <label className="flex items-center gap-1.5 text-xs text-gray-500">
+              원천 중분류
+              <select
+                value={minClassName}
+                onChange={(e) => setMinClassName(e.target.value)}
+                className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
+              >
+                <option value="">전체</option>
+                {currentOptions.minClassNames.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-gray-500">
+              접수/이용 상태
+              <select
+                value={svcStatNm}
+                onChange={(e) => setSvcStatNm(e.target.value)}
+                className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
+              >
+                <option value="">전체</option>
+                {currentOptions.svcStatNms.map((v) => (
+                  <option key={v} value={v}>
+                    {v}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        )}
+
+        {tab !== 'raw_ingest_data' && (
+          <div className="flex flex-wrap gap-x-4 gap-y-2">
+            <TriStateToggle label="무료" value={isFree} onChange={setIsFree} />
+            <TriStateToggle label="🅿️ 주차" value={hasParking} onChange={setHasParking} />
+            <TriStateToggle label="👶 유모차" value={strollerAccessible} onChange={setStrollerAccessible} />
+            <TriStateToggle label="🛝 키즈친화" value={isKidsFriendly} onChange={setIsKidsFriendly} />
+            <label className="flex items-center gap-1.5 text-xs text-gray-500">
+              <input type="checkbox" checked={missingLocation} onChange={(e) => setMissingLocation(e.target.checked)} />
+              주소/좌표 NULL만 보기
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-gray-500">
+              <input type="checkbox" checked={missingFee} onChange={(e) => setMissingFee(e.target.checked)} />
+              요금 NULL만 보기
+            </label>
+          </div>
+        )}
       </div>
 
+      {/* 4. 테이블 그리드 */}
       <div className="flex-1 overflow-auto p-4">
         {isLoading && <p className="text-sm text-gray-400">불러오는 중...</p>}
         {errorMessage && <p className="text-sm text-red-500">{errorMessage}</p>}
-
-        {!isLoading && !errorMessage && rows.length === 0 && (
-          <p className="text-sm text-gray-400">조건에 맞는 데이터가 없습니다.</p>
-        )}
+        {!isLoading && !errorMessage && rows.length === 0 && <p className="text-sm text-gray-400">조건에 맞는 데이터가 없습니다.</p>}
 
         {!isLoading && !errorMessage && rows.length > 0 && (
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="border-b border-gray-200 text-left text-xs text-gray-500">
-                <th className="py-2 pr-3">시설명</th>
+                <th className="py-2 pr-3">ID</th>
                 <th className="py-2 pr-3">출처</th>
-                <th className="py-2 pr-3">카테고리</th>
-                <th className="py-2 pr-3">주소</th>
-                <th className="py-2 pr-3">무료</th>
-                <th className="py-2 pr-3">뱃지</th>
-                <th className="py-2 pr-3">시설유형</th>
-                <th className="py-2 pr-3">연령대</th>
-                <th className="py-2 pr-3">좌표</th>
-                <th className="py-2 pr-3">수집일</th>
+                {tab !== 'raw_ingest_data' && <th className="py-2 pr-3">원천 대/중분류</th>}
+                <th className="py-2 pr-3">{tab === 'raw_ingest_data' ? '수집 시각' : '제목/명칭'}</th>
+                {tab !== 'raw_ingest_data' && <th className="py-2 pr-3">장소/시설명</th>}
+                {tab !== 'raw_ingest_data' && <th className="py-2 pr-3">주소</th>}
+                {tab !== 'raw_ingest_data' && <th className="py-2 pr-3">위도/경도</th>}
+                {tab !== 'raw_ingest_data' && <th className="py-2 pr-3">요금</th>}
+                {tab !== 'raw_ingest_data' && <th className="py-2 pr-3">접수상태</th>}
+                <th className="py-2 pr-3">{tab === 'raw_ingest_data' ? '' : '수정/적재일'}</th>
+                <th className="py-2 pr-3" />
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => {
-                const meta = getCategoryMeta(row.category);
+                if (tab === 'raw_ingest_data') {
+                  const r = row as AdminRawIngestRow;
+                  return (
+                    <tr key={`${r.source}-${r.source_id}`} onClick={() => setSelectedRow(row)} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer">
+                      <td className="py-2 pr-3 font-mono text-xs text-gray-900">{r.source_id}</td>
+                      <td className="py-2 pr-3 text-gray-600">{r.source}</td>
+                      <td className="py-2 pr-3 text-gray-600">{new Date(r.fetched_at).toLocaleString('ko-KR')}</td>
+                      <td className="py-2 pr-3" />
+                      <td className="py-2 pr-3 text-right text-xs text-blue-600">상세</td>
+                    </tr>
+                  );
+                }
+
+                const isEvent = tab === 'events';
+                const r = row as AdminOpenSpaceRow | AdminEventRow;
+                const titleText = isEvent ? (r as AdminEventRow).title : (r as AdminOpenSpaceRow).name;
+                const venueText = isEvent ? (r as AdminEventRow).venue_name ?? '-' : (r as AdminOpenSpaceRow).name;
+                const addressText = isEvent ? (r as AdminEventRow).sigungu_name ?? '-' : (r as AdminOpenSpaceRow).address;
+                const categoryValue = isEvent ? (r as AdminEventRow).event_type : (r as AdminOpenSpaceRow).category;
+                const meta = getCategoryMeta(categoryValue);
+                const coords = extractLngLat(r.location);
+                const maxClass = rawField(r.raw_data, 'MAXCLASSNM');
+                const minClass = rawField(r.raw_data, 'MINCLASSNM');
+                const svcStat = rawField(r.raw_data, 'SVCSTATNM');
+                const updatedAt = isEvent ? (r as AdminEventRow).created_at : (r as AdminOpenSpaceRow).updated_at ?? (r as AdminOpenSpaceRow).created_at;
+
                 return (
-                  <tr
-                    key={row.id}
-                    onClick={() => setSelectedRow(row)}
-                    className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
-                  >
-                    <td className="py-2 pr-3 font-medium text-gray-900">{row.name}</td>
-                    <td className="py-2 pr-3 text-gray-600">{row.source_type}</td>
-                    <td className="py-2 pr-3">
-                      <span
-                        className="text-xs font-semibold px-2 py-0.5 rounded-full text-white"
-                        style={{ backgroundColor: meta.color }}
-                      >
-                        {meta.label}
-                      </span>
-                    </td>
-                    <td className="py-2 pr-3 text-gray-600">{row.address}</td>
-                    <td className="py-2 pr-3">
-                      {row.is_free === true && (
-                        <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-green-50 text-green-600 whitespace-nowrap">
-                          🎁 무료
+                  <tr key={r.id} onClick={() => setSelectedRow(row)} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer">
+                    <td className="py-2 pr-3 font-mono text-[11px] text-gray-500 max-w-[140px] truncate">{r.external_id}</td>
+                    <td className="py-2 pr-3 text-gray-600 whitespace-nowrap">{r.source ?? (isEvent ? '-' : (r as AdminOpenSpaceRow).source_type)}</td>
+                    <td className="py-2 pr-3 text-gray-600 whitespace-nowrap">
+                      {maxClass || minClass ? (
+                        <span>
+                          {maxClass ?? '-'} / {minClass ?? '-'}
                         </span>
-                      )}
-                      {row.is_free === false && (
-                        <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600 whitespace-nowrap">
-                          💰 유료
-                        </span>
-                      )}
-                      {row.is_free === null && <span className="text-xs text-gray-300">미기재(숨김)</span>}
-                    </td>
-                    <td className="py-2 pr-3">
-                      <div className="flex flex-wrap gap-1">
-                        {row.has_parking && (
-                          <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-600 whitespace-nowrap">
-                            🅿️ 주차
-                          </span>
-                        )}
-                        {row.stroller_accessible && (
-                          <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-600 whitespace-nowrap">
-                            👶 유모차
-                          </span>
-                        )}
-                        {row.is_kids_friendly && (
-                          <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-pink-50 text-pink-600 whitespace-nowrap">
-                            🛝 키즈친화
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-2 pr-3 text-gray-600">{row.facility_type}</td>
-                    <td className="py-2 pr-3 text-gray-600">{row.target_age_group ?? '-'}</td>
-                    <td className="py-2 pr-3">
-                      {row.location != null ? (
-                        <span className="text-xs font-semibold text-green-600">존재</span>
                       ) : (
-                        <span className="text-xs font-semibold text-red-500">미존재</span>
+                        <span
+                          className="text-xs font-semibold px-2 py-0.5 rounded-full text-white"
+                          style={{ backgroundColor: meta.color }}
+                        >
+                          {meta.label}
+                        </span>
                       )}
                     </td>
-                    <td className="py-2 pr-3 text-gray-400 whitespace-nowrap">
-                      {row.created_at ? new Date(row.created_at).toLocaleDateString('ko-KR') : '-'}
+                    <td className="py-2 pr-3 font-medium text-gray-900 max-w-[220px] truncate">{titleText}</td>
+                    <td className="py-2 pr-3 text-gray-600 max-w-[160px] truncate">{venueText}</td>
+                    <td className="py-2 pr-3 text-gray-600 max-w-[200px] truncate">{addressText}</td>
+                    <td className="py-2 pr-3 text-gray-500 whitespace-nowrap text-xs">
+                      {coords ? `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}` : <span className="text-red-500">미존재</span>}
                     </td>
+                    <td className="py-2 pr-3 whitespace-nowrap">
+                      {r.is_free === true && <span className="text-xs text-green-600">🎁 무료</span>}
+                      {r.is_free === false && <span className="text-xs text-gray-600">💰 유료</span>}
+                      {r.is_free === null && <span className="text-xs text-gray-300">NULL</span>}
+                    </td>
+                    <td className="py-2 pr-3 text-gray-600 whitespace-nowrap">{svcStat ?? '-'}</td>
+                    <td className="py-2 pr-3 text-gray-400 whitespace-nowrap text-xs">{updatedAt ? new Date(updatedAt).toLocaleDateString('ko-KR') : '-'}</td>
+                    <td className="py-2 pr-3 text-right text-xs text-blue-600">상세</td>
                   </tr>
                 );
               })}
@@ -328,27 +515,46 @@ export function AdminDataGridClient({
         <span className="text-xs text-gray-500">
           총 {total.toLocaleString('ko-KR')}건 · {page} / {totalPages} 페이지
         </span>
-        <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page <= 1}
-            className="rounded-lg border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 disabled:opacity-40 hover:bg-gray-50"
-          >
-            이전
-          </button>
-          <button
-            type="button"
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page >= totalPages}
-            className="rounded-lg border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 disabled:opacity-40 hover:bg-gray-50"
-          >
-            다음
-          </button>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-1.5 text-xs text-gray-500">
+            페이지당
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setPage(1);
+              }}
+              className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
+            >
+              {PAGE_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={size}>
+                  {size}건
+                </option>
+              ))}
+            </select>
+          </label>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="rounded-lg border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 disabled:opacity-40 hover:bg-gray-50"
+            >
+              이전
+            </button>
+            <button
+              type="button"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages}
+              className="rounded-lg border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 disabled:opacity-40 hover:bg-gray-50"
+            >
+              다음
+            </button>
+          </div>
         </div>
       </div>
 
-      {selectedRow && <RawDataModal row={selectedRow} onClose={() => setSelectedRow(null)} />}
+      {selectedRow && <RawDataModal table={tab} row={selectedRow} onClose={() => setSelectedRow(null)} />}
     </div>
   );
 }
