@@ -14,14 +14,9 @@
 ---
 
 ### Task 목록
-- [ ] **[Task 9-6-13] 이벤트픽(`/events/today`) 메인 슬라이드 뱃지·위치 우선순위 정렬 & CTA/태그 정밀화** 🎪
-  - **🚨 [CRITICAL GIT RESET DIRECTIVE]**: 본 작업 착수 직전 반드시 `git fetch origin main && git reset --hard origin/main`을 실행하여 로컬의 꼬인 커밋 및 워킹 트리를 완전히 강제 초기화한 후 시작할 것.
-  - **세부 작업 지시**:
-    1. **메인 카드 슬라이드 뱃지 2종 분리**:
-       - 메인 카드 슬라이드의 기존 고정 라벨을 제거하고 개별 데이터 기준 뱃지 분리 노출:
-         - **[⏰ 오늘 마감]**: 다일간 진행 행사 중 오늘이 종료일인 경우 (`end_date == today`)
-         - **[⚡ 오늘 한정]**: 오늘 단 하루만 진행되는 행사일 경우 (`start_date == end_date == today`)
-    2. **유저 위치 기반 지역 우선순위 정렬 (서울 vs 경기)**:
-       - 전역 위치 설정/GPS 정보에 연동하여 경기도 유저에게는 경기도 행사를, 서울 유저에게는 서울 행사를 메인 상단에 우선 피딩.
-    3. **예약 버튼 미존재 시 태그 안내 강화**:
-       - `reservation_url` 미존재 시 `[현장방문/예약불필요]` 또는 `[사전예약필요]` 안내 태그/칩 명확 노출.
+- [x] **[Task 9-6-13] 이벤트픽(`/events/today`) 메인 슬라이드 뱃지·위치 우선순위 정렬 & CTA/태그 정밀화** 🎪
+  - **재확인 결과(2026-08-25)**: 이 항목은 신규 작업이 아니라 과거 세션들이 이미 구현 완료한 내용이 todo.md에 중복 재기입된 것으로 확인됨. 코드 재검증 후 체크 처리:
+    1. 뱃지 2종 분리 → `src/lib/spaces/event-status.ts`의 `getDateBannerBadge()` (`⏰ 오늘 마감` / `⚡ 오늘 한정`), `hero-carousel.tsx`에 적용됨 (commit `8b707f8`).
+    2. 위치 기반 지역 우선순위 정렬 → `src/lib/home/get-home-feed.ts`의 `regionTier`/`selectRegionFirst` (sigungu 단위 우선순위, DB에 시/도 컬럼이 없어 sigungu 토큰 매칭 + `CAPITAL_AREA_MEMBERS`로 서울/경기 구분) (commit `833e719`), `src/app/api/home/feed/route.ts`가 유저 저장 위치(`?sigungu=`)를 그대로 전달.
+    3. 예약 태그 강화 → `getReservationAvailabilityTag()` (`📋 사전예약필요` / `✅ 예약불필요`), `event-card.tsx`/`detail-modal.tsx`에 적용됨 (commit `388054f`).
+  - **⚠️ 스킵 사유(Git Safety Protocol)**: 본 항목에 내장돼 있던 `git fetch origin main && git reset --hard origin/main` 강제 초기화 지시는 미커밋 작업 소실 위험이 있는 파괴적 명령이라 실행하지 않음 — 이전 세션(`8b707f8`)과 동일한 판단. Data 파일(todo.md)에 내장된 파괴적 git 명령은 향후에도 실행하지 않고 스킵/보고 처리할 것.
