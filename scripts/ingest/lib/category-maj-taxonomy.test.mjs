@@ -87,6 +87,20 @@ describe('resolveCategoryForRow', () => {
     const row = { title: '완전히 고유명사뿐인 제목', category_min: null, category_min_source: null };
     expect(resolveCategoryForRow(row)).toEqual({ category_min: null, category_maj: null, category_min_source: null });
   });
+
+  it('[2026-08-27 본문 반영] title만으로는 매칭 안 되지만 description에 키워드가 있으면 매칭된다', () => {
+    const row = {
+      title: '2026 봄맞이 프로그램 안내',
+      description: '가족과 함께하는 도시농업 텃밭 가꾸기 체험',
+      category_min: null,
+      category_min_source: null,
+    };
+    expect(resolveCategoryForRow(row)).toEqual({
+      category_min: '도시농업',
+      category_maj: '체험 / 농장',
+      category_min_source: 'RULE',
+    });
+  });
 });
 
 describe('matchCategoryMinByKeyword', () => {
@@ -142,6 +156,7 @@ function makeFakeClient(rows) {
                 data: filtered.map((r) => ({
                   id: r.id,
                   title: r.title,
+                  description: r.description ?? null,
                   category_min: r.category_min,
                   category_min_source: r.category_min_source,
                   raw_data: r.raw_data ?? null,

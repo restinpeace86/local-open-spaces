@@ -158,8 +158,12 @@ export function resolveCategoryForRow(row) {
     };
   }
 
-  // RULE 또는 NULL: 새 규칙으로 제목을 다시 스캔한다.
-  const matched = matchCategoryMinByKeyword(row.title);
+  // RULE 또는 NULL: 새 규칙으로 제목+본문(description)을 다시 스캔한다.
+  // [2026-08-27, 본문 백필 반영] 기존에는 title만 스캔했으나, description 백필 파이프라인
+  // 완료 후 Dry-run 재검증(implementation/2026-08-27-category-maj-description-dryrun-recheck.md)에서
+  // title+description 스캔 시 매칭률이 55.96%→59.02%(+109건)로 개선됨을 확인해 실제 반영한다.
+  const scanText = row.description ? `${row.title ?? ''} ${row.description}` : row.title;
+  const matched = matchCategoryMinByKeyword(scanText);
   return {
     category_min: matched,
     category_maj: matched ? (CATEGORY_MAJ_OF[matched] ?? null) : null,
@@ -183,7 +187,7 @@ export async function applyCategoryMajTaxonomy(client) {
   for (;;) {
     let query = client
       .from('events')
-      .select('id, title, category_min, category_min_source, raw_data')
+      .select('id, title, description, category_min, category_min_source, raw_data')
       .eq('is_active', true)
       .order('id', { ascending: true })
       .limit(PAGE_SIZE);
