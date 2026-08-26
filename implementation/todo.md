@@ -56,3 +56,11 @@
 - [x] 실측 중 발견해 즉시 수정한 버그 2건: (1) "OO문화재단"(기관명)이 "역사"로 오매칭(exclude 키워드 추가로 수정, 58건 교정) (2) RAW 행 재매핑이 가변 컬럼(category_min) 대신 불변 원본(raw_data.MINCLASSNM)을 써야 하는 멱등성 버그(132건 소실 발견 후 수정, 재실행 2회로 완전 멱등성 확인) — implementation/2026-08-26-category-maj-real-application.md 4절 상세
 - [x] `/admin/data-grid` is_active=true 기본 필터: 직전 작업에서 이미 구현·검증 완료 상태였음을 재확인(추가 변경 없음)
 - [x] 검증: tsc(clean)/test(437/437, 신규 4건)/build(성공)
+
+---
+## [target_audience 분석] events 5대 태그 분류 시뮬레이션 (2026-08-26)
+
+- [x] Dry-run 시뮬레이션(DB 반영 없음): 전체 26,404건 중 서울시 1차 정형화 1,055건 + 0단계 소거 2,583건 + 1단계 245건 + 2단계 1,121건 = 5,004건 처리, 최후 NULL 잔여 21,400건(81.05%) — `docs/target-audience-analysis-report.md`
+- [핵심 발견] `raw_data`가 완전히 비어 있는 소스(seoul_public_culture/gg_public/tourapi_4.0, 전체의 83.9%)가 있어 지시된 "설명(contents)" 스캔이 애초에 불가능함을 확인 — 근본 원인은 키워드 부족이 아니라 수집 파이프라인이 본문 필드를 저장하지 않은 것
+- [보류 — 승인 대기] 실제 `target_audience` 컬럼 추가/UPDATE, 어드민 Split-View 구현은 지시대로 실행하지 않음. 선행 필요: (a) "성인"(313건, 5대 태그 밖) 처리 방침, (b) 추가 키워드 제안(6.1~6.3) 검토, (c) raw_data 공백 파이프라인 보강 여부
+- [x] 검증: 코드 변경 없음(순수 분석/문서 작업) — implementation/2026-08-26-target-audience-analysis.md 참고
