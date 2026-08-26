@@ -39,3 +39,11 @@
 - [x] Admin API: 키워드 CRUD(`/api/admin/category-rules`), 일괄 재분류 실행(`/api/admin/category-rules/reclassify`), 개별 행 수동 수정(`/api/admin/data-grid/category-min`)
 - [x] Admin UI: 중분류(category_min) 필터 + NULL 퀵 필터, RAW/RULE/MANUAL 출처 뱃지, 상세 모달 수동 수정 UI, "카테고리 키워드 규칙 관리" 모달(칩 조회/추가/삭제 + 일괄 재분류 버튼)
 - [x] 검증: tsc(clean)/test(410/410)/build(성공) + 실제 재분류 1회 실행으로 동작 증빙(open_spaces 68.46%, events 35.35% 커버리지 달성) — 상세는 implementation/2026-08-26-category-rule-engine-admin.md 참고
+
+---
+## [7대 대분류 및 37종 중분류 체계 도입 & 1단계 매핑 시뮬레이션] (2026-08-26)
+
+- [x] Dry-run 시뮬레이션 실행(DB 반영 없음): 전체 26,404건 중 9,050건(34.28%) 매칭, NULL 잔여 17,354건(65.72%), 7대 대분류/36종(지시문 "37종"과 1건 차이, 보고서에 명시) 중분류별 분포 리포트 — `docs/category-taxonomy-7major-dryrun-report.md`
+- [보류 — 승인 대기] 실제 `category_maj` 컬럼 추가 및 `UPDATE`는 지시대로 실행하지 않음. 선행 필요: (a) "37종" 표기와 실제 나열 36종의 차이 확인, (b) 신규/개명 3종(공공키즈카페/어린이실내놀이터/지역축제·페스티벌) 키워드 제안 검토, (c) 기존 events 규칙 중 새 목록에 없는 항목(정보통신/전문·자격증/단체봉사/청년정보/녹화장소) 처리 방침, (d) 기존 MANUAL 확정 행 덮어쓰기 여부
+- [x] `/admin/data-grid` 표준 페이지네이션(번호+첫/끝 이동) 및 가독성 개선(sticky 헤더, zebra striping) — 구현 완료, 게이트 없음
+- [x] 검증: tsc(clean)/test(423/423)/build(성공) — 상세는 implementation/2026-08-26-category-taxonomy-v2-and-admin-pagination.md 참고

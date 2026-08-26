@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
 import { RawDataModal } from '@/components/admin/raw-data-modal';
 import { CategoryRulesModal } from '@/components/admin/category-rules-modal';
+import { Pagination } from '@/components/admin/pagination';
 
 export type AdminTable = 'open_spaces' | 'events' | 'raw_ingest_data';
 
@@ -524,28 +525,33 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
         {!isLoading && !errorMessage && rows.length > 0 && (
           <table className="w-full text-sm border-collapse">
             <thead>
-              <tr className="border-b border-gray-200 text-left text-xs text-gray-500">
-                <th className="py-2 pr-3">ID</th>
-                <th className="py-2 pr-3">출처</th>
-                {tab !== 'raw_ingest_data' && <th className="py-2 pr-3">원천 대/중분류</th>}
-                {tab !== 'raw_ingest_data' && <th className="py-2 pr-3">표준 중분류</th>}
-                <th className="py-2 pr-3">{tab === 'raw_ingest_data' ? '수집 시각' : '제목/명칭'}</th>
-                {tab === 'events' && <th className="py-2 pr-3">행사기간(start~end)</th>}
-                {tab !== 'raw_ingest_data' && <th className="py-2 pr-3">장소/시설명</th>}
-                {tab !== 'raw_ingest_data' && <th className="py-2 pr-3">주소</th>}
-                {tab !== 'raw_ingest_data' && <th className="py-2 pr-3">위도/경도</th>}
-                {tab !== 'raw_ingest_data' && <th className="py-2 pr-3">요금</th>}
-                {tab !== 'raw_ingest_data' && <th className="py-2 pr-3">접수상태</th>}
-                <th className="py-2 pr-3">{tab === 'raw_ingest_data' ? '' : '수정/적재일'}</th>
-                <th className="py-2 pr-3" />
+              <tr className="sticky top-0 z-10 bg-white border-b-2 border-gray-200 text-left text-xs font-semibold text-gray-600 shadow-[0_1px_0_0_rgba(0,0,0,0.04)]">
+                <th className="py-2.5 pr-3">ID</th>
+                <th className="py-2.5 pr-3">출처</th>
+                {tab !== 'raw_ingest_data' && <th className="py-2.5 pr-3">원천 대/중분류</th>}
+                {tab !== 'raw_ingest_data' && <th className="py-2.5 pr-3">표준 중분류</th>}
+                <th className="py-2.5 pr-3">{tab === 'raw_ingest_data' ? '수집 시각' : '제목/명칭'}</th>
+                {tab === 'events' && <th className="py-2.5 pr-3">행사기간(start~end)</th>}
+                {tab !== 'raw_ingest_data' && <th className="py-2.5 pr-3">장소/시설명</th>}
+                {tab !== 'raw_ingest_data' && <th className="py-2.5 pr-3">주소</th>}
+                {tab !== 'raw_ingest_data' && <th className="py-2.5 pr-3">위도/경도</th>}
+                {tab !== 'raw_ingest_data' && <th className="py-2.5 pr-3">요금</th>}
+                {tab !== 'raw_ingest_data' && <th className="py-2.5 pr-3">접수상태</th>}
+                <th className="py-2.5 pr-3">{tab === 'raw_ingest_data' ? '' : '수정/적재일'}</th>
+                <th className="py-2.5 pr-3" />
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => {
+              {rows.map((row, rowIndex) => {
+                const zebraClass = rowIndex % 2 === 1 ? 'bg-gray-50/60' : 'bg-white';
                 if (tab === 'raw_ingest_data') {
                   const r = row as AdminRawIngestRow;
                   return (
-                    <tr key={`${r.source}-${r.source_id}`} onClick={() => setSelectedRow(row)} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer">
+                    <tr
+                      key={`${r.source}-${r.source_id}`}
+                      onClick={() => setSelectedRow(row)}
+                      className={`border-b border-gray-100 hover:bg-blue-50 cursor-pointer ${zebraClass}`}
+                    >
                       <td className="py-2 pr-3 font-mono text-xs text-gray-900">{r.source_id}</td>
                       <td className="py-2 pr-3 text-gray-600">{r.source}</td>
                       <td className="py-2 pr-3 text-gray-600">{new Date(r.fetched_at).toLocaleString('ko-KR')}</td>
@@ -569,7 +575,11 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                 const updatedAt = isEvent ? (r as AdminEventRow).created_at : (r as AdminOpenSpaceRow).updated_at ?? (r as AdminOpenSpaceRow).created_at;
 
                 return (
-                  <tr key={r.id} onClick={() => setSelectedRow(row)} className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer">
+                  <tr
+                    key={r.id}
+                    onClick={() => setSelectedRow(row)}
+                    className={`border-b border-gray-100 hover:bg-blue-50 cursor-pointer ${zebraClass}`}
+                  >
                     <td className="py-2 pr-3 font-mono text-[11px] text-gray-500 max-w-[140px] truncate">{r.external_id}</td>
                     <td className="py-2 pr-3 text-gray-600 whitespace-nowrap">{r.source ?? (isEvent ? '-' : (r as AdminOpenSpaceRow).source_type)}</td>
                     <td className="py-2 pr-3 text-gray-600 whitespace-nowrap">
@@ -643,24 +653,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
               ))}
             </select>
           </label>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1}
-              className="rounded-lg border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 disabled:opacity-40 hover:bg-gray-50"
-            >
-              이전
-            </button>
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages}
-              className="rounded-lg border border-gray-300 px-3 py-1 text-xs font-medium text-gray-700 disabled:opacity-40 hover:bg-gray-50"
-            >
-              다음
-            </button>
-          </div>
+          <Pagination page={page} totalPages={totalPages} onChange={setPage} />
         </div>
       </div>
 
