@@ -210,3 +210,54 @@
 - 이 문서에서 제시한 키워드 목록/제외 규칙/예상 소스는 전부 **제안(초안)**이며, 대표 검토 후
   수정 지시를 받으면 확정판으로 갱신한다. 확정 전까지 룰베이스 분류 스크립트는 작성·실행하지
   않는다.
+
+> **후속 진행 상황(2026-08-26)**: 위 47종 키워드 매핑은 이후 [카테고리 정제 & 어드민 확장]
+> 작업에서 대표 승인을 받아 실제 `category_rules` 테이블/Dynamic Keyword Rule Engine으로
+> 구현·실행됐다(신규 카테고리 "공원"/"어린이놀이터" 2종 추가해 49종, `/admin/data-grid`에서
+> 키워드 관리/일괄 재분류 가능 — `implementation/2026-08-26-category-rule-engine-admin.md`
+> 참고). 이 문서(키워드 초안 자체)는 그 작업의 최초 근거 기록으로 그대로 보존한다.
+
+---
+
+## 4. [0순위 우선 요청] 만료 데이터(is_active) 자동 비활성화 — 수집 필터링 기준 반영 및 시뮬레이션
+
+> **상태: 시뮬레이션 결과 보고 — 실제 DB 업데이트는 아직 실행하지 않음**
+> 대표 지침에 따라 실제 `UPDATE ... SET is_active = false`는 이 시뮬레이션 보고 이후 별도
+> 실행 없이는 수행하지 않았다. 다만 지시대로 배치 코드(run-daily.mjs) 자체에는 반영해
+> 커밋·배포했다 — 기존 스케줄(GitHub Actions `ingest-daily.yml`, 매일 03:00 KST)의 다음
+> 정기 실행부터 자동으로 적용되기 시작한다는 점을 명확히 알려드린다(아래 5절 참고).
+
+### 4.1. 적용 기준
+`events.end_date < CURRENT_DATE - INTERVAL '2 DAY'`인 행 중 현재 `is_active = true`인 행을
+`is_active = false`로 전환한다. `end_date`가 `NULL`인 행은 비교 불가라 대상에서 자동 제외된다
+(이미 `is_active = false`인 행은 손대지 않음 — 멱등적 UPDATE).
+
+### 4.2. 시뮬레이션 결과 (실측, 읽기 전용 COUNT만 실행 — DB 변경 없음, 2026-08-26 기준일)
+
+기준일(UTC) 2026-08-26 → 컷오프(`CURRENT_DATE - INTERVAL '2 DAY'`) 2026-08-24 미만이면 만료.
+
+| 항목 | 건수 | 비고 |
+| :--- | ---: | :--- |
+| 1) 전체 events 데이터 수량 | **26,404건** | |
+| 2) 새로 비활성화될 만료 데이터 수량 | **21,523건** | `end_date < 2026-08-24` AND 현재 `is_active=true` |
+| 3) 최종적으로 남는 유효(is_active=true 유지) 데이터 수량 | **3,560건** | `end_date >= 2026-08-24` AND `is_active=true` |
+| (참고) 현재 이미 `is_active=false`인 행 | 1,321건 | 이 중 169건은 만료 사유와도 일치, 나머지 1,152건은 다른 사유(예: SVCSTATNM 기반 종료 판정)로 이미 비활성 — 이번 규칙으로 추가 변경 없음 |
+| (참고) `end_date`가 `NULL`인 행 | 0건 | 대상 없음(전량 값 존재) |
+
+**검산**: 26,404 = (`is_active=true` 25,083건 = 만료대상 21,523 + 유효 3,560) + (`is_active=false`
+1,321건) — 정확히 일치.
+
+**해석**: 현재 events 테이블의 **약 81.5%(21,523건)가 새 기준으로 만료 처리 대상**이다.
+어드민 그리드에서 검수해야 할 "실질적으로 유효한" 데이터는 26,404건이 아니라 **3,560건**
+수준으로 크게 줄어든다 — `events` 데이터가 오랫동안 정기적인 만료 정리 없이 계속 누적돼
+왔음을 보여주는 결과다(제5장 제9조 구현 기록 원칙에 따라 실측 그대로 보고, 축소·과장 없음).
+
+### 4.3. 코드 반영 사항 (구현 완료, 대량 실행은 미실행)
+- `scripts/ingest/lib/deactivate-expired-events.mjs`(신규): `end_date < CURRENT_DATE -
+  INTERVAL '2 DAY' AND is_active = true` 조건의 단건 UPDATE 함수.
+- `run-daily.mjs`에 `DEACTIVATE_EXPIRED_EVENTS` 단계 추가(dry-run 시 미실행, 배치 리포트에
+  집계 표시).
+- `/admin/data-grid`: `events` 탭 기본 조회 조건에 `is_active=true` 적용(비활성 데이터가
+  기본적으로 섞여 나오지 않음, "활성 상태" 필터로 전체/비활성 전환 가능), 그리드 목록과
+  상세 모달에 `start_date`/`end_date`(행사 기간) 필드 노출 추가.
+- 상세 구현/검증 내역은 `implementation/2026-08-26-expired-events-deactivation.md` 참고.

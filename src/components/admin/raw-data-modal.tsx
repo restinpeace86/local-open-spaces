@@ -14,7 +14,15 @@ function getModalContent(table: AdminTable, row: AdminRow): { title: string; sub
   }
   if (table === 'events') {
     const r = row as AdminEventRow;
-    return { title: r.title, subtitle: `${r.source ?? '(source 미표기)'} · ${r.external_id}`, raw: r.raw_data };
+    // [0순위 우선 요청](2026-08-26): 검수 효율성을 위해 행사 기간(start_date~end_date)을
+    // 상세 패널에서도 곧바로 보이도록 부제에 포함한다(기존에는 "전체 컬럼" 목록에 묻혀 있었음).
+    return {
+      title: r.title,
+      subtitle: `${r.source ?? '(source 미표기)'} · ${r.external_id} · 📅 ${r.start_date} ~ ${r.end_date}${
+        r.is_active === false ? ' · 비활성' : ''
+      }`,
+      raw: r.raw_data,
+    };
   }
   const r = row as AdminOpenSpaceRow;
   return { title: r.name, subtitle: `${r.source_type} · ${r.external_id}`, raw: r.raw_data };

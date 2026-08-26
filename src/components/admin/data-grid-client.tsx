@@ -245,6 +245,10 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
   const [categoryMin, setCategoryMin] = useState('');
   const [missingCategoryMin, setMissingCategoryMin] = useState(false);
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
+  // [0순위 우선 요청](2026-08-26): "기본 조회 조건에 WHERE is_active = true를 적용" — 다른
+  // tri-state 필터와 달리 기본값이 'all'이 아니라 'true'다(비활성 만료 데이터가 기본적으로
+  // 섞여 나오지 않도록). events 탭에만 의미가 있다(open_spaces에는 is_active 컬럼이 없음).
+  const [isActive, setIsActive] = useState<TriState>('true');
   const [isFree, setIsFree] = useState<TriState>('all');
   const [hasParking, setHasParking] = useState<TriState>('all');
   const [strollerAccessible, setStrollerAccessible] = useState<TriState>('all');
@@ -269,6 +273,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     setSvcStatNm('');
     setCategoryMin('');
     setMissingCategoryMin(false);
+    setIsActive('true');
     setIsFree('all');
     setHasParking('all');
     setStrollerAccessible('all');
@@ -290,7 +295,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedQ, sourceTypes, sources, categories, minClassName, svcStatNm, categoryMin, missingCategoryMin, isFree, hasParking, strollerAccessible, isKidsFriendly, missingLocation, missingFee]);
+  }, [debouncedQ, sourceTypes, sources, categories, minClassName, svcStatNm, categoryMin, missingCategoryMin, isActive, isFree, hasParking, strollerAccessible, isKidsFriendly, missingLocation, missingFee]);
 
   useEffect(() => {
     let cancelled = false;
@@ -307,6 +312,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     if (svcStatNm) params.set('svc_stat_nm', svcStatNm);
     if (categoryMin) params.set('category_min', categoryMin);
     if (missingCategoryMin) params.set('missing_category_min', 'true');
+    if (tab === 'events') params.set('is_active', isActive);
     if (isFree !== 'all') params.set('is_free', isFree);
     if (hasParking !== 'all') params.set('has_parking', hasParking);
     if (strollerAccessible !== 'all') params.set('stroller_accessible', strollerAccessible);
@@ -338,7 +344,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, debouncedQ, sourceTypes, sources, categories, minClassName, svcStatNm, categoryMin, missingCategoryMin, isFree, hasParking, strollerAccessible, isKidsFriendly, missingLocation, missingFee, page, pageSize]);
+  }, [tab, debouncedQ, sourceTypes, sources, categories, minClassName, svcStatNm, categoryMin, missingCategoryMin, isActive, isFree, hasParking, strollerAccessible, isKidsFriendly, missingLocation, missingFee, page, pageSize]);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
   const currentOptions = filterOptions[tab];
@@ -485,6 +491,12 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
           </div>
         )}
 
+        {tab === 'events' && (
+          <div className="flex flex-wrap gap-x-4 gap-y-2">
+            <TriStateToggle label="✅ 활성 상태(is_active)" value={isActive} onChange={setIsActive} />
+          </div>
+        )}
+
         {tab !== 'raw_ingest_data' && (
           <div className="flex flex-wrap gap-x-4 gap-y-2">
             <TriStateToggle label="무료" value={isFree} onChange={setIsFree} />
@@ -518,6 +530,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                 {tab !== 'raw_ingest_data' && <th className="py-2 pr-3">원천 대/중분류</th>}
                 {tab !== 'raw_ingest_data' && <th className="py-2 pr-3">표준 중분류</th>}
                 <th className="py-2 pr-3">{tab === 'raw_ingest_data' ? '수집 시각' : '제목/명칭'}</th>
+                {tab === 'events' && <th className="py-2 pr-3">행사기간(start~end)</th>}
                 {tab !== 'raw_ingest_data' && <th className="py-2 pr-3">장소/시설명</th>}
                 {tab !== 'raw_ingest_data' && <th className="py-2 pr-3">주소</th>}
                 {tab !== 'raw_ingest_data' && <th className="py-2 pr-3">위도/경도</th>}
@@ -577,6 +590,16 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                       <CategoryMinBadge categoryMin={r.category_min} source={r.category_min_source} />
                     </td>
                     <td className="py-2 pr-3 font-medium text-gray-900 max-w-[220px] truncate">{titleText}</td>
+                    {isEvent && (
+                      <td className="py-2 pr-3 text-gray-600 whitespace-nowrap text-xs">
+                        {(r as AdminEventRow).start_date} ~ {(r as AdminEventRow).end_date}
+                        {(r as AdminEventRow).is_active === false && (
+                          <span className="ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-200 text-gray-600">
+                            비활성
+                          </span>
+                        )}
+                      </td>
+                    )}
                     <td className="py-2 pr-3 text-gray-600 max-w-[160px] truncate">{venueText}</td>
                     <td className="py-2 pr-3 text-gray-600 max-w-[200px] truncate">{addressText}</td>
                     <td className="py-2 pr-3 text-gray-500 whitespace-nowrap text-xs">

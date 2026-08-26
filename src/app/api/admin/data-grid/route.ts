@@ -24,6 +24,16 @@ function parseBoolFilter(value: string | null): boolean | null {
   return null;
 }
 
+// [0순위 우선 요청](2026-08-26): "기본 조회 조건에 WHERE is_active = true를 적용하여
+// 비활성화된 과거 데이터가 어드민 그리드에 섞여 나오지 않도록" — 다른 tri-state 필터
+// (parseBoolFilter, 기본값 '전체')와 달리 이 필터만 파라미터가 없을 때도 기본값이 true다.
+// 명시적으로 'all'을 보내야만 필터가 해제된다(비활성 포함 전체 조회).
+function parseIsActiveFilter(value: string | null): boolean | null {
+  if (value === 'false') return false;
+  if (value === 'all') return null;
+  return true;
+}
+
 function parseListFilter(value: string | null): string[] {
   return value ? value.split(',').filter(Boolean) : [];
 }
@@ -192,6 +202,7 @@ async function queryEvents(supabase: Ctx, searchParams: URLSearchParams, page: n
   const svcStatNm = searchParams.get('svc_stat_nm');
   const categoryMin = searchParams.get('category_min');
   const missingCategoryMin = searchParams.get('missing_category_min') === 'true';
+  const isActive = parseIsActiveFilter(searchParams.get('is_active'));
   const isFree = parseBoolFilter(searchParams.get('is_free'));
   const hasParking = parseBoolFilter(searchParams.get('has_parking'));
   const strollerAccessible = parseBoolFilter(searchParams.get('stroller_accessible'));
@@ -213,6 +224,7 @@ async function queryEvents(supabase: Ctx, searchParams: URLSearchParams, page: n
   if (svcStatNm) query = query.filter('raw_data->>SVCSTATNM', 'eq', svcStatNm);
   if (categoryMin) query = query.eq('category_min', categoryMin);
   if (missingCategoryMin) query = query.is('category_min', null);
+  if (isActive !== null) query = query.eq('is_active', isActive);
   if (isFree !== null) query = query.eq('is_free', isFree);
   if (hasParking !== null) query = query.eq('has_parking', hasParking);
   if (strollerAccessible !== null) query = query.eq('stroller_accessible', strollerAccessible);

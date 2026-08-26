@@ -27,6 +27,7 @@ import { enrichGgCultureEventLocations } from './adapters/gg-culture-location-en
 import { run as runSeoulCultureEvents } from './seoul-culture-events.mjs';
 import { run as runTourApiFestival } from './tour-api-festival.mjs';
 import { applyCategoryRules } from './lib/category-rules.mjs';
+import { deactivateExpiredEvents } from './lib/deactivate-expired-events.mjs';
 
 loadEnv();
 
@@ -77,6 +78,44 @@ async function runCategoryRulesApplication({ dryRun }) {
   };
 }
 
+// [0순위 우선 요청] 만료 데이터 자동 비활성화(2026-08-26): "end_date < CURRENT_DATE -
+// INTERVAL '2 DAY'"인 events 행을 is_active=false로 전환한다. 신규 수집분("적재 시")과
+// 기존 적재분("이미 적재된 데이터") 모두 이 매일 배치 한 번으로 함께 커버된다 — 오늘 새로
+// 들어온 행이든 예전부터 있던 행이든, end_date 조건만 보고 판단하기 때문에 소스/수집
+// 시점과 무관하게 동일하게 적용된다. dry-run 시에는 실행하지 않는다(사용자 지시: 시뮬레이션
+// 보고 전에는 실제 DB 반영 금지 — docs/category-mapping-keywords-draft.md 4절 참고).
+async function runDeactivateExpiredEvents({ dryRun }) {
+  if (dryRun) {
+    return {
+      sourceKey: 'DEACTIVATE_EXPIRED_EVENTS',
+      source: null,
+      targetTable: 'events',
+      rawCount: 0,
+      count: 0,
+      upserted: false,
+      safeMergeCount: 0,
+      errorCount: 0,
+      excludeFromVerification: true,
+      note: 'dry-run: 실제 비활성화는 실행하지 않음',
+    };
+  }
+
+  const client = createAdminClient();
+  const { cutoffDate, deactivatedCount } = await deactivateExpiredEvents(client);
+  return {
+    sourceKey: 'DEACTIVATE_EXPIRED_EVENTS',
+    source: null,
+    targetTable: 'events',
+    rawCount: deactivatedCount,
+    count: deactivatedCount,
+    upserted: deactivatedCount > 0,
+    safeMergeCount: 0,
+    errorCount: 0,
+    excludeFromVerification: true,
+    note: `end_date < ${cutoffDate} 이면서 is_active=true였던 행 ${deactivatedCount}건을 false로 전환(신규 적재 아닌 만료 정리 후처리)`,
+  };
+}
+
 async function runLocationEnrichment({ dryRun }) {
   const client = createAdminClient();
   const adapter = new GgCultureEventsAdapter();
@@ -96,7 +135,7 @@ async function runLocationEnrichment({ dryRun }) {
 }
 
 export async function runDailyBatch({ dryRun = false } = {}) {
-  console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length + 2}개 단계\n`);
+  console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length + 3}개 단계\n`);
 
   const results = [];
 
@@ -140,6 +179,14 @@ export async function runDailyBatch({ dryRun = false } = {}) {
   } catch (err) {
     console.error(`❌ [CATEGORY_RULES_APPLICATION] 실패: ${err.message}`);
     results.push({ failed: true, sourceKey: 'CATEGORY_RULES_APPLICATION', source: null, note: err.message });
+  }
+
+  console.log('\n=== [DEACTIVATE_EXPIRED_EVENTS] ===');
+  try {
+    results.push(await runDeactivateExpiredEvents({ dryRun }));
+  } catch (err) {
+    console.error(`❌ [DEACTIVATE_EXPIRED_EVENTS] 실패: ${err.message}`);
+    results.push({ failed: true, sourceKey: 'DEACTIVATE_EXPIRED_EVENTS', source: null, note: err.message });
   }
 
   if (!dryRun) {
