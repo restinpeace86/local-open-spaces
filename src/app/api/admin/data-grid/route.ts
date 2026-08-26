@@ -47,7 +47,7 @@ const OPEN_SPACES_COLUMNS =
   'id, external_id, source_type, source, name, category, category_min, category_min_source, address, location, location_precision, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, raw_data, sigungu_name, created_at, updated_at';
 
 const EVENTS_COLUMNS =
-  'id, external_id, source, title, event_type, category_min, category_min_source, venue_name, sigungu_name, start_date, end_date, location, location_precision, is_reservation_required, reservation_url, reservation_start_date, reservation_end_date, is_free, thumbnail_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, is_active, raw_data, created_at';
+  'id, external_id, source, title, event_type, category_maj, category_min, category_min_source, venue_name, sigungu_name, start_date, end_date, location, location_precision, is_reservation_required, reservation_url, reservation_start_date, reservation_end_date, is_free, thumbnail_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, is_active, raw_data, created_at';
 
 const RAW_INGEST_COLUMNS = 'source, source_id, fetched_at, raw_payload';
 

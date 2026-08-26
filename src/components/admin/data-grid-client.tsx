@@ -40,6 +40,7 @@ export type AdminEventRow = {
   source: string | null;
   title: string;
   event_type: string;
+  category_maj: string | null;
   category_min: string | null;
   category_min_source: string | null;
   venue_name: string | null;
@@ -191,11 +192,25 @@ const CATEGORY_MIN_SOURCE_STYLE: Record<string, string> = {
   MANUAL: 'bg-purple-100 text-purple-700',
 };
 
-function CategoryMinBadge({ categoryMin, source }: { categoryMin: string | null; source: string | null }) {
+// [7대 대분류 실제 적용](2026-08-26): categoryMaj가 있으면(events, category_maj 컬럼 신규)
+// "대분류 › 중분류" 형태로 함께 보여준다 — open_spaces는 이 컬럼이 없어 categoryMaj가 항상
+// undefined이며 기존과 동일하게 중분류만 표시된다.
+function CategoryMinBadge({
+  categoryMin,
+  categoryMaj,
+  source,
+}: {
+  categoryMin: string | null;
+  categoryMaj?: string | null;
+  source: string | null;
+}) {
   if (!categoryMin) return <span className="text-xs text-gray-300">NULL</span>;
   return (
     <span className="inline-flex items-center gap-1">
-      <span className="text-xs text-gray-700">{categoryMin}</span>
+      <span className="text-xs text-gray-700">
+        {categoryMaj && <span className="text-gray-400">{categoryMaj} › </span>}
+        {categoryMin}
+      </span>
       {source && (
         <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${CATEGORY_MIN_SOURCE_STYLE[source] ?? 'bg-gray-100 text-gray-600'}`}>
           {source}
@@ -597,7 +612,11 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                       )}
                     </td>
                     <td className="py-2 pr-3 whitespace-nowrap">
-                      <CategoryMinBadge categoryMin={r.category_min} source={r.category_min_source} />
+                      <CategoryMinBadge
+                        categoryMin={r.category_min}
+                        categoryMaj={isEvent ? (r as AdminEventRow).category_maj : undefined}
+                        source={r.category_min_source}
+                      />
                     </td>
                     <td className="py-2 pr-3 font-medium text-gray-900 max-w-[220px] truncate">{titleText}</td>
                     {isEvent && (

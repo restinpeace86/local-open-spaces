@@ -44,6 +44,15 @@
 ## [7대 대분류 및 37종 중분류 체계 도입 & 1단계 매핑 시뮬레이션] (2026-08-26)
 
 - [x] Dry-run 시뮬레이션 실행(DB 반영 없음): 전체 26,404건 중 9,050건(34.28%) 매칭, NULL 잔여 17,354건(65.72%), 7대 대분류/36종(지시문 "37종"과 1건 차이, 보고서에 명시) 중분류별 분포 리포트 — `docs/category-taxonomy-7major-dryrun-report.md`
-- [보류 — 승인 대기] 실제 `category_maj` 컬럼 추가 및 `UPDATE`는 지시대로 실행하지 않음. 선행 필요: (a) "37종" 표기와 실제 나열 36종의 차이 확인, (b) 신규/개명 3종(공공키즈카페/어린이실내놀이터/지역축제·페스티벌) 키워드 제안 검토, (c) 기존 events 규칙 중 새 목록에 없는 항목(정보통신/전문·자격증/단체봉사/청년정보/녹화장소) 처리 방침, (d) 기존 MANUAL 확정 행 덮어쓰기 여부
+- [x] **해소(2026-08-26)**: 대표 승인 — [7대 대분류 실제 적용 및 /admin/data-grid 활성 데이터 전용 필터 적용] 작업으로 실제 반영 완료(is_active=true 3,560건 대상, 1,992건 매칭). 상세는 아래 및 implementation/2026-08-26-category-maj-real-application.md 참고
 - [x] `/admin/data-grid` 표준 페이지네이션(번호+첫/끝 이동) 및 가독성 개선(sticky 헤더, zebra striping) — 구현 완료, 게이트 없음
 - [x] 검증: tsc(clean)/test(423/423)/build(성공) — 상세는 implementation/2026-08-26-category-taxonomy-v2-and-admin-pagination.md 참고
+
+---
+## [7대 대분류 실제 적용 및 /admin/data-grid 활성 데이터 전용 필터 적용] (2026-08-26)
+
+- [x] `events.category_maj` 컬럼 마이그레이션 적용
+- [x] `is_active=true`(3,560건) 대상 실제 UPDATE 실행: 1,992건(55.96%) 매칭, 1,568건 NULL 유지, MANUAL 0건 보존
+- [x] 실측 중 발견해 즉시 수정한 버그 2건: (1) "OO문화재단"(기관명)이 "역사"로 오매칭(exclude 키워드 추가로 수정, 58건 교정) (2) RAW 행 재매핑이 가변 컬럼(category_min) 대신 불변 원본(raw_data.MINCLASSNM)을 써야 하는 멱등성 버그(132건 소실 발견 후 수정, 재실행 2회로 완전 멱등성 확인) — implementation/2026-08-26-category-maj-real-application.md 4절 상세
+- [x] `/admin/data-grid` is_active=true 기본 필터: 직전 작업에서 이미 구현·검증 완료 상태였음을 재확인(추가 변경 없음)
+- [x] 검증: tsc(clean)/test(437/437, 신규 4건)/build(성공)

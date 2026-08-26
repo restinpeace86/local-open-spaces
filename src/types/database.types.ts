@@ -69,6 +69,7 @@ export type Database = {
       events: {
         Row: {
           booking_status: string | null
+          category_maj: string | null
           category_min: string | null
           category_min_source: string | null
           created_at: string | null
@@ -100,6 +101,7 @@ export type Database = {
         }
         Insert: {
           booking_status?: string | null
+          category_maj?: string | null
           category_min?: string | null
           category_min_source?: string | null
           created_at?: string | null
@@ -131,6 +133,7 @@ export type Database = {
         }
         Update: {
           booking_status?: string | null
+          category_maj?: string | null
           category_min?: string | null
           category_min_source?: string | null
           created_at?: string | null
