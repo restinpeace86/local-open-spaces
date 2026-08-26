@@ -12,55 +12,9 @@
    - 작업 완료 시 관련 테스트/빌드를 검증하고 `todo.md` 내 체크박스(`[x]`) 및 진행 상태를 최신화한다.
 
 ---
-- [] git push
-
----
-## [프론트엔드 UI/UX 개선] 이벤트픽/스팟픽 메인 화면 개편 (2026-08-26, docs/spec.md 개정판 기준)
-
-- [x] 스팟픽(/nearby): (explore) 라우트 그룹에서 분리 — 도감/캘린더 탭이 더 이상 노출되지 않는 단일 지도 레이아웃으로 전환
-- [x] 스팟픽: 지도 상단 1km/5km/10km Floating 반경 선택 버튼 및 연동 광역 반경 잠금해제(GridViewPrompt) 로직 전면 삭제 — 반경은 기존 기본값(5km) 고정 유지
-- [x] 스팟픽: 위치 헤더가 상세 도로명주소 대신 시/군/구 단위(sigunguName)를 표기하도록 통일(이벤트픽과 동일 컴포넌트/표기 공유 확인)
-- [x] 이벤트픽(홈): GNB 검색을 `/nearby`(공간 검색) 이동 대신 `events` 테이블 전용 인라인 검색으로 전환
-- [x] 이벤트픽: Hero 카드 지역 정렬에 "사용자 위치가 경기도면 경기도→서울, 서울이면 서울→경기" 우선순위 추가
-- [x] 이벤트픽: "당일 예약 접수중"(booking_status='접수중' 또는 SEOUL_YEYAK 원본 SVCSTATNM='접수중') 이벤트 가로 스크롤 슬라이더 신규 섹션 추가
-- [스킵 (보류)] 이벤트픽/스팟픽 "카테고리 구역 원천 중분류(MINCLASSNM) 전체 노출": DB 실측 확인 결과 `MINCLASSNM`은 SEOUL_YEYAK(source='seoul_public_reservation') 원본 API에만 있는 필드로, 나머지 16개 소스(open_spaces 13개 중 12개, events 4개 중 3개)의 raw_data에는 해당 키 자체가 없다(`scripts/migrations/2026-08-25-admin-data-grid-rpcs.sql` 주석에 이미 명시된 실측 사실). 지시대로 "MINCLASSNM 전체 노출"을 문자 그대로 구현하면 전체 18만 건 중 SEOUL_YEYAK 소스분을 제외한 절대다수 행에는 카테고리가 전혀 배정되지 않아 카테고리 필터/마커 기능이 사실상 비어버린다. 이는 제3장 제5조(추측 금지)·제7장 제3조(임의 비즈니스 로직 생성 금지)에 해당하는 진짜 데이터 모델 충돌이라 임의로 대체 taxonomy를 만들지 않고 사용자 확인 대기로 스킵한다(기존 5대 UI 카테고리 그리드/테마별 필터는 그대로 유지해 기능 공백은 없음).
-  - 선행 필요: 대표가 (a) MINCLASSNM 기반 카테고리를 SEOUL_YEYAK 소스에만 한정 적용하고 나머지 소스는 기존 5대 카테고리/테마 분류를 유지하는 하이브리드로 갈지, (b) 전체 소스에 새로운 통합 중분류 매핑을 정의해 Spec에 반영할지 결정 필요.
-  - **해소(2026-08-26)**: 대표가 (b) 방향으로 결정 — [카테고리 정제 & 어드민 확장] Dynamic Keyword Rule Engine 작업으로 이어짐(아래).
-
----
-## [카테고리 정제 & 어드민 확장] Dynamic Keyword Rule Engine 구축 및 /admin/data-grid 키워드 관리 (2026-08-26)
-
-- [x] DB 마이그레이션: `category_rules` 테이블(id/category_min/keyword/is_exclude/created_at + target_table 구분자 추가) 신규 생성, `open_spaces`/`events`에 `category_min`/`category_min_source`(RAW/RULE/MANUAL) 컬럼 추가, 인덱스 추가
-- [x] 초기 키워드 데이터 백필: `docs/category-mapping-keywords-draft.md` 47종 + Dry-run 리포트에서 발견한 구조적 공백 2종(놀이터/공원, city_park·localdata_playground 전용) = 49종 시드(122개 키워드 행)
-- [x] SEOUL_YEYAK RAW 백필: 기존 행의 `category_min = raw_data->>'MINCLASSNM'`, `category_min_source='RAW'` 일괄 반영(open_spaces 1,284건 + events 1,625건)
-- [x] 공용 규칙 엔진: ingest 파이프라인용(`scripts/ingest/lib/category-rules.mjs`)과 Admin API용(`src/lib/admin/category-rules.ts`) 각각 구현
-- [x] `run-daily.mjs`/`run-monthly.mjs`: 배치 종료 시 `category_min IS NULL`인 신규 행에 규칙 엔진 적용해 `category_min_source='RULE'`로 자동 반영
-- [x] `schema-mapper.mjs`/`seoul-yeyak-adapter.mjs`: 신규 수집 시점부터 SEOUL_YEYAK 행에 `category_min`(RAW) 직접 태깅
-- [x] Admin API: 키워드 CRUD(`/api/admin/category-rules`), 일괄 재분류 실행(`/api/admin/category-rules/reclassify`), 개별 행 수동 수정(`/api/admin/data-grid/category-min`)
-- [x] Admin UI: 중분류(category_min) 필터 + NULL 퀵 필터, RAW/RULE/MANUAL 출처 뱃지, 상세 모달 수동 수정 UI, "카테고리 키워드 규칙 관리" 모달(칩 조회/추가/삭제 + 일괄 재분류 버튼)
-- [x] 검증: tsc(clean)/test(410/410)/build(성공) + 실제 재분류 1회 실행으로 동작 증빙(open_spaces 68.46%, events 35.35% 커버리지 달성) — 상세는 implementation/2026-08-26-category-rule-engine-admin.md 참고
-
----
-## [7대 대분류 및 37종 중분류 체계 도입 & 1단계 매핑 시뮬레이션] (2026-08-26)
-
-- [x] Dry-run 시뮬레이션 실행(DB 반영 없음): 전체 26,404건 중 9,050건(34.28%) 매칭, NULL 잔여 17,354건(65.72%), 7대 대분류/36종(지시문 "37종"과 1건 차이, 보고서에 명시) 중분류별 분포 리포트 — `docs/category-taxonomy-7major-dryrun-report.md`
-- [x] **해소(2026-08-26)**: 대표 승인 — [7대 대분류 실제 적용 및 /admin/data-grid 활성 데이터 전용 필터 적용] 작업으로 실제 반영 완료(is_active=true 3,560건 대상, 1,992건 매칭). 상세는 아래 및 implementation/2026-08-26-category-maj-real-application.md 참고
-- [x] `/admin/data-grid` 표준 페이지네이션(번호+첫/끝 이동) 및 가독성 개선(sticky 헤더, zebra striping) — 구현 완료, 게이트 없음
-- [x] 검증: tsc(clean)/test(423/423)/build(성공) — 상세는 implementation/2026-08-26-category-taxonomy-v2-and-admin-pagination.md 참고
-
----
-## [7대 대분류 실제 적용 및 /admin/data-grid 활성 데이터 전용 필터 적용] (2026-08-26)
-
-- [x] `events.category_maj` 컬럼 마이그레이션 적용
-- [x] `is_active=true`(3,560건) 대상 실제 UPDATE 실행: 1,992건(55.96%) 매칭, 1,568건 NULL 유지, MANUAL 0건 보존
-- [x] 실측 중 발견해 즉시 수정한 버그 2건: (1) "OO문화재단"(기관명)이 "역사"로 오매칭(exclude 키워드 추가로 수정, 58건 교정) (2) RAW 행 재매핑이 가변 컬럼(category_min) 대신 불변 원본(raw_data.MINCLASSNM)을 써야 하는 멱등성 버그(132건 소실 발견 후 수정, 재실행 2회로 완전 멱등성 확인) — implementation/2026-08-26-category-maj-real-application.md 4절 상세
-- [x] `/admin/data-grid` is_active=true 기본 필터: 직전 작업에서 이미 구현·검증 완료 상태였음을 재확인(추가 변경 없음)
-- [x] 검증: tsc(clean)/test(437/437, 신규 4건)/build(성공)
-
----
-## [target_audience 분석] events 5대 태그 분류 시뮬레이션 (2026-08-26)
-
-- [x] Dry-run 시뮬레이션(DB 반영 없음): 전체 26,404건 중 서울시 1차 정형화 1,055건 + 0단계 소거 2,583건 + 1단계 245건 + 2단계 1,121건 = 5,004건 처리, 최후 NULL 잔여 21,400건(81.05%) — `docs/target-audience-analysis-report.md`
-- [핵심 발견] `raw_data`가 완전히 비어 있는 소스(seoul_public_culture/gg_public/tourapi_4.0, 전체의 83.9%)가 있어 지시된 "설명(contents)" 스캔이 애초에 불가능함을 확인 — 근본 원인은 키워드 부족이 아니라 수집 파이프라인이 본문 필드를 저장하지 않은 것
-- [보류 — 승인 대기] 실제 `target_audience` 컬럼 추가/UPDATE, 어드민 Split-View 구현은 지시대로 실행하지 않음. 선행 필요: (a) "성인"(313건, 5대 태그 밖) 처리 방침, (b) 추가 키워드 제안(6.1~6.3) 검토, (c) raw_data 공백 파이프라인 보강 여부
-- [x] 검증: 코드 변경 없음(순수 분석/문서 작업) — implementation/2026-08-26-target-audience-analysis.md 참고
+## [Task] /admin/data-grid events 탭 활성 데이터 전용 기본 조회 필터 적용
+- **대상**: `/admin/data-grid` (Events 데이터 그리드 영역)
+- **요구사항**: 
+  1. 그리드 기본 조회 쿼리 및 API 호출 시 `is_active = true` 조건 고정 (만료된 `is_active = false` 데이터 기본 제외).
+  2. 필요 시 상단 필터바에서 '전체 보기(비활성 포함)' 또는 '비활성만 보기'로 전환할 수 있는 토글/필터 UI 제공 여부 점검 및 반영.
+- **검증**: `npx tsc --noEmit` 및 빌드(`npm run build`) 테스트 통과.
