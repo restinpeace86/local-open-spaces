@@ -201,15 +201,20 @@ open_spaces '야외/자연' 대분류 하위 중분류를 유저 탐색에 직�
 - 특히 아래와 같은 키즈/가족 특화 야외 공간 시설이 원천 데이터에 존재하는지 확인하고, 필요시 신규 중분류(예: 캠핑/휴양, 농장/체험장, 유원지/야외놀이 등) 추천안을 작성하여 보고하라.
 
 ---
-[open_spaces NATIONAL_PARK_ECOTOUR 카테고리 매핑 지침]
+[open_spaces / events] NATIONAL_PARK_ECOTOUR 출처 데이터 일괄 비활성화 요청
 
-NATIONAL_PARK_ECOTOUR 소스 데이터는 별도 기간이 없는 상시 자연 탐방/산책 코스이므로 open_spaces에 유지하고 아래 카테고리로 매핑하라.
+NATIONAL_PARK_ECOTOUR(국립공원 생태탐방) 출처 데이터는 운영 여부 미확인 및 과거 만료 데이터 섞임으로 인해 서비스 데이터 품질을 저하시키므로 아래와 같이 조치하라.
 
-- 대분류: 야외/자연 (OUTDOOR_NATURE)
-- 중분류: 산/천/산책로 (TRAIL_NATURE)
-  (이유: raw_data 내 희방계곡, 죽령옛길 등 산길/계곡/옛길 탐방 코스 성격 반영)
+---
+
+### 📌 조치 지침
+1. `source = 'national_park_ecotour'` (또는 `source_type = 'NATIONAL_PARK_ECOTOUR'`) 출처의 모든 레코드에 대하여 `is_active = false`로 일괄 비활성화 처리할 것.
+2. 어드민 및 서비스 노출 기본 쿼리(`WHERE is_active = true`)에서 완전히 제외되도록 조치할 것.
+3. 본 비활성화 조치로 제외되는 레코드 수량을 Read-Only 시뮬레이션 보고서에 명시하여 보고할 것.
   
 ### 📋 제출 요청 사항
 1. 기본 5개 중분류 매핑 적용 시 데이터 수량 시뮬레이션 표
 2. 미분류(NULL) 데이터 분석을 통한 추가 중분류 후보 추천 목록 및 해당 수량 보고
+
+3. 
 
