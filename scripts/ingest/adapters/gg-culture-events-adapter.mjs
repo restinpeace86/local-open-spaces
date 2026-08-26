@@ -320,6 +320,12 @@ export class GgCultureEventsAdapter extends BaseCollectorAdapter {
           // 좌표 지오코딩에 실패해도(coords===null) 매칭된 시/군명 자체는 알고 있으므로 남겨둔다
           // (좌표 없이도 "어느 시/군"인지는 표시 가능 — 추측이 아니라 이미 매칭된 사실).
           sigunguName: matchedSigun,
+          // [수집기 본문(Contents) 필드 적재 보강](2026-08-26) 실측 확인: GGCULTUREVENTSTUS(API1,
+          // 문화행사)에는 설명/본문 필드 자체가 원본에 없다(위 헤더 주석의 실제 필드 목록 참고,
+          // 20건 표본 전수 확인 완료) — description은 null이 정확한 값이다(추측으로 다른 필드를
+          // 억지로 끼워 넣지 않음). raw_data에는 그래도 원본 전체를 무손실 보존한다.
+          rawData: item,
+          description: null,
         });
 
         if (row) rows.push(row);
@@ -374,6 +380,12 @@ export class GgCultureEventsAdapter extends BaseCollectorAdapter {
           bookingStatus,
           venueName: item.LOC_NM || null,
           sigunguName: extractSigunguName(primaryLocation),
+          // [수집기 본문(Contents) 필드 적재 보강](2026-08-26): GGCULFOUEVENSTM(API2, 경기문화
+          // 재단 행사)은 DTCONT(설명) 필드가 실제로 존재한다(위 헤더 주석 실측 확인). 다만
+          // 값이 없을 때 "-"(하이픈) 플레이스홀더로 채워진 사례를 실측으로 확인해, 실질적인
+          // 내용이 없는 이 값은 null로 정리한다(플레이스홀더를 실제 설명으로 오인하지 않도록).
+          rawData: item,
+          description: item.DTCONT && item.DTCONT.trim() && item.DTCONT.trim() !== '-' ? item.DTCONT.trim() : null,
           ...tags,
         });
 

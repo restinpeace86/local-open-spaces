@@ -63,6 +63,13 @@ async function mapToEventRow(item, { apiKey }) {
     // 다루므로("서울시 문화행사 정보") 항상 "서울시 " 접두를 붙인다 — "동구"/"중구" 등 다른
     // 도시와 겹치는 구 이름의 단독 표기를 방지한다(사용자 지적, 추측 아닌 소스 자체 범위 확정).
     sigungu_name: item.GUNAME ? `서울시 ${item.GUNAME}` : null,
+    // [수집기 본문(Contents) 필드 적재 보강](2026-08-26) 버그 수정: 이 행 빌더가 raw_data를
+    // 애초에 전달하지 않아 events.raw_data가 계속 빈 값(null)으로 적재되고 있었다(실측
+    // 확인). 원본 전체를 무손실 보존한다.
+    raw_data: item,
+    // PROGRAM(프로그램 소개)/ETC_DESC(기타내용) 둘 다 실제 원본 필드다(실측 확인) — 값이
+    // 있는 것만 이어붙이고, 둘 다 빈 문자열이면 null(추측으로 다른 값을 넣지 않음).
+    description: [item.PROGRAM, item.ETC_DESC].map((v) => v?.trim()).filter(Boolean).join(' ') || null,
     ...tags,
   };
 }

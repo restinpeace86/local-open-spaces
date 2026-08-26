@@ -194,6 +194,11 @@ export function buildEventRow({
   // 표준 중분류를 직접 갖고 있으면 RAW로 태깅, 없으면 null로 남겨 배치 후처리가 RULE 태깅한다.
   categoryMin = null,
   categoryMinSource = null,
+  // [수집기 본문(Contents) 필드 적재 보강](2026-08-26): 소스마다 다른 JSONB 원본 필드
+  // (PROGRAM/ETC_DESC/DTCONT/overview 등)에서 정제해 뽑아낸 단일 설명 텍스트. rawData와
+  // 별개로 둔 이유는 target_audience 등 텍스트 스캔 로직이 소스별 JSONB 키를 매번 찾지
+  // 않고 이 컬럼 하나만 보면 되게 하기 위함.
+  description = null,
 }) {
   if (!externalId || !title || !startDate || !endDate) return null;
   if (locationPrecision === 'UNKNOWN') {
@@ -233,6 +238,7 @@ export function buildEventRow({
     sigungu_name: normalizeSigunguProvince(sigunguName),
     // Decision 017: 원천 메타필드(MAXCLASSNM/MINCLASSNM 등)를 무손실 보존하기 위한 원본 객체.
     raw_data: rawData,
+    description,
     category_min: categoryMin,
     category_min_source: categoryMinSource,
   };

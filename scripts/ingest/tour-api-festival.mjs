@@ -88,7 +88,56 @@ async function fetchAllFestivals() {
   return items;
 }
 
-function mapToEventRow(item) {
+// [수집기 본문(Contents) 필드 적재 보강](2026-08-26) 실측 확인: searchFestival2(목록 조회)
+// 응답에는 설명/개요 필드가 전혀 없다(실제 응답 필드 전수 확인 — tel/cat1-3/mapx/mapy/addr1-2/
+// title/mlevel/zipcode/areacode/contentid/firstimage/lclsSystm1-3/cpyrhtDivCd/createdtime/
+// firstimage2/lDongRegnCd/sigungucode/eventenddate/festivaltype/modifiedtime/progresstype/
+// contenttypeid/lDongSignguCd/eventstartdate 뿐). "개요(overview)"는 별도 상세 조회
+// 엔드포인트(detailCommon2)에만 있음을 실제 호출로 확인했다 — contentId만으로 호출 성공,
+// 실제 개요 텍스트("2026 서천국가유산야행은...")가 정상 반환됨을 확인함. 이 소스는 전체
+// 240건 수준으로 규모가 작아(2026-08-26 기준) 매 수집마다 항목당 1회씩 상세 호출을 추가해도
+// 부담이 크지 않다(기존 tour-api-v4-area-based-adapter.mjs의 detailIntro2 N+1 패턴과 동일한
+// 성격 — 제5장 제4조 기존 구조 우선).
+const DETAIL_URL = 'https://apis.data.go.kr/B551011/KorService2/detailCommon2';
+const DETAIL_PACING_MS = 150;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchOverview(contentId) {
+  const params = new URLSearchParams({
+    MobileOS: 'ETC',
+    MobileApp: 'local-open-spaces',
+    _type: 'json',
+    contentId: String(contentId),
+  });
+  const url = `${DETAIL_URL}?serviceKey=${encodeURIComponent(env.PUBLIC_DATA_API_KEY)}&${params.toString()}`;
+
+  try {
+    const res = await fetch(url);
+    const text = await res.text();
+    if (!res.ok) {
+      console.warn(`⚠️ detailCommon2 호출 실패 [${contentId}] (HTTP ${res.status})`);
+      return null;
+    }
+    const json = JSON.parse(text);
+    if (json.response?.header?.resultCode !== '0000') {
+      console.warn(`⚠️ detailCommon2 에러 응답 [${contentId}]: ${json.response?.header?.resultMsg}`);
+      return null;
+    }
+    const item = json.response?.body?.items?.item;
+    const detail = Array.isArray(item) ? item[0] : item;
+    return detail?.overview?.trim() || null;
+  } catch (err) {
+    // Task 9-6-14(Decision 012) Graceful Parsing과 동일한 원칙 — 상세 조회 1건이 실패해도
+    // 목록 수집 전체를 중단시키지 않는다(개요는 보강 정보이지 필수 필드가 아님).
+    console.warn(`⚠️ detailCommon2 처리 중 예외 [${contentId}]: ${err.message}`);
+    return null;
+  }
+}
+
+async function mapToEventRow(item, { dryRun = false } = {}) {
   const lng = Number(item.mapx);
   const lat = Number(item.mapy);
   if (!lng || !lat || !item.eventstartdate || !item.eventenddate) return null;
@@ -104,6 +153,10 @@ function mapToEventRow(item) {
     startDate,
     endDate,
   });
+
+  // dry-run은 미리보기 용도라 항목당 상세 호출(외부 API 사용량)까지 발생시키지 않는다.
+  const overview = item.contentid && !dryRun ? await fetchOverview(item.contentid) : null;
+  if (item.contentid && !dryRun) await sleep(DETAIL_PACING_MS);
 
   return {
     external_id: `TOUR_API_${item.contentid}`,
@@ -121,6 +174,11 @@ function mapToEventRow(item) {
     venue_name: item.addr1 || null,
     // Task 9-1-3: 별도 구/지역명 필드가 없어(실측 확인) 주소(addr1)에서 시/군/구를 파싱한다.
     sigungu_name: extractSigunguName(item.addr1) ?? null,
+    // [수집기 본문(Contents) 필드 적재 보강](2026-08-26) 버그 수정: 이 행 빌더가 raw_data를
+    // 애초에 전달하지 않아 events.raw_data가 계속 빈 값(null)으로 적재되고 있었다(실측 확인).
+    // detailCommon2로 보강한 overview를 원본 item에 합쳐 함께 보존한다.
+    raw_data: overview ? { ...item, overview } : item,
+    description: overview,
     ...tags,
   };
 }
@@ -133,7 +191,14 @@ export async function run({ dryRun = false } = {}) {
   const items = await fetchAllFestivals();
   console.log(`✅ TourAPI 호출 성공: ${items.length}건 수신`);
 
-  const rows = items.map(mapToEventRow).filter(Boolean);
+  // [수집기 본문(Contents) 필드 적재 보강](2026-08-26): mapToEventRow가 항목당 detailCommon2
+  // 상세 호출을 곁들이므로(개요 보강), seoul-culture-events.mjs의 AI 분류 호출과 동일한
+  // 이유로 순차 처리한다(동시 호출 폭주로 인한 rate limit 방지).
+  const rows = [];
+  for (const item of items) {
+    const row = await mapToEventRow(item, { dryRun });
+    if (row) rows.push(row);
+  }
   console.log(`  → 좌표/일자 유효 데이터: ${rows.length}건`);
 
   if (dryRun) {

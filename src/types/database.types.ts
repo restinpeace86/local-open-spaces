@@ -73,6 +73,7 @@ export type Database = {
           category_min: string | null
           category_min_source: string | null
           created_at: string | null
+          description: string | null
           end_date: string
           event_type: string
           external_id: string
@@ -105,6 +106,7 @@ export type Database = {
           category_min?: string | null
           category_min_source?: string | null
           created_at?: string | null
+          description?: string | null
           end_date: string
           event_type: string
           external_id: string
@@ -137,6 +139,7 @@ export type Database = {
           category_min?: string | null
           category_min_source?: string | null
           created_at?: string | null
+          description?: string | null
           end_date?: string
           event_type?: string
           external_id?: string
