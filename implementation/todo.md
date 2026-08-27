@@ -12,22 +12,27 @@
    - 작업 완료 시 관련 테스트/빌드를 검증하고 `todo.md` 내 체크박스(`[x]`) 및 진행 상태를 최신화한다.
 
 ---
-- [ ] **[원격 `git pull` 동기화 및 `spec.md` 명세 반영 확인]**
+- [x] **[원격 `git pull` 동기화 및 `spec.md` 명세 반영 확인]**
   - 원격 저장소의 최신 변경 사항(`spec.md` 내 특정 중분류 화면 노출 제외 정책 반영분 포함)을 pull하여 로컬 환경과 동기화한다.
+  - 확인 결과(2026-08-28): 로컬 `main`이 이미 `origin/main`과 동일(`33d3f31`)하여 별도 pull 불필요. `docs/spec.md` 4번 항목(특정 중분류 화면 노출 제외 정책)도 이미 반영되어 있음을 확인.
 
-- [ ] **[특정 중분류 화면 노출 제외 쿼리 반영 (`category_min` 필터링)]**
+- [x] **[특정 중분류 화면 노출 제외 쿼리 반영 (`category_min` 필터링)]**
   - **대상 항목**: `단체봉사`, `청년정보`, `정보통신`, `전문/자격증` (4개 중분류)
   - **반영 내용**: 데이터 수집 및 정제 체계(`category_min`)에는 온전하게 유지하되, 홈 피드 및 이벤트픽 조회 쿼리(`src/lib/home/get-home-feed.ts` 등)에서 해당 항목들을 화면 노출 시 제외(`category_min NOT IN (...)`)하도록 구현한다.
+  - 확인 결과(2026-08-28): 이전 커밋(`3b3e7a5`)에서 이미 구현 완료됨을 확인. `src/lib/home/get-home-feed.ts`의 `EXCLUDED_CATEGORY_MIN`이 요청 4종을 포함해 16종으로 확장 적용되어 모든 이벤트픽/피드 조회 쿼리에 `.not('category_min', 'in', EXCLUDED_CATEGORY_MIN_FILTER)`로 반영되어 있음.
 
-- [ ] **[`/admin/data-grid` 필터 UI 개편 (다중 선택 체크박스)]**
+- [x] **[`/admin/data-grid` 필터 UI 개편 (다중 선택 체크박스)]**
   - **대상 필터**: 표준 중분류(`category_min`), 타겟 연령(`target_audience`)
   - **반영 내용**: 기존 단일 셀렉트 드롭다운을 **다중 선택 체크박스(Multi-select)** 형태로 변경한다.
   - **핵심 요구사항**: 유효한 분류 값들뿐만 아니라 **`NULL` 값(미지정 항목)**도 체크박스 목록에 반드시 포함시켜 사용자가 `NULL` 데이터를 선택해 조회할 수 있도록 지원한다.
   - 관련 `IN` 조건 쿼리 및 API 페이징/필터링 로직 확장.
   - 체크박스를 누를 때마다 실시간으로 쿼리가 날아가지 않도록 방지하고, 명시적인 [조회하기] 버튼을 추가하여 해당 버튼을 클릭할 때만 단 한 번 쿼릭 ㅏ실행되도록 UX 및 로직을 설계한다.
+  - 확인 결과(2026-08-28): 이전 커밋(`3b3e7a5`)에서 이미 구현 완료됨을 확인. `src/components/admin/data-grid-client.tsx`의 `CheckboxMultiSelect`(`includeNullOption`)가 두 필터에 적용되어 있고, `pending*`/`applied*` 상태 분리 + `[🔍 조회하기]` 버튼으로 명시적 클릭 시에만 조회가 실행됨. 서버 측 `src/app/api/admin/data-grid/route.ts`의 `applyMultiValueOrNullFilter`/`NULL_FILTER_TOKEN`도 함께 반영됨.
 
-- [ ] **[`/admin/data-grid` 기본 정렬 기준 변경 (시작일 오름차순)]**
+- [x] **[`/admin/data-grid` 기본 정렬 기준 변경 (시작일 오름차순)]**
   - 어드민 그리드에 로드되는 이벤트 데이터의 기본 정렬 순서를 행사 시작 시간/일자 기준 **오름차순(`ORDER BY start_date ASC`)**으로 변경하여 임박한 행사 우선 노출.
+  - 확인 결과(2026-08-28): 이전 커밋(`3b3e7a5`)에서 이미 구현 완료됨을 확인. `src/app/api/admin/data-grid/route.ts`의 `queryEvents`가 `.order('start_date', { ascending: true, nullsFirst: false })`로 정렬함.
 
-- [ ] **[최종 정합성 검증]**
+- [x] **[최종 정합성 검증]**
   - `npx tsc --noEmit` 타입 검증, 전체 단위 테스트(470건) 실행 및 빌드 정상 통과 확인.
+  - 확인 결과(2026-08-28): `npx tsc --noEmit` 오류 없음, `npm run test` 48개 파일 517건 전체 통과(요구된 470건보다 많은 최신 테스트 스위트 기준), `npm run build` 프로덕션 빌드 정상 완료.
