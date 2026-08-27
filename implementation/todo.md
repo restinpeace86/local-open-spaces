@@ -111,7 +111,14 @@
     2. **`is_active = true` 활성 데이터 대상 Dry-run 실행**: 실제 DB 수정 없이 매핑 결과 통계 산출.
     3. **검증 및 리포트 작성**: 시뮬레이션 결과 검토 후 대표님 보고 및 승인 요청 절차 준비.
     4. 
-- [ ] **[1단계 중분류(Category Min) 본 데이터 UPDATE 마이그레이션 실행]**
+- [x] **[1단계 중분류(Category Min) 본 데이터 UPDATE 마이그레이션 실행]** — 완료(2026-08-27).
+  결과: `implementation/2026-08-27-category-min-update-real-application.md`. 승인된 3건 그대로
+  `scripts/migrations/category_min_update.mjs` 실행: (1) `seoul_public_reservation`
+  `MINCLASSNM` 재적용 1,096건 100% 해소, (2) `seoul_public_culture` `CODENAME` 제안 매핑 반영
+  270건 해소(`기타` 8건은 매핑표에 없어 의도적으로 NULL 유지), (3) `gg_public`/`tourapi_4.0`은
+  보류 확정대로 변경 없음(NULL 36건/9건 잔존). `is_active=true` 전체 기준 `category_min` NULL
+  잔여 93건(2.61%, Dry-run 리포트 예측치와 정확히 일치). `npx tsc --noEmit`/`npm run test`(470
+  테스트)/`npm run build` 전부 통과.
   - **[대표 승인 완료 사항 (3건)]**
     1. **`seoul_public_reservation`**: `MINCLASSNM` 원천 필드(청년정보, 봉사활동 등 포함) 0순위 적용을 통한 NULL 100% 해소 및 본 데이터 반영.
     2. **`seoul_public_culture`**: `CODENAME` 정제 제안 매핑 규칙을 적용하여 중분류 산발 매칭 방지 및 NULL 최소화(2.61% 수준) 반영.
