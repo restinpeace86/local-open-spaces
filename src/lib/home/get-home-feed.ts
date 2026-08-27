@@ -542,17 +542,27 @@ export async function getReservationOpenEvents(
   const items = dedupeAndMergeFree(data.map(toEventItem));
   const ordered = sortByDistanceIfKnown(items, region);
   const regionOrdered = ordered.sort(byRegionPriority(region));
-  return sortByCategoryMinPriority(regionOrdered).slice(0, limit);
+  return sortByCategoryMinPriority(regionOrdered, limit).slice(0, limit);
 }
 
 // [카드 순서 우선순위](2026-08-27 사용자 지시): "현재 이용 가능"/"예약 가능" 두 섹션에서
 // 공공키즈카페류(유아/어린이 특화)는 좀 더 앞으로, 자연/과학·교육체험(상대적으로 덜 특화된
 // 일반 프로그램)은 뒤로 가면 좋겠다는 지적. 이 두 섹션에만 적용하는 부드러운 우선순위
-// 정렬이다 — 기존 지역/거리 정렬 결과 안에서 안정 정렬(Array.sort는 stable)로 순서만 조금
-// 옮기고, 지시받지 않은 나머지 카테고리는 전부 동일한 중간 순위로 그대로 둔다(추측으로
+// 정렬이다 — 지시받지 않은 나머지 카테고리는 전부 동일한 중간 순위로 그대로 둔다(추측으로
 // 전체 카테고리 순위를 매기지 않는다, 제3장 제5조).
+//
+// [카드 순서 우선순위 — 쏠림 수정](2026-08-27 후속 버그 수정): 처음 구현(전체를 우선순위로
+// 정렬 후 limit만큼 자르기)은 "부드러운 정렬"이 아니었다 — 공공키즈카페류 공급이 넉넉하면
+// (실측 확인: is_active=true만 265건) limit(20) 전체를 공공키즈카페류가 독점해 다른 카테고리가
+// 한 건도 안 보이는 상태가 됐다(실제 재현: "현재 이용 가능"/"예약 가능"이 전부 공공키즈카페로만
+// 채워짐). "앞으로 가면 좋겠다"는 지시는 "그것만 보이게 해달라"는 뜻이 아니므로, 앞 우선순위가
+// 차지할 수 있는 자리를 전체의 절반으로 제한(FRONT_TIER_MAX_SHARE)해 나머지 절반은 반드시
+// 중간/뒤 우선순위 카테고리로 채워지도록 한다. 잘려나간 앞 우선순위 항목은 완전히 버리지
+// 않고 중간 우선순위 뒤·뒤 우선순위 앞에 이어붙여, limit 안에 못 들어가면 자연스럽게
+// 잘려나가되 여전히 뒤 우선순위보다는 앞서도록 한다.
 const CATEGORY_MIN_PRIORITY_FRONT = new Set(['공공키즈카페', '어린이실내놀이터']);
 const CATEGORY_MIN_PRIORITY_BACK = new Set(['자연/과학', '교육체험']);
+const FRONT_TIER_MAX_SHARE = 0.5;
 
 function categoryMinPriorityTier(categoryMin: string | null | undefined): 0 | 1 | 2 {
   if (categoryMin && CATEGORY_MIN_PRIORITY_FRONT.has(categoryMin)) return 0;
@@ -560,10 +570,24 @@ function categoryMinPriorityTier(categoryMin: string | null | undefined): 0 | 1 
   return 1;
 }
 
-// 지역/거리 정렬이 끝난 배열에 마지막으로 적용한다 — stable sort라 같은 우선순위 안에서는
-// 기존 순서(지역/거리)가 그대로 보존된다.
-function sortByCategoryMinPriority(items: NearbyItem[]): NearbyItem[] {
-  return [...items].sort((a, b) => categoryMinPriorityTier(a.category_min) - categoryMinPriorityTier(b.category_min));
+// 지역/거리 정렬이 끝난 배열에 마지막으로 적용한다. limit을 함께 받아, 앞 우선순위 항목이
+// 전체 노출 자리의 절반을 넘게 차지하지 못하도록 상한을 둔다(각 그룹 내부의 상대 순서는
+// 원래의 지역/거리 정렬 순서를 그대로 유지한다).
+function sortByCategoryMinPriority(items: NearbyItem[], limit: number): NearbyItem[] {
+  const front: NearbyItem[] = [];
+  const middle: NearbyItem[] = [];
+  const back: NearbyItem[] = [];
+  for (const item of items) {
+    const tier = categoryMinPriorityTier(item.category_min);
+    if (tier === 0) front.push(item);
+    else if (tier === 2) back.push(item);
+    else middle.push(item);
+  }
+
+  const frontCap = Math.max(1, Math.ceil(limit * FRONT_TIER_MAX_SHARE));
+  const frontShown = front.slice(0, frontCap);
+  const frontOverflow = front.slice(frontCap);
+  return [...frontShown, ...middle, ...frontOverflow, ...back];
 }
 
 // [이벤트픽 화면 개편] "현재 이용 가능" 카드 구역(2026-08-27 사용자 지시): "예약 가능"
@@ -597,7 +621,7 @@ export async function getCurrentlyOngoingEvents(
   const items = dedupeAndMergeFree(data.map(toEventItem));
   const ordered = sortByDistanceIfKnown(items, region);
   const regionOrdered = ordered.sort(byRegionPriority(region));
-  return sortByCategoryMinPriority(regionOrdered).slice(0, limit);
+  return sortByCategoryMinPriority(regionOrdered, limit).slice(0, limit);
 }
 
 // [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "GNB 헤더 & 글로벌 위치 상태 공유"):

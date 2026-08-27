@@ -1055,6 +1055,32 @@ describe('getCurrentlyOngoingEvents', () => {
     // 앞: 공공키즈카페/어린이실내놀이터(입력 순서 그대로, stable) → 중간: 문화행사 → 뒤: 자연/과학·교육체험
     expect(items.map((item) => item.id)).toEqual(['kids-cafe', 'indoor-playground', 'general', 'nature', 'education']);
   });
+
+  // [카드 순서 우선순위 — 쏠림 수정](2026-08-27 후속 버그 수정): 대표가 실측으로 발견한 버그 —
+  // 공공키즈카페류 공급이 넉넉하면(실측: is_active=true 265건) limit 전체를 독점해 다른
+  // 카테고리가 한 건도 안 보이는 문제가 있었다. 앞 우선순위는 limit의 절반까지만 차지해야
+  // 하고, 나머지 절반은 다른 카테고리로 채워져야 한다.
+  it('공공키즈카페류 공급이 넉넉해도 limit의 절반을 넘게 차지하지 못한다(쏠림 방지)', async () => {
+    const kidsCafeRows = Array.from({ length: 20 }, (_, i) =>
+      eventRow({ id: `kids-cafe-${i}`, title: `키즈카페 행사 ${i}`, category_min: '공공키즈카페', is_active: true })
+    );
+    const generalRows = Array.from({ length: 5 }, (_, i) =>
+      eventRow({ id: `general-${i}`, title: `일반 행사 ${i}`, category_min: '문화행사', is_active: true })
+    );
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeFilteringChainable([...kidsCafeRows, ...generalRows]) }),
+    }));
+
+    const { getCurrentlyOngoingEvents } = await import('./get-home-feed');
+    const items = await getCurrentlyOngoingEvents(10, { sigunguName: null });
+
+    const kidsCafeCount = items.filter((item) => item.id.startsWith('kids-cafe')).length;
+    const generalCount = items.filter((item) => item.id.startsWith('general')).length;
+    expect(items).toHaveLength(10);
+    expect(kidsCafeCount).toBeLessThanOrEqual(5);
+    expect(generalCount).toBe(5);
+  });
 });
 
 // [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "GNB 헤더 & 검색")
