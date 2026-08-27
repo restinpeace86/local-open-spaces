@@ -72,13 +72,18 @@ function extractCoords(location: unknown): { lng: number; lat: number } {
   return { lng: geometry?.coordinates?.[0] ?? 0, lat: geometry?.coordinates?.[1] ?? 0 };
 }
 
+// [카드 표준 중분류/연령대상 표시](2026-08-27 사용자 지시): category_min/target_audience를
+// 카드/상세보기 표시용으로 추가 선택한다(둘 다 이벤트픽 3대 조건 필터에 이미 쓰이고 있어
+// 추가 조회 비용 없이 select 목록에만 포함하면 된다).
 const EVENT_COLUMNS =
-  'id, title, event_type, location, location_precision, thumbnail_url, start_date, end_date, reservation_start_date, reservation_end_date, reservation_url, is_reservation_required, is_free, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, venue_name, sigungu_name';
+  'id, title, event_type, category_min, target_audience, location, location_precision, thumbnail_url, start_date, end_date, reservation_start_date, reservation_end_date, reservation_url, is_reservation_required, is_free, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, venue_name, sigungu_name';
 
 type EventRow = {
   id: string;
   title: string;
   event_type: string;
+  category_min: string | null;
+  target_audience: string | null;
   location: unknown;
   location_precision: string | null;
   thumbnail_url: string | null;
@@ -105,6 +110,8 @@ function toEventItem(row: EventRow): NearbyItem {
     id: row.id,
     name: row.title,
     category: row.event_type,
+    category_min: row.category_min,
+    target_audience: row.target_audience,
     // Task 9-1-3: 더 이상 거리를 계산하지 않는다 — -1 sentinel(기존 컴포넌트들이 이미
     // "거리 정보 없음"으로 처리하는 관례값)을 그대로 쓴다.
     distance_meters: -1,

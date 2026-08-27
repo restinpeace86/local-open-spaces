@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
+import { getTargetAudienceLabel } from '@/lib/spaces/target-audience-meta';
 import { formatDDay } from '@/lib/spaces/d-day';
 import { getReservationAvailabilityTag } from '@/lib/spaces/event-status';
 import { formatDistance, formatDateRange, formatDateTime } from '@/lib/spaces/format';
@@ -33,6 +34,10 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
 
   const dDay = isEvent ? formatDDay(item.reservation_end_date ?? item.end_date) : null;
   const period = isEvent ? formatDateRange(item.start_date, item.end_date) : null;
+  // [카드 표준 중분류/연령대상 표시](2026-08-27 사용자 지시): 상세보기에 연령대상(초등학생
+  // 이상/미취학/가족/유아 등)을 안내한다. OTHER(수동 검수 대상)나 매핑 안 된 값은 null이라
+  // 노출하지 않는다(getTargetAudienceLabel 참고).
+  const targetAudienceLabel = isEvent ? getTargetAudienceLabel(item.target_audience) : null;
   const reservationDeadline = isEvent && item.is_reservation_required
     ? formatDateTime(item.reservation_end_date)
     : null;
@@ -88,11 +93,14 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
         <div className="p-5">
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-2 flex-wrap">
+              {/* [카드 표준 중분류 표시](2026-08-27 사용자 지시): event_type 기반 5대 UI
+                  카테고리 대신 실제 표준 중분류(category_min)를 보여준다(이벤트 한정 —
+                  공간은 이 컬럼을 조회하지 않아 기존 라벨 그대로 유지). */}
               <span
                 className="text-xs font-semibold px-2 py-0.5 rounded-full text-white"
                 style={{ backgroundColor: meta.color }}
               >
-                {meta.label}
+                {isEvent ? (item.category_min ?? meta.label) : meta.label}
               </span>
               {dDay && <span className="text-xs font-semibold text-red-600">{dDay}</span>}
               {!isEvent && item.is_free !== null && (
@@ -146,6 +154,13 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
               <div className="flex items-start justify-between gap-2">
                 <dt className="text-gray-500 shrink-0">행사 기간</dt>
                 <dd className="text-right text-gray-900">{period}</dd>
+              </div>
+            )}
+
+            {isEvent && targetAudienceLabel && (
+              <div className="flex items-start justify-between gap-2">
+                <dt className="text-gray-500 shrink-0">연령대상</dt>
+                <dd className="text-right text-gray-900">{targetAudienceLabel}</dd>
               </div>
             )}
 

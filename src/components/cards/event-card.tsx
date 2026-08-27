@@ -52,11 +52,16 @@ export function EventCard({ item, onSelect }: { item: NearbyItem; onSelect: (ite
             🖼️
           </div>
         )}
+        {/* [카드 표준 중분류 표시](2026-08-27 사용자 지시): 5대 UI 카테고리(event_type 기반,
+            예: "체험·클래스") 대신 실제 표준 중분류(category_min, 예: "도시농업")를 보여준다.
+            색상은 기존처럼 meta.color(5대 카테고리 색 코딩)를 그대로 쓴다 — 중분류 자체는
+            색이 없어 상위 대분류 색으로 시각적 구분을 유지한다. category_min이 없으면(이론상
+            이벤트픽 3대 조건상 발생하지 않지만 방어적으로) 기존 라벨로 폴백한다. */}
         <span
           className="absolute top-2 left-2 text-[11px] font-semibold px-2 py-0.5 rounded-full text-white"
           style={{ backgroundColor: meta.color }}
         >
-          {meta.label}
+          {item.category_min ?? meta.label}
         </span>
         <span className="absolute top-2 right-2 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-black/60 text-white">
           {status.label}

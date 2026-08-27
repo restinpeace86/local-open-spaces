@@ -168,3 +168,50 @@ describe('DetailModal 조건부 CTA 3분류 (Task 9-6-11, Decision 011)', () => 
     expect(screen.queryByText('🗺️ 길찾기')).not.toBeInTheDocument();
   });
 });
+
+// [카드 표준 중분류/연령대상 표시](2026-08-27 사용자 지시)
+describe('DetailModal 표준 중분류 뱃지 및 연령대상 표시', () => {
+  beforeEach(() => {
+    mockUserLocation = { lat: 37.4, lng: 127.2 };
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('행사는 event_type 기반 라벨 대신 category_min을 뱃지로 보여준다', () => {
+    render(
+      <DetailModal
+        item={makeSpaceItem({ item_type: 'EVENT', category: 'EXPERIENCE_CLASS', category_min: '도시농업' })}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.getByText('도시농업')).toBeInTheDocument();
+    expect(screen.queryByText('체험·클래스')).not.toBeInTheDocument();
+  });
+
+  it('공간은 category_min이 있어도 기존 5대 카테고리 라벨을 그대로 보여준다(이벤트 전용 변경)', () => {
+    render(<DetailModal item={makeSpaceItem({ category: 'OUTDOOR_NATURE' })} onClose={() => {}} />);
+
+    expect(screen.getByText('야외·자연')).toBeInTheDocument();
+  });
+
+  it('행사에 target_audience가 있으면 "연령대상" 행을 사람이 읽을 수 있는 한글로 보여준다', () => {
+    render(
+      <DetailModal
+        item={makeSpaceItem({ item_type: 'EVENT', target_audience: 'KIDS_SCHOOL' })}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.getByText('연령대상')).toBeInTheDocument();
+    expect(screen.getByText('초등학생 이상')).toBeInTheDocument();
+  });
+
+  it('target_audience가 없으면 "연령대상" 행 자체를 숨긴다', () => {
+    render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT', target_audience: null })} onClose={() => {}} />);
+
+    expect(screen.queryByText('연령대상')).not.toBeInTheDocument();
+  });
+});

@@ -42,6 +42,13 @@ export type NearbyItem = {
   // 붙으면 값이 채워진다. 그 전까지 DetailModal의 조건부 CTA는 이 필드가 비어 있으므로 자동으로
   // "길찾기" 등 다른 분류로 폴백한다.
   affiliate_url?: string | null;
+  // [카드 표준 중분류/연령대상 표시](2026-08-27 사용자 지시): 카드 상단 뱃지를 event_type
+  // 기반 5대 UI 카테고리(예: "체험·클래스") 대신 실제 표준 중분류(category_min, 예: "도시농업")
+  // 로 보여주고, 상세보기에 연령대상(target_audience)을 추가하기 위한 필드. get-home-feed.ts의
+  // events 조회 경로만 채운다 — get_nearby_spaces_and_events RPC(SPACE 대상) 결과에는 해당
+  // 컬럼이 없어 undefined로 남는다(소비 측이 category_min ?? meta.label로 안전하게 폴백).
+  category_min?: string | null;
+  target_audience?: string | null;
 };
 
 // Task 9-6-10(2026-08-23): itemType을 넘기면 RPC가 해당 타입만 반환한다(예: '/nearby' 지도는
