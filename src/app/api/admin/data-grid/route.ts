@@ -38,6 +38,53 @@ function parseListFilter(value: string | null): string[] {
   return value ? value.split(',').filter(Boolean) : [];
 }
 
+// [행사 데이터 수집/정제 파이프라인 및 홈 피드 필터링 개선](2026-08-27) 사용자 지시 4번:
+// 표준 중분류/타겟 연령 필터를 단일 셀렉트에서 다중 선택 체크박스로 바꾸면서, "NULL(미지정)"
+// 값도 체크박스 하나로 함께 선택할 수 있어야 한다. 클라이언트는 이 예약 토큰을 다른 실제
+// 값과 나란히 콤마 목록에 섞어 보낸다(예: "카테고리A,카테고리B,__NULL__").
+const NULL_FILTER_TOKEN = '__NULL__';
+
+// PostgREST 필터 문자열(`.or()`)에서 콤마/괄호는 예약 문자라(get-home-feed.ts의
+// regionOrFilter와 동일한 이유로 이미 실측된 버그 클래스) 값마다 큰따옴표로 감싸 안전하게
+// in() 리스트를 구성한다. 이 프로젝트의 category_min/target_audience 값은 자유 텍스트가
+// 아니라 확정된 표준 taxonomy 문자열이라 큰따옴표 자체가 섞일 일은 없다.
+function buildInList(values: string[]): string {
+  return `(${values.map((v) => `"${v}"`).join(',')})`;
+}
+
+// 콤마로 구분된 다중 선택 값(NULL_FILTER_TOKEN 포함 가능)을 실제 값 목록과 "NULL 포함 여부"로
+// 나눈 뒤, 선택된 조합에 맞는 쿼리를 적용한다. 값과 NULL이 함께 선택되면 OR로 묶어야 하므로
+// `.or('column.in.(...),column.is.null')` PostgREST 문법을 직접 구성한다(둘 다 아니면
+// 아무 필터도 걸지 않음 — "전체"와 동일).
+function applyMultiValueOrNullFilter<Q extends { or: (s: string) => Q; in: (c: string, v: string[]) => Q; is: (c: string, v: null) => Q; eq: (c: string, v: string) => Q }>(
+  query: Q,
+  column: string,
+  rawParam: string | null
+): Q {
+  const tokens = parseListFilter(rawParam);
+  if (tokens.length === 0) return query;
+
+  const includeNull = tokens.includes(NULL_FILTER_TOKEN);
+  const values = tokens.filter((t) => t !== NULL_FILTER_TOKEN);
+
+  if (includeNull && values.length > 0) {
+    return query.or(`${column}.in.${buildInList(values)},${column}.is.null`);
+  }
+  if (includeNull) return query.is(column, null);
+  if (values.length === 1) return query.eq(column, values[0]);
+  return query.in(column, values);
+}
+
+// JS 배열(queryOpenSpacesViaSourceSubset의 raw_data 우회 경로)에 대해 동일한 다중선택+NULL
+// 판정을 내리는 술어 버전.
+function multiValueOrNullPredicate(rawParam: string | null): (value: string | null) => boolean {
+  const tokens = parseListFilter(rawParam);
+  if (tokens.length === 0) return () => true;
+  const includeNull = tokens.includes(NULL_FILTER_TOKEN);
+  const values = tokens.filter((t) => t !== NULL_FILTER_TOKEN);
+  return (value) => (value === null ? includeNull : values.includes(value));
+}
+
 // ilike 패턴에 사용되는 %, _ 와일드카드를 검색어에서 이스케이프한다.
 function escapeIlikePattern(value: string): string {
   return value.replace(/[\\%_]/g, (char) => `\\${char}`);
@@ -76,8 +123,7 @@ async function queryOpenSpacesViaSourceSubset(
     categories: string[];
     minClassName: string | null;
     svcStatNm: string | null;
-    categoryMin: string | null;
-    missingCategoryMin: boolean;
+    categoryMinFilter: string | null;
     isFree: boolean | null;
     hasParking: boolean | null;
     strollerAccessible: boolean | null;
@@ -93,6 +139,7 @@ async function queryOpenSpacesViaSourceSubset(
 
   type Row = NonNullable<typeof data>[number];
   const q = params.q.toLowerCase();
+  const matchesCategoryMin = multiValueOrNullPredicate(params.categoryMinFilter);
 
   const filtered = (data ?? []).filter((row: Row) => {
     if (q && !`${row.name} ${row.address}`.toLowerCase().includes(q)) return false;
@@ -102,8 +149,7 @@ async function queryOpenSpacesViaSourceSubset(
     const rawData = row.raw_data as Record<string, unknown> | null;
     if (params.minClassName && rawData?.MINCLASSNM !== params.minClassName) return false;
     if (params.svcStatNm && rawData?.SVCSTATNM !== params.svcStatNm) return false;
-    if (params.categoryMin && row.category_min !== params.categoryMin) return false;
-    if (params.missingCategoryMin && row.category_min !== null) return false;
+    if (!matchesCategoryMin(row.category_min)) return false;
     if (params.isFree !== null && row.is_free !== params.isFree) return false;
     if (params.hasParking !== null && row.has_parking !== params.hasParking) return false;
     if (params.strollerAccessible !== null && row.stroller_accessible !== params.strollerAccessible) return false;
@@ -125,8 +171,7 @@ async function queryOpenSpaces(supabase: Ctx, searchParams: URLSearchParams, pag
   const categories = parseListFilter(searchParams.get('category'));
   const minClassName = searchParams.get('min_class_name');
   const svcStatNm = searchParams.get('svc_stat_nm');
-  const categoryMin = searchParams.get('category_min');
-  const missingCategoryMin = searchParams.get('missing_category_min') === 'true';
+  const categoryMinFilter = searchParams.get('category_min');
   const isFree = parseBoolFilter(searchParams.get('is_free'));
   const hasParking = parseBoolFilter(searchParams.get('has_parking'));
   const strollerAccessible = parseBoolFilter(searchParams.get('stroller_accessible'));
@@ -142,8 +187,7 @@ async function queryOpenSpaces(supabase: Ctx, searchParams: URLSearchParams, pag
       categories,
       minClassName,
       svcStatNm,
-      categoryMin,
-      missingCategoryMin,
+      categoryMinFilter,
       isFree,
       hasParking,
       strollerAccessible,
@@ -176,8 +220,7 @@ async function queryOpenSpaces(supabase: Ctx, searchParams: URLSearchParams, pag
   else if (sources.length > 1) query = query.in('source', sources);
   if (categories.length === 1) query = query.eq('category', categories[0]);
   else if (categories.length > 1) query = query.in('category', categories);
-  if (categoryMin) query = query.eq('category_min', categoryMin);
-  if (missingCategoryMin) query = query.is('category_min', null);
+  query = applyMultiValueOrNullFilter(query, 'category_min', categoryMinFilter);
   if (isFree !== null) query = query.eq('is_free', isFree);
   if (hasParking !== null) query = query.eq('has_parking', hasParking);
   if (strollerAccessible !== null) query = query.eq('stroller_accessible', strollerAccessible);
@@ -200,11 +243,9 @@ async function queryEvents(supabase: Ctx, searchParams: URLSearchParams, page: n
   const eventTypes = parseListFilter(searchParams.get('category'));
   const minClassName = searchParams.get('min_class_name');
   const svcStatNm = searchParams.get('svc_stat_nm');
-  const categoryMin = searchParams.get('category_min');
-  const missingCategoryMin = searchParams.get('missing_category_min') === 'true';
+  const categoryMinFilter = searchParams.get('category_min');
   // [10대 타겟 분류 체계 실제 적용](2026-08-27): category_min과 동일한 필터 관례.
-  const targetAudience = searchParams.get('target_audience');
-  const missingTargetAudience = searchParams.get('missing_target_audience') === 'true';
+  const targetAudienceFilter = searchParams.get('target_audience');
   const isActive = parseIsActiveFilter(searchParams.get('is_active'));
   const isFree = parseBoolFilter(searchParams.get('is_free'));
   const hasParking = parseBoolFilter(searchParams.get('has_parking'));
@@ -225,10 +266,8 @@ async function queryEvents(supabase: Ctx, searchParams: URLSearchParams, page: n
   if (eventTypes.length > 0) query = query.in('event_type', eventTypes);
   if (minClassName) query = query.filter('raw_data->>MINCLASSNM', 'eq', minClassName);
   if (svcStatNm) query = query.filter('raw_data->>SVCSTATNM', 'eq', svcStatNm);
-  if (categoryMin) query = query.eq('category_min', categoryMin);
-  if (missingCategoryMin) query = query.is('category_min', null);
-  if (targetAudience) query = query.eq('target_audience', targetAudience);
-  if (missingTargetAudience) query = query.is('target_audience', null);
+  query = applyMultiValueOrNullFilter(query, 'category_min', categoryMinFilter);
+  query = applyMultiValueOrNullFilter(query, 'target_audience', targetAudienceFilter);
   if (isActive !== null) query = query.eq('is_active', isActive);
   if (isFree !== null) query = query.eq('is_free', isFree);
   if (hasParking !== null) query = query.eq('has_parking', hasParking);
@@ -238,8 +277,11 @@ async function queryEvents(supabase: Ctx, searchParams: URLSearchParams, page: n
   if (missingFee) query = query.is('is_free', null);
 
   const from = (page - 1) * pageSize;
+  // [행사 데이터 수집/정제 파이프라인 및 홈 피드 필터링 개선](2026-08-27) 사용자 지시 4번:
+  // 어드민 그리드 기본 정렬을 최신 적재순(created_at DESC)에서 행사 시작일 오름차순으로
+  // 변경 — 관리자가 임박한/진행 중인 행사부터 순서대로 검수할 수 있도록.
   const { data, error, count } = await query
-    .order('created_at', { ascending: false, nullsFirst: false })
+    .order('start_date', { ascending: true, nullsFirst: false })
     .range(from, from + pageSize - 1);
 
   if (error) throw new Error(error.message);

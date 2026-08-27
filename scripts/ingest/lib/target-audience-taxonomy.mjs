@@ -12,11 +12,30 @@
 // 승인 범위 밖이라 이번에 적용하지 않는 것(docs/target-audience-10tier-dryrun-report.md 5절):
 // 숫자 나이 임계값 파싱(예: "8세 이상"), 여성/장애인/국가유공자 등 비-연령 인구 속성 처리,
 // TOUR_API_/SEOUL_YEYAK_ 소스=null 45건 스코프 외 백필.
+//
+// [행사 데이터 수집/정제 파이프라인 및 홈 피드 필터링 개선](2026-08-27) 사용자 지시 2번 추가
+// 반영: 원천 데이터의 타겟 연령(USETGTINFO 등)이 NULL인 경우는 데이터가 없어서가 아니라
+// 여러 대상이 혼재돼 특정하지 못했기 때문이라는 지적에 따라 0순위(resolveViaRawField)를
+// 아래 2개 규칙으로 보강했다:
+// 1. 예외/블랙리스트 선제 필터링: 난임/임산부/임신/출산지원/전문 자격 키워드가 있으면
+//    가족/어린이 대상(kidFamily 태그)에서 원천 제외(NEGATIVE_OVERRIDE_KEYWORDS 확장).
+// 2. 최연소 연령 대표값 매핑: 1을 통과한 뒤에도 순수 연령 태그가 여러 개 섞여 있으면
+//    (예: 어린이/청소년/성인) NULL로 미루지 않고 가장 젊은 연령대를 대표값으로 채택
+//    (AGE_ORDER, resolveViaRawField의 CONFLICTING_TOKENS 분기 참고).
 
 // 0단계: 역방향 소거(implementation/todo.md 원 지시문 그대로, 8대 체계 때부터 승인된 문구를
 // 10대 체계에도 재사용) — 아래 키워드가 있으면 INFANT/KIDS_PRE/KIDS_SCHOOL/FAMILY 매핑에서만
 // 제외한다(TEEN/YOUTH/ADULT/SENIOR/ALL/FACILITY 판정에는 영향 없음). '시민'/'주민'/단독 '부모'는
 // 지시문에 따라 소거 대상에서 명시적으로 제외한다.
+// 연령/대상 라벨 그룹은 별도로 뽑아둔다 — 자유 텍스트(제목/설명)에서는 "성인 발레 클래스"처럼
+// 이 단어들이 "이 프로그램 전체가 성인 전용"이라는 신호라 소거 게이트로 그대로 쓰지만,
+// resolveViaRawField가 다루는 쉼표 나열 원천 필드(예: "어린이, 청소년, 성인")에서는 이 단어들
+// 자체가 "혼재된 여러 대상 중 하나"를 가리키는 정상 토큰이므로 게이트에서 제외해야 한다
+// (RAW_FIELD_NEGATIVE_OVERRIDE_KEYWORDS 참고, 2026-08-27 실측으로 발견 — 이 그룹을 그대로
+// 게이트에 쓰면 "성인"이 섞인 모든 혼재값이 UNRESOLVED_TOKEN으로 막혀 아래 최연소 대표값
+// 매핑 규칙이 지시받은 예시("어린이, 청소년, 성인")에서조차 전혀 동작하지 않았다).
+const AGE_LABEL_KEYWORDS = ['성인', '어르신', '시니어', '실버', '은퇴', '청년'];
+
 export const NEGATIVE_OVERRIDE_KEYWORDS = [
   // 학술/행정
   '학술대회', '세미나', '학술', '포럼', '심포지엄', '간담회', '설명회', '공청회', '봉사활동', '민원',
@@ -29,8 +48,28 @@ export const NEGATIVE_OVERRIDE_KEYWORDS = [
   // 자격증/직무
   '자격증', '강사', '전문가', '재테크', '부동산', '창업', '취업', '역량강화', '실무', '직무교육', '마케팅',
   // 연령/대상
-  '성인', '어르신', '시니어', '실버', '은퇴', '청년',
+  ...AGE_LABEL_KEYWORDS,
+  // [행사 데이터 수집/정제 파이프라인 및 홈 피드 필터링 개선](2026-08-27) 사용자 지시: 의료/
+  // 행정 지원 성격의 성인 대상 키워드. "가족(난임)"/"성인(난임)"/"여성(난임부부)"처럼 괄호
+  // 안팎에 섞여 있어도(hasNegativeOverride가 원본 문자열 전체를 검사하므로 자동 대응) 가족/
+  // 어린이 대상으로 오분류되지 않도록 차단한다 — 순수 나들이/여가와 무관한 성인 의료/행정
+  // 지원이기 때문이지, 완전히 판단 불가라서가 아니다(예: "성인(난임)"은 여전히 ADULT로는
+  // 정상 매칭된다, kidFamily 태그에서만 배제).
+  '난임', '임산부', '임신', '출산지원', '전문 자격',
 ];
+
+// resolveViaRawField 전용: 위 설명대로 AGE_LABEL_KEYWORDS를 게이트에서 제외한 변형.
+const RAW_FIELD_NEGATIVE_OVERRIDE_KEYWORDS = NEGATIVE_OVERRIDE_KEYWORDS.filter(
+  (kw) => !AGE_LABEL_KEYWORDS.includes(kw)
+);
+
+// [혼재 데이터 정제 규칙](2026-08-27) 사용자 지시 2번: resolveViaRawField에서 토큰이 여러
+// 순수 연령 태그로 갈리면(예: "어린이, 청소년, 성인") 가장 젊은 연령대를 대표값으로 채택한다
+// (임의로 매핑 불가 처리해 다음 단계로 미루지 않음). FAMILY/ALL/FACILITY는 나이가 선형으로
+// 정렬되지 않는 개념이라(가족=그룹, 전연령/시설=나이 무관) 이 목록에 포함하지 않는다 — 이
+// 태그들이 섞여 있으면(예: "어린이, 가족") 지시받은 범위 밖이라 추측하지 않고 기존처럼
+// CONFLICTING_TOKENS로 다음 단계에 넘긴다(제3장 제5조 추측 금지).
+const AGE_ORDER = ['INFANT', 'KIDS_PRE', 'KIDS_SCHOOL', 'TEEN', 'YOUTH', 'ADULT', 'SENIOR'];
 
 // 2.1절 공용 키워드 표(0순위+2단계) + 승인된 KIDS_SCHOOL("키즈") 확장. 순서 = 매칭 우선순위
 // (앞 태그부터 검사, 첫 매칭 채택) — "초등학생"이 KIDS_SCHOOL에서 먼저 잡혀야 TEEN의 "학생"
@@ -66,8 +105,8 @@ export const KIDS_PRE_CATEGORY_MIN = new Set(['공공키즈카페', '어린이�
 
 export const YOUTH_CATEGORY_MIN = new Set(['청년공간']);
 
-function hasNegativeOverride(text) {
-  return NEGATIVE_OVERRIDE_KEYWORDS.some((kw) => text.includes(kw));
+function hasNegativeOverride(text, keywords = NEGATIVE_OVERRIDE_KEYWORDS) {
+  return keywords.some((kw) => text.includes(kw));
 }
 
 // 하나의 텍스트(원천 필드 토큰 또는 title+description)에서 우선순위 표 그대로 첫 매칭 태그를
@@ -103,16 +142,25 @@ export function resolveViaRawField(rawData) {
     const value = rawData[field];
     if (typeof value !== 'string' || !value.trim()) continue;
 
-    const allowKidFamily = !hasNegativeOverride(value);
+    const allowKidFamily = !hasNegativeOverride(value, RAW_FIELD_NEGATIVE_OVERRIDE_KEYWORDS);
     const tokens = tokenize(value);
     if (tokens.length === 0) continue;
 
     const resolvedTags = tokens.map((token) => matchTag(token, { allowKidFamily }));
     if (resolvedTags.some((tag) => tag === null)) continue; // UNRESOLVED_TOKEN
     const distinctTags = new Set(resolvedTags);
-    if (distinctTags.size !== 1) continue; // CONFLICTING_TOKENS
+    if (distinctTags.size === 1) {
+      return { tag: resolvedTags[0], viaField: field };
+    }
 
-    return { tag: resolvedTags[0], viaField: field };
+    // [혼재 데이터 정제 규칙](2026-08-27) 사용자 지시 2번: 순수 연령 태그끼리만 섞여 있으면
+    // NULL로 방치하지 않고 가장 젊은 연령대를 대표값으로 채택한다.
+    if ([...distinctTags].every((tag) => AGE_ORDER.includes(tag))) {
+      const youngest = AGE_ORDER.find((tag) => distinctTags.has(tag));
+      return { tag: youngest, viaField: field };
+    }
+
+    continue; // CONFLICTING_TOKENS(연령 외 비-선형 태그 혼재)
   }
   return null;
 }

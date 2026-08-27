@@ -49,13 +49,26 @@ describe('resolveViaRawField (0순위)', () => {
     expect(resolveViaRawField({ USETGTINFO: '유아(만3~5세)' })).toEqual({ tag: 'KIDS_PRE', viaField: 'USETGTINFO' });
   });
 
-  it('토큰이 서로 다른 태그로 갈리면(CONFLICTING_TOKENS) null(다음 단계로 이관)을 반환한다', () => {
-    expect(resolveViaRawField({ USETGTINFO: '어린이, 성인' })).toBeNull();
+  it('순수 연령 외 태그(예: FAMILY)와 섞이면(CONFLICTING_TOKENS) null(다음 단계로 이관)을 반환한다', () => {
+    expect(resolveViaRawField({ USETGTINFO: '어린이, 가족' })).toBeNull();
   });
 
   it('원천 필드가 없으면 null을 반환한다', () => {
     expect(resolveViaRawField(null)).toBeNull();
     expect(resolveViaRawField({})).toBeNull();
+  });
+
+  it('[혼재 데이터 정제] 순수 연령 태그끼리 섞이면 가장 젊은 연령대를 대표값으로 채택한다', () => {
+    expect(resolveViaRawField({ USETGTINFO: '어린이, 성인' })).toEqual({ tag: 'KIDS_SCHOOL', viaField: 'USETGTINFO' });
+    expect(resolveViaRawField({ USETGTINFO: '성인, 청소년, 어린이' })).toEqual({ tag: 'KIDS_SCHOOL', viaField: 'USETGTINFO' });
+    expect(resolveViaRawField({ USETGTINFO: '청소년, 성인' })).toEqual({ tag: 'TEEN', viaField: 'USETGTINFO' });
+  });
+
+  it('[예외/블랙리스트] 난임/임산부 등 키워드가 있으면 가족/어린이 대상에서 원천 제외한다', () => {
+    expect(resolveViaRawField({ USETGTINFO: '가족(난임)' })).toBeNull();
+    expect(resolveViaRawField({ USETGTINFO: '여성(난임부부)' })).toBeNull();
+    // "성인(난임)"은 kidFamily 태그에서만 배제될 뿐, ADULT로는 정상 매칭된다(완전 제외가 아님).
+    expect(resolveViaRawField({ USETGTINFO: '성인(난임)' })).toEqual({ tag: 'ADULT', viaField: 'USETGTINFO' });
   });
 });
 

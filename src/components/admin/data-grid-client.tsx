@@ -103,6 +103,11 @@ const TRI_STATE_LABEL: Record<TriState, string> = { all: '전체', true: '예', 
 
 const PAGE_SIZE_OPTIONS = [50, 100, 200];
 
+// [행사 데이터 수집/정제 파이프라인 및 홈 피드 필터링 개선](2026-08-27) 사용자 지시 4번:
+// 서버(src/app/api/admin/data-grid/route.ts)와 동일한 NULL 선택 예약 토큰. 실제 category_min/
+// target_audience 값과 절대 겹치지 않도록 이중 밑줄로 감싼 식별자를 쓴다.
+const NULL_FILTER_TOKEN = '__NULL__';
+
 // [10대 타겟 분류 체계 실제 적용](2026-08-27): 고정 10종 태그라 category_min과 달리 RPC로
 // DB에서 discover하지 않고 하드코딩한다(값 자체가 스펙으로 확정된 enum).
 const TARGET_AUDIENCE_TAGS = [
@@ -189,6 +194,50 @@ function ChipMultiSelect({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+// [행사 데이터 수집/정제 파이프라인 및 홈 피드 필터링 개선](2026-08-27) 사용자 지시 4번:
+// 표준 중분류/타겟 연령 필터를 단일 셀렉트 드롭다운에서 실제 체크박스 목록으로 변경한다.
+// includeNullOption이 true면 목록 맨 앞에 "미지정(NULL)" 체크박스를 추가로 렌더링한다 —
+// 기존 값 배열(options)에는 실제 NULL이 포함될 수 없으므로(DB distinct values), 이 옵션을
+// 별도로 붙여야 사용자가 NULL 데이터도 체크박스로 선택해 조회할 수 있다.
+function CheckboxMultiSelect({
+  label,
+  options,
+  selected,
+  onToggle,
+  includeNullOption = false,
+}: {
+  label: string;
+  options: string[];
+  selected: string[];
+  onToggle: (value: string) => void;
+  includeNullOption?: boolean;
+}) {
+  if (options.length === 0 && !includeNullOption) return null;
+  return (
+    <div className="flex flex-wrap items-start gap-1.5">
+      <span className="text-xs text-gray-500 shrink-0 pt-1">{label}</span>
+      <div className="flex flex-wrap gap-x-3 gap-y-1 max-w-2xl">
+        {includeNullOption && (
+          <label className="flex items-center gap-1 text-xs text-gray-500 shrink-0">
+            <input
+              type="checkbox"
+              checked={selected.includes(NULL_FILTER_TOKEN)}
+              onChange={() => onToggle(NULL_FILTER_TOKEN)}
+            />
+            미지정(NULL)
+          </label>
+        )}
+        {options.map((opt) => (
+          <label key={opt} className="flex items-center gap-1 text-xs text-gray-600 shrink-0">
+            <input type="checkbox" checked={selected.includes(opt)} onChange={() => onToggle(opt)} />
+            {opt}
+          </label>
+        ))}
+      </div>
     </div>
   );
 }
@@ -289,10 +338,19 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
   const [categories, setCategories] = useState<string[]>([]);
   const [minClassName, setMinClassName] = useState('');
   const [svcStatNm, setSvcStatNm] = useState('');
-  const [categoryMin, setCategoryMin] = useState('');
-  const [missingCategoryMin, setMissingCategoryMin] = useState(false);
-  const [targetAudience, setTargetAudience] = useState('');
-  const [missingTargetAudience, setMissingTargetAudience] = useState(false);
+  // [행사 데이터 수집/정제 파이프라인 및 홈 피드 필터링 개선](2026-08-27) 사용자 지시 4번:
+  // 체크박스를 누를 때마다 즉시 쿼리가 나가지 않도록, 선택 상태를 "대기(pending)"와
+  // "적용(applied)" 두 단계로 나눈다 — 체크박스는 pending만 바꾸고, 실제 조회 파라미터/
+  // fetch effect는 applied만 바라본다. [조회하기] 버튼을 눌러야 pending → applied로 반영되어
+  // 그 순간 단 한 번만 쿼리가 실행된다. 다른 필터(검색어/칩/토글)는 기존처럼 즉시 반영이라
+  // 이 두 필터만 별도로 관리한다.
+  const [pendingCategoryMin, setPendingCategoryMin] = useState<string[]>([]);
+  const [appliedCategoryMin, setAppliedCategoryMin] = useState<string[]>([]);
+  const [pendingTargetAudience, setPendingTargetAudience] = useState<string[]>([]);
+  const [appliedTargetAudience, setAppliedTargetAudience] = useState<string[]>([]);
+  const hasPendingFilterChanges =
+    pendingCategoryMin.join(',') !== appliedCategoryMin.join(',') ||
+    pendingTargetAudience.join(',') !== appliedTargetAudience.join(',');
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
   // [0순위 우선 요청](2026-08-26): "기본 조회 조건에 WHERE is_active = true를 적용" — 다른
   // tri-state 필터와 달리 기본값이 'all'이 아니라 'true'다(비활성 만료 데이터가 기본적으로
@@ -320,10 +378,10 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     setCategories([]);
     setMinClassName('');
     setSvcStatNm('');
-    setCategoryMin('');
-    setMissingCategoryMin(false);
-    setTargetAudience('');
-    setMissingTargetAudience(false);
+    setPendingCategoryMin([]);
+    setAppliedCategoryMin([]);
+    setPendingTargetAudience([]);
+    setAppliedTargetAudience([]);
     setIsActive('true');
     setIsFree('all');
     setHasParking('all');
@@ -346,7 +404,15 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedQ, sourceTypes, sources, categories, minClassName, svcStatNm, categoryMin, missingCategoryMin, targetAudience, missingTargetAudience, isActive, isFree, hasParking, strollerAccessible, isKidsFriendly, missingLocation, missingFee]);
+  }, [debouncedQ, sourceTypes, sources, categories, minClassName, svcStatNm, appliedCategoryMin, appliedTargetAudience, isActive, isFree, hasParking, strollerAccessible, isKidsFriendly, missingLocation, missingFee]);
+
+  // [행사 데이터 수집/정제 파이프라인 및 홈 피드 필터링 개선](2026-08-27) 사용자 지시 4번:
+  // [조회하기] 버튼 클릭 시 pending → applied로 한 번에 반영한다 — 이 시점에만 아래 fetch
+  // effect가 재실행된다(체크박스를 누르는 매 순간이 아니라).
+  const applyPendingFilters = () => {
+    setAppliedCategoryMin(pendingCategoryMin);
+    setAppliedTargetAudience(pendingTargetAudience);
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -361,10 +427,8 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     if (categories.length > 0) params.set('category', categories.join(','));
     if (minClassName) params.set('min_class_name', minClassName);
     if (svcStatNm) params.set('svc_stat_nm', svcStatNm);
-    if (categoryMin) params.set('category_min', categoryMin);
-    if (missingCategoryMin) params.set('missing_category_min', 'true');
-    if (tab === 'events' && targetAudience) params.set('target_audience', targetAudience);
-    if (tab === 'events' && missingTargetAudience) params.set('missing_target_audience', 'true');
+    if (appliedCategoryMin.length > 0) params.set('category_min', appliedCategoryMin.join(','));
+    if (tab === 'events' && appliedTargetAudience.length > 0) params.set('target_audience', appliedTargetAudience.join(','));
     if (tab === 'events') params.set('is_active', isActive);
     if (isFree !== 'all') params.set('is_free', isFree);
     if (hasParking !== 'all') params.set('has_parking', hasParking);
@@ -397,7 +461,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, debouncedQ, sourceTypes, sources, categories, minClassName, svcStatNm, categoryMin, missingCategoryMin, targetAudience, missingTargetAudience, isActive, isFree, hasParking, strollerAccessible, isKidsFriendly, missingLocation, missingFee, page, pageSize]);
+  }, [tab, debouncedQ, sourceTypes, sources, categories, minClassName, svcStatNm, appliedCategoryMin, appliedTargetAudience, isActive, isFree, hasParking, strollerAccessible, isKidsFriendly, missingLocation, missingFee, page, pageSize]);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
   const currentOptions = filterOptions[tab];
@@ -482,31 +546,15 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
         )}
 
         {tab !== 'raw_ingest_data' && 'categoryMins' in currentOptions && (
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-1.5 text-xs text-gray-500">
-              표준 중분류(category_min)
-              <select
-                value={categoryMin}
-                onChange={(e) => setCategoryMin(e.target.value)}
-                className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
-              >
-                <option value="">전체</option>
-                {currentOptions.categoryMins.map((v) => (
-                  <option key={v} value={v}>
-                    {v}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex items-center gap-1.5 text-xs text-gray-500">
-              <input
-                type="checkbox"
-                checked={missingCategoryMin}
-                onChange={(e) => setMissingCategoryMin(e.target.checked)}
-              />
-              중분류 NULL만 보기
-            </label>
-          </div>
+          <CheckboxMultiSelect
+            label="표준 중분류(category_min)"
+            options={currentOptions.categoryMins}
+            selected={pendingCategoryMin}
+            includeNullOption
+            onToggle={(v) =>
+              setPendingCategoryMin((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]))
+            }
+          />
         )}
 
         {tab !== 'raw_ingest_data' && 'minClassNames' in currentOptions && (
@@ -551,30 +599,33 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
         )}
 
         {tab === 'events' && (
-          <div className="flex flex-wrap items-center gap-3">
-            <label className="flex items-center gap-1.5 text-xs text-gray-500">
-              타겟 연령(target_audience)
-              <select
-                value={targetAudience}
-                onChange={(e) => setTargetAudience(e.target.value)}
-                className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
-              >
-                <option value="">전체</option>
-                {TARGET_AUDIENCE_TAGS.map((tag) => (
-                  <option key={tag} value={tag}>
-                    {tag}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex items-center gap-1.5 text-xs text-gray-500">
-              <input
-                type="checkbox"
-                checked={missingTargetAudience}
-                onChange={(e) => setMissingTargetAudience(e.target.checked)}
-              />
-              타겟 연령 NULL만 보기
-            </label>
+          <CheckboxMultiSelect
+            label="타겟 연령(target_audience)"
+            options={[...TARGET_AUDIENCE_TAGS]}
+            selected={pendingTargetAudience}
+            includeNullOption
+            onToggle={(v) =>
+              setPendingTargetAudience((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]))
+            }
+          />
+        )}
+
+        {tab !== 'raw_ingest_data' && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={applyPendingFilters}
+              className={`text-xs font-semibold rounded-full px-3 py-1.5 transition-colors ${
+                hasPendingFilterChanges ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-gray-100 text-gray-500'
+              }`}
+            >
+              🔍 조회하기
+            </button>
+            {hasPendingFilterChanges && (
+              <span className="text-[11px] text-amber-600">
+                중분류/타겟 연령 선택이 변경됐습니다 — 조회하기를 눌러야 반영됩니다.
+              </span>
+            )}
           </div>
         )}
 
