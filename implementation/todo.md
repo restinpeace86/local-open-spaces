@@ -127,3 +127,14 @@
     1. **마이그레이션 스크립트 작성**: 승인된 3건의 룰을 반영한 실제 DB UPDATE 스크립트 작성 (`scripts/migrations/category_min_update.mjs`).
     2. **`is_active = true` 활성 데이터 대상 UPDATE 실행**: 실제 DB의 `events.category_min` 컬럼에 승인된 매핑 결과 실데이터 반영 수행.
     3. **결과 검증 및 리포트**: 실행 후 NULL 잔여 건수 최종 확인 및 `npx tsc --noEmit` 타입 검증 완료 후 `implementation/` 결과 문서 작성.
+   
+   
+- [ ] **[gg_public `CATEGORY_NM` 기반 중분류 추가 매핑 보완 및 본 데이터 반영]**
+  - **[작업 목표]**
+    1. **`gg_public` 원천 필드 분석**: `gg_public` 데이터의 `raw_data` 내에 존재하는 `CATEGORY_NM` (예: "교육" 등) 값을 전수 스캔한다.
+    2. **표준 `category_min` 매핑 룰 확장**: `gg_public`의 `CATEGORY_NM` 값을 기존 표준 중분류 체계와 1:1 또는 유의미하게 매핑하는 규칙을 추가 정의한다.
+    3. **마이그레이션 스크립트 보완 및 실행**: 해당 룰을 반영한 업데이트 스크립트를 작성하여 `gg_public` 데이터의 `category_min` NULL 잔여 건수를 추가로 해소한다.
+  - **[상세 작업 내용]**
+    1. `scripts/migrations/gg_public_category_min_patch.mjs` 스크립트 작성.
+    2. `is_active = true`인 `gg_public` 데이터 대상 `category_min` UPDATE 실행.
+    3. 최종 NULL 잔여 건수 재측정 및 `npx tsc --noEmit` 검증.
