@@ -624,6 +624,67 @@ export async function getCurrentlyOngoingEvents(
   return sortByCategoryMinPriority(regionOrdered, limit).slice(0, limit);
 }
 
+// [전체보기 페이지](2026-08-27 사용자 지시): 홈 미리보기(getCurrentlyOngoingEvents/
+// getReservationOpenEvents)는 "몇 개만 보여주고 끝"이라 전체를 확인할 방법이 없다는 지적 —
+// Hero Carousel의 "오늘 전체보기"(/events/today)와 동일하게, 두 섹션에도 실제 DB 페이지네이션
+// (.range())으로 전부 훑어볼 수 있는 전용 페이지를 만든다. 미리보기와 달리 지역/거리 큐레이션
+// (Strict Location-First, 카드 순서 우선순위)은 적용하지 않는다 — "전부 보여달라"는 목적과
+// "일부를 앞으로 당겨 보여주는" 큐레이션은 상충하므로, 여기서는 안정적인 페이지 경계를 위해
+// start_date 오름차순 단일 정렬만 쓴다. 같은 이유로 제목 유사 병합(dedupeAndMergeFree)도 하지
+// 않는다 — 오프셋 페이지네이션과 사후 병합을 같이 쓰면 페이지마다 건수가 들쭉날쭉해진다.
+export type PagedEvents = { items: NearbyItem[]; total: number };
+
+const BROWSE_ALL_PAGE_SIZE = 24;
+
+export async function getCurrentlyOngoingEventsPage(page = 1, pageSize = BROWSE_ALL_PAGE_SIZE): Promise<PagedEvents> {
+  const supabase = await createClient();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const from = (page - 1) * pageSize;
+  const { data, error, count } = await supabase
+    .from('events')
+    .select(EVENT_COLUMNS, { count: 'exact' })
+    .eq('is_active', true)
+    .in('target_audience', EVENT_PICK_TARGET_AUDIENCES)
+    .not('category_min', 'is', null)
+    .not('category_min', 'in', EXCLUDED_CATEGORY_MIN_FILTER)
+    .lte('start_date', today)
+    .gte('end_date', today)
+    .order('start_date', { ascending: true })
+    .range(from, from + pageSize - 1);
+
+  if (error) throw new Error(error.message);
+
+  return { items: ((data ?? []) as EventRow[]).map(toEventItem), total: count ?? 0 };
+}
+
+export async function getReservationOpenEventsPage(page = 1, pageSize = BROWSE_ALL_PAGE_SIZE): Promise<PagedEvents> {
+  const supabase = await createClient();
+  const today = new Date().toISOString().slice(0, 10);
+
+  // getReservationOpenEvents의 두 조건(booking_status='접수중' OR SEOUL_YEYAK 원본
+  // SVCSTATNM='접수중')을 별도 쿼리 두 번 + 병합이 아니라 하나의 or() 그룹으로 합친다 —
+  // 오프셋 페이지네이션은 "정확한 count와 안정적인 페이지 경계"가 필요한데, 두 쿼리를 따로
+  // 페이지네이션한 뒤 합치면 그 두 조건을 다 만족할 수 없다(제5장 제5조 데이터 중심 —
+  // count(*)가 실제 화면과 어긋나면 안 됨).
+  const from = (page - 1) * pageSize;
+  const { data, error, count } = await supabase
+    .from('events')
+    .select(EVENT_COLUMNS, { count: 'exact' })
+    .eq('is_active', true)
+    .in('target_audience', EVENT_PICK_TARGET_AUDIENCES)
+    .not('category_min', 'is', null)
+    .not('category_min', 'in', EXCLUDED_CATEGORY_MIN_FILTER)
+    .gte('end_date', today)
+    .or(`booking_status.eq.접수중,and(source.eq.seoul_public_reservation,raw_data->>SVCSTATNM.eq.접수중)`)
+    .order('start_date', { ascending: true })
+    .range(from, from + pageSize - 1);
+
+  if (error) throw new Error(error.message);
+
+  return { items: ((data ?? []) as EventRow[]).map(toEventItem), total: count ?? 0 };
+}
+
 // [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "GNB 헤더 & 글로벌 위치 상태 공유"):
 // 이벤트픽 검색은 events 테이블 전용으로 수행한다(스팟픽의 open_spaces 검색과 분리) — 검색은
 // 사용자가 이름을 직접 아는 상태로 찾는 행위라 지역 제한을 걸지 않는다(다른 피드 함수들과

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { useUserLocation } from '@/hooks/use-user-location';
 import { HomeHeader } from '@/components/home/home-header';
@@ -334,20 +335,38 @@ export function HomeView({
                 이용 가능"(오늘이 start_date~end_date 진행 기간 안에 있는 행사, 예약 여부와
                 무관) 섹션을 추가한다. 0건이면 섹션 자체를 숨긴다(다른 섹션과 동일한 가변
                 노출 원칙). ReservationOpenSlider는 단순 가로 스크롤 카드 목록 컴포넌트라
-                items만 바꿔 그대로 재사용한다(제5장 제4조 기존 구조 우선). */}
+                items만 바꿔 그대로 재사용한다(제5장 제4조 기존 구조 우선).
+                [전체보기 페이지](2026-08-27 후속 지시): 미리보기가 최대 20건만 보여주고
+                끝나는 게 이상하다는 지적 — Hero Carousel의 "오늘 전체보기"와 동일하게
+                전용 페이지(/events/ongoing)로 가는 링크를 추가한다. */}
             {currentlyOngoingEvents.length > 0 && (
               <section aria-label="현재 이용 가능">
-                <h2 className="text-base font-bold text-gray-900 mb-3 px-4">✅ 현재 이용 가능</h2>
+                <div className="flex items-center justify-between mb-3 px-4">
+                  <h2 className="text-base font-bold text-gray-900">✅ 현재 이용 가능</h2>
+                  <Link href="/events/ongoing" className="text-xs font-semibold text-gray-500 hover:text-gray-800">
+                    전체보기 →
+                  </Link>
+                </div>
                 <ReservationOpenSlider items={currentlyOngoingEvents} onSelect={setSelectedItem} />
               </section>
             )}
 
             {/* [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "당일 예약 필요 카드
                 구역")/[이벤트픽 화면 개편](2026-08-27 사용자 지시로 "예약 가능"으로 개칭):
-                접수중인 이벤트가 없으면 섹션 자체를 숨긴다(Hero와 동일한 가변 노출 원칙). */}
+                접수중인 이벤트가 없으면 섹션 자체를 숨긴다(Hero와 동일한 가변 노출 원칙).
+                [전체보기 페이지](2026-08-27 후속 지시): /events/reservation-open로 가는
+                전체보기 링크 추가. */}
             {reservationOpenEvents.length > 0 && (
               <section aria-label="예약 가능">
-                <h2 className="text-base font-bold text-gray-900 mb-3 px-4">📋 예약 가능</h2>
+                <div className="flex items-center justify-between mb-3 px-4">
+                  <h2 className="text-base font-bold text-gray-900">📋 예약 가능</h2>
+                  <Link
+                    href="/events/reservation-open"
+                    className="text-xs font-semibold text-gray-500 hover:text-gray-800"
+                  >
+                    전체보기 →
+                  </Link>
+                </div>
                 <ReservationOpenSlider items={reservationOpenEvents} onSelect={setSelectedItem} />
               </section>
             )}

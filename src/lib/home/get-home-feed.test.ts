@@ -1083,6 +1083,158 @@ describe('getCurrentlyOngoingEvents', () => {
   });
 });
 
+// [전체보기 페이지](2026-08-27 사용자 지시): 미리보기가 최대 20건만 보여주고 끝나는 문제 —
+// 실제 DB 페이지네이션(.range(), count:'exact')으로 전부 훑어볼 수 있어야 한다. 이 기능
+// 전용으로 range()/count를 지원하는 별도 스텁을 쓴다(makeFilteringChainable은 range를
+// 지원하지 않음).
+function evalSimpleCondition(row: Record<string, unknown>, cond: string): boolean {
+  const [column, operator, ...rest] = cond.split('.');
+  const rawValue = rest.join('.');
+  if (operator === 'eq') return String(row[column]) === rawValue;
+  return false;
+}
+
+// and(...)로 묶인 그룹(booking_status OR (source AND raw_data->>SVCSTATNM))만 이 테스트
+// 스위트에서 필요해, 그 형태만 최소한으로 해석한다.
+function matchesOrGroup(row: Record<string, unknown>, group: string): boolean {
+  const topConditions: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const ch of group) {
+    if (ch === '(') depth += 1;
+    if (ch === ')') depth -= 1;
+    if (ch === ',' && depth === 0) {
+      topConditions.push(current);
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  if (current) topConditions.push(current);
+
+  return topConditions.some((cond) => {
+    const andMatch = cond.match(/^and\((.*)\)$/);
+    if (andMatch) {
+      const inner = andMatch[1].split(',');
+      return inner.every((c) => evalSimpleCondition(row, c));
+    }
+    return evalSimpleCondition(row, cond);
+  });
+}
+
+function makeRangeChainable(rows: Array<Record<string, unknown>>) {
+  const eqFilters: Record<string, unknown> = {};
+  const inFilters: Record<string, unknown[]> = {};
+  const notNullFilters: string[] = [];
+  const gteFilters: Record<string, unknown> = {};
+  const lteFilters: Record<string, unknown> = {};
+  const orFilterGroups: string[] = [];
+  const builder: Record<string, unknown> = {};
+  builder.select = () => builder;
+  builder.eq = (column: string, value: unknown) => {
+    eqFilters[column] = value;
+    return builder;
+  };
+  builder.in = (column: string, values: unknown[]) => {
+    inFilters[column] = values;
+    return builder;
+  };
+  builder.not = (column: string, operator: string, value: unknown) => {
+    if (operator === 'is' && value === null) notNullFilters.push(column);
+    return builder;
+  };
+  builder.gte = (column: string, value: unknown) => {
+    gteFilters[column] = value;
+    return builder;
+  };
+  builder.lte = (column: string, value: unknown) => {
+    lteFilters[column] = value;
+    return builder;
+  };
+  builder.or = (expr: string) => {
+    orFilterGroups.push(expr);
+    return builder;
+  };
+  builder.order = () => builder;
+  builder.range = (from: number, to: number) => {
+    let filtered = rows;
+    filtered = filtered.filter((row) => Object.entries(eqFilters).every(([col, val]) => row[col] === val));
+    filtered = filtered.filter((row) =>
+      Object.entries(inFilters).every(([col, vals]) => vals.includes(row[col]))
+    );
+    filtered = filtered.filter((row) => notNullFilters.every((col) => row[col] !== null && row[col] !== undefined));
+    filtered = filtered.filter((row) =>
+      Object.entries(gteFilters).every(([col, val]) => row[col] !== null && String(row[col]) >= String(val))
+    );
+    filtered = filtered.filter((row) =>
+      Object.entries(lteFilters).every(([col, val]) => row[col] !== null && String(row[col]) <= String(val))
+    );
+    for (const group of orFilterGroups) {
+      filtered = filtered.filter((row) => matchesOrGroup(row, group));
+    }
+
+    const total = filtered.length;
+    return Promise.resolve({ data: filtered.slice(from, to + 1), error: null, count: total });
+  };
+  return builder;
+}
+
+describe('getCurrentlyOngoingEventsPage', () => {
+  afterEach(() => {
+    vi.doUnmock('@/lib/supabase/server');
+    vi.resetModules();
+  });
+
+  it('page/pageSize에 맞춰 .range()로 잘라 반환하고 정확한 total을 함께 준다', async () => {
+    const rows = Array.from({ length: 30 }, (_, i) =>
+      eventRow({ id: `ongoing-${i}`, title: `행사 ${i}`, is_active: true })
+    );
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeRangeChainable(rows) }),
+    }));
+
+    const { getCurrentlyOngoingEventsPage } = await import('./get-home-feed');
+    const page1 = await getCurrentlyOngoingEventsPage(1, 10);
+    const page2 = await getCurrentlyOngoingEventsPage(2, 10);
+
+    expect(page1.total).toBe(30);
+    expect(page1.items).toHaveLength(10);
+    expect(page2.items).toHaveLength(10);
+    expect(page1.items.map((i) => i.id)).not.toEqual(page2.items.map((i) => i.id));
+  });
+});
+
+describe('getReservationOpenEventsPage', () => {
+  afterEach(() => {
+    vi.doUnmock('@/lib/supabase/server');
+    vi.resetModules();
+  });
+
+  it('booking_status="접수중"과 SEOUL_YEYAK SVCSTATNM="접수중" 둘 다 하나의 페이지에 포함한다', async () => {
+    const statusOpen = eventRow({ id: 'status-open', title: '일반 접수중', booking_status: '접수중', is_active: true });
+    const yeyakOpen = eventRow({
+      id: 'yeyak-open',
+      title: 'YEYAK 접수중',
+      booking_status: null,
+      is_active: true,
+      source: 'seoul_public_reservation',
+      'raw_data->>SVCSTATNM': '접수중',
+    });
+    const closed = eventRow({ id: 'closed', title: '마감', booking_status: '접수마감', is_active: true });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeRangeChainable([statusOpen, yeyakOpen, closed]) }),
+    }));
+
+    const { getReservationOpenEventsPage } = await import('./get-home-feed');
+    const result = await getReservationOpenEventsPage(1, 10);
+
+    expect(result.items.map((i) => i.id).sort()).toEqual(['status-open', 'yeyak-open']);
+    expect(result.total).toBe(2);
+  });
+});
+
 // [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "GNB 헤더 & 검색")
 describe('searchEvents', () => {
   afterEach(() => {
