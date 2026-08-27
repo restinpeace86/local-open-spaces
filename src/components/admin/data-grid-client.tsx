@@ -96,8 +96,6 @@ type FilterOptions = {
   raw_ingest_data: { sources: string[] };
 };
 
-type SummaryMetrics = Record<string, number | null>;
-
 type TriState = 'all' | 'true' | 'false';
 const TRI_STATE_LABEL: Record<TriState, string> = { all: '전체', true: '예', false: '아니오' };
 
@@ -300,36 +298,8 @@ function TargetAudienceBadge({ targetAudience, source }: { targetAudience: strin
   );
 }
 
-function MetricCard({ label, value, sub }: { label: string; value: number | null; sub?: string }) {
-  return (
-    <div className="rounded-xl border border-gray-200 px-3 py-2 min-w-[110px]">
-      <p className="text-[11px] text-gray-500">{label}</p>
-      <p className="text-lg font-bold text-gray-900">
-        {value === null ? <span className="text-sm text-gray-300">집계 지연</span> : value.toLocaleString('ko-KR')}
-      </p>
-      {sub && <p className="text-[10px] text-gray-400">{sub}</p>}
-    </div>
-  );
-}
-
 export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOptions }) {
   const [tab, setTab] = useState<AdminTable>('open_spaces');
-
-  const [summary, setSummary] = useState<SummaryMetrics | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    fetch('/api/admin/data-grid/summary')
-      .then((res) => res.json())
-      .then((json: SummaryMetrics) => {
-        if (!cancelled) setSummary(json);
-      })
-      .catch(() => {
-        if (!cancelled) setSummary({});
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const [q, setQ] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
@@ -337,7 +307,6 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
   const [sources, setSources] = useState<string[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [minClassName, setMinClassName] = useState('');
-  const [svcStatNm, setSvcStatNm] = useState('');
   // [행사 데이터 수집/정제 파이프라인 및 홈 피드 필터링 개선](2026-08-27) 사용자 지시 4번:
   // 체크박스를 누를 때마다 즉시 쿼리가 나가지 않도록, 선택 상태를 "대기(pending)"와
   // "적용(applied)" 두 단계로 나눈다 — 체크박스는 pending만 바꾸고, 실제 조회 파라미터/
@@ -356,12 +325,6 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
   // tri-state 필터와 달리 기본값이 'all'이 아니라 'true'다(비활성 만료 데이터가 기본적으로
   // 섞여 나오지 않도록). events 탭에만 의미가 있다(open_spaces에는 is_active 컬럼이 없음).
   const [isActive, setIsActive] = useState<TriState>('true');
-  const [isFree, setIsFree] = useState<TriState>('all');
-  const [hasParking, setHasParking] = useState<TriState>('all');
-  const [strollerAccessible, setStrollerAccessible] = useState<TriState>('all');
-  const [isKidsFriendly, setIsKidsFriendly] = useState<TriState>('all');
-  const [missingLocation, setMissingLocation] = useState(false);
-  const [missingFee, setMissingFee] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0]);
 
@@ -377,18 +340,11 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     setSources([]);
     setCategories([]);
     setMinClassName('');
-    setSvcStatNm('');
     setPendingCategoryMin([]);
     setAppliedCategoryMin([]);
     setPendingTargetAudience([]);
     setAppliedTargetAudience([]);
     setIsActive('true');
-    setIsFree('all');
-    setHasParking('all');
-    setStrollerAccessible('all');
-    setIsKidsFriendly('all');
-    setMissingLocation(false);
-    setMissingFee(false);
   };
 
   const switchTab = (next: AdminTable) => {
@@ -404,7 +360,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedQ, sourceTypes, sources, categories, minClassName, svcStatNm, appliedCategoryMin, appliedTargetAudience, isActive, isFree, hasParking, strollerAccessible, isKidsFriendly, missingLocation, missingFee]);
+  }, [debouncedQ, sourceTypes, sources, categories, minClassName, appliedCategoryMin, appliedTargetAudience, isActive]);
 
   // [행사 데이터 수집/정제 파이프라인 및 홈 피드 필터링 개선](2026-08-27) 사용자 지시 4번:
   // [조회하기] 버튼 클릭 시 pending → applied로 한 번에 반영한다 — 이 시점에만 아래 fetch
@@ -426,16 +382,9 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     if (sources.length > 0) params.set('source', sources.join(','));
     if (categories.length > 0) params.set('category', categories.join(','));
     if (minClassName) params.set('min_class_name', minClassName);
-    if (svcStatNm) params.set('svc_stat_nm', svcStatNm);
     if (appliedCategoryMin.length > 0) params.set('category_min', appliedCategoryMin.join(','));
     if (tab === 'events' && appliedTargetAudience.length > 0) params.set('target_audience', appliedTargetAudience.join(','));
     if (tab === 'events') params.set('is_active', isActive);
-    if (isFree !== 'all') params.set('is_free', isFree);
-    if (hasParking !== 'all') params.set('has_parking', hasParking);
-    if (strollerAccessible !== 'all') params.set('stroller_accessible', strollerAccessible);
-    if (isKidsFriendly !== 'all') params.set('is_kids_friendly', isKidsFriendly);
-    if (missingLocation) params.set('missing_location', 'true');
-    if (missingFee) params.set('missing_fee', 'true');
     params.set('page', String(page));
     params.set('page_size', String(pageSize));
 
@@ -461,7 +410,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, debouncedQ, sourceTypes, sources, categories, minClassName, svcStatNm, appliedCategoryMin, appliedTargetAudience, isActive, isFree, hasParking, strollerAccessible, isKidsFriendly, missingLocation, missingFee, page, pageSize]);
+  }, [tab, debouncedQ, sourceTypes, sources, categories, minClassName, appliedCategoryMin, appliedTargetAudience, isActive, page, pageSize]);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
   const currentOptions = filterOptions[tab];
@@ -483,17 +432,6 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
               필터 초기화
             </button>
           </div>
-        </div>
-
-        {/* 1. 요약 메트릭 카드 */}
-        <div className="flex flex-wrap gap-2">
-          <MetricCard label="open_spaces 총 건수" value={summary?.open_spaces_count ?? null} />
-          <MetricCard label="events 총 건수" value={summary?.events_count ?? null} />
-          <MetricCard label="raw_ingest_data 총 건수" value={summary?.raw_ingest_data_count ?? null} />
-          <MetricCard label="위치/좌표 NULL" value={(summary?.open_spaces_missing_location ?? 0) + (summary?.events_missing_location ?? 0)} sub="open_spaces+events" />
-          <MetricCard label="주소 NULL(open_spaces)" value={summary?.open_spaces_missing_address ?? null} />
-          <MetricCard label="요금 NULL" value={(summary?.open_spaces_missing_fee ?? 0) + (summary?.events_missing_fee ?? 0)} sub="open_spaces+events" />
-          <MetricCard label="예약/정보 URL NULL" value={(summary?.open_spaces_missing_url ?? 0) + (summary?.events_missing_reservation_url ?? 0)} sub="open_spaces+events" />
         </div>
 
         {/* 2. 탭 구성 */}
@@ -574,21 +512,6 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                 ))}
               </select>
             </label>
-            <label className="flex items-center gap-1.5 text-xs text-gray-500">
-              접수/이용 상태
-              <select
-                value={svcStatNm}
-                onChange={(e) => setSvcStatNm(e.target.value)}
-                className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
-              >
-                <option value="">전체</option>
-                {currentOptions.svcStatNms.map((v) => (
-                  <option key={v} value={v}>
-                    {v}
-                  </option>
-                ))}
-              </select>
-            </label>
           </div>
         )}
 
@@ -629,22 +552,6 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
           </div>
         )}
 
-        {tab !== 'raw_ingest_data' && (
-          <div className="flex flex-wrap gap-x-4 gap-y-2">
-            <TriStateToggle label="무료" value={isFree} onChange={setIsFree} />
-            <TriStateToggle label="🅿️ 주차" value={hasParking} onChange={setHasParking} />
-            <TriStateToggle label="👶 유모차" value={strollerAccessible} onChange={setStrollerAccessible} />
-            <TriStateToggle label="🛝 키즈친화" value={isKidsFriendly} onChange={setIsKidsFriendly} />
-            <label className="flex items-center gap-1.5 text-xs text-gray-500">
-              <input type="checkbox" checked={missingLocation} onChange={(e) => setMissingLocation(e.target.checked)} />
-              주소/좌표 NULL만 보기
-            </label>
-            <label className="flex items-center gap-1.5 text-xs text-gray-500">
-              <input type="checkbox" checked={missingFee} onChange={(e) => setMissingFee(e.target.checked)} />
-              요금 NULL만 보기
-            </label>
-          </div>
-        )}
       </div>
 
       {/* 4. 테이블 그리드 */}
