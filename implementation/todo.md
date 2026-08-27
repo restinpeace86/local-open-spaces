@@ -110,3 +110,13 @@
     1. **중분류 원천 필드 분석 스크립트 작성**: `raw_data` 내 중분류 키/값 패턴 및 분포를 스캔하는 시뮬레이션 스크립트 작성 (`scripts/simulations/category_mid_dryrun.ts`).
     2. **`is_active = true` 활성 데이터 대상 Dry-run 실행**: 실제 DB 수정 없이 매핑 결과 통계 산출.
     3. **검증 및 리포트 작성**: 시뮬레이션 결과 검토 후 대표님 보고 및 승인 요청 절차 준비.
+    4. 
+- [ ] **[1단계 중분류(Category Min) 본 데이터 UPDATE 마이그레이션 실행]**
+  - **[대표 승인 완료 사항 (3건)]**
+    1. **`seoul_public_reservation`**: `MINCLASSNM` 원천 필드(청년정보, 봉사활동 등 포함) 0순위 적용을 통한 NULL 100% 해소 및 본 데이터 반영.
+    2. **`seoul_public_culture`**: `CODENAME` 정제 제안 매핑 규칙을 적용하여 중분류 산발 매칭 방지 및 NULL 최소화(2.61% 수준) 반영.
+    3. **`gg_public` / `tourapi_4.0`**: 승인된 방침에 따른 예외 처리 및 보완 반영.
+  - **[상세 작업 내용]**
+    1. **마이그레이션 스크립트 작성**: 승인된 3건의 룰을 반영한 실제 DB UPDATE 스크립트 작성 (`scripts/migrations/category_min_update.mjs`).
+    2. **`is_active = true` 활성 데이터 대상 UPDATE 실행**: 실제 DB의 `events.category_min` 컬럼에 승인된 매핑 결과 실데이터 반영 수행.
+    3. **결과 검증 및 리포트**: 실행 후 NULL 잔여 건수 최종 확인 및 `npx tsc --noEmit` 타입 검증 완료 후 `implementation/` 결과 문서 작성.
