@@ -12,12 +12,23 @@
    - 작업 완료 시 관련 테스트/빌드를 검증하고 `todo.md` 내 체크박스(`[x]`) 및 진행 상태를 최신화한다.
 
 ---
-- [ ] **[최신 `spec.md` 동기화 및 이벤트픽(Event Pick) 데이터 파이프라인 연동]**
-  - **[작업 목표]**
-    1. **`git pull` 및 명세 동기화**: 원격 저장소로부터 최신 `docs/spec.md` 및 관련 명세 변경 사항을 병합(pull)하여 정합성을 맞춘다.
-    2. **이벤트픽 조회 파이프라인 적용**: 앞서 반영된 10대 타겟 연령 체계와 정제된 중분류(`category_min`), 그리고 화면 노출 3대 조건(`is_active = true`, 타겟 연령 조건, 중분류 널값 제외)을 이벤트픽 조회 API 및 쿼리 파이프라인에 완전 장착한다.
-    3. **화면 렌더링 및 검증**: 이벤트픽 카드 영역에 정상적으로 데이터가 필터링 및 렌더링되는지 확인하고, 빌드 및 타입 검증을 수행한다.
-  - **[상세 작업 내용]**
-    1. `git pull` 실행 및 충돌 여부 확인.
-    2. 이벤트픽 조회 서비스 로직/쿼리(`src/services/` 또는 관련 API 라우트)에 최신 명세 반영.
-    3. `npx tsc --noEmit` 타입 검증 및 `npm run test` 전체 테스트 실행.
+- [x] **[최신 `spec.md` 동기화 및 이벤트픽(Event Pick) 데이터 파이프라인 연동]** — 완료(2026-08-27).
+  - **0. Pre-check**: `git pull` 결과 원격과 이미 동기화 상태(추가 변경 없음). `docs/spec.md` 1절
+    "이벤트픽 화면 노출 3대 기본 전제 조건"과 직전 완료 Task
+    (`implementation/2026-08-27-target-audience-10tier-real-application.md` 5절)이 스스로
+    명시한 "홈 피드 쿼리는 아직 category_min/target_audience 필터를 전혀 사용하지 않는다 —
+    이번 인덱스는 향후 홈 피드가 이 3조건 필터를 실제로 사용하게 될 때를 대비한 선제적
+    최적화" 기록을 확인, 본 Task가 정확히 그 후속 배선 작업임을 확인(홀드/상충 없음).
+  - **1. 구현**: `src/lib/home/get-home-feed.ts`의 이벤트픽 화면에 노출되는 모든 `events` 조회
+    쿼리(`getTodayEvents`, `getReservationOpenEvents`(2개 하위 쿼리), `searchEvents`,
+    `getProvinceWideEvents`, `getFreeFeed`의 events 분기, `getThemeSpotFeed`의 events 분기,
+    `getCategoryFeed`)에 `EVENT_PICK_TARGET_AUDIENCES`(`INFANT`/`KIDS_PRE`/`KIDS_SCHOOL`/
+    `FAMILY`/`ALL`) `.in()` 필터와 `category_min` `.not(is null)` 필터를 기존 `is_active=true`
+    조건 옆에 공통 추가. 스팟픽(`open_spaces`) 쿼리는 대상에서 제외(Decision 010 — 이벤트픽
+    전용 조건).
+  - **2. 검증**: `npx tsc --noEmit` clean, `npm run test` 470건 전부 통과(테스트 픽스처
+    `eventRow()`에 `target_audience`/`category_min` 기본값 추가 및 mock 빌더에 `.not()` 지원
+    추가), `npm run build` 성공. `npm run dev` 로컬 서버로 `/`, `/events/today`, `/nearby`,
+    `/api/home/feed`, `/api/home/category-feed`, `/api/home/free-feed`,
+    `/api/home/theme-feed`, `/api/home/search` 전부 200 응답 및 필터링된 실데이터 정상 반환
+    실측 확인.

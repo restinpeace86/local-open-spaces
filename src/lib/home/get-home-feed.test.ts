@@ -13,6 +13,7 @@ function makeChainable(result: { data: unknown[]; error: null }) {
   builder.gt = self;
   builder.eq = self;
   builder.in = self;
+  builder.not = self;
   builder.or = self;
   builder.order = self;
   builder.limit = () => Promise.resolve(result);
@@ -42,6 +43,7 @@ function makeSequentialFrom(dataSequence: unknown[][]) {
 function makeFilteringChainable(rows: Array<Record<string, unknown>>) {
   const eqFilters: Record<string, unknown> = {};
   const inFilters: Record<string, unknown[]> = {};
+  const notNullFilters: string[] = [];
   const orFilterGroups: string[] = [];
   const builder: Record<string, unknown> = {};
   builder.select = () => builder;
@@ -57,6 +59,12 @@ function makeFilteringChainable(rows: Array<Record<string, unknown>>) {
     inFilters[column] = values;
     return builder;
   };
+  // docs/spec.md 1: getFreeFeed/getCategoryFeed 등에서 쓰는 `.not(col, 'is', null)`(중분류
+  // 유효성 조건) 재현 — 이 스텁은 'is'/null 조합만 지원한다(실제 코드가 이 조합으로만 호출함).
+  builder.not = (column: string, operator: string, value: unknown) => {
+    if (operator === 'is' && value === null) notNullFilters.push(column);
+    return builder;
+  };
   builder.or = (expr: string) => {
     orFilterGroups.push(expr);
     return builder;
@@ -68,6 +76,9 @@ function makeFilteringChainable(rows: Array<Record<string, unknown>>) {
     }
     if (Object.keys(inFilters).length > 0) {
       filtered = filtered.filter((row) => Object.entries(inFilters).every(([col, vals]) => vals.includes(row[col])));
+    }
+    if (notNullFilters.length > 0) {
+      filtered = filtered.filter((row) => notNullFilters.every((col) => row[col] !== null && row[col] !== undefined));
     }
     for (const group of orFilterGroups) {
       const conditions = group.split(',').map((cond) => {
@@ -134,6 +145,10 @@ function eventRow(overrides: Record<string, unknown> = {}) {
     booking_status: '오늘방문',
     venue_name: '율동공원 야외무대',
     sigungu_name: '성남시 분당구',
+    // docs/spec.md 1: 이벤트픽 화면 노출 3대 조건(타겟 연령대 5대값 중 하나, 중분류 NOT NULL)을
+    // 기본으로 충족하는 값 — 이 조건 자체를 검증하는 테스트만 명시적으로 override한다.
+    target_audience: 'FAMILY',
+    category_min: '체험',
     ...overrides,
   };
 }
@@ -228,6 +243,7 @@ describe('getTodayEvents (Task 9-1-3: 거리 계산 없음 / Task 9-1-6: Strict 
       builder.gt = self;
       builder.eq = self;
       builder.in = self;
+      builder.not = self;
       builder.or = (expr: string) => {
         orCalls.push(expr);
         return builder;
@@ -938,6 +954,8 @@ describe('searchEvents', () => {
     builder.select = () => builder;
     builder.ilike = ilikeMock;
     builder.eq = () => builder;
+    builder.in = () => builder;
+    builder.not = () => builder;
     builder.gte = () => builder;
     builder.order = () => builder;
     builder.limit = () => Promise.resolve({ data: [row], error: null });

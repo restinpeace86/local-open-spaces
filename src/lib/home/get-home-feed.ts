@@ -41,6 +41,12 @@ export type HomeRegion = {
 // 그대로 계승한다(추측 없음). 위치 미설정 상태를 나타내므로 lat/lng는 일부러 넣지 않는다.
 export const DEFAULT_HOME_REGION: HomeRegion = { sigunguName: '성남시 분당구' };
 
+// docs/spec.md 1: "이벤트픽 화면 노출 3대 기본 전제 조건" 중 나머지 2개(활성화 상태 `is_active=true`는
+// 각 쿼리가 이미 개별로 건다) — 타겟 연령대(5대 값)와 중분류 유효성(NULL 아님)을 이벤트픽 화면에
+// 노출되는 모든 events 쿼리에 공통 적용한다. open_spaces(스팟픽)는 이 조건의 대상이 아니다
+// (Decision 010 — 스팟픽은 상시 공간 전용, 이벤트픽과 데이터 성격이 다름).
+const EVENT_PICK_TARGET_AUDIENCES = ['INFANT', 'KIDS_PRE', 'KIDS_SCHOOL', 'FAMILY', 'ALL'] as const;
+
 function extractCoords(location: unknown): { lng: number; lat: number } {
   const geometry = location as { coordinates: [number, number] } | null;
   return { lng: geometry?.coordinates?.[0] ?? 0, lat: geometry?.coordinates?.[1] ?? 0 };
@@ -418,6 +424,8 @@ export async function getTodayEvents(
       .select(EVENT_COLUMNS)
       .eq('end_date', today)
       .eq('is_active', true)
+      .in('target_audience', EVENT_PICK_TARGET_AUDIENCES)
+      .not('category_min', 'is', null)
       // 예약 필수이면서 이미 마감된 건은 DB 단에서 제외(마감 안 지난 것 OR 예약 불필요)
       .or(`is_reservation_required.eq.false,reservation_end_date.gte.${nowIso},reservation_end_date.is.null`);
     if (token) query = query.or(regionOrFilter(token, 'venue_name'));
@@ -455,6 +463,8 @@ export async function getReservationOpenEvents(
       .select(EVENT_COLUMNS)
       .eq('booking_status', '접수중')
       .eq('is_active', true)
+      .in('target_audience', EVENT_PICK_TARGET_AUDIENCES)
+      .not('category_min', 'is', null)
       .gte('end_date', today);
     if (token) query = query.or(regionOrFilter(token, 'venue_name'));
     return query.order('start_date', { ascending: false }).limit(500);
@@ -467,6 +477,8 @@ export async function getReservationOpenEvents(
       .eq('source', 'seoul_public_reservation')
       .eq('raw_data->>SVCSTATNM', '접수중')
       .eq('is_active', true)
+      .in('target_audience', EVENT_PICK_TARGET_AUDIENCES)
+      .not('category_min', 'is', null)
       .gte('end_date', today);
     if (token) query = query.or(regionOrFilter(token, 'venue_name'));
     return query.order('start_date', { ascending: false }).limit(500);
@@ -511,6 +523,8 @@ export async function searchEvents(keyword: string, limit = 30): Promise<NearbyI
     .select(EVENT_COLUMNS)
     .ilike('title', `%${keyword}%`)
     .eq('is_active', true)
+    .in('target_audience', EVENT_PICK_TARGET_AUDIENCES)
+    .not('category_min', 'is', null)
     .gte('end_date', today)
     .order('start_date', { ascending: false })
     .limit(limit);
@@ -589,6 +603,8 @@ export async function getProvinceWideEvents(limit = 12): Promise<NearbyItem[]> {
     .select(EVENT_COLUMNS)
     .eq('location_precision', 'UNKNOWN')
     .eq('is_active', true)
+    .in('target_audience', EVENT_PICK_TARGET_AUDIENCES)
+    .not('category_min', 'is', null)
     .gte('end_date', today)
     .order('start_date', { ascending: true })
     .limit(limit);
@@ -615,7 +631,13 @@ export async function getFreeFeed(
   };
 
   const buildEventsQuery = (token: string | readonly string[] | null) => {
-    let query = supabase.from('events').select(EVENT_COLUMNS).eq('is_free', true).eq('is_active', true);
+    let query = supabase
+      .from('events')
+      .select(EVENT_COLUMNS)
+      .eq('is_free', true)
+      .eq('is_active', true)
+      .in('target_audience', EVENT_PICK_TARGET_AUDIENCES)
+      .not('category_min', 'is', null);
     if (token) query = query.or(regionOrFilter(token, 'venue_name'));
     return query.order('start_date', { ascending: false }).limit(500);
   };
@@ -687,6 +709,8 @@ export async function getThemeSpotFeed(
           .from('events')
           .select(EVENT_COLUMNS)
           .eq('is_active', true)
+          .in('target_audience', EVENT_PICK_TARGET_AUDIENCES)
+          .not('category_min', 'is', null)
           .lte('start_date', today)
           .gte('end_date', today)
           .or(eventKeywordFilter)
@@ -736,6 +760,8 @@ export async function getCategoryFeed(
       .select(EVENT_COLUMNS)
       .eq('event_type', category)
       .eq('is_active', true)
+      .in('target_audience', EVENT_PICK_TARGET_AUDIENCES)
+      .not('category_min', 'is', null)
       .lte('start_date', today)
       .gte('end_date', today);
     if (token) query = query.or(regionOrFilter(token, 'venue_name'));
