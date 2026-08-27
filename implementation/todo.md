@@ -129,12 +129,37 @@
     3. **결과 검증 및 리포트**: 실행 후 NULL 잔여 건수 최종 확인 및 `npx tsc --noEmit` 타입 검증 완료 후 `implementation/` 결과 문서 작성.
    
    
-- [ ] **[gg_public `CATEGORY_NM` 기반 중분류 추가 매핑 보완 및 본 데이터 반영]**
-  - **[작업 목표]**
+- [ ] **[스킵 (보류)] [gg_public `CATEGORY_NM` 기반 중분류 추가 매핑 보완 및 본 데이터 반영]** —
+  2026-08-27, 사전 준수 확인(Pre-check) 단계에서 기존 산출물과의 정면 충돌을 확인하여 구현 착수
+  전 스킵 처리함.
+  - **① 상세 스킵 사유**:
+    - 직전 완료 Task인 "[1단계 중분류(Category Mid) raw_data 원천 필드 우선 탐색 및 Dry-run
+      시뮬레이션]"(`docs/category-mid-rawfield-dryrun-report.md` 4절·6-3절)에서 `gg_public`의
+      `CATEGORY_NM`은 값이 "전시/교육/행사/공연" 4종뿐인 `category_maj`(대분류) 수준의 성긴
+      정보이며, `category_min`(중분류) 1:1 매핑에는 정보량이 부족해 "활용 시 오히려 부정확한
+      중분류가 대량 생성될 위험"이 있다고 명시적으로 결론 내리고 **보류 확정**했다.
+    - 그 결론은 바로 다음 완료 Task인 "[1단계 중분류(Category Min) 본 데이터 UPDATE 마이그레이션
+      실행]"(`implementation/2026-08-27-category-min-update-real-application.md`)에서도
+      "`gg_public`/`tourapi_4.0`은 보류 확정대로 변경 없음(NULL 36건 잔존)"으로 재확인되어
+      실제 반영되었다.
+    - 그런데 본 Task는 같은 `CATEGORY_NM` 필드를 "표준 category_min과 1:1 또는 유의미하게
+      매핑"하도록 지시하고 있어, 정보량 부족을 사유로 이미 보류 확정된 기존 분석 결론 및
+      `docs/category-mid-rawfield-dryrun-report.md`의 실측 데이터와 직접 상충한다.
+    - 이 상태에서 임의로 4종의 대분류 수준 값(전시/교육/행사/공연)을 세분화된 중분류 태그에
+      강제로 끼워 맞추는 매핑 규칙을 새로 만드는 것은 `CLAUDE.md` 제3장 제4조(추측 금지) 및
+      제7장 제3조(임의 비즈니스 로직 생성 금지)에 위배될 위험이 있다.
+  - **② 재개를 위한 선행 작업**:
+    1. 대표 승인 필요: `docs/category-mid-rawfield-dryrun-report.md` 6-3절의 "gg_public 보류"
+       결론을 뒤집고 4종 대분류 값을 중분류로 매핑하는 것을 정말 승인할지, 혹은 `gg_public`
+       원본 API에 `CATEGORY_NM`보다 더 세분화된 다른 원천 필드가 실제로 존재하는지 재확인이
+       필요하다.
+    2. 위 승인/재확인이 `project/decision-log.md`에 신규 Decision으로 명시적으로 기록된 후에만
+       `scripts/migrations/gg_public_category_min_patch.mjs` 작성 및 실행 재개.
+  - **[원본 작업 목표 - 참고용, 미실행]**
     1. **`gg_public` 원천 필드 분석**: `gg_public` 데이터의 `raw_data` 내에 존재하는 `CATEGORY_NM` (예: "교육" 등) 값을 전수 스캔한다.
     2. **표준 `category_min` 매핑 룰 확장**: `gg_public`의 `CATEGORY_NM` 값을 기존 표준 중분류 체계와 1:1 또는 유의미하게 매핑하는 규칙을 추가 정의한다.
     3. **마이그레이션 스크립트 보완 및 실행**: 해당 룰을 반영한 업데이트 스크립트를 작성하여 `gg_public` 데이터의 `category_min` NULL 잔여 건수를 추가로 해소한다.
-  - **[상세 작업 내용]**
+  - **[상세 작업 내용 - 참고용, 미실행]**
     1. `scripts/migrations/gg_public_category_min_patch.mjs` 스크립트 작성.
     2. `is_active = true`인 `gg_public` 데이터 대상 `category_min` UPDATE 실행.
     3. 최종 NULL 잔여 건수 재측정 및 `npx tsc --noEmit` 검증.
