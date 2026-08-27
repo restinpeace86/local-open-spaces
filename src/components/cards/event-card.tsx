@@ -9,9 +9,21 @@ import { formatDateRange, formatVenueLine } from '@/lib/spaces/format';
 // spec/event/event-card.md 준용 신규 카드 (Task 9-1) — 기존에는 이벤트 전용 카드가 없었고
 // ItemListPanel의 리스트 행으로만 표현됐다. 썸네일/상태 뱃지/예약 마감 경고를 갖춘
 // 독립 카드 형태가 필요해 새로 만든다(기존 SpaceGridCard는 공간 전용 필드 구성이라 그대로 못 씀).
-export function EventCard({ item, onSelect }: { item: NearbyItem; onSelect: (item: NearbyItem) => void }) {
+// [카드 뱃지 문구 정리](2026-08-27 사용자 지시): "현재 이용 가능"/"예약 가능" 슬라이더에서는
+// 키즈/어린이 뱃지를 빼 달라는 요청 — EventCard는 카테고리 그리드/검색/무료 피드 등 여러
+// 화면에서 공유하는 컴포넌트라(제5장 제4조 기존 구조 우선) 전역으로 뺄 수 없다. 특정 배지
+// key만 선택적으로 숨기는 옵션을 추가해 호출부(ReservationOpenSlider)에서만 적용한다.
+export function EventCard({
+  item,
+  onSelect,
+  hideBadgeKeys = [],
+}: {
+  item: NearbyItem;
+  onSelect: (item: NearbyItem) => void;
+  hideBadgeKeys?: string[];
+}) {
   const meta = getCategoryMeta(item.category);
-  const badges = getParentalBadges(item);
+  const badges = getParentalBadges(item).filter((badge) => !hideBadgeKeys.includes(badge.key));
   const status = getEventStatus(item);
   const dateBanner = getDateBannerBadge(item);
   const reservationTag = getReservationAvailabilityTag(item);

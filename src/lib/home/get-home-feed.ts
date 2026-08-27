@@ -813,8 +813,13 @@ export async function getThemeSpotFeed(
 // 이벤트픽(HomeView)은 항상 events만 다루므로(Task 9-6-10) dataType 분기 없이 events 테이블만
 // event_type(=5대 UI 카테고리 값)으로 필터링한다. "현재 진행 중"(오늘이 start~end 기간에 포함)
 // 조건은 getThemeSpotFeed의 events 조회와 동일하게 맞춘다.
-export async function getCategoryFeed(
-  category: string,
+// [대분류/중분류 드릴다운 개편](2026-08-27 사용자 지시): 기존 event_type 기반 필터를
+// category_min(표준 중분류) 기반으로 교체했다 — 홈 화면 카테고리 Quick 그리드가 이제
+// 대분류(category_maj) → 중분류(category_min) 2단계 드릴다운이라, 최종 카드 조회는 사용자가
+// 실제로 선택한 중분류 값 그대로 필터링해야 한다. 이 함수의 유일한 소비처
+// (/api/home/category-feed)도 함께 바꿨다 — 다른 호출부는 없다(실측 확인).
+export async function getCategoryMinFeed(
+  categoryMin: string,
   limit = 20,
   region: HomeRegion = DEFAULT_HOME_REGION
 ): Promise<NearbyItem[]> {
@@ -825,7 +830,7 @@ export async function getCategoryFeed(
     let query = supabase
       .from('events')
       .select(EVENT_COLUMNS)
-      .eq('event_type', category)
+      .eq('category_min', categoryMin)
       .eq('is_active', true)
       .in('target_audience', EVENT_PICK_TARGET_AUDIENCES)
       .not('category_min', 'is', null)

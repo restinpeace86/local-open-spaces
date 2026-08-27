@@ -55,7 +55,9 @@ function getEventBadges(item: NearbyItem): ParentalBadge[] {
   // Task 9-1에서 수정: is_free === null(요금 정보 미기재)을 유료로 단정 표시하던 오탐을 바로잡는다
   // (space-card.md의 null 숨김 규약을 event 카드에도 동일 적용 — SEOUL_CULTURE/GG_EVENTS 실데이터에
   // is_free: null 레코드가 실제로 존재함, implementation/todo.md Task 8-4 참고).
-  if (item.is_free === true) badges.push({ key: 'is_free', label: '🎁 완전 무료' });
+  // [카드 뱃지 문구 정리](2026-08-27 사용자 지시): "완전 무료"는 공간 카드가 이미 쓰는
+  // "🎁 무료"(getSpaceBadges 참고)와 표현을 맞춘다.
+  if (item.is_free === true) badges.push({ key: 'is_free', label: '🎁 무료' });
   else if (item.is_free === false) badges.push({ key: 'is_free', label: '💰 유료' });
 
   // Quick Filter '👶 키즈/어린이' 스크리닝 기준(target_age_group이 유아/어린이 대상)과

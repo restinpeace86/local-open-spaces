@@ -8,7 +8,7 @@ import { HomeHeader } from '@/components/home/home-header';
 import { HomeSubTabs, HomeSubTab } from '@/components/home/home-sub-tabs';
 import { HeroCarousel } from '@/components/home/hero-carousel';
 import { ReservationOpenSlider } from '@/components/home/reservation-open-slider';
-import { QuickCategoryGrid } from '@/components/home/quick-category-grid';
+import { MajorCategoryGrid } from '@/components/home/major-category-grid';
 import { FreeFeedSkeleton } from '@/components/home/free-feed-skeleton';
 import { ThemeSpotKey } from '@/lib/theme-spots';
 import { themeOptionsFor } from '@/lib/home-categories';
@@ -139,9 +139,11 @@ function useThemeSpotFeed(region: { sigunguName: string | null; lat?: number; ln
   return { selectedTheme, items, isLoading, selectTheme, reset };
 }
 
-// Task 9-6-17(2026-08-25, docs/spec.md 2.2 ② 개정): "5대 카테고리 Quick 아이콘 그리드" 인라인
-// 피딩 — useThemeSpotFeed와 동일한 패턴(기본 선택 없음, 클릭 시에만 지연 페칭). 이 화면은 항상
-// events만 다루므로(Task 9-6-10) dataType 파라미터는 넘기지 않는다.
+// Task 9-6-17(2026-08-25, docs/spec.md 2.2 ② 개정)/[대분류·중분류 드릴다운 개편](2026-08-27
+// 사용자 지시): 카테고리 그리드 인라인 피딩 — useThemeSpotFeed와 동일한 패턴(기본 선택 없음,
+// 클릭 시에만 지연 페칭). 이 화면은 항상 events만 다루므로(Task 9-6-10) dataType 파라미터는
+// 넘기지 않는다. 이제 선택 대상은 event_type이 아니라 중분류(category_min) 값이다 — 대분류를
+// 바꾸면 이전 중분류 선택이 더 이상 유효하지 않으므로 reset()으로 지운다.
 function useCategoryFeed(region: { sigunguName: string | null; lat?: number; lng?: number }) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [items, setItems] = useState<NearbyItem[] | null>(null);
@@ -168,7 +170,12 @@ function useCategoryFeed(region: { sigunguName: string | null; lat?: number; lng
     [region.sigunguName, region.lat, region.lng]
   );
 
-  return { selectedCategory, items, isLoading, selectCategory };
+  const reset = useCallback(() => {
+    setSelectedCategory(null);
+    setItems(null);
+  }, []);
+
+  return { selectedCategory, items, isLoading, selectCategory, reset };
 }
 
 // [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "GNB 헤더 & 글로벌 위치 상태 공유"):
@@ -241,7 +248,19 @@ export function HomeView({
     items: categoryFeedItems,
     isLoading: isCategoryFeedLoading,
     selectCategory,
+    reset: resetCategoryFeed,
   } = useCategoryFeed(region);
+  // [대분류·중분류 드릴다운 개편](2026-08-27 사용자 지시): 대분류 선택은 순수 UI 상태라(조회를
+  // 트리거하지 않음, 그 아래 중분류 칩 목록을 펼치는 역할만 함) 별도 로컬 state로 둔다. 실제
+  // 카드 조회는 여전히 useCategoryFeed의 selectCategory(중분류 값)가 담당한다.
+  const [selectedMaj, setSelectedMaj] = useState<string | null>(null);
+  const handleSelectMaj = useCallback(
+    (maj: string) => {
+      setSelectedMaj((prev) => (prev === maj ? null : maj));
+      resetCategoryFeed();
+    },
+    [resetCategoryFeed]
+  );
 
   // Task 9-1-1: Server Component는 기본 지역(성남시 분당구)으로만 렌더링할 수 있으므로,
   // 유저가 실제로 위치를 설정한 경우(addressName이 채워짐)에만 그 지역으로 재조회한다.
@@ -366,10 +385,16 @@ export function HomeView({
               </section>
             )}
 
-            {/* Task 9-6-17(2026-08-25, docs/spec.md 2.2 ② 개정): 카테고리 클릭 시 라우팅 없이
-                이 화면 내부에서 바로 아래 카드 피드가 전환된다(인라인 피딩). */}
+            {/* Task 9-6-17(2026-08-25, docs/spec.md 2.2 ② 개정)/[대분류·중분류 드릴다운
+                개편](2026-08-27 사용자 지시): 대분류를 누르면 중분류 칩이 펼쳐지고, 중분류를
+                누르면 라우팅 없이 이 화면 내부에서 바로 아래 카드 피드가 전환된다(인라인 피딩). */}
             <section aria-label="카테고리별 행사">
-              <QuickCategoryGrid selected={selectedCategory} onSelect={selectCategory} />
+              <MajorCategoryGrid
+                selectedMaj={selectedMaj}
+                onSelectMaj={handleSelectMaj}
+                selectedMin={selectedCategory}
+                onSelectMin={selectCategory}
+              />
               {selectedCategory !== null && (
                 <div className="px-4 mt-3">
                   {isCategoryFeedLoading || categoryFeedItems === null ? (

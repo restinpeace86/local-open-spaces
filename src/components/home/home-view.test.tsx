@@ -121,12 +121,12 @@ describe('HomeView', () => {
     vi.unstubAllGlobals();
   });
 
-  it('Hero Carousel/Quick 그리드를 홈 탭에서 즉시 렌더링한다', () => {
+  it('Hero Carousel/대분류 그리드를 홈 탭에서 즉시 렌더링한다', () => {
     render(<HomeView initialHeroEvents={[makeEventItem()]} />);
 
     expect(screen.getByText('오늘의 추천 행사')).toBeInTheDocument();
-    // 5대 카테고리 Quick 그리드
-    expect(screen.getByText('키즈·액티비티')).toBeInTheDocument();
+    // [대분류·중분류 드릴다운 개편](2026-08-27) 7대 대분류 그리드
+    expect(screen.getByText('문화 / 전시')).toBeInTheDocument();
   });
 
   // Task 9-6-18(2026-08-25, docs/spec.md 3.2 "화면 구성 및 UI 간소화"): "가성비 행복" 필터
@@ -148,25 +148,46 @@ describe('HomeView', () => {
     expect(screen.queryByLabelText('오늘의 추천 행사')).not.toBeInTheDocument();
   });
 
-  // Task 9-6-17(2026-08-25, docs/spec.md 2.2 ② 개정): "5대 카테고리 Quick 아이콘 그리드" 인라인
-  // 피딩 — 클릭 시 /region으로 라우팅하지 않고 이 화면 내부에서 /api/home/category-feed로
-  // 지연 페칭해 바로 아래에 카드 피드를 보여준다.
-  describe('5대 카테고리 인라인 피딩 (Task 9-6-17)', () => {
-    it('카테고리 클릭 시 /region으로 이동하지 않고 /api/home/category-feed를 호출해 카드로 보여준다', async () => {
+  // Task 9-6-17(2026-08-25, docs/spec.md 2.2 ② 개정)/[대분류·중분류 드릴다운 개편](2026-08-27
+  // 사용자 지시): 대분류를 누르면 중분류 칩이 펼쳐지고, 중분류를 누르면 /region으로
+  // 라우팅하지 않고 이 화면 내부에서 /api/home/category-feed로 지연 페칭해 바로 아래에 카드
+  // 피드를 보여준다.
+  describe('대분류·중분류 드릴다운 인라인 피딩', () => {
+    it('대분류 클릭 시 중분류 칩이 나타나고, 중분류 클릭 시 카드가 보인다', async () => {
       const fetchMock = stubFetchFreeFeed(
         [],
         [],
-        [makeEventItem({ id: 'kids-1', name: '키즈 체험 행사' })]
+        [makeEventItem({ id: 'farm-1', name: '도시농업 체험 행사' })]
       );
       render(<HomeView initialHeroEvents={[]} />);
 
-      fireEvent.click(screen.getByText('키즈·액티비티'));
+      // 대분류 클릭 전에는 중분류 칩("도시농업")이 없다.
+      expect(screen.queryByText('도시농업')).not.toBeInTheDocument();
 
-      expect(await screen.findByText('키즈 체험 행사')).toBeInTheDocument();
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringContaining('/api/home/category-feed?category=KIDS_ACTIVITY')
-      );
-      expect(screen.getByText('키즈·액티비티').closest('a')).toBeNull();
+      fireEvent.click(screen.getByText('체험 / 농장'));
+      expect(screen.getByText('도시농업')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText('도시농업'));
+
+      expect(await screen.findByText('도시농업 체험 행사')).toBeInTheDocument();
+      const expectedParam = new URLSearchParams({ category: '도시농업' }).toString();
+      expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining(`/api/home/category-feed?${expectedParam}`));
+      expect(screen.getByText('체험 / 농장').closest('a')).toBeNull();
+    });
+
+    it('다른 대분류를 클릭하면 이전 중분류 선택/카드가 초기화된다', async () => {
+      stubFetchFreeFeed([], [], [makeEventItem({ id: 'farm-1', name: '도시농업 체험 행사' })]);
+      render(<HomeView initialHeroEvents={[]} />);
+
+      fireEvent.click(screen.getByText('체험 / 농장'));
+      fireEvent.click(screen.getByText('도시농업'));
+      expect(await screen.findByText('도시농업 체험 행사')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText('자연 / 캠핑'));
+
+      expect(screen.queryByText('도시농업')).not.toBeInTheDocument();
+      expect(screen.queryByText('도시농업 체험 행사')).not.toBeInTheDocument();
+      expect(screen.getByText('캠핑장')).toBeInTheDocument();
     });
   });
 

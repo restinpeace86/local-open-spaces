@@ -113,9 +113,9 @@ describe('getParentalBadges (EVENT)', () => {
     expect(badges).toContainEqual({ key: 'booking_status', label: '📅 접수중', emphasis: undefined });
   });
 
-  it('is_free === true면 완전 무료 뱃지를 노출한다', () => {
+  it('is_free === true면 무료 뱃지를 노출한다', () => {
     const badges = getParentalBadges(makeEvent({ is_free: true }));
-    expect(badges).toContainEqual({ key: 'is_free', label: '🎁 완전 무료' });
+    expect(badges).toContainEqual({ key: 'is_free', label: '🎁 무료' });
   });
 
   it('is_free === false면 유료 뱃지를 노출한다', () => {
