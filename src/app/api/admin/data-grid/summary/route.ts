@@ -11,16 +11,26 @@ import { createClient } from '@/lib/supabase/server';
 type SupabaseClientType = Awaited<ReturnType<typeof createClient>>;
 type MetricJob = { key: string; run: (supabase: SupabaseClientType) => PromiseLike<{ count: number | null; error: { message: string } | null }> };
 
+// [매일 배치 신규 데이터 모니터링](2026-08-28): "오늘 자정 이후 반영" 요약 카드용 지표.
+// 실측 확인(2026-08-28): events는 updated_at 컬럼이 아예 없고, open_spaces의 updated_at은
+// 트리거가 없어 created_at과 항상 동일한 값만 가진다(1000건 샘플 전수 확인, 단 한 건도
+// 차이 없음) — 즉 "내용 갱신 건수"는 현재 스키마로는 판단 근거가 없다(추측 금지). 이 조회는
+// created_at 기준 "오늘 신규 생성" 건수만 집계하며, 업데이트 카운트는 스키마 변경(컬럼 추가 +
+// 자동 갱신 트리거) 결정이 선행되기 전까지 의도적으로 만들지 않는다.
+const todayStartIso = () => `${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`;
+
 const JOBS: MetricJob[] = [
   { key: 'open_spaces_count', run: (s) => s.from('open_spaces').select('*', { count: 'exact', head: true }) },
   { key: 'open_spaces_missing_location', run: (s) => s.from('open_spaces').select('*', { count: 'exact', head: true }).is('location', null) },
   { key: 'open_spaces_missing_address', run: (s) => s.from('open_spaces').select('*', { count: 'exact', head: true }).eq('address', '') },
   { key: 'open_spaces_missing_fee', run: (s) => s.from('open_spaces').select('*', { count: 'exact', head: true }).is('is_free', null) },
   { key: 'open_spaces_missing_url', run: (s) => s.from('open_spaces').select('*', { count: 'exact', head: true }).is('info_url', null) },
+  { key: 'open_spaces_created_today', run: (s) => s.from('open_spaces').select('*', { count: 'exact', head: true }).gte('created_at', todayStartIso()) },
   { key: 'events_count', run: (s) => s.from('events').select('*', { count: 'exact', head: true }) },
   { key: 'events_missing_location', run: (s) => s.from('events').select('*', { count: 'exact', head: true }).is('location', null) },
   { key: 'events_missing_fee', run: (s) => s.from('events').select('*', { count: 'exact', head: true }).is('is_free', null) },
   { key: 'events_missing_reservation_url', run: (s) => s.from('events').select('*', { count: 'exact', head: true }).is('reservation_url', null) },
+  { key: 'events_created_today', run: (s) => s.from('events').select('*', { count: 'exact', head: true }).gte('created_at', todayStartIso()) },
   { key: 'raw_ingest_data_count', run: (s) => s.from('raw_ingest_data').select('*', { count: 'exact', head: true }) },
 ];
 

@@ -90,6 +90,36 @@ function escapeIlikePattern(value: string): string {
   return value.replace(/[\\%_]/g, (char) => `\\${char}`);
 }
 
+// [매일 배치 신규 데이터 모니터링](2026-08-28): 상단 요약 카드/단축 필터("오늘 등록건 보기",
+// "최근 3일건 보기")와 달력 기간 조회가 공유하는 created_at 범위 필터. 날짜 형식이 아닌 값이
+// 들어오면(오조작/URL 직접 조작) 조용히 무시한다 — 이 프로젝트의 다른 파서(parsePageSize 등)와
+// 동일하게 기본값(필터 없음)으로 안전하게 폴백한다.
+const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+function parseDateFilter(value: string | null): string | null {
+  return value && DATE_ONLY_PATTERN.test(value) ? value : null;
+}
+
+// created_to는 관리자 입장에서 "그 날짜까지 포함"이 직관적이라, 다음 날 00:00 UTC 미만
+// (`<`)으로 변환해 하루 전체를 포함시킨다. 이 프로젝트는 get-home-feed.ts와 동일하게 날짜
+// 문자열을 UTC 기준으로 다룬다(KST 변환 없음 — 기존 관례 그대로 따름).
+function nextDateString(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+function applyCreatedAtRange<Q extends { gte: (c: string, v: string) => Q; lt: (c: string, v: string) => Q }>(
+  query: Q,
+  createdFrom: string | null,
+  createdTo: string | null
+): Q {
+  let next = query;
+  if (createdFrom) next = next.gte('created_at', `${createdFrom}T00:00:00.000Z`);
+  if (createdTo) next = next.lt('created_at', `${nextDateString(createdTo)}T00:00:00.000Z`);
+  return next;
+}
+
 const OPEN_SPACES_COLUMNS =
   'id, external_id, source_type, source, name, category, category_min, category_min_source, address, location, location_precision, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, raw_data, sigungu_name, created_at, updated_at';
 
@@ -130,6 +160,8 @@ async function queryOpenSpacesViaSourceSubset(
     isKidsFriendly: boolean | null;
     missingLocation: boolean;
     missingFee: boolean;
+    createdFrom: string | null;
+    createdTo: string | null;
     page: number;
     pageSize: number;
   }
@@ -140,6 +172,8 @@ async function queryOpenSpacesViaSourceSubset(
   type Row = NonNullable<typeof data>[number];
   const q = params.q.toLowerCase();
   const matchesCategoryMin = multiValueOrNullPredicate(params.categoryMinFilter);
+  const createdFromIso = params.createdFrom ? `${params.createdFrom}T00:00:00.000Z` : null;
+  const createdToIso = params.createdTo ? `${nextDateString(params.createdTo)}T00:00:00.000Z` : null;
 
   const filtered = (data ?? []).filter((row: Row) => {
     if (q && !`${row.name} ${row.address}`.toLowerCase().includes(q)) return false;
@@ -156,6 +190,8 @@ async function queryOpenSpacesViaSourceSubset(
     if (params.isKidsFriendly !== null && row.is_kids_friendly !== params.isKidsFriendly) return false;
     if (params.missingLocation && row.location !== null) return false;
     if (params.missingFee && row.is_free !== null) return false;
+    if (createdFromIso && (!row.created_at || row.created_at < createdFromIso)) return false;
+    if (createdToIso && (!row.created_at || row.created_at >= createdToIso)) return false;
     return true;
   });
 
@@ -178,6 +214,8 @@ async function queryOpenSpaces(supabase: Ctx, searchParams: URLSearchParams, pag
   const isKidsFriendly = parseBoolFilter(searchParams.get('is_kids_friendly'));
   const missingLocation = searchParams.get('missing_location') === 'true';
   const missingFee = searchParams.get('missing_fee') === 'true';
+  const createdFrom = parseDateFilter(searchParams.get('created_from'));
+  const createdTo = parseDateFilter(searchParams.get('created_to'));
 
   if (minClassName || svcStatNm) {
     const result = await queryOpenSpacesViaSourceSubset(supabase, {
@@ -194,6 +232,8 @@ async function queryOpenSpaces(supabase: Ctx, searchParams: URLSearchParams, pag
       isKidsFriendly,
       missingLocation,
       missingFee,
+      createdFrom,
+      createdTo,
       page,
       pageSize,
     });
@@ -227,6 +267,7 @@ async function queryOpenSpaces(supabase: Ctx, searchParams: URLSearchParams, pag
   if (isKidsFriendly !== null) query = query.eq('is_kids_friendly', isKidsFriendly);
   if (missingLocation) query = query.is('location', null);
   if (missingFee) query = query.is('is_free', null);
+  query = applyCreatedAtRange(query, createdFrom, createdTo);
 
   const from = (page - 1) * pageSize;
   const { data, error, count } = await query
@@ -253,6 +294,8 @@ async function queryEvents(supabase: Ctx, searchParams: URLSearchParams, page: n
   const isKidsFriendly = parseBoolFilter(searchParams.get('is_kids_friendly'));
   const missingLocation = searchParams.get('missing_location') === 'true';
   const missingFee = searchParams.get('missing_fee') === 'true';
+  const createdFrom = parseDateFilter(searchParams.get('created_from'));
+  const createdTo = parseDateFilter(searchParams.get('created_to'));
 
   // events(약 2.6만 건)는 open_spaces보다 훨씬 작아 raw_data JSONB 조건을 SQL에 그대로 넣어도
   // 실측상 문제없이 빠르다(별도 우회 경로 불필요).
@@ -275,6 +318,7 @@ async function queryEvents(supabase: Ctx, searchParams: URLSearchParams, page: n
   if (isKidsFriendly !== null) query = query.eq('is_kids_friendly', isKidsFriendly);
   if (missingLocation) query = query.is('location', null);
   if (missingFee) query = query.is('is_free', null);
+  query = applyCreatedAtRange(query, createdFrom, createdTo);
 
   const from = (page - 1) * pageSize;
   // [행사 데이터 수집/정제 파이프라인 및 홈 피드 필터링 개선](2026-08-27) 사용자 지시 4번:

@@ -120,6 +120,66 @@ const TAB_LABEL: Record<AdminTable, string> = {
   raw_ingest_data: 'raw_ingest_data (원천 보존)',
 };
 
+// [매일 배치 신규 데이터 모니터링](2026-08-28): get-home-feed.ts와 동일한 관례로 날짜 문자열을
+// UTC 기준으로 다룬다(KST 변환 없음).
+function todayDateStr(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function daysAgoDateStr(days: number): string {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
+type DataGridSummary = {
+  open_spaces_created_today: number | null;
+  events_created_today: number | null;
+};
+
+// 요구사항 1: "/admin/data-grid 상단 요약 카드". 실측 확인(2026-08-28): events는 updated_at
+// 컬럼이 없고 open_spaces의 updated_at은 트리거가 없어 created_at과 항상 같은 값이라(1000건
+// 샘플 전수 확인) "내용 갱신 건수"는 현재 스키마로 집계할 근거가 없다 — 사용자 확인 후
+// 이번에는 신규(created_at) 집계만 구현하고 업데이트 집계는 스키마 변경 결정이 있을 때까지
+// 보류한다(추측으로 0건을 표시하면 "갱신이 없었다"는 오해를 주므로 아예 표시하지 않는다).
+function TodayBatchSummary() {
+  const [summary, setSummary] = useState<DataGridSummary | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/admin/data-grid/summary')
+      .then((res) => res.json())
+      .then((json: DataGridSummary) => {
+        if (!cancelled) setSummary(json);
+      })
+      .catch(() => {
+        if (!cancelled) setErrorMessage('오늘 반영 현황을 불러오지 못했습니다.');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (errorMessage) return <p className="text-xs text-red-500">{errorMessage}</p>;
+  if (!summary) return <p className="text-xs text-gray-400">오늘 반영 현황 불러오는 중...</p>;
+
+  const openToday = summary.open_spaces_created_today;
+  const eventsToday = summary.events_created_today;
+  const total = (openToday ?? 0) + (eventsToday ?? 0);
+
+  return (
+    <div className="rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+      <span className="text-xs font-semibold text-blue-900">📅 오늘 신규 반영: Total {total.toLocaleString('ko-KR')}건</span>
+      <span className="text-xs text-blue-800">open_spaces {openToday ?? '-'}건</span>
+      <span className="text-xs text-blue-800">events {eventsToday ?? '-'}건</span>
+      <span className="text-[11px] text-blue-400">
+        ※ 내용 변경(업데이트) 건수는 현재 스키마(updated_at 자동 갱신 트리거 없음)로는 집계할 수 없습니다.
+      </span>
+    </div>
+  );
+}
+
 function extractLngLat(location: unknown): { lng: number; lat: number } | null {
   const geometry = location as { coordinates?: [number, number] } | null;
   if (!geometry?.coordinates) return null;
@@ -329,6 +389,11 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
   // tri-state 필터와 달리 기본값이 'all'이 아니라 'true'다(비활성 만료 데이터가 기본적으로
   // 섞여 나오지 않도록). events 탭에만 의미가 있다(open_spaces에는 is_active 컬럼이 없음).
   const [isActive, setIsActive] = useState<TriState>('true');
+  // 요구사항 2: 단축 필터([오늘 등록건 보기]/[최근 3일건 보기]) + 달력 기간 조회. 다른 즉시
+  // 반영 필터(검색어/칩 등)와 같은 관례로, 값이 바뀌면 바로 쿼리가 나간다(체크박스 필터만
+  // pending/applied 2단계인 것과 다름 — 날짜는 오조작 빈도가 낮고 즉시 반영이 자연스럽다).
+  const [createdFrom, setCreatedFrom] = useState('');
+  const [createdTo, setCreatedTo] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0]);
 
@@ -349,6 +414,8 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     setPendingTargetAudience([]);
     setAppliedTargetAudience([]);
     setIsActive('true');
+    setCreatedFrom('');
+    setCreatedTo('');
   };
 
   const switchTab = (next: AdminTable) => {
@@ -364,7 +431,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedQ, sourceTypes, sources, categories, minClassName, appliedCategoryMin, appliedTargetAudience, isActive]);
+  }, [debouncedQ, sourceTypes, sources, categories, minClassName, appliedCategoryMin, appliedTargetAudience, isActive, createdFrom, createdTo]);
 
   // [행사 데이터 수집/정제 파이프라인 및 홈 피드 필터링 개선](2026-08-27) 사용자 지시 4번:
   // [조회하기] 버튼 클릭 시 pending → applied로 한 번에 반영한다 — 이 시점에만 아래 fetch
@@ -389,6 +456,8 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     if (appliedCategoryMin.length > 0) params.set('category_min', appliedCategoryMin.join(','));
     if (tab === 'events' && appliedTargetAudience.length > 0) params.set('target_audience', appliedTargetAudience.join(','));
     if (tab === 'events') params.set('is_active', isActive);
+    if (tab !== 'raw_ingest_data' && createdFrom) params.set('created_from', createdFrom);
+    if (tab !== 'raw_ingest_data' && createdTo) params.set('created_to', createdTo);
     params.set('page', String(page));
     params.set('page_size', String(pageSize));
 
@@ -414,7 +483,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, debouncedQ, sourceTypes, sources, categories, minClassName, appliedCategoryMin, appliedTargetAudience, isActive, page, pageSize]);
+  }, [tab, debouncedQ, sourceTypes, sources, categories, minClassName, appliedCategoryMin, appliedTargetAudience, isActive, createdFrom, createdTo, page, pageSize]);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
   const currentOptions = filterOptions[tab];
@@ -422,6 +491,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="shrink-0 p-4 border-b border-gray-100 flex flex-col gap-3">
+        <TodayBatchSummary />
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-sm font-bold text-gray-900">Admin Data Grid</h1>
           <div className="flex items-center gap-3">
@@ -462,6 +532,66 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
           placeholder={tab === 'raw_ingest_data' ? 'source_id 검색' : '제목/시설명, 주소 키워드 검색'}
           className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
         />
+
+        {/* 요구사항 2: 단축 필터 + 달력 기간 조회(created_at 기준) */}
+        {tab !== 'raw_ingest_data' && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-gray-500 shrink-0">등록일(created_at)</span>
+            <button
+              type="button"
+              onClick={() => {
+                setCreatedFrom(todayDateStr());
+                setCreatedTo(todayDateStr());
+              }}
+              className={`rounded-full px-2.5 py-1 text-xs font-medium border transition-colors ${
+                createdFrom === todayDateStr() && createdTo === todayDateStr()
+                  ? 'bg-gray-900 text-white border-gray-900'
+                  : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              오늘 등록건 보기
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setCreatedFrom(daysAgoDateStr(2));
+                setCreatedTo(todayDateStr());
+              }}
+              className={`rounded-full px-2.5 py-1 text-xs font-medium border transition-colors ${
+                createdFrom === daysAgoDateStr(2) && createdTo === todayDateStr()
+                  ? 'bg-gray-900 text-white border-gray-900'
+                  : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              최근 3일건 보기
+            </button>
+            <input
+              type="date"
+              value={createdFrom}
+              onChange={(e) => setCreatedFrom(e.target.value)}
+              className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
+            />
+            <span className="text-xs text-gray-400">~</span>
+            <input
+              type="date"
+              value={createdTo}
+              onChange={(e) => setCreatedTo(e.target.value)}
+              className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
+            />
+            {(createdFrom || createdTo) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setCreatedFrom('');
+                  setCreatedTo('');
+                }}
+                className="text-xs text-gray-500 hover:text-gray-800 underline"
+              >
+                날짜 초기화
+              </button>
+            )}
+          </div>
+        )}
 
         {tab === 'open_spaces' && (
           <ChipMultiSelect
@@ -616,6 +746,9 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                 const minClass = rawField(r.raw_data, 'MINCLASSNM');
                 const svcStat = rawField(r.raw_data, 'SVCSTATNM');
                 const updatedAt = isEvent ? (r as AdminEventRow).created_at : (r as AdminOpenSpaceRow).updated_at ?? (r as AdminOpenSpaceRow).created_at;
+                // 요구사항 3: 오늘 자정 이후 새로 생성된 건 [NEW] 뱃지. "내용 갱신([UPDATED])"은
+                // TodayBatchSummary 주석과 동일한 이유로 이번 범위에 포함하지 않는다.
+                const isNewToday = Boolean(r.created_at) && r.created_at!.slice(0, 10) === todayDateStr();
 
                 return (
                   <tr
@@ -654,7 +787,14 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                         />
                       </td>
                     )}
-                    <td className="py-2 pr-3 font-medium text-gray-900 max-w-[220px] truncate">{titleText}</td>
+                    <td className="py-2 pr-3 font-medium text-gray-900 max-w-[220px] truncate">
+                      {isNewToday && (
+                        <span className="mr-1.5 inline-block align-middle text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500 text-white">
+                          NEW
+                        </span>
+                      )}
+                      {titleText}
+                    </td>
                     {isEvent && (
                       <td className="py-2 pr-3 text-gray-600 whitespace-nowrap text-xs">
                         {(r as AdminEventRow).start_date} ~ {(r as AdminEventRow).end_date}
