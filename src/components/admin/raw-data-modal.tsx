@@ -102,18 +102,94 @@ function CategoryMinEditor({
   );
 }
 
+// [10대 타겟 분류 체계 실제 적용](2026-08-27): 상세 모달에서 target_audience를 직접 선택해
+// 수동 수정할 수 있다(events 탭 전용 — target_audience는 events에만 있는 컬럼).
+// CategoryMinEditor와 동일 관례: 저장 시 target_audience_source가 항상 'MANUAL'로 바뀐다.
+function TargetAudienceEditor({
+  row,
+  targetAudienceOptions,
+  onUpdated,
+}: {
+  row: AdminEventRow;
+  targetAudienceOptions: string[];
+  onUpdated: (id: string, nextTargetAudience: string | null, nextSource: string | null) => void;
+}) {
+  const [value, setValue] = useState(row.target_audience ?? '');
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setErrorMessage(null);
+    try {
+      const res = await fetch('/api/admin/data-grid/target-audience', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: row.id, target_audience: value || null }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? '수동 수정 실패');
+      onUpdated(row.id, json.row.target_audience, json.row.target_audience_source);
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : '수동 수정 실패');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 rounded-xl border border-gray-200 p-3">
+      <h3 className="text-xs font-semibold text-gray-500 mb-2">
+        타겟 연령(target_audience) 수동 수정
+        {row.target_audience_source && (
+          <span className="ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
+            현재: {row.target_audience_source}
+          </span>
+        )}
+      </h3>
+      <div className="flex items-center gap-2">
+        <select
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs flex-1"
+        >
+          <option value="">(미분류)</option>
+          {targetAudienceOptions.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={isSaving}
+          className="rounded-full bg-purple-600 text-white text-xs font-semibold px-3 py-1.5 disabled:opacity-40 hover:bg-purple-700"
+        >
+          {isSaving ? '저장 중...' : '저장(MANUAL)'}
+        </button>
+      </div>
+      {errorMessage && <p className="mt-1.5 text-xs text-red-500">{errorMessage}</p>}
+    </div>
+  );
+}
+
 export function RawDataModal({
   table,
   row,
   categoryMinOptions,
+  targetAudienceOptions = [],
   onClose,
   onCategoryMinUpdated,
+  onTargetAudienceUpdated,
 }: {
   table: AdminTable;
   row: AdminRow;
   categoryMinOptions: string[];
+  targetAudienceOptions?: string[];
   onClose: () => void;
   onCategoryMinUpdated?: (id: string, nextCategoryMin: string | null, nextSource: string | null) => void;
+  onTargetAudienceUpdated?: (id: string, nextTargetAudience: string | null, nextSource: string | null) => void;
 }) {
   const { title, subtitle, raw } = getModalContent(table, row);
   const prettyJson = JSON.stringify(raw ?? null, null, 2);
@@ -143,6 +219,14 @@ export function RawDataModal({
               row={row as AdminOpenSpaceRow | AdminEventRow}
               categoryMinOptions={categoryMinOptions}
               onUpdated={onCategoryMinUpdated}
+            />
+          )}
+
+          {table === 'events' && onTargetAudienceUpdated && (
+            <TargetAudienceEditor
+              row={row as AdminEventRow}
+              targetAudienceOptions={targetAudienceOptions}
+              onUpdated={onTargetAudienceUpdated}
             />
           )}
 

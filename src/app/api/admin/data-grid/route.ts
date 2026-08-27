@@ -47,7 +47,7 @@ const OPEN_SPACES_COLUMNS =
   'id, external_id, source_type, source, name, category, category_min, category_min_source, address, location, location_precision, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, raw_data, sigungu_name, created_at, updated_at';
 
 const EVENTS_COLUMNS =
-  'id, external_id, source, title, event_type, category_maj, category_min, category_min_source, venue_name, sigungu_name, start_date, end_date, location, location_precision, is_reservation_required, reservation_url, reservation_start_date, reservation_end_date, is_free, thumbnail_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, is_active, raw_data, created_at';
+  'id, external_id, source, title, event_type, category_maj, category_min, category_min_source, target_audience, target_audience_source, venue_name, sigungu_name, start_date, end_date, location, location_precision, is_reservation_required, reservation_url, reservation_start_date, reservation_end_date, is_free, thumbnail_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, is_active, raw_data, created_at';
 
 const RAW_INGEST_COLUMNS = 'source, source_id, fetched_at, raw_payload';
 
@@ -202,6 +202,9 @@ async function queryEvents(supabase: Ctx, searchParams: URLSearchParams, page: n
   const svcStatNm = searchParams.get('svc_stat_nm');
   const categoryMin = searchParams.get('category_min');
   const missingCategoryMin = searchParams.get('missing_category_min') === 'true';
+  // [10대 타겟 분류 체계 실제 적용](2026-08-27): category_min과 동일한 필터 관례.
+  const targetAudience = searchParams.get('target_audience');
+  const missingTargetAudience = searchParams.get('missing_target_audience') === 'true';
   const isActive = parseIsActiveFilter(searchParams.get('is_active'));
   const isFree = parseBoolFilter(searchParams.get('is_free'));
   const hasParking = parseBoolFilter(searchParams.get('has_parking'));
@@ -224,6 +227,8 @@ async function queryEvents(supabase: Ctx, searchParams: URLSearchParams, page: n
   if (svcStatNm) query = query.filter('raw_data->>SVCSTATNM', 'eq', svcStatNm);
   if (categoryMin) query = query.eq('category_min', categoryMin);
   if (missingCategoryMin) query = query.is('category_min', null);
+  if (targetAudience) query = query.eq('target_audience', targetAudience);
+  if (missingTargetAudience) query = query.is('target_audience', null);
   if (isActive !== null) query = query.eq('is_active', isActive);
   if (isFree !== null) query = query.eq('is_free', isFree);
   if (hasParking !== null) query = query.eq('has_parking', hasParking);

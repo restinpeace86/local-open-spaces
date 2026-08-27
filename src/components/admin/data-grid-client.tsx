@@ -43,6 +43,8 @@ export type AdminEventRow = {
   category_maj: string | null;
   category_min: string | null;
   category_min_source: string | null;
+  target_audience: string | null;
+  target_audience_source: string | null;
   venue_name: string | null;
   sigungu_name: string | null;
   start_date: string;
@@ -100,6 +102,12 @@ type TriState = 'all' | 'true' | 'false';
 const TRI_STATE_LABEL: Record<TriState, string> = { all: '전체', true: '예', false: '아니오' };
 
 const PAGE_SIZE_OPTIONS = [50, 100, 200];
+
+// [10대 타겟 분류 체계 실제 적용](2026-08-27): 고정 10종 태그라 category_min과 달리 RPC로
+// DB에서 discover하지 않고 하드코딩한다(값 자체가 스펙으로 확정된 enum).
+const TARGET_AUDIENCE_TAGS = [
+  'INFANT', 'KIDS_PRE', 'KIDS_SCHOOL', 'FAMILY', 'TEEN', 'YOUTH', 'ADULT', 'SENIOR', 'ALL', 'FACILITY',
+] as const;
 
 const TAB_LABEL: Record<AdminTable, string> = {
   open_spaces: 'open_spaces (공간·시설)',
@@ -220,6 +228,29 @@ function CategoryMinBadge({
   );
 }
 
+// [10대 타겟 분류 체계 실제 적용](2026-08-27): target_audience_source(RAW_FIELD/CATEGORY/
+// TEXT/MANUAL) 출처 뱃지 — CATEGORY_MIN_SOURCE_STYLE과 동일 관례, 색만 별도 팔레트로 구분.
+const TARGET_AUDIENCE_SOURCE_STYLE: Record<string, string> = {
+  RAW_FIELD: 'bg-emerald-100 text-emerald-700',
+  CATEGORY: 'bg-amber-100 text-amber-700',
+  TEXT: 'bg-blue-100 text-blue-700',
+  MANUAL: 'bg-purple-100 text-purple-700',
+};
+
+function TargetAudienceBadge({ targetAudience, source }: { targetAudience: string | null; source: string | null }) {
+  if (!targetAudience) return <span className="text-xs text-gray-300">NULL</span>;
+  return (
+    <span className="inline-flex items-center gap-1">
+      <span className="text-xs text-gray-700">{targetAudience}</span>
+      {source && (
+        <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${TARGET_AUDIENCE_SOURCE_STYLE[source] ?? 'bg-gray-100 text-gray-600'}`}>
+          {source}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function MetricCard({ label, value, sub }: { label: string; value: number | null; sub?: string }) {
   return (
     <div className="rounded-xl border border-gray-200 px-3 py-2 min-w-[110px]">
@@ -260,6 +291,8 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
   const [svcStatNm, setSvcStatNm] = useState('');
   const [categoryMin, setCategoryMin] = useState('');
   const [missingCategoryMin, setMissingCategoryMin] = useState(false);
+  const [targetAudience, setTargetAudience] = useState('');
+  const [missingTargetAudience, setMissingTargetAudience] = useState(false);
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
   // [0순위 우선 요청](2026-08-26): "기본 조회 조건에 WHERE is_active = true를 적용" — 다른
   // tri-state 필터와 달리 기본값이 'all'이 아니라 'true'다(비활성 만료 데이터가 기본적으로
@@ -289,6 +322,8 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     setSvcStatNm('');
     setCategoryMin('');
     setMissingCategoryMin(false);
+    setTargetAudience('');
+    setMissingTargetAudience(false);
     setIsActive('true');
     setIsFree('all');
     setHasParking('all');
@@ -311,7 +346,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedQ, sourceTypes, sources, categories, minClassName, svcStatNm, categoryMin, missingCategoryMin, isActive, isFree, hasParking, strollerAccessible, isKidsFriendly, missingLocation, missingFee]);
+  }, [debouncedQ, sourceTypes, sources, categories, minClassName, svcStatNm, categoryMin, missingCategoryMin, targetAudience, missingTargetAudience, isActive, isFree, hasParking, strollerAccessible, isKidsFriendly, missingLocation, missingFee]);
 
   useEffect(() => {
     let cancelled = false;
@@ -328,6 +363,8 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     if (svcStatNm) params.set('svc_stat_nm', svcStatNm);
     if (categoryMin) params.set('category_min', categoryMin);
     if (missingCategoryMin) params.set('missing_category_min', 'true');
+    if (tab === 'events' && targetAudience) params.set('target_audience', targetAudience);
+    if (tab === 'events' && missingTargetAudience) params.set('missing_target_audience', 'true');
     if (tab === 'events') params.set('is_active', isActive);
     if (isFree !== 'all') params.set('is_free', isFree);
     if (hasParking !== 'all') params.set('has_parking', hasParking);
@@ -360,7 +397,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, debouncedQ, sourceTypes, sources, categories, minClassName, svcStatNm, categoryMin, missingCategoryMin, isActive, isFree, hasParking, strollerAccessible, isKidsFriendly, missingLocation, missingFee, page, pageSize]);
+  }, [tab, debouncedQ, sourceTypes, sources, categories, minClassName, svcStatNm, categoryMin, missingCategoryMin, targetAudience, missingTargetAudience, isActive, isFree, hasParking, strollerAccessible, isKidsFriendly, missingLocation, missingFee, page, pageSize]);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
   const currentOptions = filterOptions[tab];
@@ -513,6 +550,34 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
           </div>
         )}
 
+        {tab === 'events' && (
+          <div className="flex flex-wrap items-center gap-3">
+            <label className="flex items-center gap-1.5 text-xs text-gray-500">
+              타겟 연령(target_audience)
+              <select
+                value={targetAudience}
+                onChange={(e) => setTargetAudience(e.target.value)}
+                className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
+              >
+                <option value="">전체</option>
+                {TARGET_AUDIENCE_TAGS.map((tag) => (
+                  <option key={tag} value={tag}>
+                    {tag}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-gray-500">
+              <input
+                type="checkbox"
+                checked={missingTargetAudience}
+                onChange={(e) => setMissingTargetAudience(e.target.checked)}
+              />
+              타겟 연령 NULL만 보기
+            </label>
+          </div>
+        )}
+
         {tab !== 'raw_ingest_data' && (
           <div className="flex flex-wrap gap-x-4 gap-y-2">
             <TriStateToggle label="무료" value={isFree} onChange={setIsFree} />
@@ -545,6 +610,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                 <th className="py-2.5 pr-3">출처</th>
                 {tab !== 'raw_ingest_data' && <th className="py-2.5 pr-3">원천 대/중분류</th>}
                 {tab !== 'raw_ingest_data' && <th className="py-2.5 pr-3">표준 중분류</th>}
+                {tab === 'events' && <th className="py-2.5 pr-3">타겟 연령</th>}
                 <th className="py-2.5 pr-3">{tab === 'raw_ingest_data' ? '수집 시각' : '제목/명칭'}</th>
                 {tab === 'events' && <th className="py-2.5 pr-3">행사기간(start~end)</th>}
                 {tab !== 'raw_ingest_data' && <th className="py-2.5 pr-3">장소/시설명</th>}
@@ -618,6 +684,14 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                         source={r.category_min_source}
                       />
                     </td>
+                    {isEvent && (
+                      <td className="py-2 pr-3 whitespace-nowrap">
+                        <TargetAudienceBadge
+                          targetAudience={(r as AdminEventRow).target_audience}
+                          source={(r as AdminEventRow).target_audience_source}
+                        />
+                      </td>
+                    )}
                     <td className="py-2 pr-3 font-medium text-gray-900 max-w-[220px] truncate">{titleText}</td>
                     {isEvent && (
                       <td className="py-2 pr-3 text-gray-600 whitespace-nowrap text-xs">
@@ -681,6 +755,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
           table={tab}
           row={selectedRow}
           categoryMinOptions={currentOptions && 'categoryMins' in currentOptions ? currentOptions.categoryMins : []}
+          targetAudienceOptions={tab === 'events' ? [...TARGET_AUDIENCE_TAGS] : []}
           onClose={() => setSelectedRow(null)}
           onCategoryMinUpdated={(id, nextCategoryMin, nextSource) => {
             setRows((prev) =>
@@ -693,6 +768,20 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
             setSelectedRow((prev) =>
               prev && 'id' in prev && prev.id === id
                 ? { ...prev, category_min: nextCategoryMin, category_min_source: nextSource }
+                : prev
+            );
+          }}
+          onTargetAudienceUpdated={(id, nextTargetAudience, nextSource) => {
+            setRows((prev) =>
+              prev.map((row) =>
+                'id' in row && row.id === id
+                  ? { ...row, target_audience: nextTargetAudience, target_audience_source: nextSource }
+                  : row
+              )
+            );
+            setSelectedRow((prev) =>
+              prev && 'id' in prev && prev.id === id
+                ? { ...prev, target_audience: nextTargetAudience, target_audience_source: nextSource }
                 : prev
             );
           }}

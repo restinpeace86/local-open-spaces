@@ -67,7 +67,14 @@
 
 ---
 
-- [ ] **[10대 타겟 분류 체계 및 활성 데이터 실데이터 반영 및 성능 최적화]**
+- [x] **[10대 타겟 분류 체계 및 활성 데이터 실데이터 반영 및 성능 최적화]** — 완료(2026-08-27).
+  결과: `implementation/2026-08-27-target-audience-10tier-real-application.md`. 승인된 5건
+  잠정 규칙만 반영해 `events.target_audience`/`target_audience_source` 컬럼 신설 및
+  is_active=true 3,560건 실제 UPDATE 실행(태그 부여 2,968건/83.37%, NULL 잔여 592건/16.63%).
+  `/admin/data-grid`에 10종 태그 필터/뱃지/수동 수정(MANUAL) UI 연동, `docs/spec.md` 1절
+  3대 노출 조건(is_active, target_audience, category_min) 조회용 부분 인덱스 추가 후
+  `EXPLAIN ANALYZE`로 Index Scan 사용 실측 확인(14ms). 승인 범위 밖(숫자 나이 임계값 파싱,
+  비-연령 인구 속성 처리, 스코프 외 소스 백필)은 이번에도 적용하지 않음.
   - **[대표 승인 완료 사항 (잠정 규칙 5건)]**
     1. **`FACILITY` 태그 적용**: 캠핑장, 테니스장, 주민센터 다목적실 등 순수 공간/장비 대관 데이터는 `FACILITY`로 일괄 분류.
     2. **`ADULT` 태그 판정**: 만 19세 이상 성인 전용 및 직장인/부모 교육 등 성인 대상 프로그램에 `ADULT` 부여.

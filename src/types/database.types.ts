@@ -96,6 +96,8 @@ export type Database = {
           start_date: string
           stroller_accessible: boolean
           target_age_group: string | null
+          target_audience: string | null
+          target_audience_source: string | null
           thumbnail_url: string | null
           title: string
           venue_name: string | null
@@ -129,6 +131,8 @@ export type Database = {
           start_date: string
           stroller_accessible?: boolean
           target_age_group?: string | null
+          target_audience?: string | null
+          target_audience_source?: string | null
           thumbnail_url?: string | null
           title: string
           venue_name?: string | null
@@ -162,6 +166,8 @@ export type Database = {
           start_date?: string
           stroller_accessible?: boolean
           target_age_group?: string | null
+          target_audience?: string | null
+          target_audience_source?: string | null
           thumbnail_url?: string | null
           title?: string
           venue_name?: string | null
