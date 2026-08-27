@@ -145,9 +145,18 @@ export function HeroCarousel({
                     {dateBanner.label}
                   </span>
                 )}
+                {/* [메인 카드 유료/무료 뱃지 누락 수정](2026-08-27 사용자 지시): is_free===true일
+                    때만 "무료" 뱃지를 보여주고 is_free===false(유료)면 아무 뱃지도 없어 요금
+                    정보를 전혀 알 수 없었다 — EventCard(getParentalBadges)처럼 두 상태 모두
+                    표시한다. is_free===null(정보 없음)은 기존처럼 단정 표시하지 않고 숨긴다. */}
                 {item.is_free === true && (
                   <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white">
                     🎁 무료
+                  </span>
+                )}
+                {item.is_free === false && (
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-gray-700 text-white">
+                    💰 유료
                   </span>
                 )}
               </div>

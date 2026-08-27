@@ -17,9 +17,16 @@ const NO_INFO_TEXT = '정보 준비 중 (공공 기관 문의)';
 
 // spec/space/space-detail.md, spec/event/event-detail.md: 공간/행사 상세 정보 모달
 // 데스크톱은 중앙 모달, 모바일은 하단 바텀시트로 표시한다.
+// [상세보기 설명 추가](2026-08-27 사용자 지시): 제목만으로는 무슨 행사인지 알기 어려운
+// 경우가 많다는 지적 — 설명이 이 글자 수를 넘으면 기본은 미리보기(line-clamp)로 줄이고
+// "더보기" 버튼으로 펼친다. 모바일이 주 사용 환경(Decision 004)이라 터치에서 동작하지 않는
+// 마우스 호버 툴팁 대신, 모바일/데스크톱 모두에서 동일하게 동작하는 펼치기 토글을 택했다.
+const DESCRIPTION_PREVIEW_THRESHOLD = 60;
+
 export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () => void }) {
   const [copied, setCopied] = useState(false);
   const [isMapPreviewOpen, setIsMapPreviewOpen] = useState(false);
+  const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   useModalBackClose(onClose);
   // Task 9-5-1(2026-08-22): 유저가 이미 설정해 둔 전역 위치(온보딩에서 저장한 좌표, 미설정
   // 시 기본값)를 그대로 "내 위치" 출발지로 쓴다 — 별도 GPS 권한 요청 없이 서비스가 이미 아는
@@ -38,6 +45,8 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
   // 이상/미취학/가족/유아 등)을 안내한다. OTHER(수동 검수 대상)나 매핑 안 된 값은 null이라
   // 노출하지 않는다(getTargetAudienceLabel 참고).
   const targetAudienceLabel = isEvent ? getTargetAudienceLabel(item.target_audience) : null;
+  const description = isEvent ? item.description : null;
+  const isLongDescription = (description?.length ?? 0) > DESCRIPTION_PREVIEW_THRESHOLD;
   const reservationDeadline = isEvent && item.is_reservation_required
     ? formatDateTime(item.reservation_end_date)
     : null;
@@ -122,6 +131,26 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
           <h2 className="mt-2 text-lg font-bold text-gray-900">{item.name}</h2>
           {item.distance_meters >= 0 && (
             <p className="text-sm text-gray-400">현재 위치에서 {formatDistance(item.distance_meters)}</p>
+          )}
+
+          {/* [상세보기 설명 추가](2026-08-27 사용자 지시): 제목만으로 내용을 파악하기 어려운
+              행사가 많아 본문 설명을 보여준다. 짧으면 그대로, 길면(60자 초과) 2줄 미리보기 +
+              "더보기/접기" 토글로 감춘다. */}
+          {description && (
+            <div className="mt-2">
+              <p className={`text-sm text-gray-600 whitespace-pre-line ${!isDescriptionExpanded && isLongDescription ? 'line-clamp-2' : ''}`}>
+                {description}
+              </p>
+              {isLongDescription && (
+                <button
+                  type="button"
+                  onClick={() => setIsDescriptionExpanded((prev) => !prev)}
+                  className="mt-0.5 text-xs font-semibold text-blue-600"
+                >
+                  {isDescriptionExpanded ? '접기' : '더보기'}
+                </button>
+              )}
+            </div>
           )}
 
           <dl className="mt-4 flex flex-col gap-3 text-sm">

@@ -200,6 +200,38 @@ describe('HeroCarousel 뱃지 구분 (Task 9-6-13)', () => {
     expect(screen.getByText('⏰ 오늘 마감')).toBeInTheDocument();
     expect(screen.queryByText('⚡ 오늘 한정')).not.toBeInTheDocument();
   });
+
+  // [메인 카드 유료/무료 뱃지 누락 수정](2026-08-27 사용자 지시): is_free===false(유료)일 때
+  // 아무 뱃지도 없어 요금 정보를 전혀 알 수 없었다.
+  it('is_free===true면 "🎁 무료" 뱃지를 보여준다', () => {
+    const item = makeItem('3', '무료 행사');
+    item.is_free = true;
+
+    render(<HeroCarousel items={[item]} onSelect={() => {}} />);
+
+    expect(screen.getByText('🎁 무료')).toBeInTheDocument();
+    expect(screen.queryByText('💰 유료')).not.toBeInTheDocument();
+  });
+
+  it('is_free===false면 "💰 유료" 뱃지를 보여준다', () => {
+    const item = makeItem('4', '유료 행사');
+    item.is_free = false;
+
+    render(<HeroCarousel items={[item]} onSelect={() => {}} />);
+
+    expect(screen.getByText('💰 유료')).toBeInTheDocument();
+    expect(screen.queryByText('🎁 무료')).not.toBeInTheDocument();
+  });
+
+  it('is_free===null(정보 없음)이면 두 뱃지 다 숨긴다(단정 표시 방지)', () => {
+    const item = makeItem('5', '요금 정보 없음');
+    item.is_free = null;
+
+    render(<HeroCarousel items={[item]} onSelect={() => {}} />);
+
+    expect(screen.queryByText('🎁 무료')).not.toBeInTheDocument();
+    expect(screen.queryByText('💰 유료')).not.toBeInTheDocument();
+  });
 });
 
 // Task 9-1-9: 후보가 10개를 넘겨 HomeView가 moreHref를 넘기면 마지막 슬라이드로 "전체 보기"

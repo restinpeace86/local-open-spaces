@@ -966,6 +966,22 @@ describe('getReservationOpenEvents', () => {
 
     expect(items.map((item) => item.id)).toEqual(['dup']);
   });
+
+  // [카드 순서 우선순위](2026-08-27 사용자 지시): getCurrentlyOngoingEvents와 동일한 규칙.
+  it('공공키즈카페류는 앞으로, 자연/과학·교육체험은 뒤로 정렬한다', async () => {
+    const nature = eventRow({ id: 'nature', title: '자연 행사', category_min: '자연/과학', booking_status: '접수중', is_active: true });
+    const kidsCafe = eventRow({ id: 'kids-cafe', title: '키즈카페 행사', category_min: '공공키즈카페', booking_status: '접수중', is_active: true });
+    const general = eventRow({ id: 'general', title: '일반 행사', category_min: '문화행사', booking_status: '접수중', is_active: true });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeFilteringChainable([nature, kidsCafe, general]) }),
+    }));
+
+    const { getReservationOpenEvents } = await import('./get-home-feed');
+    const items = await getReservationOpenEvents(10, { sigunguName: null });
+
+    expect(items.map((item) => item.id)).toEqual(['kids-cafe', 'general', 'nature']);
+  });
 });
 
 // [이벤트픽 화면 개편](2026-08-27 사용자 지시): "예약 가능" 위에 두는 "현재 이용 가능" 섹션 —
@@ -1012,6 +1028,32 @@ describe('getCurrentlyOngoingEvents', () => {
     const items = await getCurrentlyOngoingEvents(10, { sigunguName: null });
 
     expect(items.map((item) => item.id)).toEqual(['one-day']);
+  });
+
+  // [카드 순서 우선순위](2026-08-27 사용자 지시): 공공키즈카페류는 앞으로, 자연/과학·교육체험은
+  // 뒤로 — 나머지는 중간 순위(기존 순서 그대로).
+  it('공공키즈카페류는 앞으로, 자연/과학·교육체험은 뒤로 정렬한다', async () => {
+    const nature = eventRow({ id: 'nature', title: '자연 행사', category_min: '자연/과학', is_active: true });
+    const general = eventRow({ id: 'general', title: '일반 행사', category_min: '문화행사', is_active: true });
+    const kidsCafe = eventRow({ id: 'kids-cafe', title: '키즈카페 행사', category_min: '공공키즈카페', is_active: true });
+    const education = eventRow({ id: 'education', title: '교육 행사', category_min: '교육체험', is_active: true });
+    const indoorPlayground = eventRow({
+      id: 'indoor-playground',
+      title: '실내놀이터 행사',
+      category_min: '어린이실내놀이터',
+      is_active: true,
+    });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () =>
+        Promise.resolve({ from: () => makeFilteringChainable([nature, general, kidsCafe, education, indoorPlayground]) }),
+    }));
+
+    const { getCurrentlyOngoingEvents } = await import('./get-home-feed');
+    const items = await getCurrentlyOngoingEvents(10, { sigunguName: null });
+
+    // 앞: 공공키즈카페/어린이실내놀이터(입력 순서 그대로, stable) → 중간: 문화행사 → 뒤: 자연/과학·교육체험
+    expect(items.map((item) => item.id)).toEqual(['kids-cafe', 'indoor-playground', 'general', 'nature', 'education']);
   });
 });
 

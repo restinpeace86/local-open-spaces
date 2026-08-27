@@ -215,3 +215,45 @@ describe('DetailModal 표준 중분류 뱃지 및 연령대상 표시', () => {
     expect(screen.queryByText('연령대상')).not.toBeInTheDocument();
   });
 });
+
+// [상세보기 설명 추가](2026-08-27 사용자 지시)
+describe('DetailModal 설명(description) 표시', () => {
+  beforeEach(() => {
+    mockUserLocation = { lat: 37.4, lng: 127.2 };
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('짧은 설명은 그대로 보여주고 "더보기" 버튼이 없다', () => {
+    render(
+      <DetailModal item={makeSpaceItem({ item_type: 'EVENT', description: '짧은 설명입니다.' })} onClose={() => {}} />
+    );
+
+    expect(screen.getByText('짧은 설명입니다.')).toBeInTheDocument();
+    expect(screen.queryByText('더보기')).not.toBeInTheDocument();
+  });
+
+  it('긴 설명(60자 초과)은 "더보기" 버튼이 있고, 누르면 "접기"로 바뀐다', () => {
+    const longDescription = '가'.repeat(61);
+    render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT', description: longDescription })} onClose={() => {}} />);
+
+    expect(screen.getByText('더보기')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('더보기'));
+    expect(screen.getByText('접기')).toBeInTheDocument();
+    expect(screen.queryByText('더보기')).not.toBeInTheDocument();
+  });
+
+  it('설명이 없으면 아무것도 렌더링하지 않는다', () => {
+    render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT', description: null })} onClose={() => {}} />);
+
+    expect(screen.queryByText('더보기')).not.toBeInTheDocument();
+  });
+
+  it('공간(SPACE)은 description이 있어도 보여주지 않는다(이벤트 전용 기능)', () => {
+    render(<DetailModal item={makeSpaceItem({ description: '이건 공간 설명' })} onClose={() => {}} />);
+
+    expect(screen.queryByText('이건 공간 설명')).not.toBeInTheDocument();
+  });
+});

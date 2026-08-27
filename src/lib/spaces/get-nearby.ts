@@ -49,6 +49,10 @@ export type NearbyItem = {
   // 컬럼이 없어 undefined로 남는다(소비 측이 category_min ?? meta.label로 안전하게 폴백).
   category_min?: string | null;
   target_audience?: string | null;
+  // [상세보기 설명 추가](2026-08-27 사용자 지시): 제목만으로는 무슨 행사인지 알기 어려운
+  // 경우가 많아 상세 팝업에 본문 설명을 추가한다. get-home-feed.ts의 events 조회 경로만
+  // 채운다(공간/RPC 경로는 이 컬럼을 조회하지 않아 undefined로 남는다).
+  description?: string | null;
 };
 
 // Task 9-6-10(2026-08-23): itemType을 넘기면 RPC가 해당 타입만 반환한다(예: '/nearby' 지도는
