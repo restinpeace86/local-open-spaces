@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  applyOtherReviewFlag,
   applyTargetAudienceTaxonomy,
   matchTag,
+  resolveOtherReviewTag,
   resolveTargetAudienceForRow,
   resolveViaCategory,
   resolveViaRawField,
@@ -226,5 +228,160 @@ describe('applyTargetAudienceTaxonomy', () => {
 
     await applyTargetAudienceTaxonomy(client);
     expect(rows[0]).toMatchObject({ target_audience: 'FACILITY', target_audience_source: 'CATEGORY' });
+  });
+});
+
+describe('resolveOtherReviewTag ("타겟 연령 기타" 수동 검수 분리)', () => {
+  it('target_audience가 NULL이고 raw_data 기타 필드(DTLCONT)에 키워드가 있으면 OTHER로 분리한다', () => {
+    const row = {
+      title: '중구 토요일 은하수 길 따라 남산 야간 트레킹',
+      description: null,
+      target_audience: null,
+      target_audience_source: null,
+      raw_data: { DTLCONT: '보호자 동반 시 참여 가능합니다', USETGTINFO: null },
+    };
+    expect(resolveOtherReviewTag(row)).toEqual({ target_audience: 'OTHER', target_audience_source: 'OTHER' });
+  });
+
+  it('target_audience가 ALL이고 키워드가 있으면 OTHER로 분리한다', () => {
+    const row = {
+      title: '아무 제목',
+      description: null,
+      target_audience: 'ALL',
+      target_audience_source: 'RAW_FIELD',
+      raw_data: { DTLCONT: '유아 동반 가족 프로그램' },
+    };
+    expect(resolveOtherReviewTag(row)).toEqual({ target_audience: 'OTHER', target_audience_source: 'OTHER' });
+  });
+
+  it('키워드가 전혀 없으면 그대로 둔다(null 반환)', () => {
+    const row = {
+      title: '성인 대상 요가 클래스',
+      description: null,
+      target_audience: 'ALL',
+      target_audience_source: 'RAW_FIELD',
+      raw_data: { DTLCONT: '누구나 참여 가능한 성인 프로그램입니다' },
+    };
+    expect(resolveOtherReviewTag(row)).toBeNull();
+  });
+
+  it('이미 실제 태그(NULL/ALL이 아님)가 확정된 행은 건드리지 않는다', () => {
+    const row = {
+      title: '무관',
+      description: null,
+      target_audience: 'KIDS_PRE',
+      target_audience_source: 'RAW_FIELD',
+      raw_data: { DTLCONT: '보호자 동반 필수' },
+    };
+    expect(resolveOtherReviewTag(row)).toBeNull();
+  });
+
+  it('MANUAL 행은 절대 건드리지 않는다', () => {
+    const row = {
+      title: '무관',
+      description: null,
+      target_audience: 'ALL',
+      target_audience_source: 'MANUAL',
+      raw_data: { DTLCONT: '보호자 동반 필수' },
+    };
+    expect(resolveOtherReviewTag(row)).toBeNull();
+  });
+
+  it('0순위/description으로 이미 스캔된 필드(USETGTINFO 등)의 키워드는 새 신호로 치지 않는다', () => {
+    const row = {
+      title: '아무 제목',
+      description: null,
+      target_audience: null,
+      target_audience_source: null,
+      raw_data: { USETGTINFO: '어린이', PROGRAM: '가족 프로그램' },
+    };
+    expect(resolveOtherReviewTag(row)).toBeNull();
+  });
+});
+
+function makeOtherReviewFakeClient(rows) {
+  return {
+    from() {
+      return {
+        select() {
+          const state = { or: null };
+          const builder = {
+            eq(column, value) {
+              state[column] = value;
+              return builder;
+            },
+            or(filterString) {
+              state.or = filterString;
+              return builder;
+            },
+            gt() {
+              return builder;
+            },
+            order() {
+              return builder;
+            },
+            limit(n) {
+              let filtered = rows;
+              if ('is_active' in state) filtered = filtered.filter((r) => r.is_active === state.is_active);
+              if (state.or) {
+                const clauses = state.or.split(',').map((c) => c.split('.'));
+                filtered = filtered.filter((r) =>
+                  clauses.some(([col, op, val]) => (op === 'is' ? r[col] === null : r[col] === val))
+                );
+              }
+              filtered = filtered.slice(0, n);
+              return Promise.resolve({
+                data: filtered.map((r) => ({
+                  id: r.id,
+                  title: r.title,
+                  description: r.description ?? null,
+                  target_audience: r.target_audience ?? null,
+                  target_audience_source: r.target_audience_source ?? null,
+                  raw_data: r.raw_data ?? null,
+                })),
+                error: null,
+              });
+            },
+          };
+          return builder;
+        },
+        update(patch) {
+          const state = {};
+          const builder = {
+            eq(column, value) {
+              state[column] = value;
+              const row = rows.find((r) => r.id === state.id);
+              if (row) Object.assign(row, patch);
+              return Promise.resolve({ error: null });
+            },
+          };
+          return builder;
+        },
+      };
+    },
+  };
+}
+
+describe('applyOtherReviewFlag', () => {
+  it('is_active=true이면서 target_audience가 NULL/ALL인 행만 스캔해 키워드 매칭 시 OTHER로 UPDATE한다', async () => {
+    const rows = [
+      { id: 'a', title: '무관', target_audience: null, is_active: true, raw_data: { DTLCONT: '보호자 동반 필수' } },
+      { id: 'b', title: '무관', target_audience: 'ALL', is_active: true, raw_data: { DTLCONT: '누구나 참여 가능한 가족 프로그램' } },
+      { id: 'c', title: '무관', target_audience: 'KIDS_PRE', is_active: true, raw_data: { DTLCONT: '보호자 동반' } },
+      { id: 'd', title: '무관', target_audience: null, target_audience_source: 'MANUAL', is_active: true, raw_data: { DTLCONT: '보호자 동반' } },
+      { id: 'e', title: '무관', target_audience: null, is_active: false, raw_data: { DTLCONT: '보호자 동반' } },
+    ];
+    const client = makeOtherReviewFakeClient(rows);
+
+    const result = await applyOtherReviewFlag(client);
+
+    // c/d/e는 is_active=false이거나 target_audience가 이미 실제 값이거나 MANUAL이라
+    // 애초에 or() 필터(NULL/ALL만)에 안 걸리거나 MANUAL 가드로 스캔에서 제외된다.
+    expect(rows.find((r) => r.id === 'a').target_audience).toBe('OTHER');
+    expect(rows.find((r) => r.id === 'b').target_audience).toBe('OTHER');
+    expect(rows.find((r) => r.id === 'c').target_audience).toBe('KIDS_PRE');
+    expect(rows.find((r) => r.id === 'd').target_audience).toBe(null);
+    expect(rows.find((r) => r.id === 'e').target_audience).toBe(null);
+    expect(result.flaggedAsOther).toBe(2);
   });
 });

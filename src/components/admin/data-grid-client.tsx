@@ -106,10 +106,12 @@ const PAGE_SIZE_OPTIONS = [50, 100, 200];
 // target_audience 값과 절대 겹치지 않도록 이중 밑줄로 감싼 식별자를 쓴다.
 const NULL_FILTER_TOKEN = '__NULL__';
 
-// [10대 타겟 분류 체계 실제 적용](2026-08-27): 고정 10종 태그라 category_min과 달리 RPC로
+// [10대 타겟 분류 체계 실제 적용](2026-08-27): 고정 태그라 category_min과 달리 RPC로
 // DB에서 discover하지 않고 하드코딩한다(값 자체가 스펙으로 확정된 enum).
+// [행사 데이터 수집/정제 파이프라인 및 홈 피드 필터링 개선] 후속 지시(2026-08-27): NULL/ALL
+// 중 유아/어린이/가족 관련 신호가 있어 수동 검수가 필요한 행을 모아두는 'OTHER'(기타) 추가.
 const TARGET_AUDIENCE_TAGS = [
-  'INFANT', 'KIDS_PRE', 'KIDS_SCHOOL', 'FAMILY', 'TEEN', 'YOUTH', 'ADULT', 'SENIOR', 'ALL', 'FACILITY',
+  'INFANT', 'KIDS_PRE', 'KIDS_SCHOOL', 'FAMILY', 'TEEN', 'YOUTH', 'ADULT', 'SENIOR', 'ALL', 'FACILITY', 'OTHER',
 ] as const;
 
 const TAB_LABEL: Record<AdminTable, string> = {
@@ -282,6 +284,8 @@ const TARGET_AUDIENCE_SOURCE_STYLE: Record<string, string> = {
   CATEGORY: 'bg-amber-100 text-amber-700',
   TEXT: 'bg-blue-100 text-blue-700',
   MANUAL: 'bg-purple-100 text-purple-700',
+  // NULL/ALL 중 유아/어린이/가족 관련 신호가 있어 수동 검수가 필요한 행 — 눈에 띄도록 경고색.
+  OTHER: 'bg-red-100 text-red-700',
 };
 
 function TargetAudienceBadge({ targetAudience, source }: { targetAudience: string | null; source: string | null }) {

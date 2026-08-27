@@ -269,3 +269,103 @@ export async function applyTargetAudienceTaxonomy(client) {
 
   return { scanned, updatedToValue, clearedToNull, preservedManual, tagCounts, sourceCounts };
 }
+
+// ---------- "타겟 연령 기타(OTHER)" 수동 검수 분리 ----------
+// [행사 데이터 수집/정제 파이프라인 및 홈 피드 필터링 개선] 후속 지시(2026-08-27): is_active=true
+// 대상으로 위 3단계 퍼널을 적용한 뒤에도 target_audience가 NULL이거나 ALL인 행 중, 지금까지
+// 어느 단계에서도 스캔한 적 없는 필드(raw_data의 기타 필드)에까지 범위를 넓혀 유아/어린이/
+// 가족 관련 키워드가 발견되면 'OTHER'로 표시해 별도로 모아 관리자가 수동으로 확인·수정하게
+// 한다(docs/target-audience-null-all-rawdata-keyword-simulation.md에서 사전 시뮬레이션한
+// 근거). 목적은 ALL 태그에 남는 행이 "가족/어린이와 진짜 무관한" 것만 남도록 정제하는 것
+// — ALL 자체가 틀렸다고 단정하는 게 아니라, 사람이 한 번 더 봐야 할 애매한 신호가 있다는
+// 뜻이라 새 태그로 분리한다(제3장 제5조 추측 금지 — 어떤 구체적 태그인지 임의로 추정하지
+// 않음).
+export const OTHER_REVIEW_KEYWORDS = ['어린이', '보호자', '유아', '초등', '가족', '동반', '키즈'];
+
+// 0순위에서 이미 보는 원천 타겟 필드, description으로 이미 편입된 소스별 필드, title과
+// 중복되는 필드는 "새로운 신호"가 아니므로 기타 필드 스캔에서 제외한다.
+const ALREADY_SCANNED_RAW_FIELDS = new Set([
+  ...RAW_AGE_FIELDS,
+  'PROGRAM', 'ETC_DESC', 'DTCONT', 'overview',
+  'TITLE', 'title',
+]);
+
+function otherRawFieldsText(rawData) {
+  if (!rawData || typeof rawData !== 'object') return '';
+  const parts = [];
+  for (const [key, value] of Object.entries(rawData)) {
+    if (ALREADY_SCANNED_RAW_FIELDS.has(key)) continue;
+    if (typeof value === 'string' && value.trim()) parts.push(value);
+  }
+  return parts.join(' ');
+}
+
+// 한 행에 대해 OTHER 분리 여부를 판정한다. MANUAL 행이나 이미 실제 태그(NULL/ALL이 아닌
+// 값)가 확정된 행은 절대 건드리지 않는다(null 반환 = 그대로 둠).
+export function resolveOtherReviewTag(row) {
+  if (row.target_audience_source === 'MANUAL') return null;
+  if (row.target_audience !== null && row.target_audience !== 'ALL') return null;
+
+  const text = `${row.title ?? ''} ${row.description ?? ''} ${otherRawFieldsText(row.raw_data)}`;
+  if (OTHER_REVIEW_KEYWORDS.some((kw) => text.includes(kw))) {
+    return { target_audience: 'OTHER', target_audience_source: 'OTHER' };
+  }
+  return null;
+}
+
+// is_active=true이면서 target_audience가 NULL 또는 ALL인 행만 대상으로 위 판정을 적용해
+// 실제 UPDATE한다(applyTargetAudienceTaxonomy와 별개의 후속 배치 — 이미 확정된 다른 태그는
+// 절대 재검토하지 않는다).
+export async function applyOtherReviewFlag(client) {
+  let lastId = null;
+  let scanned = 0;
+  let flaggedAsOther = 0;
+  let preservedManual = 0;
+  const fromCounts = new Map();
+
+  for (;;) {
+    let query = client
+      .from('events')
+      .select('id, title, description, target_audience, target_audience_source, raw_data')
+      .eq('is_active', true)
+      .or('target_audience.is.null,target_audience.eq.ALL')
+      .order('id', { ascending: true })
+      .limit(PAGE_SIZE);
+    if (lastId) query = query.gt('id', lastId);
+
+    const { data, error } = await query;
+    if (error) throw new Error(`events 스캔 실패: ${error.message}`);
+    if (!data || data.length === 0) break;
+
+    const updates = [];
+    for (const row of data) {
+      scanned += 1;
+      if (row.target_audience_source === 'MANUAL') {
+        preservedManual += 1;
+        continue;
+      }
+      const resolved = resolveOtherReviewTag(row);
+      if (!resolved) continue;
+      flaggedAsOther += 1;
+      fromCounts.set(row.target_audience ?? '(NULL)', (fromCounts.get(row.target_audience ?? '(NULL)') ?? 0) + 1);
+      updates.push({ id: row.id, ...resolved });
+    }
+
+    for (let i = 0; i < updates.length; i += UPDATE_BATCH_SIZE) {
+      const batch = updates.slice(i, i + UPDATE_BATCH_SIZE);
+      await Promise.all(
+        batch.map((u) =>
+          client
+            .from('events')
+            .update({ target_audience: u.target_audience, target_audience_source: u.target_audience_source })
+            .eq('id', u.id)
+        )
+      );
+    }
+
+    lastId = data[data.length - 1].id;
+    if (data.length < PAGE_SIZE) break;
+  }
+
+  return { scanned, flaggedAsOther, preservedManual, fromCounts };
+}

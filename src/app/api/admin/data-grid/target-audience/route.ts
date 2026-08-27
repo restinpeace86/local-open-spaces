@@ -5,8 +5,10 @@ import { createAdminClient } from '@/lib/supabase/admin';
 // 선택해 수정하면 target_audience_source를 항상 'MANUAL'로 바꾼다(category-min/route.ts와
 // 동일 규약 — 관리자의 명시적 판단이 자동 판정보다 최종 우선한다). target_audience는
 // events 테이블에만 있는 컬럼이라(open_spaces는 대상 외) table 파라미터를 받지 않는다.
+// [행사 데이터 수집/정제 파이프라인 및 홈 피드 필터링 개선] 후속 지시(2026-08-27): NULL/ALL
+// 중 유아/어린이/가족 관련 신호가 있어 수동 검수가 필요한 행을 모아두는 'OTHER'(기타) 추가.
 const TARGET_AUDIENCE_TAGS = [
-  'INFANT', 'KIDS_PRE', 'KIDS_SCHOOL', 'FAMILY', 'TEEN', 'YOUTH', 'ADULT', 'SENIOR', 'ALL', 'FACILITY',
+  'INFANT', 'KIDS_PRE', 'KIDS_SCHOOL', 'FAMILY', 'TEEN', 'YOUTH', 'ADULT', 'SENIOR', 'ALL', 'FACILITY', 'OTHER',
 ];
 
 export async function PATCH(request: NextRequest) {
