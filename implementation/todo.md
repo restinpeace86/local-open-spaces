@@ -12,23 +12,8 @@
    - 작업 완료 시 관련 테스트/빌드를 검증하고 `todo.md` 내 체크박스(`[x]`) 및 진행 상태를 최신화한다.
 
 ---
-- [x] **[최신 `spec.md` 동기화 및 이벤트픽(Event Pick) 데이터 파이프라인 연동]** — 완료(2026-08-27).
-  - **0. Pre-check**: `git pull` 결과 원격과 이미 동기화 상태(추가 변경 없음). `docs/spec.md` 1절
-    "이벤트픽 화면 노출 3대 기본 전제 조건"과 직전 완료 Task
-    (`implementation/2026-08-27-target-audience-10tier-real-application.md` 5절)이 스스로
-    명시한 "홈 피드 쿼리는 아직 category_min/target_audience 필터를 전혀 사용하지 않는다 —
-    이번 인덱스는 향후 홈 피드가 이 3조건 필터를 실제로 사용하게 될 때를 대비한 선제적
-    최적화" 기록을 확인, 본 Task가 정확히 그 후속 배선 작업임을 확인(홀드/상충 없음).
-  - **1. 구현**: `src/lib/home/get-home-feed.ts`의 이벤트픽 화면에 노출되는 모든 `events` 조회
-    쿼리(`getTodayEvents`, `getReservationOpenEvents`(2개 하위 쿼리), `searchEvents`,
-    `getProvinceWideEvents`, `getFreeFeed`의 events 분기, `getThemeSpotFeed`의 events 분기,
-    `getCategoryFeed`)에 `EVENT_PICK_TARGET_AUDIENCES`(`INFANT`/`KIDS_PRE`/`KIDS_SCHOOL`/
-    `FAMILY`/`ALL`) `.in()` 필터와 `category_min` `.not(is null)` 필터를 기존 `is_active=true`
-    조건 옆에 공통 추가. 스팟픽(`open_spaces`) 쿼리는 대상에서 제외(Decision 010 — 이벤트픽
-    전용 조건).
-  - **2. 검증**: `npx tsc --noEmit` clean, `npm run test` 470건 전부 통과(테스트 픽스처
-    `eventRow()`에 `target_audience`/`category_min` 기본값 추가 및 mock 빌더에 `.not()` 지원
-    추가), `npm run build` 성공. `npm run dev` 로컬 서버로 `/`, `/events/today`, `/nearby`,
-    `/api/home/feed`, `/api/home/category-feed`, `/api/home/free-feed`,
-    `/api/home/theme-feed`, `/api/home/search` 전부 200 응답 및 필터링된 실데이터 정상 반환
-    실측 확인.
+- [ ] **[원격 `git pull` 동기화 및 특정 중분류 화면 노출 제외 쿼리 반영]**
+  - **[작업 목표]**
+    1. **`git pull` 실행**: 대표님이 직접 수정/반영하신 최신 `spec.md` 명세 및 원격 변경 사항을 로컬 저장소로 pull하여 완벽히 동기화한다.
+    2. **화면 노출 제외 조건 반영 (`category_min NOT IN (...)`)**: `src/lib/home/get-home-feed.ts` 등 홈 피드 및 이벤트픽 조회 파이프라인에 `단체봉사`, `청년정보`, `정보통신`, `전문/자격증` 4개 중분류 항목을 화면 노출 시 제외하는 필터링 로직을 추가 구현한다.
+    3. **정합성 검증**: `npx tsc --noEmit` 타입 검증, 전체 테스트(470건 이상) 실행 및 API 정상 응답 여부 확인.
