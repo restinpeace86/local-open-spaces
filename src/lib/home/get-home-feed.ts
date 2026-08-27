@@ -653,32 +653,6 @@ function toSpaceItem(row: SpaceRow): NearbyItem {
   };
 }
 
-// Task 9-6-2(2026-08-23, Decision 009): 원본에 위치 정보가 전혀 없는 행사(예: 경기데이터드림
-// API1 중 시/군명조차 매칭 안 된 건)를 지도/주변에는 노출하지 않되, 메인 페이지 "경기도권 기타"
-// 섹션에서는 볼 수 있게 한다(사용자 요구사항: "지도에는 정확한 위치의 이벤트만 나오면 되지만
-// 메인화면에는 경기도권 모든 이벤트에 대하여 어떤 형태로든 볼 수 있어야 함"). location이 없어
-// 특정 지역(sigungu_name)과 무관하므로 지역 우선순위 정렬 없이 종료 임박순으로만 노출한다.
-export async function getProvinceWideEvents(limit = 12): Promise<NearbyItem[]> {
-  const supabase = await createClient();
-  const today = new Date().toISOString().slice(0, 10);
-
-  const { data, error } = await supabase
-    .from('events')
-    .select(EVENT_COLUMNS)
-    .eq('location_precision', 'UNKNOWN')
-    .eq('is_active', true)
-    .in('target_audience', EVENT_PICK_TARGET_AUDIENCES)
-    .not('category_min', 'is', null)
-    .not('category_min', 'in', EXCLUDED_CATEGORY_MIN_FILTER)
-    .gte('end_date', today)
-    .order('start_date', { ascending: true })
-    .limit(limit);
-
-  if (error) throw new Error(error.message);
-
-  return ((data ?? []) as EventRow[]).map(toEventItem);
-}
-
 // docs/spec.md 2.2 ③: "🎁 0원의 행복 — 지출 부담 없는 완전 무료 공공장소/행사 카드"
 // Task 9-6-4(2026-08-23): dataType 기본값 'events' — 홈 화면 최상위 대분류(🎪 행사·축제가
 // 기본)에 맞춰 open_spaces는 명시적으로 'open_spaces'를 넘길 때만 조회한다.

@@ -7,8 +7,8 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: () => {} }),
 }));
 
-// Task 9-3-1(2026-08-22): jsdom에는 IntersectionObserver가 없어, "경기도권 기타" 섹션(useInView
-// 사용처)이 렌더링될 때 크래시하지 않도록 가짜 구현을 전역에 등록해둔다.
+// Task 9-3-1(2026-08-22): jsdom에는 IntersectionObserver가 없어, HeroCarousel(뷰포트 이탈 시
+// Autoplay 정지 로직)이 렌더링될 때 크래시하지 않도록 가짜 구현을 전역에 등록해둔다.
 class FakeIntersectionObserver {
   static instances: FakeIntersectionObserver[] = [];
   callback: IntersectionObserverCallback;
