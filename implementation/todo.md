@@ -42,7 +42,15 @@
     5. **[3단계: 어드민 정밀 수동 검수 (최후 잔여건)]**
        - 0~2단계를 거치고도 판단이 불가능하여 `target_audience IS NULL`로 남는 최후 잔여건수 산출 및 고효율 추가 키워드 제안.
 
-- [ ] **[레거시 백필 실행 및 Target Audience 10대 분류 체계 시뮬레이션]**
+- [x] **[레거시 백필 실행 및 Target Audience 10대 분류 체계 시뮬레이션]** — 완료(2026-08-27).
+  결과: `implementation/2026-08-27-legacy-backfill-and-target-audience-10tier-dryrun.md`,
+  상세 리포트: `docs/target-audience-10tier-dryrun-report.md`. (1) 레거시 백필은 지시대로
+  실제 DB 반영 완료 — `SEOUL_RESERVATION_*`(source=null) 2,544건 중 라이브 API SVCID 정확
+  매칭 2,322건(91.3%)의 `source`/`raw_data`를 실제 UPDATE(`scripts/migrations/2026-08-27-
+  backfill-legacy-seoul-reservation-raw-data.mjs`, 멱등), 222건은 라이브 피드 소멸로 복구
+  불가(NULL 유지). (2) 10대 체계 시뮬레이션은 지시대로 Read-Only만 수행 — 최종 NULL 잔여
+  582건(16.35%, 8대 체계 50.48% 대비 대폭 개선). FACILITY/ADULT 키워드 등 잠정 규칙 5건은
+  대표 승인 대기 미결 사항으로 보고서에 남김(임의 확정 안 함).
   - **[핵심 원칙 - 절대주의]**
     1. **레거시 백필은 실제 DB 적용**: `source` 및 `raw_data`가 비어 있는 구버전(`SEOUL_RESERVATION_*`, `source=null`) 데이터들은 실제 DB에 원천 데이터 및 소스명을 정상적으로 UPDATE 반영한다.
     2. **10대 분류 시뮬레이션은 Read-Only**: 백필 완료 후 `events.target_audience` 정제 작업은 실제 DB 변경 없이 오직 메모리 상에서 10대 체계 Dry-run 시뮬레이션만 수행하고 결과를 보고한다.
