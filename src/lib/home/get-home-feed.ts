@@ -533,6 +533,39 @@ export async function getReservationOpenEvents(
   return ordered.sort(byRegionPriority(region)).slice(0, limit);
 }
 
+// [이벤트픽 화면 개편] "현재 이용 가능" 카드 구역(2026-08-27 사용자 지시): "예약 가능"
+// (getReservationOpenEvents, 예약 접수 상태 기준) 바로 위에 두는 별도 섹션 — 예약 여부와
+// 무관하게 오늘 날짜가 행사 진행 기간(start_date~end_date) 안에 있으면(지금 당장 가서 볼 수
+// 있는 행사) 노출한다. getReservationOpenEvents처럼 소스별 분기가 필요 없다(start_date/
+// end_date는 모든 소스가 공통으로 채우는 컬럼) — 단일 쿼리로 충분하다.
+export async function getCurrentlyOngoingEvents(
+  limit = 10,
+  region: HomeRegion = DEFAULT_HOME_REGION
+): Promise<NearbyItem[]> {
+  const supabase = await createClient();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const buildQuery = (token: string | readonly string[] | null) => {
+    let query = supabase
+      .from('events')
+      .select(EVENT_COLUMNS)
+      .eq('is_active', true)
+      .in('target_audience', EVENT_PICK_TARGET_AUDIENCES)
+      .not('category_min', 'is', null)
+      .not('category_min', 'in', EXCLUDED_CATEGORY_MIN_FILTER)
+      .lte('start_date', today)
+      .gte('end_date', today);
+    if (token) query = query.or(regionOrFilter(token, 'venue_name'));
+    return query.order('start_date', { ascending: false }).limit(500);
+  };
+
+  const data = await fetchRegionFirstRows<EventRow>(buildQuery, region, limit);
+
+  const items = dedupeAndMergeFree(data.map(toEventItem));
+  const ordered = sortByDistanceIfKnown(items, region);
+  return ordered.sort(byRegionPriority(region)).slice(0, limit);
+}
+
 // [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "GNB 헤더 & 글로벌 위치 상태 공유"):
 // 이벤트픽 검색은 events 테이블 전용으로 수행한다(스팟픽의 open_spaces 검색과 분리) — 검색은
 // 사용자가 이름을 직접 아는 상태로 찾는 행위라 지역 제한을 걸지 않는다(다른 피드 함수들과
@@ -807,6 +840,7 @@ export type HomeFeed = {
   heroEvents: NearbyItem[];
   freeFeed: NearbyItem[];
   reservationOpenEvents: NearbyItem[];
+  currentlyOngoingEvents: NearbyItem[];
 };
 
 // 사용자 피드백(2026-08-22): 메인 Hero Carousel은 처음엔 10개만 보여주되(HomeView가 화면에
@@ -817,15 +851,19 @@ export type HomeFeed = {
 // 같은 값을 쓰도록 export한다(하단 "가성비 행복" 피드는 더 이상 초기 페칭에 포함하지 않음).
 export const HERO_FETCH_LIMIT = 30;
 
-// [프론트엔드 UI/UX 개선](2026-08-26): "당일 예약 필요 카드" 가로 스크롤 슬라이더도 Hero처럼
+// [프론트엔드 UI/UX 개선](2026-08-26): "예약 가능 카드" 가로 스크롤 슬라이더도 Hero처럼
 // 화면에 보여줄 개수(HomeView가 결정)보다 넉넉히 가져온다.
 export const RESERVATION_OPEN_FETCH_LIMIT = 20;
 
+// [이벤트픽 화면 개편](2026-08-27): "현재 이용 가능" 슬라이더도 동일한 관례.
+export const CURRENTLY_ONGOING_FETCH_LIMIT = 20;
+
 export async function getHomeFeed(region: HomeRegion = DEFAULT_HOME_REGION): Promise<HomeFeed> {
-  const [heroEvents, freeFeed, reservationOpenEvents] = await Promise.all([
+  const [heroEvents, freeFeed, reservationOpenEvents, currentlyOngoingEvents] = await Promise.all([
     getTodayEvents(HERO_FETCH_LIMIT, region),
     getFreeFeed(12, region),
     getReservationOpenEvents(RESERVATION_OPEN_FETCH_LIMIT, region),
+    getCurrentlyOngoingEvents(CURRENTLY_ONGOING_FETCH_LIMIT, region),
   ]);
-  return { heroEvents, freeFeed, reservationOpenEvents };
+  return { heroEvents, freeFeed, reservationOpenEvents, currentlyOngoingEvents };
 }

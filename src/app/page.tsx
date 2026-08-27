@@ -1,7 +1,9 @@
 import { HomeView } from '@/components/home/home-view';
 import {
+  getCurrentlyOngoingEvents,
   getReservationOpenEvents,
   getTodayEvents,
+  CURRENTLY_ONGOING_FETCH_LIMIT,
   HERO_FETCH_LIMIT,
   RESERVATION_OPEN_FETCH_LIMIT,
 } from '@/lib/home/get-home-feed';
@@ -25,7 +27,7 @@ export default async function HomePage() {
     // 폴백: 빈 배열이면 HomeView가 "오늘 진행 중인 추천 행사가 아직 없습니다" 안내를 보여준다.
   }
 
-  // [프론트엔드 UI/UX 개선](2026-08-26): "당일 예약 필요 카드" 슬라이더도 Hero와 동일하게
+  // [프론트엔드 UI/UX 개선](2026-08-26): "예약 가능 카드" 슬라이더도 Hero와 동일하게
   // 초기 SSR에서 함께 페칭한다 — 실패해도(DB 일시 오류 등) 홈 화면 전체가 죽지 않도록 Hero와
   // 같은 방어적 폴백(빈 배열)을 적용한다.
   let reservationOpenEvents: Awaited<ReturnType<typeof getReservationOpenEvents>> = [];
@@ -35,5 +37,19 @@ export default async function HomePage() {
     // 폴백: 빈 배열이면 HomeView가 해당 섹션을 숨긴다.
   }
 
-  return <HomeView initialHeroEvents={heroEvents} initialReservationOpenEvents={reservationOpenEvents} />;
+  // [이벤트픽 화면 개편](2026-08-27): "현재 이용 가능 카드" 슬라이더도 동일한 방어적 폴백.
+  let currentlyOngoingEvents: Awaited<ReturnType<typeof getCurrentlyOngoingEvents>> = [];
+  try {
+    currentlyOngoingEvents = await getCurrentlyOngoingEvents(CURRENTLY_ONGOING_FETCH_LIMIT);
+  } catch {
+    // 폴백: 빈 배열이면 HomeView가 해당 섹션을 숨긴다.
+  }
+
+  return (
+    <HomeView
+      initialHeroEvents={heroEvents}
+      initialReservationOpenEvents={reservationOpenEvents}
+      initialCurrentlyOngoingEvents={currentlyOngoingEvents}
+    />
+  );
 }

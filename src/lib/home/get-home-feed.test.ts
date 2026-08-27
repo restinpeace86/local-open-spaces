@@ -45,10 +45,22 @@ function makeFilteringChainable(rows: Array<Record<string, unknown>>) {
   const inFilters: Record<string, unknown[]> = {};
   const notNullFilters: string[] = [];
   const orFilterGroups: string[] = [];
+  // [이벤트픽 화면 개편](2026-08-27): getCurrentlyOngoingEvents 등 lte/gte 날짜 범위 필터를
+  // 실제로 검증하려면 no-op이던 이 두 메서드가 실제로 걸러줘야 한다. 기존 다른 describe
+  // 블록들은 전부 eventRow()의 기본값(start_date=end_date=오늘)만 쓰거나 lte/gte를 쓰지 않는
+  // 함수만 테스트해 영향이 없음을 확인했다.
+  const lteFilters: Record<string, unknown> = {};
+  const gteFilters: Record<string, unknown> = {};
   const builder: Record<string, unknown> = {};
   builder.select = () => builder;
-  builder.lte = () => builder;
-  builder.gte = () => builder;
+  builder.lte = (column: string, value: unknown) => {
+    lteFilters[column] = value;
+    return builder;
+  };
+  builder.gte = (column: string, value: unknown) => {
+    gteFilters[column] = value;
+    return builder;
+  };
   builder.gt = () => builder;
   builder.order = () => builder;
   builder.eq = (column: string, value: unknown) => {
@@ -79,6 +91,20 @@ function makeFilteringChainable(rows: Array<Record<string, unknown>>) {
     }
     if (notNullFilters.length > 0) {
       filtered = filtered.filter((row) => notNullFilters.every((col) => row[col] !== null && row[col] !== undefined));
+    }
+    if (Object.keys(lteFilters).length > 0) {
+      filtered = filtered.filter((row) =>
+        Object.entries(lteFilters).every(
+          ([col, val]) => row[col] !== null && row[col] !== undefined && String(row[col]) <= String(val)
+        )
+      );
+    }
+    if (Object.keys(gteFilters).length > 0) {
+      filtered = filtered.filter((row) =>
+        Object.entries(gteFilters).every(
+          ([col, val]) => row[col] !== null && row[col] !== undefined && String(row[col]) >= String(val)
+        )
+      );
     }
     for (const group of orFilterGroups) {
       const conditions = group.split(',').map((cond) => {
@@ -937,6 +963,53 @@ describe('getReservationOpenEvents', () => {
     const items = await getReservationOpenEvents(10, { sigunguName: null });
 
     expect(items.map((item) => item.id)).toEqual(['dup']);
+  });
+});
+
+// [이벤트픽 화면 개편](2026-08-27 사용자 지시): "예약 가능" 위에 두는 "현재 이용 가능" 섹션 —
+// 예약 상태와 무관하게 오늘이 진행 기간(start_date~end_date) 안에 있으면 노출한다.
+describe('getCurrentlyOngoingEvents', () => {
+  afterEach(() => {
+    vi.doUnmock('@/lib/supabase/server');
+    vi.resetModules();
+  });
+
+  it('오늘이 start_date~end_date 범위 안에 있는 행사만 반환한다', async () => {
+    const ongoing = eventRow({ id: 'ongoing', start_date: '2026-08-01', end_date: '2026-09-30', is_active: true });
+    const notStartedYet = eventRow({
+      id: 'not-started',
+      start_date: '2099-01-01',
+      end_date: '2099-01-31',
+      is_active: true,
+    });
+    const alreadyEnded = eventRow({
+      id: 'already-ended',
+      start_date: '2000-01-01',
+      end_date: '2000-01-31',
+      is_active: true,
+    });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeFilteringChainable([ongoing, notStartedYet, alreadyEnded]) }),
+    }));
+
+    const { getCurrentlyOngoingEvents } = await import('./get-home-feed');
+    const items = await getCurrentlyOngoingEvents(10, { sigunguName: null });
+
+    expect(items.map((item) => item.id)).toEqual(['ongoing']);
+  });
+
+  it('하루짜리 행사도(start_date=end_date=오늘) 포함한다', async () => {
+    const oneDayEvent = eventRow({ id: 'one-day', is_active: true });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeFilteringChainable([oneDayEvent]) }),
+    }));
+
+    const { getCurrentlyOngoingEvents } = await import('./get-home-feed');
+    const items = await getCurrentlyOngoingEvents(10, { sigunguName: null });
+
+    expect(items.map((item) => item.id)).toEqual(['one-day']);
   });
 });
 

@@ -203,9 +203,11 @@ function useEventSearch() {
 export function HomeView({
   initialHeroEvents,
   initialReservationOpenEvents = [],
+  initialCurrentlyOngoingEvents = [],
 }: {
   initialHeroEvents: NearbyItem[];
   initialReservationOpenEvents?: NearbyItem[];
+  initialCurrentlyOngoingEvents?: NearbyItem[];
 }) {
   const { center, addressName, sigunguName, isOnboardingOpen, confirmLocation, openOnboarding, closeOnboarding } =
     useUserLocation();
@@ -213,6 +215,7 @@ export function HomeView({
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
   const [heroEvents, setHeroEvents] = useState<NearbyItem[]>(initialHeroEvents);
   const [reservationOpenEvents, setReservationOpenEvents] = useState<NearbyItem[]>(initialReservationOpenEvents);
+  const [currentlyOngoingEvents, setCurrentlyOngoingEvents] = useState<NearbyItem[]>(initialCurrentlyOngoingEvents);
   const { keyword: searchKeyword, results: searchResults, isSearching, search: handleSearchChange } = useEventSearch();
   const isSearchActive = searchKeyword.trim().length > 0;
   // Task 9-6-10(2026-08-23): 하단 탭 재편으로 이 화면이 "이벤트픽"(시한성 이벤트 전용)이
@@ -259,10 +262,13 @@ export function HomeView({
       // 그대로 실행되므로(HTTP 상태와 무관하게 body만 있으면 resolve), heroEvents가 배열인지
       // 확인 없이 그대로 setHeroEvents에 넘기면 undefined가 들어가 이후 heroEvents.slice(...)가
       // 던지며 홈 화면이 통째로 크래시했다(실제 재현: sigungu 쿼리에 콤마가 섞이면 항상 발생).
-      .then((data: { heroEvents?: NearbyItem[]; reservationOpenEvents?: NearbyItem[] }) => {
+      .then((data: { heroEvents?: NearbyItem[]; reservationOpenEvents?: NearbyItem[]; currentlyOngoingEvents?: NearbyItem[] }) => {
         if (!cancelled && Array.isArray(data.heroEvents)) setHeroEvents(data.heroEvents);
         if (!cancelled && Array.isArray(data.reservationOpenEvents)) {
           setReservationOpenEvents(data.reservationOpenEvents);
+        }
+        if (!cancelled && Array.isArray(data.currentlyOngoingEvents)) {
+          setCurrentlyOngoingEvents(data.currentlyOngoingEvents);
         }
         // 배열이 아니면(에러 응답 등) 기존 피드를 그대로 유지한다(Fail-Safe).
       })
@@ -338,11 +344,24 @@ export function HomeView({
               </section>
             )}
 
+            {/* [이벤트픽 화면 개편](2026-08-27 사용자 지시): "예약 가능" 섹션 위에 "현재
+                이용 가능"(오늘이 start_date~end_date 진행 기간 안에 있는 행사, 예약 여부와
+                무관) 섹션을 추가한다. 0건이면 섹션 자체를 숨긴다(다른 섹션과 동일한 가변
+                노출 원칙). ReservationOpenSlider는 단순 가로 스크롤 카드 목록 컴포넌트라
+                items만 바꿔 그대로 재사용한다(제5장 제4조 기존 구조 우선). */}
+            {currentlyOngoingEvents.length > 0 && (
+              <section aria-label="현재 이용 가능">
+                <h2 className="text-base font-bold text-gray-900 mb-3 px-4">✅ 현재 이용 가능</h2>
+                <ReservationOpenSlider items={currentlyOngoingEvents} onSelect={setSelectedItem} />
+              </section>
+            )}
+
             {/* [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "당일 예약 필요 카드
-                구역"): 접수중인 이벤트가 없으면 섹션 자체를 숨긴다(Hero와 동일한 가변 노출 원칙). */}
+                구역")/[이벤트픽 화면 개편](2026-08-27 사용자 지시로 "예약 가능"으로 개칭):
+                접수중인 이벤트가 없으면 섹션 자체를 숨긴다(Hero와 동일한 가변 노출 원칙). */}
             {reservationOpenEvents.length > 0 && (
-              <section aria-label="당일 예약 필요">
-                <h2 className="text-base font-bold text-gray-900 mb-3 px-4">📋 당일 예약 필요</h2>
+              <section aria-label="예약 가능">
+                <h2 className="text-base font-bold text-gray-900 mb-3 px-4">📋 예약 가능</h2>
                 <ReservationOpenSlider items={reservationOpenEvents} onSelect={setSelectedItem} />
               </section>
             )}
