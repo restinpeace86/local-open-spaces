@@ -18,6 +18,7 @@
 import { BaseCollectorAdapter } from './base-collector-adapter.mjs';
 import { buildEventRow, buildOpenSpaceRow, UI_CATEGORY } from './lib/schema-mapper.mjs';
 import { deriveParentalTags, deriveSpaceKidsFriendly } from '../lib/ai-tagging.mjs';
+import { extractYeyakDescription } from '../lib/seoul-yeyak-description.mjs';
 
 const BASE_URL = 'http://openapi.seoul.go.kr:8088';
 const SERVICE_NAME = 'tvYeyakCOllect';
@@ -219,6 +220,10 @@ export class SeoulYeyakAdapter extends BaseCollectorAdapter {
             venueName: item.PLACENM || null,
             sigunguName,
             rawData: item,
+            // [상세보기 설명 누락 수정](2026-08-27): 이 소스는 본문 백필(backfill-contents.mjs)
+            // 대상에서 빠져 description이 전량 NULL이었다(실측 확인) — 원본 DTLCONT(상세내용)에서
+            // 공통 안내문/HTML 태그를 제거해 채운다.
+            description: extractYeyakDescription(item.DTLCONT),
             categoryMin,
             categoryMinSource,
           });
