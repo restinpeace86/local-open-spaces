@@ -90,7 +90,18 @@
        - 화면 노출 3대 조건(`is_active = true`, 타겟 연령 5대 조건, 중분류 널값 제외)을 만족하는 데이터 조회 쿼리 및 인덱스 최적화 수행.
   - **검증**: `npx tsc --noEmit` 타입 검증, 마이그레이션 실행 결과 및 어드민 렌더링 검증 완료.
      
-- [ ] **[1단계 중분류(Category Mid) raw_data 원천 필드 우선 탐색 및 Dry-run 시뮬레이션]**
+- [x] **[1단계 중분류(Category Mid) raw_data 원천 필드 우선 탐색 및 Dry-run 시뮬레이션]** —
+  완료(2026-08-27, DB 미반영 순수 시뮬레이션). 결과: `implementation/2026-08-27-category-mid-
+  rawfield-dryrun.md`, 상세 리포트: `docs/category-mid-rawfield-dryrun-report.md`. 지시문의
+  "Category Mid"는 실제 DB 컬럼 `category_min`을 가리킨다(신규 컬럼 아님). 스크립트는
+  `.ts` 대신 프로젝트 관례에 맞춰 `.mjs`로 작성(`scripts/simulations/category_mid_dryrun.mjs`
+  — tsx/ts-node 미보유 확인). 핵심 발견: (1) `seoul_public_reservation` NULL 1,096건 전수가
+  이미 `MINCLASSNM` 값을 보유(승인된 0순위 규칙 재적용 시 100% 해소 가능하나 실제 데이터에는
+  미적용 상태였음을 실측 확인, 원인 조사는 범위 밖), (2) `seoul_public_culture`의 `CODENAME`
+  미활용으로 동일 장르가 최대 8종 중분류로 산발 매칭되는 비일관성 확인, CODENAME 제안 매핑
+  (승인 대기)까지 반영 시 NULL 1,459건→93건(2.61%)까지 개선 가능. (3) `gg_public`/
+  `tourapi_4.0`은 원천 필드가 부적합/공식 코드표 미확보로 매핑 보류. 3건 모두 대표 승인
+  대기 미결 사항으로 보고서에 남김(임의 확정 안 함).
   - **[핵심 원칙 - 절대주의]**
     1. **raw_data 내 중분류 원천 필드 정밀 스캔**: 백필된 이벤트 데이터의 `raw_data` 내부에서 중분류 의미를 담고 있는 원천 필드(`MINCLASSNM`, `SUBCLASSNM`, `CATEGORY`, `SCLASS` 등 API 소스별 상이한 필드 구조)를 전수 조사한다.
     2. **원천 필드 우선 매핑 (0순위) 시뮬레이션**: 실제 DB 반영 전, 메모리상에서 위 원천 필드 값을 최우선으로 참고하여 표준 중분류(`category_mid`)로 1:1 매핑하는 Dry-run을 수행한다.
