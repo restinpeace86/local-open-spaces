@@ -1,11 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { KakaoMapView } from '@/components/map/kakao-map-view';
 import { SearchBar } from '@/components/map/search-bar';
-import { CategoryFilter, ALL_CATEGORY } from '@/components/map/category-filter';
-import { QuickFilters } from '@/components/map/quick-filters';
+import { SpotCategoryFilter, MAX_SPOT_CATEGORY_MIN_SELECTION } from '@/components/map/spot-category-filter';
 import { ItemListPanel } from '@/components/map/item-list-panel';
 import { EmptyState } from '@/components/map/empty-state';
 import { DetailModal } from '@/components/map/detail-modal';
@@ -15,17 +14,15 @@ import { LocationOnboardingModal } from '@/components/map/location-onboarding-mo
 import { RecenterButton } from '@/components/map/recenter-button';
 import { MyLocationButton } from '@/components/map/my-location-button';
 import { getNearbySpacesAndEvents, NearbyItem } from '@/lib/spaces/get-nearby';
-import { matchesQuickFilters, QuickFilterKey, QUICK_FILTER_OPTIONS } from '@/lib/spaces/quick-filters';
-import { classifyThemeSpot, NEARBY_CATEGORY_FILTER_OPTIONS } from '@/lib/theme-spots';
 import { useUserLocation } from '@/hooks/use-user-location';
-
-// Task 9-1-9: 유효한 QuickFilterKey인지 확인(URL에서 임의 값이 들어와도 안전하게 무시).
-function isQuickFilterKey(value: string): value is QuickFilterKey {
-  return QUICK_FILTER_OPTIONS.some((opt) => opt.key === value);
-}
 
 // spec/map/spatial-search.md 3.1: 반경 내 최대 200개 마커만 우선 렌더링
 const MARKER_LIMIT = 200;
+
+// [스팟픽 대분류/중분류 계층적 탐색](2026-08-28): 중분류 6번째 선택 시도 시 안내 토스트를
+// 이 시간 동안만 노출한다(반경 초과 Toast와 달리 조건이 계속 참인 게 아니라 "시도 순간"의
+// 일회성 안내라 자동으로 사라져야 한다).
+const MAX_SELECTION_TOAST_DURATION_MS = 2000;
 
 // [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 3): "지도 상단 Floating 1km/5km/10km
 // 반경 선택 버튼 전면 삭제"에 따라 사용자가 더 이상 반경을 고를 수 없다 — 이전 RadiusSelector의
@@ -43,18 +40,15 @@ export function MapExplorer() {
     closeOnboarding,
   } = useUserLocation();
   // Task 9-1(2026-08-22): 홈 화면 검색바에서 "/nearby?q=..."로 넘어온 검색어를 초기값으로 반영한다.
-  // Task 9-1-9: "/nearby?filter=TODAY_WEEKEND"처럼 넘어온 Quick 필터를 초기 활성값으로 반영한다.
-  // Task 9-6-6(2026-08-23) 이후: 홈 Hero Carousel의 "전체 보기" CTA는 더 이상 이 화면(지도)이
-  // 아니라 /events/today로 연결되므로, 이 쿼리 파라미터 처리는 현재 실제로 이걸 넘기는 진입점이
-  // 없다 — 다만 범용 기능이라 제거하지 않고 남겨둔다(향후 다른 진입점이 재사용할 수 있음).
   const searchParams = useSearchParams();
   const radius = FIXED_RADIUS_METERS;
   const [keyword, setKeyword] = useState(() => searchParams.get('q') ?? '');
-  const [category, setCategory] = useState(ALL_CATEGORY);
-  const [activeQuickFilters, setActiveQuickFilters] = useState<QuickFilterKey[]>(() => {
-    const filterParam = searchParams.get('filter');
-    return filterParam && isQuickFilterKey(filterParam) ? [filterParam] : [];
-  });
+  // [스팟픽 대분류/중분류 계층적 탐색](2026-08-28): 기존 목적별 테마 단일 선택(category,
+  // classifyThemeSpot)과 키즈/무료/오늘·주말 Quick 필터를 표준 중분류(category_min) 다중
+  // 선택(최대 5개)으로 전면 교체한다 — 대표 확인 후 결정.
+  const [selectedCategoryMins, setSelectedCategoryMins] = useState<string[]>([]);
+  const [isMaxSelectionToastVisible, setIsMaxSelectionToastVisible] = useState(false);
+  const maxSelectionToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [items, setItems] = useState<NearbyItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
   const [isSheetExpanded, setIsSheetExpanded] = useState(false);
@@ -124,26 +118,42 @@ export function MapExplorer() {
 
   const resetFilters = useCallback(() => {
     setKeyword('');
-    setCategory(ALL_CATEGORY);
-    setActiveQuickFilters([]);
+    setSelectedCategoryMins([]);
   }, []);
 
-  // spec/common/search.md 'Quick Filters': 칩은 다중 선택되며 AND 조건으로 스크리닝된다.
-  const handleToggleQuickFilter = useCallback((key: QuickFilterKey) => {
-    setActiveQuickFilters((prev) =>
-      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+  // [스팟픽 대분류/중분류 계층적 탐색](2026-08-28): 중분류 다중 선택(최대
+  // MAX_SPOT_CATEGORY_MIN_SELECTION개)을 토글한다. 제한 초과 시도는
+  // SpotCategoryFilter가 걸러 onLimitExceeded로 알려주므로 여기서는 정상 토글만 담당한다.
+  const handleToggleCategoryMin = useCallback((minor: string) => {
+    setSelectedCategoryMins((prev) => (prev.includes(minor) ? prev.filter((m) => m !== minor) : [...prev, minor]));
+  }, []);
+
+  const handleLimitExceeded = useCallback(() => {
+    if (maxSelectionToastTimerRef.current) clearTimeout(maxSelectionToastTimerRef.current);
+    setIsMaxSelectionToastVisible(true);
+    maxSelectionToastTimerRef.current = setTimeout(
+      () => setIsMaxSelectionToastVisible(false),
+      MAX_SELECTION_TOAST_DURATION_MS
     );
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (maxSelectionToastTimerRef.current) clearTimeout(maxSelectionToastTimerRef.current);
+    };
   }, []);
 
   // spec/common/search.md 2.3: 카테고리 선택 시 지도 마커와 리스트가 즉시 동기화되어 렌더링
   // Task 9-6-10(2026-08-23): /nearby가 상시 공간 전용으로 단일화되면서(RPC가 이미 SPACE만
-  // 반환) EVENT/showSpaces 토글 분기가 필요 없어졌다. 카테고리 칩도 5대 UI 카테고리가 아니라
-  // 목적별 테마(classifyThemeSpot, NEARBY_CATEGORY_FILTER_OPTIONS)로 거른다.
+  // 반환) EVENT/showSpaces 토글 분기가 필요 없어졌다.
+  // [스팟픽 대분류/중분류 계층적 탐색](2026-08-28): 목적별 테마(classifyThemeSpot) 대신
+  // 표준 중분류(category_min) 다중 선택으로 거른다 — get_nearby_spaces_and_events RPC가
+  // 이제 category_min을 반환한다(2026-08-28-nearby-rpc-category-min.sql).
   const filteredItems = useMemo(() => {
     let result = items;
 
-    if (category !== ALL_CATEGORY) {
-      result = result.filter((item) => classifyThemeSpot(item) === category);
+    if (selectedCategoryMins.length > 0) {
+      result = result.filter((item) => item.category_min && selectedCategoryMins.includes(item.category_min));
     }
 
     const trimmedKeyword = keyword.trim().toLowerCase();
@@ -151,12 +161,8 @@ export function MapExplorer() {
       result = result.filter((item) => item.name.toLowerCase().includes(trimmedKeyword));
     }
 
-    if (activeQuickFilters.length > 0) {
-      result = result.filter((item) => matchesQuickFilters(item, activeQuickFilters));
-    }
-
     return result;
-  }, [items, category, keyword, activeQuickFilters]);
+  }, [items, selectedCategoryMins, keyword]);
 
   const visibleItems = useMemo(() => filteredItems.slice(0, MARKER_LIMIT), [filteredItems]);
   const isOverLimit = filteredItems.length > MARKER_LIMIT;
@@ -176,8 +182,11 @@ export function MapExplorer() {
         <div className="p-4 border-b border-gray-100 flex flex-col gap-3">
           <LocationHeader addressName={sigunguName ?? addressName} onClick={openOnboarding} />
           <SearchBar value={keyword} onChange={setKeyword} />
-          <CategoryFilter value={category} onChange={setCategory} options={NEARBY_CATEGORY_FILTER_OPTIONS} />
-          <QuickFilters value={activeQuickFilters} onToggle={handleToggleQuickFilter} />
+          <SpotCategoryFilter
+            selectedMinors={selectedCategoryMins}
+            onToggleMinor={handleToggleCategoryMin}
+            onLimitExceeded={handleLimitExceeded}
+          />
         </div>
         <div className="flex-1 overflow-y-auto">
           {isLoading && <p className="p-4 text-sm text-gray-400">불러오는 중...</p>}
@@ -221,8 +230,11 @@ export function MapExplorer() {
         <div className="md:hidden absolute top-3 left-3 right-3 flex flex-col gap-2 z-10">
           <LocationHeader addressName={sigunguName ?? addressName} onClick={openOnboarding} />
           <SearchBar value={keyword} onChange={setKeyword} />
-          <CategoryFilter value={category} onChange={setCategory} options={NEARBY_CATEGORY_FILTER_OPTIONS} />
-          <QuickFilters value={activeQuickFilters} onToggle={handleToggleQuickFilter} />
+          <SpotCategoryFilter
+            selectedMinors={selectedCategoryMins}
+            onToggleMinor={handleToggleCategoryMin}
+            onLimitExceeded={handleLimitExceeded}
+          />
           {/* implementation/todo.md: 지도 드래그 후 재검색 버튼 - 모바일에서는 필터 스택 하단에 노출해 겹침 방지 */}
           {pendingRecenter && (
             <div className="flex justify-center">
@@ -267,6 +279,10 @@ export function MapExplorer() {
 
       {isOverLimit && (
         <Toast message="반경 내 시설이 너무 많습니다. 지도를 확대하거나 범위를 좁혀 상세히 탐색하세요." />
+      )}
+
+      {isMaxSelectionToastVisible && (
+        <Toast message={`중분류는 최대 ${MAX_SPOT_CATEGORY_MIN_SELECTION}개까지 선택할 수 있어요.`} />
       )}
 
       {selectedItem && (

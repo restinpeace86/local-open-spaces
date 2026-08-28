@@ -4,7 +4,6 @@ import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
 import { formatDDay } from '@/lib/spaces/d-day';
 import { formatDistance } from '@/lib/spaces/format';
-import { getParentalBadges } from '@/lib/spaces/parental-badges';
 
 // spec/common/responsive.md 2.1/2.2: 데스크톱 좌측 패널 리스트 / 모바일 바텀시트 리스트 공용 컴포넌트
 export function ItemListPanel({
@@ -30,7 +29,6 @@ export function ItemListPanel({
         const meta = getCategoryMeta(item.category);
         const dDay = item.item_type === 'EVENT' ? formatDDay(item.reservation_end_date ?? item.end_date) : null;
         const isSelected = item.id === selectedId;
-        const badges = getParentalBadges(item);
 
         return (
           <li key={item.id}>
@@ -54,22 +52,6 @@ export function ItemListPanel({
                   {meta.label}
                   {item.distance_meters >= 0 && ` · ${formatDistance(item.distance_meters)}`}
                 </span>
-                {badges.length > 0 && (
-                  <span className="mt-1 flex flex-wrap gap-1">
-                    {badges.map((badge) => (
-                      <span
-                        key={badge.key}
-                        className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
-                          badge.emphasis
-                            ? 'bg-red-50 text-red-600'
-                            : 'bg-gray-100 text-gray-600'
-                        }`}
-                      >
-                        {badge.label}
-                      </span>
-                    ))}
-                  </span>
-                )}
               </span>
               {dDay && (
                 <span className="shrink-0 text-xs font-semibold text-red-600">{dDay}</span>

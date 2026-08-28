@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MapExplorer } from './map-explorer';
 
 const rpcMock = vi.fn(() => Promise.resolve({ data: [], error: null }));
@@ -17,8 +17,7 @@ beforeEach(() => {
 
 // implementation/todo.md: 재검색 버튼 테스트는 dragend를 트리거하는 것이 목적이므로
 // 실제 Kakao SDK 대신 onDragEnd를 즉시 호출할 수 있는 버튼을 노출하는 스텁으로 대체한다.
-// Task 9-1-9: ?filter= 초기값 테스트를 위해 매 테스트가 바꿔 쓸 수 있는 가변 참조로 둔다.
-let mockSearchParams = new URLSearchParams();
+const mockSearchParams = new URLSearchParams();
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: () => {} }),
   useSearchParams: () => mockSearchParams,
@@ -95,46 +94,45 @@ describe('MapExplorer 내 위치/설정위치로 이동 버튼 (Task 9-6-10)', (
 });
 
 // Task 9-6-10(2026-08-23): 상시 공간 전용 단일화 — RPC가 이미 SPACE만 반환하므로 이벤트
-// on/off 토글(LayerToggle, "상시 시설 보기")은 더 이상 필요 없어 완전히 제거했다. 카테고리
-// 칩도 5대 UI 카테고리(events와 공유하던 축)가 아니라 상시 공간 목적별 테마 라벨로 바뀐다.
+// on/off 토글(LayerToggle, "상시 시설 보기")은 더 이상 필요 없어 완전히 제거했다.
 describe('MapExplorer 상시 공간 전용 단일화 (Task 9-6-10)', () => {
   it('상시 시설 on/off 토글(LayerToggle)이 더 이상 렌더링되지 않는다', () => {
     render(<MapExplorer />);
     expect(screen.queryByText('상시 시설 보기')).not.toBeInTheDocument();
     expect(screen.queryByText('상시 시설 보임')).not.toBeInTheDocument();
   });
-
-  it('카테고리 칩이 5대 UI 카테고리 대신 상시 공간 목적별 테마 라벨로 노출된다', () => {
-    render(<MapExplorer />);
-    expect(screen.getAllByText('공원·광장').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('어린이 놀이터').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('야외 수영장·물놀이터').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('국립공원·수목원·휴양림').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('박물관·미술관·체육시설').length).toBeGreaterThan(0);
-    expect(screen.queryByText('체험·클래스')).not.toBeInTheDocument();
-  });
 });
 
-// Task 9-1-9: 홈 Hero Carousel "전체 보기" CTA(/nearby?filter=TODAY_WEEKEND)에서 넘어온
-// Quick 필터를 초기 활성 상태로 반영하는지 검증.
-describe('MapExplorer ?filter= 초기 Quick 필터 연동 (Task 9-1-9)', () => {
-  afterEach(() => {
-    mockSearchParams = new URLSearchParams();
+// [스팟픽 대분류/중분류 계층적 탐색](2026-08-28): 기존 목적별 테마 단일 선택 칩과 키즈/무료/
+// 오늘·주말 Quick 필터를 표준 중분류(category_min) 다중 선택(최대 5개)으로 전면 교체했다.
+describe('MapExplorer 대분류/중분류 계층적 탐색 (2026-08-28)', () => {
+  it('기존 목적별 테마 칩과 키즈/무료/오늘·주말 Quick 필터가 더 이상 렌더링되지 않는다', () => {
+    render(<MapExplorer />);
+    expect(screen.queryByText('공원·광장')).not.toBeInTheDocument();
+    expect(screen.queryByText('👶 키즈')).not.toBeInTheDocument();
+    expect(screen.queryByText('🎁 무료')).not.toBeInTheDocument();
+    expect(screen.queryByText('⚡ 오늘/주말')).not.toBeInTheDocument();
   });
 
-  it('?filter=TODAY_WEEKEND로 진입하면 "오늘/주말" Quick 필터가 처음부터 활성화된다', () => {
-    mockSearchParams = new URLSearchParams('filter=TODAY_WEEKEND');
+  it('새 대분류 탭(체육시설/문화시설/자연·공원/키즈·놀이시설)이 노출되고 기본 대분류의 중분류만 보인다', () => {
     render(<MapExplorer />);
-
-    const todayWeekendButtons = screen.getAllByText('⚡ 오늘/주말');
-    expect(todayWeekendButtons[0]).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getAllByText(/체육시설/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/문화시설/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/자연\/공원/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/키즈\/놀이시설/).length).toBeGreaterThan(0);
+    // 기본 대분류(체육시설)의 중분류만 보이고 다른 대분류(문화시설)의 중분류는 안 보인다
+    expect(screen.getAllByText('테니스장').length).toBeGreaterThan(0);
+    expect(screen.queryByText('도서관')).not.toBeInTheDocument();
   });
 
-  it('알 수 없는 filter 값은 무시하고 아무 Quick 필터도 활성화하지 않는다', () => {
-    mockSearchParams = new URLSearchParams('filter=NOT_A_REAL_FILTER');
+  it('중분류를 6번째로 선택하려 하면 안내 토스트가 뜨고 선택되지 않는다', async () => {
     render(<MapExplorer />);
+    const desktopMinors = ['테니스장', '골프장', '풋살장', '축구장', '농구장'];
+    for (const minor of desktopMinors) {
+      fireEvent.click(screen.getAllByText(minor)[0]);
+    }
+    fireEvent.click(screen.getAllByText('족구장')[0]);
 
-    const todayWeekendButtons = screen.getAllByText('⚡ 오늘/주말');
-    expect(todayWeekendButtons[0]).toHaveAttribute('aria-pressed', 'false');
+    expect(await screen.findByText(/최대 5개까지 선택할 수 있어요/)).toBeInTheDocument();
   });
 });

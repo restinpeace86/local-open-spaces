@@ -45,8 +45,12 @@ export type NearbyItem = {
   // [카드 표준 중분류/연령대상 표시](2026-08-27 사용자 지시): 카드 상단 뱃지를 event_type
   // 기반 5대 UI 카테고리(예: "체험·클래스") 대신 실제 표준 중분류(category_min, 예: "도시농업")
   // 로 보여주고, 상세보기에 연령대상(target_audience)을 추가하기 위한 필드. get-home-feed.ts의
-  // events 조회 경로만 채운다 — get_nearby_spaces_and_events RPC(SPACE 대상) 결과에는 해당
-  // 컬럼이 없어 undefined로 남는다(소비 측이 category_min ?? meta.label로 안전하게 폴백).
+  // events 조회 경로가 채운다. [스팟픽 대분류/중분류 계층적 탐색](2026-08-28)부터
+  // get_nearby_spaces_and_events RPC(SPACE 대상)도 open_spaces.category_min을 함께
+  // 반환하도록 확장했다(2026-08-28-nearby-rpc-category-min.sql) — 여전히 optional인 이유는
+  // open_spaces 쪽 category_min이 아직 전량 채워지지 않았고(일부 NULL 잔존, docs/
+  // null-category-analysis.md 참고) target_audience는 events 전용 개념이라 SPACE에는 항상
+  // undefined이기 때문이다.
   category_min?: string | null;
   target_audience?: string | null;
   // [상세보기 설명 추가](2026-08-27 사용자 지시): 제목만으로는 무슨 행사인지 알기 어려운
