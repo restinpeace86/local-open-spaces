@@ -19,7 +19,7 @@
 // 리포트를 남긴다.
 import { pathToFileURL } from 'url';
 import { loadEnv } from '../lib/load-env.mjs';
-import { createAdminClient } from './lib/supabase-admin.mjs';
+import { createAdminClient, analyzeOpenSpaces } from './lib/supabase-admin.mjs';
 import { recordBatchRun } from './lib/batch-log.mjs';
 import { GgCultureEventsAdapter } from './adapters/gg-culture-events-adapter.mjs';
 import { SeoulYeyakAdapter } from './adapters/seoul-yeyak-adapter.mjs';
@@ -134,8 +134,44 @@ async function runLocationEnrichment({ dryRun }) {
   };
 }
 
+// [open_spaces 성능 최적화 및 타임아웃 재발 방지](2026-08-28): SEOUL_YEYAK가 이 배치에서
+// open_spaces에도 기록하므로(targetTable: 'multi'), 배치 종료 시점에 통계를 갱신해 다음
+// 배치(내일 Daily 또는 다음 Monthly)의 open_spaces upsert가 stale 통계로 인한 statement
+// timeout을 겪지 않도록 한다. dry-run에서는 실행하지 않는다(DB 상태 변경 없음 원칙).
+async function runAnalyzeOpenSpaces({ dryRun }) {
+  if (dryRun) {
+    return {
+      sourceKey: 'ANALYZE_OPEN_SPACES',
+      source: null,
+      targetTable: 'open_spaces',
+      rawCount: 0,
+      count: 0,
+      upserted: false,
+      safeMergeCount: 0,
+      errorCount: 0,
+      excludeFromVerification: true,
+      note: 'dry-run: 실제 ANALYZE는 실행하지 않음',
+    };
+  }
+
+  const client = createAdminClient();
+  await analyzeOpenSpaces(client);
+  return {
+    sourceKey: 'ANALYZE_OPEN_SPACES',
+    source: null,
+    targetTable: 'open_spaces',
+    rawCount: 0,
+    count: 0,
+    upserted: false,
+    safeMergeCount: 0,
+    errorCount: 0,
+    excludeFromVerification: true,
+    note: 'open_spaces 플래너 통계 갱신 완료(신규 적재 아닌 유지보수 후처리) — statement timeout 재발 방지',
+  };
+}
+
 export async function runDailyBatch({ dryRun = false } = {}) {
-  console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length + 3}개 단계\n`);
+  console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length + 4}개 단계\n`);
 
   const results = [];
 
@@ -187,6 +223,14 @@ export async function runDailyBatch({ dryRun = false } = {}) {
   } catch (err) {
     console.error(`❌ [DEACTIVATE_EXPIRED_EVENTS] 실패: ${err.message}`);
     results.push({ failed: true, sourceKey: 'DEACTIVATE_EXPIRED_EVENTS', source: null, note: err.message });
+  }
+
+  console.log('\n=== [ANALYZE_OPEN_SPACES] ===');
+  try {
+    results.push(await runAnalyzeOpenSpaces({ dryRun }));
+  } catch (err) {
+    console.error(`❌ [ANALYZE_OPEN_SPACES] 실패: ${err.message}`);
+    results.push({ failed: true, sourceKey: 'ANALYZE_OPEN_SPACES', source: null, note: err.message });
   }
 
   if (!dryRun) {

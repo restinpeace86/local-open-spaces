@@ -21,6 +21,8 @@ name: Daily Ingestion (Events Batch)
 # 확인 결과 `0 18 * * *`(정각)로 등록된 이 워크플로가 8/26·8/27 이틀 연속 단 한 번도
 # 트리거되지 않았다(GitHub Actions API로 실행 이력 조회 — 8/25 19:19 실행 이후 8/28 00:36
 # 확인 시점까지 신규 실행 0건). 정각을 피해 18:07로 옮겨 재발 가능성을 낮춘다.
+# [크론 스케줄 KST 새벽 3시대 재조정](2026-08-28): KST 기준 새벽 3시 07분 (UTC 18:07) —
+# 트래픽이 한적한 새벽 시간대 배치 + 정각 회피(비정규 분 단위) 두 조건을 함께 만족한다.
 permissions:
   contents: write
 
@@ -42,6 +44,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # [수집 파이프라인 자동 재시도 메커니즘](2026-08-28): 코드 레벨 재시도(scripts/ingest/lib/retry.mjs)는
+      # 개별 API 호출/DB 쿼리 단위의 짧은 블립만 흡수한다. DB 전체 장애나 러너 네트워크 단절처럼
+      # 프로세스 전체가 죽는 광범위 장애는 워크플로 레벨에서 한 번 더 재시도해야 당일 데이터
+      # 유실을 막을 수 있다 — 1차 실패 시 15분(10~20분 범위) 대기 후 전체를 1회 재실행한다.
+      # upsert는 external_id 기준 멱등 연산이라 이미 성공한 소스가 재실행돼도 데이터가
+      # 중복되거나 손상되지 않는다.
       - name: Daily Events Batch (GG_CULTURE_EVENTS, SEOUL_CULTURE_EVENTS, TOUR_API_FESTIVAL, SEOUL_YEYAK + 좌표 보강)
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
@@ -52,7 +60,17 @@ jobs:
           VWORLD_API_KEY: ${{ secrets.VWORLD_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
-        run: node scripts/ingest/run-daily.mjs
+        run: |
+          set +e
+          node scripts/ingest/run-daily.mjs
+          exit_code=$?
+          if [ $exit_code -ne 0 ]; then
+            echo "⚠️ 1차 실행 실패(exit $exit_code) — 15분 대기 후 1회 재시도합니다."
+            sleep 900
+            node scripts/ingest/run-daily.mjs
+            exit_code=$?
+          fi
+          exit $exit_code
 
       - name: Commit pipeline log
         if: always()

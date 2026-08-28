@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { withRetry } from './retry.mjs';
 
 export function createAdminClient() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -40,8 +41,15 @@ export async function upsertRows(client, table, rows) {
 
   for (let i = 0; i < dedupedRows.length; i += UPSERT_BATCH_SIZE) {
     const batch = dedupedRows.slice(i, i + UPSERT_BATCH_SIZE);
-    const { error } = await client.from(table).upsert(batch, { onConflict: 'external_id' });
-    if (error) throw new Error(`${table} upsert 실패: ${error.message}`);
+    // [수집 파이프라인 자동 재시도 메커니즘](2026-08-28): DB 부하/네트워크 불안정으로 인한
+    // 일시적 실패가 배치 전체를 실패시키지 않도록 재시도 가능한 에러만 짧은 백오프로 재시도한다.
+    await withRetry(
+      async () => {
+        const { error } = await client.from(table).upsert(batch, { onConflict: 'external_id' });
+        if (error) throw new Error(`${table} upsert 실패: ${error.message}`);
+      },
+      { label: `${table} upsert` }
+    );
   }
 
   return { count: dedupedRows.length };
@@ -76,8 +84,13 @@ export async function upsertRawIngestData(client, source, rawRows) {
 
   for (let i = 0; i < dedupedRows.length; i += UPSERT_BATCH_SIZE) {
     const batch = dedupedRows.slice(i, i + UPSERT_BATCH_SIZE);
-    const { error } = await client.from('raw_ingest_data').upsert(batch, { onConflict: 'source,source_id' });
-    if (error) throw new Error(`raw_ingest_data upsert 실패: ${error.message}`);
+    await withRetry(
+      async () => {
+        const { error } = await client.from('raw_ingest_data').upsert(batch, { onConflict: 'source,source_id' });
+        if (error) throw new Error(`raw_ingest_data upsert 실패: ${error.message}`);
+      },
+      { label: 'raw_ingest_data upsert' }
+    );
   }
 
   return { count: dedupedRows.length };
@@ -150,8 +163,14 @@ export async function upsertRowsSafeMerge(client, table, rows) {
     const existingById = new Map();
     for (let j = 0; j < batch.length; j += SELECT_LOOKUP_BATCH_SIZE) {
       const idsChunk = batch.slice(j, j + SELECT_LOOKUP_BATCH_SIZE).map((row) => row.external_id);
-      const { data: existingRows, error: selectError } = await client.from(table).select('*').in('external_id', idsChunk);
-      if (selectError) throw new Error(`${table} 기존 행 조회 실패: ${selectError.message}`);
+      const existingRows = await withRetry(
+        async () => {
+          const { data, error: selectError } = await client.from(table).select('*').in('external_id', idsChunk);
+          if (selectError) throw new Error(`${table} 기존 행 조회 실패: ${selectError.message}`);
+          return data;
+        },
+        { label: `${table} 기존 행 조회` }
+      );
       for (const existingRow of existingRows ?? []) {
         existingById.set(existingRow.external_id, existingRow);
       }
@@ -171,12 +190,27 @@ export async function upsertRowsSafeMerge(client, table, rows) {
       return merged;
     });
 
-    const { error } = await client.from(table).upsert(mergedBatch, { onConflict: 'external_id' });
-    if (error) throw new Error(`${table} upsert 실패: ${error.message}`);
+    await withRetry(
+      async () => {
+        const { error } = await client.from(table).upsert(mergedBatch, { onConflict: 'external_id' });
+        if (error) throw new Error(`${table} upsert 실패: ${error.message}`);
+      },
+      { label: `${table} upsert` }
+    );
     totalCount += mergedBatch.length;
   }
 
   return { count: totalCount, duplicateWithinBatch: duplicateCount, mergedWithExisting };
+}
+
+// [open_spaces 성능 최적화 및 타임아웃 재발 방지](2026-08-28): 대량 배치(예: playground
+// 82,373건) 직후 플래너 통계가 stale해져 바로 다음 open_spaces upsert가 statement timeout으로
+// 실패하는 패턴이 이 세션에서 반복 확인됐다(scripts/migrations/2026-08-28-open-spaces-auto-analyze-rpc.sql
+// 참고). 지금까지 수동으로 실행하던 `ANALYZE public.open_spaces;`를 배치 종료 시점에
+// 자동으로 호출해 통계를 항상 최신으로 유지한다 — 매번 원인 재조사 없이 구조적으로 재발을 막는다.
+export async function analyzeOpenSpaces(client) {
+  const { error } = await client.rpc('analyze_open_spaces');
+  if (error) throw new Error(`open_spaces ANALYZE 실패: ${error.message}`);
 }
 
 // [긴급 아키텍처 개편] RAW 레이어 재가공(2단계 단독 재실행)용 — 원본 API를 다시 호출하지 않고
@@ -185,12 +219,18 @@ export async function fetchRawIngestData(client, source) {
   const rows = [];
   const PAGE_SIZE = 1000;
   for (let from = 0; ; from += PAGE_SIZE) {
-    const { data, error } = await client
-      .from('raw_ingest_data')
-      .select('source_id, raw_payload, fetched_at')
-      .eq('source', source)
-      .range(from, from + PAGE_SIZE - 1);
-    if (error) throw new Error(`raw_ingest_data 조회 실패: ${error.message}`);
+    const data = await withRetry(
+      async () => {
+        const { data: page, error } = await client
+          .from('raw_ingest_data')
+          .select('source_id, raw_payload, fetched_at')
+          .eq('source', source)
+          .range(from, from + PAGE_SIZE - 1);
+        if (error) throw new Error(`raw_ingest_data 조회 실패: ${error.message}`);
+        return page;
+      },
+      { label: 'raw_ingest_data 조회' }
+    );
     rows.push(...data);
     if (data.length < PAGE_SIZE) break;
   }

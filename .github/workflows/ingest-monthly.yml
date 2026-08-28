@@ -14,11 +14,12 @@ name: Monthly Ingestion (Spaces Batch)
 # cron(vixie-cron 방언)이라 'L'(마지막 날) 토큰을 지원하지 않는다 — `0 17 L * *`를 그대로
 # 쓰면 워크플로 자체가 파싱 실패하거나 트리거되지 않는다(실제 GitHub Actions 문서 기준
 # 사실 확인, 추측 아님). 대신 GitHub Actions에서 널리 쓰이는 표준 우회법을 적용한다:
-# 매월 28~31일 17:00 UTC(=KST 다음날 02:00)에 매일 후보로 깨어나되, 아래 "Check last day
-# of month" 스텝에서 "내일(UTC)이 1일인지"를 확인해 진짜 마지막 날에만 실제 배치를
-# 실행한다 — 28~31일 중 그 달의 마지막 날 단 하루만 조건이 참이 되므로 결과적으로
-# "매월 1일 KST 02:00 정확히 1회 실행"과 수학적으로 동일하다. workflow_dispatch(수동 실행)는
-# 이 가드를 건너뛰어 언제든 즉시 실행 가능하게 한다.
+# 매월 28~31일에 매일 후보로 깨어나되, 아래 "Check last day of month" 스텝에서
+# "내일(UTC)이 1일인지"를 확인해 진짜 마지막 날에만 실제 배치를 실행한다 — 28~31일 중
+# 그 달의 마지막 날 단 하루만 조건이 참이 되므로 결과적으로 "매월 1일 KST 새벽 시간대
+# 정확히 1회 실행"과 수학적으로 동일하다. 이 판정은 UTC 날짜 단위로만 동작하므로 같은
+# UTC 날짜 안에서는 시(hour)를 몇 시로 두든 결과에 영향이 없다. workflow_dispatch(수동
+# 실행)는 이 가드를 건너뛰어 언제든 즉시 실행 가능하게 한다.
 # [파이프라인 관측성 긴급 복구](2026-08-28): ingest-daily.yml과 동일한 문제 — 이 워크플로도
 # docs/pipeline-log.md 변경분을 저장소에 커밋/푸시하는 스텝이 없어 실제 실행 여부를 사후에
 # 확인할 수 없었다. 상세 배경은 ingest-daily.yml 상단 주석 참고.
@@ -26,12 +27,16 @@ name: Monthly Ingestion (Spaces Batch)
 # 문서상 정시 트리거는 부하로 지연/드롭될 수 있음) — 상세 배경은 ingest-daily.yml 상단 주석
 # 참고. "내일이 1일인지" 가드 로직(28~31일 매일 후보로 깨어남)은 시각과 무관하므로 분만
 # 옮겨도 동일하게 동작한다.
+# [크론 스케줄 KST 새벽 3시대 재조정](2026-08-28): daily(KST 03:07)와 동일한 "새벽 3시대 +
+# 비정규 분" 기준으로 통일한다. KST 기준 새벽 3시 13분 (UTC 18:13) — 기존 02:07 KST에서
+# 이동하되, "내일이 1일인지" 판정은 UTC 날짜 기준이라 같은 28~31일 UTC 범위 안에서는 시각
+# 변경이 말일 감지 로직에 영향을 주지 않는다.
 permissions:
   contents: write
 
 on:
   schedule:
-    - cron: '7 17 28-31 * *'
+    - cron: '13 18 28-31 * *'
   workflow_dispatch:
 
 jobs:
@@ -57,6 +62,10 @@ jobs:
             echo "is_last_day=false" >> "$GITHUB_OUTPUT"
           fi
 
+      # [수집 파이프라인 자동 재시도 메커니즘](2026-08-28): ingest-daily.yml과 동일한 사유·전략 —
+      # 코드 레벨 재시도(scripts/ingest/lib/retry.mjs)로 흡수 못 하는 광범위 장애(DB 전체 장애,
+      # 러너 네트워크 단절 등)에 대비해 1차 실패 시 15분 대기 후 전체를 1회 재실행한다. upsert가
+      # external_id 기준 멱등 연산이라 재실행으로 인한 데이터 손상 위험이 없다.
       - name: Monthly Spaces Batch (CITY_PARK/CULTURE_FACILITY/CULTURAL_FACILITY_SUMMARY/LOCALDATA_AMUSEMENT/GG_EVENTS/GO_CAMPING/NATIONAL_PARK_ECOTOUR/LOCALDATA_PLAYGROUND/PUBLIC_FACILITY_OPEN/SWIMMING_POOL/KOR_TOUR/KOR_WITH_TOUR/KOR_PET_TOUR)
         if: steps.last_day.outputs.is_last_day == 'true' || github.event_name == 'workflow_dispatch'
         env:
@@ -66,7 +75,17 @@ jobs:
           PUBLIC_DATA_API_KEY: ${{ secrets.PUBLIC_DATA_API_KEY }}
           GG_DATA_API_KEY: ${{ secrets.GG_DATA_API_KEY }}
           VWORLD_API_KEY: ${{ secrets.VWORLD_API_KEY }}
-        run: node scripts/ingest/run-monthly.mjs
+        run: |
+          set +e
+          node scripts/ingest/run-monthly.mjs
+          exit_code=$?
+          if [ $exit_code -ne 0 ]; then
+            echo "⚠️ 1차 실행 실패(exit $exit_code) — 15분 대기 후 1회 재시도합니다."
+            sleep 900
+            node scripts/ingest/run-monthly.mjs
+            exit_code=$?
+          fi
+          exit $exit_code
 
       - name: Commit pipeline log
         if: always() && (steps.last_day.outputs.is_last_day == 'true' || github.event_name == 'workflow_dispatch')

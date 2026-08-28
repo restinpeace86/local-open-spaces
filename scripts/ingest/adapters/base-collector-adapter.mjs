@@ -5,6 +5,7 @@ import {
   fetchRawIngestData,
 } from '../lib/supabase-admin.mjs';
 import { countRawItems, recordPipelineRun } from '../lib/pipeline-log.mjs';
+import { withRetry } from '../lib/retry.mjs';
 
 // 모든 소스 어댑터가 상속받는 추상 베이스 클래스.
 // fetch()/transform()은 서브클래스가 반드시 구현해야 하며, run()이 공통 오케스트레이션
@@ -83,7 +84,10 @@ export class BaseCollectorAdapter {
     console.log(`▶ [${this.sourceKey}] 수집 시작 (dry-run: ${dryRun})`);
 
     try {
-      const raw = await this.fetch();
+      // [수집 파이프라인 자동 재시도 메커니즘](2026-08-28): 원본 API 호출은 일시적 타임아웃/
+      // 네트워크 불안정에 가장 취약한 구간이다 — 이 한 번의 실패로 당일 수집 전체가 스킵되지
+      // 않도록 재시도 가능한 에러(timeout/network 계열)만 짧은 백오프로 재시도한다.
+      const raw = await withRetry(() => this.fetch(), { label: `${this.sourceKey} fetch` });
       const rawCount = countRawItems(raw);
       console.log(`  raw 데이터 ${rawCount ?? '?'}건 수신`);
 
