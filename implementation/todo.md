@@ -49,3 +49,13 @@
     확인(버그 아님).
   - **검증**: `npx tsc --noEmit`/`npm run test`/`npm run build` 통과, 프로덕션 실측 재검증
     완료. 상세: `implementation/2026-08-29-spotpick-nearby-rpc-performance-fix.md`.
+
+- [x] **[스팟픽(/nearby) 겹친 마커(동일 좌표 다건) 클릭 시 목록 표시]** (2026-08-29 완료)
+  - 사용자 제보("판교원마을 5단지 504동 앞 — 3건인데 1건만 보임") 조사 결과 데이터 중복이
+    아니라 원본(LOCALDATA_PLAYGROUND) 좌표 정밀도 한계로 동일 단지 내 여러 놀이터가
+    완전히 같은 좌표를 공유해 마커가 겹치는 현상으로 확인.
+  - 대표 확인 하에 "마커 클릭 시 겹친 항목 목록 먼저 표시" 방식으로 확정,
+    `kakao-map-view.tsx`에 동일 좌표 그룹핑 + `onSelectGroup` 콜백 추가,
+    신규 `marker-group-modal.tsx`로 목록 표시 후 기존 상세 모달로 연결.
+  - **검증**: `npx tsc --noEmit`/`npm run test`/`npm run build` 통과. 상세:
+    `implementation/2026-08-29-nearby-overlapping-marker-picker.md`.

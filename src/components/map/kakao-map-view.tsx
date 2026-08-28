@@ -24,6 +24,7 @@ export function KakaoMapView({
   items,
   focusPosition,
   onSelectItem,
+  onSelectGroup,
   onDragEnd,
 }: {
   center: { lat: number; lng: number };
@@ -31,6 +32,11 @@ export function KakaoMapView({
   items: NearbyItem[];
   focusPosition?: { lat: number; lng: number } | null;
   onSelectItem: (item: NearbyItem) => void;
+  // [겹친 마커 처리](2026-08-29 사용자 지시): 원본 데이터가 동일 좌표를 공유하는 경우
+  // (예: 아파트 단지 내 개별 놀이터가 단지 대표 주소 좌표로만 등록된 경우) 마커가 완전히
+  // 겹쳐 맨 위 1개만 클릭되던 문제 — 같은 좌표에 2건 이상이 있으면 onSelectItem 대신
+  // onSelectGroup으로 그 전체 목록을 전달해 상위에서 선택 목록을 먼저 보여주게 한다.
+  onSelectGroup?: (items: NearbyItem[]) => void;
   // Task 9-6-10(2026-08-23): 이름은 dragend 그대로 두지만(호출부 API 변경 최소화), 실제로는
   // 드래그(dragend)와 줌 변경(zoom_changed) 둘 다에서 호출된다 — 상위가 "지도가 사용자
   // 조작으로 움직였다"는 신호로 받아 재검색 버튼을 띄우는 용도라 이름을 굳이 바꾸지 않았다.
@@ -185,6 +191,19 @@ export function KakaoMapView({
     clustererRef.current.clear();
     markersRef.current.forEach((marker) => marker.setMap(null));
 
+    // 좌표가 완전히 동일한(소수 6자리 기준, 약 0.1m 이내) 항목들을 한 그룹으로 묶어,
+    // 마커 클릭 시 몇 건이 겹쳐 있는지 판별한다.
+    const groupsByPosition = new Map<string, NearbyItem[]>();
+    for (const item of items) {
+      const key = `${item.lat.toFixed(6)},${item.lng.toFixed(6)}`;
+      const group = groupsByPosition.get(key);
+      if (group) {
+        group.push(item);
+      } else {
+        groupsByPosition.set(key, [item]);
+      }
+    }
+
     const markers = items.map((item) => {
       const meta = getCategoryMeta(item.category);
       const image = new window.kakao.maps.MarkerImage(
@@ -198,7 +217,15 @@ export function KakaoMapView({
         image,
       });
 
-      window.kakao.maps.event.addListener(marker, 'click', () => onSelectItem(item));
+      window.kakao.maps.event.addListener(marker, 'click', () => {
+        const key = `${item.lat.toFixed(6)},${item.lng.toFixed(6)}`;
+        const group = groupsByPosition.get(key) ?? [item];
+        if (group.length > 1 && onSelectGroup) {
+          onSelectGroup(group);
+        } else {
+          onSelectItem(item);
+        }
+      });
 
       return marker;
     });

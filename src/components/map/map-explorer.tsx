@@ -8,6 +8,7 @@ import { SpotCategoryFilter, MAX_SPOT_CATEGORY_MIN_SELECTION } from '@/component
 import { ItemListPanel } from '@/components/map/item-list-panel';
 import { EmptyState } from '@/components/map/empty-state';
 import { DetailModal } from '@/components/map/detail-modal';
+import { MarkerGroupModal } from '@/components/map/marker-group-modal';
 import { Toast } from '@/components/map/toast';
 import { LocationHeader } from '@/components/map/location-header';
 import { LocationOnboardingModal } from '@/components/map/location-onboarding-modal';
@@ -51,6 +52,7 @@ export function MapExplorer() {
   const maxSelectionToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [items, setItems] = useState<NearbyItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<NearbyItem[] | null>(null);
   const [isSheetExpanded, setIsSheetExpanded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -173,6 +175,17 @@ export function MapExplorer() {
     setSelectedItem(item);
   }, []);
 
+  // [겹친 마커 처리](2026-08-29 사용자 지시): 같은 좌표에 여러 건이 겹쳐 있는 마커를
+  // 클릭하면 상세로 바로 들어가지 않고 먼저 목록을 보여준다.
+  const handleSelectGroup = useCallback((group: NearbyItem[]) => {
+    setSelectedGroup(group);
+  }, []);
+
+  const handleSelectFromGroup = useCallback((item: NearbyItem) => {
+    setSelectedGroup(null);
+    setSelectedItem(item);
+  }, []);
+
   const focusPosition = selectedItem ? { lat: selectedItem.lat, lng: selectedItem.lng } : null;
 
   return (
@@ -210,6 +223,7 @@ export function MapExplorer() {
           items={visibleItems}
           focusPosition={focusPosition}
           onSelectItem={handleSelectItem}
+          onSelectGroup={handleSelectGroup}
           onDragEnd={handleMapDragEnd}
         />
 
@@ -289,6 +303,14 @@ export function MapExplorer() {
 
       {selectedItem && (
         <DetailModal item={selectedItem} onClose={() => setSelectedItem(null)} />
+      )}
+
+      {selectedGroup && (
+        <MarkerGroupModal
+          items={selectedGroup}
+          onSelectItem={handleSelectFromGroup}
+          onClose={() => setSelectedGroup(null)}
+        />
       )}
 
       {isOnboardingOpen && (
