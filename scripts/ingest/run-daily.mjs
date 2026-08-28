@@ -20,6 +20,7 @@
 import { pathToFileURL } from 'url';
 import { loadEnv } from '../lib/load-env.mjs';
 import { createAdminClient, analyzeOpenSpaces } from './lib/supabase-admin.mjs';
+import { dedupeOpenSpaces } from './lib/dedupe-open-spaces.mjs';
 import { recordBatchRun } from './lib/batch-log.mjs';
 import { GgCultureEventsAdapter } from './adapters/gg-culture-events-adapter.mjs';
 import { SeoulYeyakAdapter } from './adapters/seoul-yeyak-adapter.mjs';
@@ -170,8 +171,47 @@ async function runAnalyzeOpenSpaces({ dryRun }) {
   };
 }
 
+// [open_spaces 중복 데이터 정제](2026-08-28): 서로 다른 두 개 이상의 어댑터(source_type)가
+// 각자 원본 API에서 같은 실제 장소를 카탈로그에 등재해두면(예: "선화랑"이 KOR_TOUR_API_V4와
+// seoul_public_culture 양쪽에 존재), 각 어댑터는 서로 다른 external_id를 매기므로
+// upsert의 ON CONFLICT(external_id)로는 이 교차 출처 중복을 원천 차단할 수 없다 — 각 어댑터의
+// "유연하게 적재한다" 원칙(불완전한 데이터도 버리지 않음)은 그대로 둔 채, 적재 이후 시점에
+// 배치 종료 후처리로 교차 출처 중복만 판정해 정리한다(판정 기준: dedupe-open-spaces.mjs 상단
+// 주석 참고 — 단일 출처 내부 반복은 안전하게 판별할 근거가 없어 제외). 매 배치 시작 시점에
+// 전날 새로 들어온 중복도 함께 잡히므로 앞으로도 계속 쌓이지 않는다.
+async function runDedupeOpenSpaces({ dryRun }) {
+  if (dryRun) {
+    return {
+      sourceKey: 'DEDUPE_OPEN_SPACES',
+      source: null,
+      targetTable: 'open_spaces',
+      rawCount: 0,
+      count: 0,
+      upserted: false,
+      safeMergeCount: 0,
+      errorCount: 0,
+      excludeFromVerification: true,
+      note: 'dry-run: 실제 UPDATE/DELETE는 실행하지 않음',
+    };
+  }
+
+  const result = await dedupeOpenSpaces({ dryRun: false });
+  return {
+    sourceKey: 'DEDUPE_OPEN_SPACES',
+    source: null,
+    targetTable: 'open_spaces',
+    rawCount: 0,
+    count: result.deleted,
+    upserted: false,
+    safeMergeCount: result.updated,
+    errorCount: 0,
+    excludeFromVerification: true,
+    note: `교차 출처 중복 정제 완료 — ${result.groupCount}개 그룹, survivor 병합 ${result.updated}건, 삭제 ${result.deleted}건${result.backupFile ? ` (백업: ${result.backupFile})` : ''}`,
+  };
+}
+
 export async function runDailyBatch({ dryRun = false } = {}) {
-  console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length + 4}개 단계\n`);
+  console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length + 5}개 단계\n`);
 
   const results = [];
 
@@ -223,6 +263,14 @@ export async function runDailyBatch({ dryRun = false } = {}) {
   } catch (err) {
     console.error(`❌ [DEACTIVATE_EXPIRED_EVENTS] 실패: ${err.message}`);
     results.push({ failed: true, sourceKey: 'DEACTIVATE_EXPIRED_EVENTS', source: null, note: err.message });
+  }
+
+  console.log('\n=== [DEDUPE_OPEN_SPACES] ===');
+  try {
+    results.push(await runDedupeOpenSpaces({ dryRun }));
+  } catch (err) {
+    console.error(`❌ [DEDUPE_OPEN_SPACES] 실패: ${err.message}`);
+    results.push({ failed: true, sourceKey: 'DEDUPE_OPEN_SPACES', source: null, note: err.message });
   }
 
   console.log('\n=== [ANALYZE_OPEN_SPACES] ===');

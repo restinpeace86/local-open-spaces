@@ -20,6 +20,7 @@
 import { pathToFileURL } from 'url';
 import { loadEnv } from '../lib/load-env.mjs';
 import { createAdminClient, analyzeOpenSpaces } from './lib/supabase-admin.mjs';
+import { dedupeOpenSpaces } from './lib/dedupe-open-spaces.mjs';
 import { recordBatchRun } from './lib/batch-log.mjs';
 import { applyCategoryRules } from './lib/category-rules.mjs';
 import { CityParkAdapter } from './adapters/city-park-adapter.mjs';
@@ -127,8 +128,44 @@ async function runAnalyzeOpenSpaces({ dryRun }) {
   };
 }
 
+// [open_spaces 중복 데이터 정제](2026-08-28): 이 배치는 서로 다른 여러 open_spaces 전용
+// 어댑터(city_park/playground/tourapi 계열 등)를 한 번에 수집한다 - 각 어댑터가 서로
+// 다른 external_id 스킴을 쓰는 이상 교차 출처 중복은 upsert의 ON CONFLICT로 막을 수 없어,
+// 배치 종료 후처리로 정리한다(판정 기준: dedupe-open-spaces.mjs 상단 주석). 각 어댑터의
+// "유연하게 적재한다" 원칙은 그대로 유지한다 - 이 후처리는 적재 이후에만 개입한다.
+async function runDedupeOpenSpaces({ dryRun }) {
+  if (dryRun) {
+    return {
+      sourceKey: 'DEDUPE_OPEN_SPACES',
+      source: null,
+      targetTable: 'open_spaces',
+      rawCount: 0,
+      count: 0,
+      upserted: false,
+      safeMergeCount: 0,
+      errorCount: 0,
+      excludeFromVerification: true,
+      note: 'dry-run: 실제 UPDATE/DELETE는 실행하지 않음',
+    };
+  }
+
+  const result = await dedupeOpenSpaces({ dryRun: false });
+  return {
+    sourceKey: 'DEDUPE_OPEN_SPACES',
+    source: null,
+    targetTable: 'open_spaces',
+    rawCount: 0,
+    count: result.deleted,
+    upserted: false,
+    safeMergeCount: result.updated,
+    errorCount: 0,
+    excludeFromVerification: true,
+    note: `교차 출처 중복 정제 완료 - ${result.groupCount}개 그룹, survivor 병합 ${result.updated}건, 삭제 ${result.deleted}건${result.backupFile ? ` (백업: ${result.backupFile})` : ''}`,
+  };
+}
+
 export async function runMonthlyBatch({ dryRun = false } = {}) {
-  console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length + 2}개 단계\n`);
+  console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length + 3}개 단계\n`);
 
   const results = [];
 
@@ -149,6 +186,14 @@ export async function runMonthlyBatch({ dryRun = false } = {}) {
   } catch (err) {
     console.error(`❌ [CATEGORY_RULES_APPLICATION] 실패: ${err.message}`);
     results.push({ failed: true, sourceKey: 'CATEGORY_RULES_APPLICATION', source: null, note: err.message });
+  }
+
+  console.log('\n=== [DEDUPE_OPEN_SPACES] ===');
+  try {
+    results.push(await runDedupeOpenSpaces({ dryRun }));
+  } catch (err) {
+    console.error(`❌ [DEDUPE_OPEN_SPACES] 실패: ${err.message}`);
+    results.push({ failed: true, sourceKey: 'DEDUPE_OPEN_SPACES', source: null, note: err.message });
   }
 
   console.log('\n=== [ANALYZE_OPEN_SPACES] ===');
