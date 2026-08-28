@@ -19,9 +19,19 @@ name: Monthly Ingestion (Spaces Batch)
 # 실행한다 — 28~31일 중 그 달의 마지막 날 단 하루만 조건이 참이 되므로 결과적으로
 # "매월 1일 KST 02:00 정확히 1회 실행"과 수학적으로 동일하다. workflow_dispatch(수동 실행)는
 # 이 가드를 건너뛰어 언제든 즉시 실행 가능하게 한다.
+# [파이프라인 관측성 긴급 복구](2026-08-28): ingest-daily.yml과 동일한 문제 — 이 워크플로도
+# docs/pipeline-log.md 변경분을 저장소에 커밋/푸시하는 스텝이 없어 실제 실행 여부를 사후에
+# 확인할 수 없었다. 상세 배경은 ingest-daily.yml 상단 주석 참고.
+# [cron 정각 트리거 회피](2026-08-28): ingest-daily.yml과 동일한 사유(GitHub Actions 공식
+# 문서상 정시 트리거는 부하로 지연/드롭될 수 있음) — 상세 배경은 ingest-daily.yml 상단 주석
+# 참고. "내일이 1일인지" 가드 로직(28~31일 매일 후보로 깨어남)은 시각과 무관하므로 분만
+# 옮겨도 동일하게 동작한다.
+permissions:
+  contents: write
+
 on:
   schedule:
-    - cron: '0 17 28-31 * *'
+    - cron: '7 17 28-31 * *'
   workflow_dispatch:
 
 jobs:
@@ -57,3 +67,16 @@ jobs:
           GG_DATA_API_KEY: ${{ secrets.GG_DATA_API_KEY }}
           VWORLD_API_KEY: ${{ secrets.VWORLD_API_KEY }}
         run: node scripts/ingest/run-monthly.mjs
+
+      - name: Commit pipeline log
+        if: always() && (steps.last_day.outputs.is_last_day == 'true' || github.event_name == 'workflow_dispatch')
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet -- docs/pipeline-log.md; then
+            git add docs/pipeline-log.md
+            git commit -m "docs: [Actions] Monthly Spaces Batch 실행 리포트 - $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git push
+          else
+            echo "docs/pipeline-log.md 변경 없음 — 커밋 스킵"
+          fi

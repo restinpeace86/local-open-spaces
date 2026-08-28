@@ -10,9 +10,23 @@ name: Daily Ingestion (Events Batch)
 # TourAPI 축제/경기 문화행사 4개 스텝), run-daily.mjs 오케스트레이터로 통합하면서 워크플로도
 # "Daily 배치 1스텝"으로 단순화했다 — 배치 리포트(docs/pipeline-log.md)도 배치 단위 1건으로
 # 남아 실제 실행 단위와 로그 단위가 정확히 일치한다.
+# [파이프라인 관측성 긴급 복구](2026-08-28): docs/pipeline-log.md는 run-daily.mjs가 러너
+# 로컬 파일 시스템에만 기록하고, 이 워크플로에는 그 변경분을 저장소로 커밋/푸시하는 스텝이
+# 전혀 없었다 — 즉 지금까지 이 파일에 남은 모든 기록은 로컬 개발/테스트 실행분이며, 실제
+# GitHub Actions 스케줄 실행이 성공했는지조차 사후에 확인할 방법이 없었다(관측성 완전
+# 부재). 8/26~28 신규 이벤트 수집 0건 진단 과정에서 발견되어, 실행 후 변경분을 커밋/푸시하는
+# 스텝을 추가해 앞으로의 실행 결과를 저장소에서 직접 확인할 수 있도록 한다.
+# [cron 정각 트리거 회피](2026-08-28): GitHub Actions 공식 문서 기준 사실 확인 — schedule
+# 이벤트는 매 정시(top of the hour)에 부하가 몰려 지연/드롭될 수 있다고 명시돼 있다. 실측
+# 확인 결과 `0 18 * * *`(정각)로 등록된 이 워크플로가 8/26·8/27 이틀 연속 단 한 번도
+# 트리거되지 않았다(GitHub Actions API로 실행 이력 조회 — 8/25 19:19 실행 이후 8/28 00:36
+# 확인 시점까지 신규 실행 0건). 정각을 피해 18:07로 옮겨 재발 가능성을 낮춘다.
+permissions:
+  contents: write
+
 on:
   schedule:
-    - cron: '0 18 * * *'
+    - cron: '7 18 * * *'
   workflow_dispatch:
 
 jobs:
@@ -39,3 +53,16 @@ jobs:
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           KAKAO_REST_API_KEY: ${{ secrets.KAKAO_REST_API_KEY }}
         run: node scripts/ingest/run-daily.mjs
+
+      - name: Commit pipeline log
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          if ! git diff --quiet -- docs/pipeline-log.md; then
+            git add docs/pipeline-log.md
+            git commit -m "docs: [Actions] Daily Events Batch 실행 리포트 - $(date -u +'%Y-%m-%d %H:%M UTC')"
+            git push
+          else
+            echo "docs/pipeline-log.md 변경 없음 — 커밋 스킵"
+          fi

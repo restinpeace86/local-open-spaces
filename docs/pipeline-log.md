@@ -49,6 +49,12 @@ GitHub Actions cron으로 직접 표현할 수 없다는 사실을 확인했다 
 
 | 실행 일시 | 수집 권역 | RAW 적재 건수 | Service 적재 건수 | 파싱 에러 | 상태 | 비고 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 2026-08-28 10:19 | SEOUL_YEYAK | 2876 | 1586 | 1319 | 🚨 [CRITICAL] | 테이블별 부분 실패: open_spaces(open_spaces upsert 실패: canceling statement due to statement timeout) |
+| 2026-08-28 10:15 | SEOUL_YEYAK | - | 0 | N/A | 🚨 [CRITICAL] | open_spaces upsert 실패: canceling statement due to statement timeout |
+| 2026-08-28 09:58 | SEOUL_YEYAK | - | 0 | N/A | 🚨 [CRITICAL] | open_spaces upsert 실패: canceling statement due to statement timeout |
+| 2026-08-28 09:50 | GG_CULTURE_EVENTS | 3249 | 2955 | 294 | ✅ [OK] |  |
+| 2026-08-28 09:39 | GG_CULTURE_EVENTS | 3249 | 2955 | 294 | ✅ [OK] |  |
+| 2026-08-28 09:26 | GG_CULTURE_EVENTS | 3249 | 2955 | 294 | ✅ [OK] |  |
 | 2026-08-26 00:25 | KOR_PET_TOUR | 857 | 857 | 0 | ✅ [OK] |  |
 | 2026-08-26 00:25 | KOR_WITH_TOUR | 5041 | 5040 | 1 | ✅ [OK] |  |
 | 2026-08-26 00:25 | KOR_SERVICE | 19146 | 19144 | 2 | ✅ [OK] |  |
@@ -208,3 +214,23 @@ GitHub Actions cron으로 직접 표현할 수 없다는 사실을 확인했다 
 | tourapi_4.0 | 857 | 0 | 857 | 857 | 0 |  |
 
 **검증**: 전체 RAW 수신 155253건 vs DB 적재 144013건 (+에러 11240건 +범위제외 0건) → **드롭 0건 확인 ✅**
+
+<details>
+<summary>2026-08-28 10:19 SEOUL_YEYAK 상세 리포트</summary>
+
+**테이블별 적재**
+
+| 테이블 | 가져온 건수 | DB 적재 건수 | 배치 내 중복(NULL 병합) | 기존 DB 병합 |
+| :--- | ---: | ---: | ---: | ---: |
+| open_spaces | 1290 | 0 | 0 | 0 |
+| events | 1586 | 1586 | 0 | 1506 |
+
+**범위 제외**: 29건
+
+**에러 상세**
+
+| 원인 | 건수 |
+| :--- | ---: |
+| COORDINATE_PARSE_FAIL | 15 |
+
+</details>

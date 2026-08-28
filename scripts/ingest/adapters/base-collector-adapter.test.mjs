@@ -346,4 +346,51 @@ describe("BaseCollectorAdapter — targetTable: 'multi' (Decision 017 다중 테
     const adapter = new MultiTableAdapter();
     await expect(adapter.runServiceTransformFromRaw()).rejects.toThrow("targetTable 'multi'");
   });
+
+  // [파이프라인 관측성 긴급 복구](2026-08-28) 실측 확인 버그: SEOUL_YEYAK의 open_spaces
+  // upsert가 statement timeout으로 실패하면 예외가 던져져 이미 정상 변환된 events 행까지
+  // 통째로 유실됐다(events upsert 시도조차 못함). 두 테이블 upsert를 독립적으로
+  // try-catch하도록 고쳐, 한쪽이 실패해도 다른 쪽은 정상 적재되는지 검증한다.
+  it('open_spaces upsert가 실패해도 events upsert는 시도되어 정상 적재된다', async () => {
+    upsertRowsSafeMergeMock.mockImplementation((_client, table) => {
+      if (table === 'open_spaces') return Promise.reject(new Error('canceling statement due to statement timeout'));
+      return Promise.resolve({ count: 1, duplicateWithinBatch: 0, mergedWithExisting: 0 });
+    });
+    const adapter = new MultiTableAdapter();
+
+    const result = await adapter.run();
+
+    expect(upsertRowsSafeMergeMock).toHaveBeenCalledWith(expect.anything(), 'events', [{ external_id: 'S2' }]);
+    expect(result.perTable).toEqual({ open_spaces: 0, events: 1 });
+    expect(result.count).toBe(1);
+    expect(result.note).toContain('open_spaces');
+    expect(result.note).toContain('statement timeout');
+  });
+
+  it('한쪽 테이블 upsert가 실패해도 예외를 다시 던지지 않는다(다른 소스/단계로 배치가 계속 진행되어야 함)', async () => {
+    upsertRowsSafeMergeMock.mockImplementation((_client, table) => {
+      if (table === 'open_spaces') return Promise.reject(new Error('boom'));
+      return Promise.resolve({ count: 1, duplicateWithinBatch: 0, mergedWithExisting: 0 });
+    });
+    const adapter = new MultiTableAdapter();
+
+    await expect(adapter.run()).resolves.toBeDefined();
+  });
+
+  it('테이블별 부분 실패 시 recordPipelineRun에 FAILED 상태와 실패 사유를 전달한다', async () => {
+    upsertRowsSafeMergeMock.mockImplementation((_client, table) => {
+      if (table === 'open_spaces') return Promise.reject(new Error('boom'));
+      return Promise.resolve({ count: 1, duplicateWithinBatch: 0, mergedWithExisting: 0 });
+    });
+    const adapter = new MultiTableAdapter();
+    await adapter.run();
+
+    expect(recordPipelineRun).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sourceKey: 'MULTI_SOURCE',
+        status: 'FAILED',
+        note: expect.stringContaining('open_spaces'),
+      })
+    );
+  });
 });

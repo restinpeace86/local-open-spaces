@@ -205,17 +205,45 @@ export class BaseCollectorAdapter {
 
     const client = createAdminClient();
     const perTableResult = {};
+    // [파이프라인 관측성 긴급 복구](2026-08-28) 실측 확인: open_spaces upsert가 DB 쪽
+    // statement timeout으로 실패하면(예: 대량 배치 직후 플래너 통계가 stale해지는 사례,
+    // implementation/2026-08-27-category-min-filter-options-fix.md 동일 패턴) 이 두 호출을
+    // 하나의 try 블록에 묶어뒀던 기존 코드는 open_spaces 실패 시 예외가 던져져 아래 events
+    // upsert를 아예 시도조차 하지 못했다 — 서로 무관한 두 테이블인데 한쪽 DB 장애가 다른
+    // 쪽까지 통째로 드롭시킨 것이다. 이는 batch-log.mjs가 명시한 "제5장 제11조 무중단
+    // 원칙"(한 소스 실패로 배치가 중단되지 않고, 실패 사실은 숨기지 않는다)을 소스 간뿐 아니라
+    // 같은 소스 내 테이블 간에도 지켰어야 했던 사례라 각각 독립적으로 try-catch한다. 한쪽이
+    // 실패해도 다른 쪽은 정상 적재되고, 실패한 테이블의 원본 건수는 기존 errorCount 계산식
+    // (rawCount - spaceRows.length - eventRows.length - excludedCount와 무관하게, 실제
+    // 적재 0건이므로 recordBatchRun의 드롭 검증에서 자동으로 "드롭 발견"으로 잡힌다)이 그대로
+    // 투명하게 드러낸다.
+    const tableFailures = {};
     if (spaceRows.length > 0) {
-      perTableResult.open_spaces = await upsertRowsSafeMerge(client, 'open_spaces', spaceRows);
+      try {
+        perTableResult.open_spaces = await upsertRowsSafeMerge(client, 'open_spaces', spaceRows);
+      } catch (err) {
+        tableFailures.open_spaces = err.message;
+        console.error(`❌ [${this.sourceKey}] open_spaces upsert 실패(events는 계속 진행): ${err.message}`);
+      }
     }
     if (eventRows.length > 0) {
-      perTableResult.events = await upsertRowsSafeMerge(client, 'events', eventRows);
+      try {
+        perTableResult.events = await upsertRowsSafeMerge(client, 'events', eventRows);
+      } catch (err) {
+        tableFailures.events = err.message;
+        console.error(`❌ [${this.sourceKey}] events upsert 실패: ${err.message}`);
+      }
     }
 
     const totalCount = (perTableResult.open_spaces?.count ?? 0) + (perTableResult.events?.count ?? 0);
+    const failedTables = Object.keys(tableFailures);
+    const failureNote =
+      failedTables.length > 0
+        ? `테이블별 부분 실패: ${failedTables.map((t) => `${t}(${tableFailures[t]})`).join(', ')}`
+        : undefined;
     console.log(
-      `✅ [${this.sourceKey}] 다중 테이블 upsert 완료: open_spaces ${perTableResult.open_spaces?.count ?? 0}건 / ` +
-        `events ${perTableResult.events?.count ?? 0}건`
+      `${failedTables.length > 0 ? '⚠️' : '✅'} [${this.sourceKey}] 다중 테이블 upsert 완료: open_spaces ${perTableResult.open_spaces?.count ?? 0}건 / ` +
+        `events ${perTableResult.events?.count ?? 0}건${failureNote ? ` (${failureNote})` : ''}`
     );
 
     recordPipelineRun({
@@ -223,7 +251,8 @@ export class BaseCollectorAdapter {
       rawCount,
       rawArchivedCount,
       count: totalCount,
-      status: 'OK',
+      status: failedTables.length > 0 ? 'FAILED' : 'OK',
+      note: failureNote,
       detail: {
         perTable: {
           open_spaces: {
@@ -273,6 +302,7 @@ export class BaseCollectorAdapter {
       perTable: { open_spaces: perTableResult.open_spaces?.count ?? 0, events: perTableResult.events?.count ?? 0 },
       errorCounts,
       excludedCount,
+      note: failureNote,
     };
   }
 
