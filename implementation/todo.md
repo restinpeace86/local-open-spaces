@@ -27,3 +27,10 @@
   - 실측 이슈 발견 및 수정: 최초 배포한 RPC를 실행하자 ANALYZE 자체가 PostgREST 기본 statement_timeout에 걸려 실패함을 실측 확인 → 함수에 `SET statement_timeout = '300000'`(5분)을 지정해 해결, 재적용 후 RPC 성공 확인.
   - 최종 실측 재검증: RPC 성공 직후 `SeoulYeyakAdapter`를 실제로 재실행해 이전에 0/1290건(타임아웃 실패)이던 `open_spaces` upsert가 **1290/1290건 정상 적재**됨을 프로덕션에서 직접 확인(`docs/pipeline-log.md` 기록됨). 인덱스(`external_id` UNIQUE, `idx_open_spaces_location` GIST)는 기존에 이미 적정하게 구성돼 있어 추가 조치 불필요, 블로트 징후 없음.
   - 청크 단위 업서트 구조 검토: `supabase-admin.mjs`는 이미 `UPSERT_BATCH_SIZE=500`건 단위로 청크 분할돼 있었음을 확인. 원인은 배치 크기가 아닌 통계 staleness였으므로 청크 크기는 그대로 유지하고 ANALYZE 자동화로 근본 대응(상세: `implementation/2026-08-28-ingest-pipeline-reliability.md`).
+
+- [x] **[open_spaces 세부 중분류 매핑 시뮬레이션 및 자동 매핑 로직 구축]** (2026-08-28 완료)
+  - **0단계**: 원본 카테고리(`category`)/이름(`name`) 분포 분석 완료 — NULL 43,445건(31.3%) 중 4개 소스(LOCALDATA_PLAYGROUND/LOCALDATA_AMUSEMENT/SWIMMING_POOL/GG_EVENTS)는 name이 호스트 건물명이라 taxonomy 대상 아님을 발견, 8개 소스로 범위 한정.
+  - **1~3단계**: 키워드 규칙 초안 작성 → 시뮬레이션(`scripts/simulations/open-spaces-detailed-category-dryrun.mjs`) → 검토·보완 → 확정. 21종 요청 중 5종은 기존 category_min 재사용(공연장/전시실/체육관/운동장/공원), 14종 신규 추가. 상세: `docs/open-spaces-detailed-category-mapping-dryrun-report.md`.
+  - **적용**: `category_rules`에 63건 신규 시드 + 캠핑장에 "글램핑" 키워드 보강. '기타' 폴백은 범용 엔진 오염을 피하기 위해 전용 함수(`scripts/ingest/lib/detailed-category-fallback.mjs`, 8개 대상 source_type 한정)로 구현, run-daily.mjs/run-monthly.mjs에 재발 방지 단계로 연결.
+  - **실측 결과**: 신규 분류 6,982건 + 기타 폴백 20,119건, 최종 NULL 16,344건(전량 대상 외 4개 소스). 기타 오염(대상 외 소스) 0건 확인.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(51파일 536건)/`npm run build` 통과. 상세: `implementation/2026-08-28-open-spaces-detailed-category-mapping.md`.

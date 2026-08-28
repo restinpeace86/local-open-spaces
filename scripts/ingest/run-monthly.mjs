@@ -21,6 +21,7 @@ import { pathToFileURL } from 'url';
 import { loadEnv } from '../lib/load-env.mjs';
 import { createAdminClient, analyzeOpenSpaces } from './lib/supabase-admin.mjs';
 import { dedupeOpenSpaces } from './lib/dedupe-open-spaces.mjs';
+import { applyDetailedCategoryFallback } from './lib/detailed-category-fallback.mjs';
 import { recordBatchRun } from './lib/batch-log.mjs';
 import { applyCategoryRules } from './lib/category-rules.mjs';
 import { CityParkAdapter } from './adapters/city-park-adapter.mjs';
@@ -89,6 +90,41 @@ async function runCategoryRulesApplication({ dryRun }) {
     errorCount: 0,
     excludeFromVerification: true,
     note: `category_min 신규 룰 매칭 후처리(신규 적재 아님) — open_spaces ${result.open_spaces.matched}/${result.open_spaces.scanned}건, events ${result.events.matched}/${result.events.scanned}건`,
+  };
+}
+
+// [open_spaces 세부 중분류 매핑](2026-08-28): CATEGORY_RULES_APPLICATION 다음에 실행 —
+// 상세: run-daily.mjs의 동일 이름 함수 주석 및
+// docs/open-spaces-detailed-category-mapping-dryrun-report.md 3절 참고.
+async function runDetailedCategoryFallback({ dryRun }) {
+  if (dryRun) {
+    return {
+      sourceKey: 'DETAILED_CATEGORY_FALLBACK',
+      source: null,
+      targetTable: 'open_spaces',
+      rawCount: 0,
+      count: 0,
+      upserted: false,
+      safeMergeCount: 0,
+      errorCount: 0,
+      excludeFromVerification: true,
+      note: 'dry-run: 실제 UPDATE는 실행하지 않음',
+    };
+  }
+
+  const client = createAdminClient();
+  const result = await applyDetailedCategoryFallback(client);
+  return {
+    sourceKey: 'DETAILED_CATEGORY_FALLBACK',
+    source: null,
+    targetTable: 'open_spaces',
+    rawCount: result.scanned,
+    count: result.updated,
+    upserted: true,
+    safeMergeCount: 0,
+    errorCount: 0,
+    excludeFromVerification: true,
+    note: `세부 중분류 미분류 잔여를 '기타'로 안전 적재(8개 대상 source_type 한정) — ${result.updated}/${result.scanned}건`,
   };
 }
 
@@ -165,7 +201,7 @@ async function runDedupeOpenSpaces({ dryRun }) {
 }
 
 export async function runMonthlyBatch({ dryRun = false } = {}) {
-  console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length + 3}개 단계\n`);
+  console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length + 4}개 단계\n`);
 
   const results = [];
 
@@ -186,6 +222,14 @@ export async function runMonthlyBatch({ dryRun = false } = {}) {
   } catch (err) {
     console.error(`❌ [CATEGORY_RULES_APPLICATION] 실패: ${err.message}`);
     results.push({ failed: true, sourceKey: 'CATEGORY_RULES_APPLICATION', source: null, note: err.message });
+  }
+
+  console.log('\n=== [DETAILED_CATEGORY_FALLBACK] ===');
+  try {
+    results.push(await runDetailedCategoryFallback({ dryRun }));
+  } catch (err) {
+    console.error(`❌ [DETAILED_CATEGORY_FALLBACK] 실패: ${err.message}`);
+    results.push({ failed: true, sourceKey: 'DETAILED_CATEGORY_FALLBACK', source: null, note: err.message });
   }
 
   console.log('\n=== [DEDUPE_OPEN_SPACES] ===');
