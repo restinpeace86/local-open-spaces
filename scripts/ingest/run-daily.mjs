@@ -22,6 +22,7 @@ import { loadEnv } from '../lib/load-env.mjs';
 import { createAdminClient, analyzeOpenSpaces } from './lib/supabase-admin.mjs';
 import { dedupeOpenSpaces } from './lib/dedupe-open-spaces.mjs';
 import { applyDetailedCategoryFallback } from './lib/detailed-category-fallback.mjs';
+import { applyLegacySourceCategoryMapping } from './lib/legacy-source-category-mapping.mjs';
 import { recordBatchRun } from './lib/batch-log.mjs';
 import { GgCultureEventsAdapter } from './adapters/gg-culture-events-adapter.mjs';
 import { SeoulYeyakAdapter } from './adapters/seoul-yeyak-adapter.mjs';
@@ -114,6 +115,42 @@ async function runDetailedCategoryFallback({ dryRun }) {
     errorCount: 0,
     excludeFromVerification: true,
     note: `세부 중분류 미분류 잔여를 '기타'로 안전 적재(8개 대상 source_type 한정) — ${result.updated}/${result.scanned}건`,
+  };
+}
+
+// [NULL 데이터 중분류 매핑 실제 적용](2026-08-28): docs/null-category-analysis.md에서
+// "적용 가능"으로 판정한 4개 source_type(LOCALDATA_PLAYGROUND/SWIMMING_POOL/
+// LOCALDATA_AMUSEMENT/GG_EVENTS)을 매 배치마다 자동으로 채운다 — DETAILED_CATEGORY_
+// FALLBACK과 완전히 disjoint한 source_type 집합이라 실행 순서는 서로 영향을 주지 않는다.
+async function runLegacySourceCategoryMapping({ dryRun }) {
+  if (dryRun) {
+    return {
+      sourceKey: 'LEGACY_SOURCE_CATEGORY_MAPPING',
+      source: null,
+      targetTable: 'open_spaces',
+      rawCount: 0,
+      count: 0,
+      upserted: false,
+      safeMergeCount: 0,
+      errorCount: 0,
+      excludeFromVerification: true,
+      note: 'dry-run: 실제 UPDATE는 실행하지 않음',
+    };
+  }
+
+  const client = createAdminClient();
+  const result = await applyLegacySourceCategoryMapping(client);
+  return {
+    sourceKey: 'LEGACY_SOURCE_CATEGORY_MAPPING',
+    source: null,
+    targetTable: 'open_spaces',
+    rawCount: result.updated,
+    count: result.updated,
+    upserted: true,
+    safeMergeCount: 0,
+    errorCount: 0,
+    excludeFromVerification: true,
+    note: `docs/null-category-analysis.md 적용 범위(어린이놀이시설/수영장/키즈카페/바닥분수·물놀이시설) 매핑 — ${result.updated}건, 내역: ${JSON.stringify(result.breakdown)}`,
   };
 }
 
@@ -249,7 +286,7 @@ async function runDedupeOpenSpaces({ dryRun }) {
 }
 
 export async function runDailyBatch({ dryRun = false } = {}) {
-  console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length + 6}개 단계\n`);
+  console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length + 7}개 단계\n`);
 
   const results = [];
 
@@ -301,6 +338,14 @@ export async function runDailyBatch({ dryRun = false } = {}) {
   } catch (err) {
     console.error(`❌ [DETAILED_CATEGORY_FALLBACK] 실패: ${err.message}`);
     results.push({ failed: true, sourceKey: 'DETAILED_CATEGORY_FALLBACK', source: null, note: err.message });
+  }
+
+  console.log('\n=== [LEGACY_SOURCE_CATEGORY_MAPPING] ===');
+  try {
+    results.push(await runLegacySourceCategoryMapping({ dryRun }));
+  } catch (err) {
+    console.error(`❌ [LEGACY_SOURCE_CATEGORY_MAPPING] 실패: ${err.message}`);
+    results.push({ failed: true, sourceKey: 'LEGACY_SOURCE_CATEGORY_MAPPING', source: null, note: err.message });
   }
 
   console.log('\n=== [DEACTIVATE_EXPIRED_EVENTS] ===');

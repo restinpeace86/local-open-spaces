@@ -22,6 +22,7 @@ import { loadEnv } from '../lib/load-env.mjs';
 import { createAdminClient, analyzeOpenSpaces } from './lib/supabase-admin.mjs';
 import { dedupeOpenSpaces } from './lib/dedupe-open-spaces.mjs';
 import { applyDetailedCategoryFallback } from './lib/detailed-category-fallback.mjs';
+import { applyLegacySourceCategoryMapping } from './lib/legacy-source-category-mapping.mjs';
 import { recordBatchRun } from './lib/batch-log.mjs';
 import { applyCategoryRules } from './lib/category-rules.mjs';
 import { CityParkAdapter } from './adapters/city-park-adapter.mjs';
@@ -128,6 +129,42 @@ async function runDetailedCategoryFallback({ dryRun }) {
   };
 }
 
+// [NULL 데이터 중분류 매핑 실제 적용](2026-08-28): CATEGORY_RULES_APPLICATION/
+// DETAILED_CATEGORY_FALLBACK과 완전히 disjoint한 source_type 집합(LOCALDATA_PLAYGROUND/
+// SWIMMING_POOL/LOCALDATA_AMUSEMENT/GG_EVENTS) — 상세: run-daily.mjs 동일 이름 함수
+// 주석 및 docs/null-category-analysis.md 참고.
+async function runLegacySourceCategoryMapping({ dryRun }) {
+  if (dryRun) {
+    return {
+      sourceKey: 'LEGACY_SOURCE_CATEGORY_MAPPING',
+      source: null,
+      targetTable: 'open_spaces',
+      rawCount: 0,
+      count: 0,
+      upserted: false,
+      safeMergeCount: 0,
+      errorCount: 0,
+      excludeFromVerification: true,
+      note: 'dry-run: 실제 UPDATE는 실행하지 않음',
+    };
+  }
+
+  const client = createAdminClient();
+  const result = await applyLegacySourceCategoryMapping(client);
+  return {
+    sourceKey: 'LEGACY_SOURCE_CATEGORY_MAPPING',
+    source: null,
+    targetTable: 'open_spaces',
+    rawCount: result.updated,
+    count: result.updated,
+    upserted: true,
+    safeMergeCount: 0,
+    errorCount: 0,
+    excludeFromVerification: true,
+    note: `docs/null-category-analysis.md 적용 범위(어린이놀이시설/수영장/키즈카페/바닥분수·물놀이시설) 매핑 — ${result.updated}건, 내역: ${JSON.stringify(result.breakdown)}`,
+  };
+}
+
 // [open_spaces 성능 최적화 및 타임아웃 재발 방지](2026-08-28): 이 배치는 playground
 // (82,373건) 등 대량 open_spaces 적재를 수행한다 — 배치 종료 시점에 통계를 갱신해 다음
 // 배치(다음 Daily/Monthly)의 open_spaces upsert가 stale 통계로 인한 statement timeout을
@@ -201,7 +238,7 @@ async function runDedupeOpenSpaces({ dryRun }) {
 }
 
 export async function runMonthlyBatch({ dryRun = false } = {}) {
-  console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length + 4}개 단계\n`);
+  console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length + 5}개 단계\n`);
 
   const results = [];
 
@@ -230,6 +267,14 @@ export async function runMonthlyBatch({ dryRun = false } = {}) {
   } catch (err) {
     console.error(`❌ [DETAILED_CATEGORY_FALLBACK] 실패: ${err.message}`);
     results.push({ failed: true, sourceKey: 'DETAILED_CATEGORY_FALLBACK', source: null, note: err.message });
+  }
+
+  console.log('\n=== [LEGACY_SOURCE_CATEGORY_MAPPING] ===');
+  try {
+    results.push(await runLegacySourceCategoryMapping({ dryRun }));
+  } catch (err) {
+    console.error(`❌ [LEGACY_SOURCE_CATEGORY_MAPPING] 실패: ${err.message}`);
+    results.push({ failed: true, sourceKey: 'LEGACY_SOURCE_CATEGORY_MAPPING', source: null, note: err.message });
   }
 
   console.log('\n=== [DEDUPE_OPEN_SPACES] ===');
