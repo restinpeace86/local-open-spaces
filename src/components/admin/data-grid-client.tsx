@@ -3,6 +3,11 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
+import {
+  buildOpenSpacesCategoryMinGroups,
+  buildEventsCategoryMinGroups,
+  type CategoryMinGroup,
+} from '@/lib/admin/category-min-groups';
 import { RawDataModal } from '@/components/admin/raw-data-modal';
 import { CategoryRulesModal } from '@/components/admin/category-rules-modal';
 import { Pagination } from '@/components/admin/pagination';
@@ -349,6 +354,106 @@ function CheckboxMultiSelect({
   );
 }
 
+// [대분류/중분류 계층적 탐색 UI](2026-08-28): category_min이 50종 내외로 늘어나면서 flat
+// CheckboxMultiSelect가 한 화면에 전부 펼쳐져 지저분해지는 문제를 해결한다. 대분류 탭을
+// 눌러 한 번에 하나의 대분류에 속한 중분류만 체크박스로 노출한다(홈 화면
+// MajorCategoryGrid와 동일한 관례 — 대분류 탭 전환은 "보이는 범위"만 바꾸고, 선택된
+// 중분류(selected)는 탭을 넘나들어도 그대로 유지된다). 아코디언(여러 대분류 동시 확장)
+// 대신 단일 포커스 탭 방식을 택한 이유: 이 프로젝트에서 이미 홈 화면 카테고리 그리드를
+// 아코디언으로 시도했다가 "처음(아이콘 그리드+공유 칩 목록) 방식이 더 낫다"는 명확한
+// 피드백을 받은 전례가 있어(2026-08-27), 동일한 단일 포커스 상호작용을 어드민에도
+// 일관되게 적용한다.
+function HierarchicalCategoryMinFilter({
+  label,
+  groups,
+  selected,
+  onToggle,
+  includeNullOption = false,
+  fetchFailed = false,
+  onRetry,
+}: {
+  label: string;
+  groups: CategoryMinGroup[];
+  selected: string[];
+  onToggle: (value: string) => void;
+  includeNullOption?: boolean;
+  fetchFailed?: boolean;
+  onRetry?: () => void;
+}) {
+  const [activeMajor, setActiveMajor] = useState<string | null>(null);
+
+  if (groups.length === 0 && fetchFailed) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+        <span className="text-xs font-medium text-amber-700">
+          ⚠️ {label} 옵션 목록을 불러오지 못했습니다(일시적 오류) — NULL 필터만 사용 가능합니다.
+        </span>
+        {onRetry && (
+          <button type="button" onClick={onRetry} className="text-xs font-semibold text-amber-800 underline hover:text-amber-900">
+            다시 시도
+          </button>
+        )}
+      </div>
+    );
+  }
+  if (groups.length === 0 && !includeNullOption) return null;
+
+  const currentGroup = groups.find((g) => g.major === activeMajor) ?? groups[0];
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      {fetchFailed && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-medium text-amber-600">
+            ⚠️ 최신 {label} 목록을 실시간으로 불러오지 못해 최근 스냅샷을 표시 중입니다.
+          </span>
+          {onRetry && (
+            <button type="button" onClick={onRetry} className="text-[11px] font-semibold text-amber-700 underline">
+              다시 시도
+            </button>
+          )}
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-1.5">
+        <span className="text-xs text-gray-500 shrink-0">{label} — 대분류</span>
+        {groups.map((g) => {
+          const selectedCount = g.minors.filter((m) => selected.includes(m)).length;
+          const isActive = (currentGroup?.major ?? null) === g.major;
+          return (
+            <button
+              key={g.major}
+              type="button"
+              onClick={() => setActiveMajor(g.major)}
+              className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium border transition-colors ${
+                isActive ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              {g.major}
+              {selectedCount > 0 && <span className="ml-1 text-[10px] font-bold">({selectedCount})</span>}
+            </button>
+          );
+        })}
+        {includeNullOption && (
+          <label className="ml-2 flex items-center gap-1 text-xs text-gray-500 shrink-0">
+            <input type="checkbox" checked={selected.includes(NULL_FILTER_TOKEN)} onChange={() => onToggle(NULL_FILTER_TOKEN)} />
+            미지정(NULL)
+          </label>
+        )}
+      </div>
+      {currentGroup && (
+        <div className="flex flex-wrap gap-x-3 gap-y-1 max-w-2xl pl-1">
+          {currentGroup.minors.map((opt) => (
+            <label key={opt} className="flex items-center gap-1 text-xs text-gray-600 shrink-0">
+              <input type="checkbox" checked={selected.includes(opt)} onChange={() => onToggle(opt)} />
+              {opt}
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // [카테고리 정제 & 어드민 확장](2026-08-26): category_min_source(RAW/RULE/MANUAL) 출처 뱃지.
 const CATEGORY_MIN_SOURCE_STYLE: Record<string, string> = {
   RAW: 'bg-emerald-100 text-emerald-700',
@@ -536,6 +641,16 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
   const currentOptions = filterOptions[tab];
 
+  // [대분류/중분류 계층적 탐색 UI](2026-08-28): category_min이 50종 내외로 늘어나 flat
+  // 체크박스 목록이 지저분해지는 문제 — 대분류로 묶어 한 번에 하나의 대분류 하위 중분류만
+  // 노출한다. tab이 바뀌면(open_spaces ↔ events) 그룹 정의도 달라진다.
+  const categoryMinGroups = useMemo(() => {
+    if (tab === 'raw_ingest_data' || !('categoryMins' in currentOptions)) return [];
+    return tab === 'events'
+      ? buildEventsCategoryMinGroups(currentOptions.categoryMins)
+      : buildOpenSpacesCategoryMinGroups(currentOptions.categoryMins);
+  }, [tab, currentOptions]);
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="shrink-0 p-4 border-b border-gray-100 flex flex-col gap-3">
@@ -666,9 +781,9 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
         )}
 
         {tab !== 'raw_ingest_data' && 'categoryMins' in currentOptions && (
-          <CheckboxMultiSelect
+          <HierarchicalCategoryMinFilter
             label="표준 중분류(category_min)"
-            options={currentOptions.categoryMins}
+            groups={categoryMinGroups}
             selected={pendingCategoryMin}
             includeNullOption
             fetchFailed={currentOptions.categoryMinsFetchFailed}
