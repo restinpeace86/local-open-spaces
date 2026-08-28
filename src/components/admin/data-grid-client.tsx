@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
 import { RawDataModal } from '@/components/admin/raw-data-modal';
 import { CategoryRulesModal } from '@/components/admin/category-rules-modal';
@@ -85,6 +86,9 @@ type FilterOptions = {
     minClassNames: string[];
     svcStatNms: string[];
     categoryMins: string[];
+    // [Admin 필터 체크박스 렌더링 안정성 확보](2026-08-28): 서버에서 재시도까지 실패한
+    // 경우에만 true — "카테고리가 원래 0개"와 "조회 실패로 0개"를 구분하기 위함.
+    categoryMinsFetchFailed?: boolean;
   };
   events: {
     sources: string[];
@@ -92,6 +96,7 @@ type FilterOptions = {
     minClassNames: string[];
     svcStatNms: string[];
     categoryMins: string[];
+    categoryMinsFetchFailed?: boolean;
   };
   raw_ingest_data: { sources: string[] };
 };
@@ -269,34 +274,76 @@ function CheckboxMultiSelect({
   selected,
   onToggle,
   includeNullOption = false,
+  fetchFailed = false,
+  onRetry,
 }: {
   label: string;
   options: string[];
   selected: string[];
   onToggle: (value: string) => void;
   includeNullOption?: boolean;
+  // [Admin 필터 체크박스 렌더링 안정성 확보](2026-08-28): 실측 근본 원인 —
+  // get_category_min_options RPC가 대량 UPDATE 직후 일시적 DB 콜드 캐시/락 경합으로
+  // 드물게 실패하면 options가 빈 배열이 되는데, includeNullOption이 true라 이 함수가
+  // 그냥 return null 하지 않고 NULL 체크박스만 렌더링해 "목록이 통째로 사라진 것처럼"
+  // 보였다. fetchFailed가 true면 그 경우를 명확한 에러 메시지로 구분해 보여준다(서버
+  // 쪽에서 이미 재시도를 마친 뒤에도 실패한 경우에만 true가 된다 — 매우 드묾).
+  fetchFailed?: boolean;
+  onRetry?: () => void;
 }) {
-  if (options.length === 0 && !includeNullOption) return null;
-  return (
-    <div className="flex flex-wrap items-start gap-1.5">
-      <span className="text-xs text-gray-500 shrink-0 pt-1">{label}</span>
-      <div className="flex flex-wrap gap-x-3 gap-y-1 max-w-2xl">
-        {includeNullOption && (
-          <label className="flex items-center gap-1 text-xs text-gray-500 shrink-0">
-            <input
-              type="checkbox"
-              checked={selected.includes(NULL_FILTER_TOKEN)}
-              onChange={() => onToggle(NULL_FILTER_TOKEN)}
-            />
-            미지정(NULL)
-          </label>
+  if (options.length === 0 && !includeNullOption && !fetchFailed) return null;
+  if (options.length === 0 && fetchFailed) {
+    return (
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+        <span className="text-xs font-medium text-amber-700">
+          ⚠️ {label} 옵션 목록을 불러오지 못했습니다(일시적 오류) — NULL 필터만 사용 가능합니다.
+        </span>
+        {onRetry && (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="text-xs font-semibold text-amber-800 underline hover:text-amber-900"
+          >
+            다시 시도
+          </button>
         )}
-        {options.map((opt) => (
-          <label key={opt} className="flex items-center gap-1 text-xs text-gray-600 shrink-0">
-            <input type="checkbox" checked={selected.includes(opt)} onChange={() => onToggle(opt)} />
-            {opt}
-          </label>
-        ))}
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-1">
+      {fetchFailed && (
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[11px] font-medium text-amber-600">
+            ⚠️ 최신 {label} 목록을 실시간으로 불러오지 못해 최근 스냅샷을 표시 중입니다.
+          </span>
+          {onRetry && (
+            <button type="button" onClick={onRetry} className="text-[11px] font-semibold text-amber-700 underline">
+              다시 시도
+            </button>
+          )}
+        </div>
+      )}
+      <div className="flex flex-wrap items-start gap-1.5">
+        <span className="text-xs text-gray-500 shrink-0 pt-1">{label}</span>
+        <div className="flex flex-wrap gap-x-3 gap-y-1 max-w-2xl">
+          {includeNullOption && (
+            <label className="flex items-center gap-1 text-xs text-gray-500 shrink-0">
+              <input
+                type="checkbox"
+                checked={selected.includes(NULL_FILTER_TOKEN)}
+                onChange={() => onToggle(NULL_FILTER_TOKEN)}
+              />
+              미지정(NULL)
+            </label>
+          )}
+          {options.map((opt) => (
+            <label key={opt} className="flex items-center gap-1 text-xs text-gray-600 shrink-0">
+              <input type="checkbox" checked={selected.includes(opt)} onChange={() => onToggle(opt)} />
+              {opt}
+            </label>
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -363,6 +410,7 @@ function TargetAudienceBadge({ targetAudience, source }: { targetAudience: strin
 }
 
 export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOptions }) {
+  const router = useRouter();
   const [tab, setTab] = useState<AdminTable>('open_spaces');
 
   const [q, setQ] = useState('');
@@ -623,6 +671,8 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
             options={currentOptions.categoryMins}
             selected={pendingCategoryMin}
             includeNullOption
+            fetchFailed={currentOptions.categoryMinsFetchFailed}
+            onRetry={() => router.refresh()}
             onToggle={(v) =>
               setPendingCategoryMin((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]))
             }
