@@ -1,0 +1,20 @@
+-- [스팟픽 마커 미출현 버그 긴급 디버깅](2026-08-29) 부수 발견
+--
+-- get_nearby_spaces_and_events가 3-인자 버전(user_lng, user_lat, radius_meters)과
+-- 4-인자 버전(+ p_item_type)으로 동시에 존재하고 있었다(pg_proc 실측 확인). PostgreSQL은
+-- 인자 개수가 다른 CREATE OR REPLACE를 "교체"가 아니라 별도 오버로드로 만든다는 사실이
+-- 2026-08-23-nearby-rpc-item-type-and-source-type.sql에 이미 문서화돼 있었는데도, 이후
+-- 2026-08-25-decision-017-null-safe-source-schema.sql이 3-인자 시그니처로
+-- CREATE OR REPLACE를 실행해(그 파일 작성 시점에 4-인자 버전 존재를 놓친 것으로 추정)
+-- 3-인자 오버로드가 다시 살아난 것으로 보인다.
+--
+-- 이 상태에서 p_item_type 없이 호출하면(예: src/lib/notifications/generate-
+-- notifications.ts, D-1 예약 마감 알림 생성기) PostgREST가 "PGRST203: Could not choose
+-- the best candidate function" 에러로 어느 오버로드를 쓸지 정하지 못해 실패한다(실측
+-- 확인) — 즉 이 알림 기능이 2026-08-25 이후 계속 깨져 있었을 가능성이 높다(이번 작업
+-- 범위 밖의 별도 문제이나, 같은 함수를 전수 검사하다 발견해 함께 기록한다).
+--
+-- 4-인자 버전(p_item_type text default null)은 인자를 생략해도 기본값으로 동작하므로
+-- 3-인자 버전과 완전히 동일한 하위 호환 동작을 제공한다 — 3-인자 버전을 안전하게
+-- 제거한다.
+drop function if exists public.get_nearby_spaces_and_events(double precision, double precision, int);

@@ -34,3 +34,18 @@
   - **적용**: `category_rules`에 63건 신규 시드 + 캠핑장에 "글램핑" 키워드 보강. '기타' 폴백은 범용 엔진 오염을 피하기 위해 전용 함수(`scripts/ingest/lib/detailed-category-fallback.mjs`, 8개 대상 source_type 한정)로 구현, run-daily.mjs/run-monthly.mjs에 재발 방지 단계로 연결.
   - **실측 결과**: 신규 분류 6,982건 + 기타 폴백 20,119건, 최종 NULL 16,344건(전량 대상 외 4개 소스). 기타 오염(대상 외 소스) 0건 확인.
   - **검증**: `npx tsc --noEmit`/`npm run test`(51파일 536건)/`npm run build` 통과. 상세: `implementation/2026-08-28-open-spaces-detailed-category-mapping.md`.
+
+- [x] **[스팟픽(/nearby) 중분류 선택 시 지도 마커 미출현 버그 긴급 디버깅]** (2026-08-29 완료)
+  - 근본 원인: `get_nearby_spaces_and_events` RPC가 `location::geography` 캐스팅으로
+    반경 검색하는데 기존 GIST 인덱스는 `geometry_ops`라 인덱스를 못 쓰고 13만 건 전체를
+    Seq Scan(7.4초, 만성 타임아웃) — `EXPLAIN ANALYZE`로 실측 확인. 표현식 GIST 인덱스
+    `(location::geography)` 신설로 해결(웜 상태 163~489ms).
+  - 부수 발견: 동일 RPC에 3-인자/4-인자 오버로드가 공존해 `p_item_type` 생략 호출
+    (`generate-notifications.ts` D-1 알림)이 2026-08-25 이후 `PGRST203`으로 계속 실패해온
+    것을 발견, 3-인자 오버로드 제거로 함께 해결.
+  - 프론트 갭 수정: 모바일 바텀시트가 `errorMessage`를 표시하지 않아 에러와 "진짜 0건"을
+    구분 못 하던 문제를 데스크톱과 동일하게 맞춤(`map-explorer.tsx`).
+  - "0건" 테스트 케이스(서울시청 인근 체육시설 5종)는 데이터 희소성에 의한 정상 결과로
+    확인(버그 아님).
+  - **검증**: `npx tsc --noEmit`/`npm run test`/`npm run build` 통과, 프로덕션 실측 재검증
+    완료. 상세: `implementation/2026-08-29-spotpick-nearby-rpc-performance-fix.md`.

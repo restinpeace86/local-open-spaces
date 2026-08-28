@@ -263,8 +263,10 @@ export function MapExplorer() {
           </span>
         </button>
         <div className="h-[calc(100%-56px)] overflow-y-auto">
+          {isLoading && <p className="p-4 text-sm text-gray-400">불러오는 중...</p>}
+          {errorMessage && <p className="p-4 text-sm text-red-500">{errorMessage}</p>}
           {isEmptyByFilter && <EmptyState onReset={resetFilters} />}
-          {!isEmptyByFilter && (
+          {!isLoading && !errorMessage && !isEmptyByFilter && (
             <ItemListPanel
               items={visibleItems}
               selectedId={selectedItem?.id ?? null}
