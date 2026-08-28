@@ -3,10 +3,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { SpotCategoryFilter, MAX_SPOT_CATEGORY_MIN_SELECTION } from './spot-category-filter';
 
 describe('SpotCategoryFilter', () => {
-  it('기본으로 첫 대분류의 중분류만 노출한다', () => {
+  it('기본으로 첫 대분류(키즈/놀이시설)의 중분류만 노출한다', () => {
     render(<SpotCategoryFilter selectedMinors={[]} onToggleMinor={vi.fn()} onLimitExceeded={vi.fn()} />);
-    expect(screen.getByText('테니스장')).toBeInTheDocument();
-    expect(screen.queryByText('도서관')).not.toBeInTheDocument();
+    expect(screen.getByText('어린이놀이터')).toBeInTheDocument();
+    expect(screen.queryByText('테니스장')).not.toBeInTheDocument();
   });
 
   it('다른 대분류 탭을 누르면 그 하위 중분류로 바뀐다', () => {
@@ -19,8 +19,8 @@ describe('SpotCategoryFilter', () => {
   it('중분류를 클릭하면 onToggleMinor가 호출된다', () => {
     const onToggleMinor = vi.fn();
     render(<SpotCategoryFilter selectedMinors={[]} onToggleMinor={onToggleMinor} onLimitExceeded={vi.fn()} />);
-    fireEvent.click(screen.getByText('테니스장'));
-    expect(onToggleMinor).toHaveBeenCalledWith('테니스장');
+    fireEvent.click(screen.getByText('어린이놀이터'));
+    expect(onToggleMinor).toHaveBeenCalledWith('어린이놀이터');
   });
 
   it(`이미 ${MAX_SPOT_CATEGORY_MIN_SELECTION}개 선택된 상태에서 새 항목을 누르면 onLimitExceeded만 호출되고 onToggleMinor는 호출되지 않는다`, () => {
@@ -28,6 +28,7 @@ describe('SpotCategoryFilter', () => {
     const onLimitExceeded = vi.fn();
     const fiveSelected = ['테니스장', '골프장', '풋살장', '축구장', '농구장'];
     render(<SpotCategoryFilter selectedMinors={fiveSelected} onToggleMinor={onToggleMinor} onLimitExceeded={onLimitExceeded} />);
+    fireEvent.click(screen.getByText(/체육시설/));
     fireEvent.click(screen.getByText('족구장'));
     expect(onLimitExceeded).toHaveBeenCalledTimes(1);
     expect(onToggleMinor).not.toHaveBeenCalled();
@@ -38,6 +39,7 @@ describe('SpotCategoryFilter', () => {
     const onLimitExceeded = vi.fn();
     const fiveSelected = ['테니스장', '골프장', '풋살장', '축구장', '농구장'];
     render(<SpotCategoryFilter selectedMinors={fiveSelected} onToggleMinor={onToggleMinor} onLimitExceeded={onLimitExceeded} />);
+    fireEvent.click(screen.getByText(/체육시설/));
     fireEvent.click(screen.getByText('테니스장'));
     expect(onToggleMinor).toHaveBeenCalledWith('테니스장');
     expect(onLimitExceeded).not.toHaveBeenCalled();

@@ -59,3 +59,18 @@
     신규 `marker-group-modal.tsx`로 목록 표시 후 기존 상세 모달로 연결.
   - **검증**: `npx tsc --noEmit`/`npm run test`/`npm run build` 통과. 상세:
     `implementation/2026-08-29-nearby-overlapping-marker-picker.md`.
+
+- [x] **[스팟픽 대분류 순서 조정 + 지도 중심 불일치 버그 + 카테고리 필터 반응 속도 개선]**
+  (2026-08-29 완료)
+  - 대분류 탭 순서를 키즈/놀이시설 → 자연/공원 → 문화시설 → 체육시설로 변경
+    (`spot-category-groups.ts`).
+  - "위치는 분당구인데 지도는 서울시청" 버그의 실제 원인: `kakao-map-view.tsx`의 최초
+    지도 생성 effect(deps=[])가 비동기 SDK 로드 콜백에서 마운트 당시 값을 클로저로 가둬,
+    위치가 그보다 먼저 갱신돼도 지도는 옛 기본값(서울시청)으로 생성되는 race condition.
+    `centerRef`/`radiusRef`로 항상 최신 값을 읽도록 수정.
+  - "카테고리 필터 선택 시 지도 반응이 느리다" — 실측(Playwright) 결과 API 호출은 없고
+    전량 클라이언트 마커 재생성 비용임을 확인, id 기준 diff 방식으로 변경해 유지되는
+    항목은 재생성하지 않도록 개선(실측으로 개선 확인).
+  - **검증**: `npx tsc --noEmit`/`npm run test`(56파일 562건, 대분류 기본값 변경에 따른
+    3개 테스트 수정 포함)/`npm run build` 통과. 상세:
+    `implementation/2026-08-29-nearby-category-order-map-center-and-filter-perf.md`.

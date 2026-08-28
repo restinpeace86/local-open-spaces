@@ -72,6 +72,12 @@ declare namespace kakao.maps {
       styles?: Record<string, string>[];
     });
     addMarkers(markers: Marker[]): void;
+    // [카테고리 필터 성능 개선](2026-08-29): 필터 토글마다 전체 마커를 파괴 후 재생성하는
+    // 대신 id 기준으로 사라진 마커만 제거하기 위해 추가 — 카카오 맵 JS SDK v2 공식 API에
+    // 실제로 존재하는 메서드다. nodraw=true로 재계산을 미뤘다가 이후 addMarkers/redraw
+    // 호출 시 한 번에 반영한다.
+    removeMarker(marker: Marker, nodraw?: boolean): void;
+    redraw(): void;
     clear(): void;
   }
 

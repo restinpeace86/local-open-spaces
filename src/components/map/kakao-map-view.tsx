@@ -46,9 +46,36 @@ export function KakaoMapView({
   const mapRef = useRef<kakao.maps.Map | null>(null);
   const clustererRef = useRef<kakao.maps.MarkerClusterer | null>(null);
   const markersRef = useRef<kakao.maps.Marker[]>([]);
+  // [카테고리 필터 성능 개선](2026-08-29 사용자 제보 "카테고리 필터 선택 시 지도 반응이
+  // 느리다"): Playwright 실측 결과 필터 토글은 네트워크 호출 없이 전량 클라이언트 렌더링
+  // 비용(마커 전체 파괴 후 재생성)이었다. id 기준으로 마커를 유지/추가/제거만 하도록 바꿔
+  // 실제로 바뀐 만큼만 작업하게 한다. 마커 클릭 핸들러는 생성 시점의 값을 클로저로 가두지
+  // 않고 아래 ref들을 매번 조회해, 마커가 재사용되는 동안에도(카테고리 필터만 바뀌고 같은
+  // id가 계속 보이는 경우) 최신 아이템/겹침 정보를 반영한다.
+  const markersByIdRef = useRef<Map<string, kakao.maps.Marker>>(new Map());
+  const itemsByIdRef = useRef<Map<string, NearbyItem>>(new Map());
+  const groupsByPositionRef = useRef<Map<string, NearbyItem[]>>(new Map());
   const userPulseOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null);
   const onDragEndRef = useRef(onDragEnd);
   onDragEndRef.current = onDragEnd;
+  // [지도 중심 불일치 버그 수정](2026-08-29 사용자 제보: "위치는 성남시 분당구인데 지도는
+  // 서울시청"): 아래 최초 지도 생성 effect는 deps가 []라 마운트 시점 단 한 번만 실행되는데,
+  // `loadKakaoMapSdk()`가 비동기(스크립트 로드)라 그 콜백이 실제로 실행되는 시점은 항상
+  // 나중이다. 반면 `useUserLocation`이 LocalStorage에서 저장된 위치를 읽어 `center`를
+  // 기본값(서울시청)에서 실제 위치로 갱신하는 것은 마운트 직후 매우 빠르게(동기적 읽기 +
+  // 리렌더 1회) 끝난다 — 즉 SDK 로드가 끝나기 전에 `center` prop은 이미 최신 값으로
+  // 바뀌어 있는 게 보통이다. 그런데 deps=[] effect의 콜백 클로저는 "처음 실행됐을 때"의
+  // `center`/`radius` 값을 그대로 캡처해버려(리렌더와 무관하게 고정), SDK 로드가 끝난
+  // 시점에 실제로는 최신 위치가 아니라 마운트 당시의 값(서울시청)으로 지도를 생성했다.
+  // 이후 별도 effect(아래, deps=[center.lat, center.lng, radius])가 panTo로 보정을
+  // 시도하지만, 그 effect가 먼저 실행될 때는 아직 `mapRef.current`가 없어(지도가 채
+  // 생성되기 전) 아무 것도 하지 못하고 조용히 종료되며, 이후 `center`가 다시 바뀌지 않는 한
+  // 재시도되지 않는다. 매 렌더마다 최신 값을 담아두는 ref를 두고, 비동기 콜백 내부에서는
+  // (클로저가 아니라) 이 ref를 읽어 항상 "지금 시점의" 값을 쓰도록 한다.
+  const centerRef = useRef(center);
+  centerRef.current = center;
+  const radiusRef = useRef(radius);
+  radiusRef.current = radius;
   // Task 9-6-10(2026-08-23): center/radius prop이 바뀌어 아래 effect가 프로그램적으로
   // setLevel()을 호출해도 'zoom_changed'가 발생한다(카카오맵 API 특성 — 사용자가 직접
   // 확대/축소했을 때와 구분이 안 됨). 그 프로그램적 변경까지 "사용자가 줌을 바꿨다"로 오인해
@@ -62,8 +89,8 @@ export function KakaoMapView({
       if (cancelled || !containerRef.current) return;
 
       const map = new window.kakao.maps.Map(containerRef.current, {
-        center: new window.kakao.maps.LatLng(center.lat, center.lng),
-        level: radiusToLevel(radius),
+        center: new window.kakao.maps.LatLng(centerRef.current.lat, centerRef.current.lng),
+        level: radiusToLevel(radiusRef.current),
       });
       mapRef.current = map;
       // Task 9-6-10(2026-08-23): minLevel을 6→5로 낮춰 기본 반경(5km, 레벨 6)에서도 클러스터링이
@@ -100,7 +127,7 @@ export function KakaoMapView({
       // Task 9-6-10(2026-08-23): 파란 반경 원(Circle)은 제거했다 — "이 안의 시설만 검색됨"을
       // 오해하게 하고(실제로는 원 밖 마커도 뷰포트에 들어오면 보임), 클러스터 버블과도 시각적으로
       // 겹쳐 혼란을 준다는 지적. 펄스 마커(내 위치 표시 자체)는 계속 남긴다.
-      const initialPosition = new window.kakao.maps.LatLng(center.lat, center.lng);
+      const initialPosition = new window.kakao.maps.LatLng(centerRef.current.lat, centerRef.current.lng);
       const pulseContent = document.createElement('div');
       pulseContent.className = 'user-location-pulse';
       const pulseOverlay = new window.kakao.maps.CustomOverlay({
@@ -115,7 +142,7 @@ export function KakaoMapView({
 
       const handleResize = () => {
         map.relayout();
-        map.setCenter(new window.kakao.maps.LatLng(center.lat, center.lng));
+        map.setCenter(new window.kakao.maps.LatLng(centerRef.current.lat, centerRef.current.lng));
       };
       window.addEventListener('resize', handleResize);
       window.addEventListener('orientationchange', handleResize);
@@ -188,8 +215,9 @@ export function KakaoMapView({
   useEffect(() => {
     if (!mapRef.current || !clustererRef.current) return;
 
-    clustererRef.current.clear();
-    markersRef.current.forEach((marker) => marker.setMap(null));
+    // 최신 아이템 스냅샷 갱신 — 재사용되는(재생성되지 않는) 마커의 클릭 핸들러도 이 ref를
+    // 통해 항상 최신 데이터를 참조한다.
+    itemsByIdRef.current = new Map(items.map((item) => [item.id, item]));
 
     // 좌표가 완전히 동일한(소수 6자리 기준, 약 0.1m 이내) 항목들을 한 그룹으로 묶어,
     // 마커 클릭 시 몇 건이 겹쳐 있는지 판별한다.
@@ -203,8 +231,25 @@ export function KakaoMapView({
         groupsByPosition.set(key, [item]);
       }
     }
+    groupsByPositionRef.current = groupsByPosition;
 
-    const markers = items.map((item) => {
+    const nextIds = new Set(items.map((item) => item.id));
+    const markersById = markersByIdRef.current;
+
+    // 더 이상 보이지 않는 항목의 마커만 제거한다(redraw는 아래에서 한 번에 처리).
+    for (const [id, marker] of markersById) {
+      if (!nextIds.has(id)) {
+        clustererRef.current.removeMarker(marker, true);
+        markersById.delete(id);
+      }
+    }
+
+    // 새로 나타난 항목만 마커를 생성한다 — 계속 보이는 항목은 기존 마커 인스턴스를
+    // 그대로 유지해(파괴 후 재생성하지 않아) 불필요한 렌더링 비용을 없앤다.
+    const newMarkers: kakao.maps.Marker[] = [];
+    for (const item of items) {
+      if (markersById.has(item.id)) continue;
+
       const meta = getCategoryMeta(item.category);
       const image = new window.kakao.maps.MarkerImage(
         buildMarkerSvgDataUrl(meta.color),
@@ -217,22 +262,33 @@ export function KakaoMapView({
         image,
       });
 
+      const itemId = item.id;
       window.kakao.maps.event.addListener(marker, 'click', () => {
-        const key = `${item.lat.toFixed(6)},${item.lng.toFixed(6)}`;
-        const group = groupsByPosition.get(key) ?? [item];
+        const current = itemsByIdRef.current.get(itemId);
+        if (!current) return;
+        const key = `${current.lat.toFixed(6)},${current.lng.toFixed(6)}`;
+        const group = groupsByPositionRef.current.get(key) ?? [current];
         if (group.length > 1 && onSelectGroup) {
           onSelectGroup(group);
         } else {
-          onSelectItem(item);
+          onSelectItem(current);
         }
       });
 
-      return marker;
-    });
+      markersById.set(item.id, marker);
+      newMarkers.push(marker);
+    }
 
-    markersRef.current = markers;
-    clustererRef.current.addMarkers(markers);
-    // onSelectItem은 상위에서 안정적으로 전달되지 않을 수 있어 의도적으로 의존성에서 제외한다.
+    if (newMarkers.length > 0) {
+      clustererRef.current.addMarkers(newMarkers);
+    } else {
+      clustererRef.current.redraw();
+    }
+
+    markersRef.current = Array.from(markersById.values());
+    // onSelectItem/onSelectGroup은 상위에서 안정적으로 전달되지 않을 수 있어 의도적으로
+    // 의존성에서 제외한다(클릭 핸들러는 ref를 통해 최신 아이템을 조회하므로 stale closure
+    // 문제 없음).
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items]);
 

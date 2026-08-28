@@ -120,13 +120,14 @@ describe('MapExplorer 대분류/중분류 계층적 탐색 (2026-08-28)', () => 
     expect(screen.getAllByText(/문화시설/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/자연\/공원/).length).toBeGreaterThan(0);
     expect(screen.getAllByText(/키즈\/놀이시설/).length).toBeGreaterThan(0);
-    // 기본 대분류(체육시설)의 중분류만 보이고 다른 대분류(문화시설)의 중분류는 안 보인다
-    expect(screen.getAllByText('테니스장').length).toBeGreaterThan(0);
-    expect(screen.queryByText('도서관')).not.toBeInTheDocument();
+    // 기본 대분류(키즈/놀이시설)의 중분류만 보이고 다른 대분류(체육시설)의 중분류는 안 보인다
+    expect(screen.getAllByText('어린이놀이터').length).toBeGreaterThan(0);
+    expect(screen.queryByText('테니스장')).not.toBeInTheDocument();
   });
 
   it('중분류를 6번째로 선택하려 하면 안내 토스트가 뜨고 선택되지 않는다', async () => {
     render(<MapExplorer />);
+    fireEvent.click(screen.getAllByText(/체육시설/)[0]);
     const desktopMinors = ['테니스장', '골프장', '풋살장', '축구장', '농구장'];
     for (const minor of desktopMinors) {
       fireEvent.click(screen.getAllByText(minor)[0]);
