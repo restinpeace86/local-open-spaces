@@ -14,10 +14,6 @@
 ---
 # To-Do List
 - [x] 프로덕션 DB 통계 갱신 완료 (`ANALYZE public.open_spaces;` 실행 완료 - `Success. No rows returned`)
-- [ ] **크론 스케줄 시간대 한국 시간(KST) 새벽 3시 기준으로 재조정**
-  - **목적**: GitHub Actions 서버 정각 부하(Dropped Runs) 회피 및 트래픽이 한적한 시간대 배치
-  - **세부 내용**: 
-    - 한국 시간(KST) 기준 **새벽 3시 대**에 실행되도록 설정 (UTC 기준으로는 **전날 저녁 18시 대** (`18:xx`)).
-    - 정각(`0분`)을 피해 비정규 분 단위(예: `23 18 * * *`)로 임의 지정.
-    - 대상 파일: `ingest-daily.yml`, `ingest-monthly.yml` 등 크론 워크플로 파일 전반.
-    - 파일 내에 `KST 기준 새벽 3시 XX분 (UTC 18:XX)` 형태의 주석 명시 필수.
+- [ ] **`open_spaces` 테이블 성능 최적화 및 타임아웃 재발 방지 검증**
+  - `ANALYZE public.open_spaces;` 이후 다음 수집 파이프라인 트리거 시 `open_spaces` 타임아웃 해소 여부 실측 재검증
+  - 반복 재현 시 배치 묶음 크기(Batch Size) 쪼개기(청크 단위 업서트), 인덱스 상태 점검 및 테이블 블로트(Bloat) 여부 등 근본적인 구조적 원인 추가 조사 및 대책 수립
