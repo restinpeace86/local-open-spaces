@@ -171,8 +171,6 @@ const KAKAO_SDK_STUB = `
     return {
       clear: function () {},
       addMarkers: function (markers) { state.addMarkersCalls.push(markers.length); },
-      removeMarker: function () {},
-      redraw: function () {},
     };
   }
 

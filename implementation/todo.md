@@ -74,3 +74,17 @@
   - **검증**: `npx tsc --noEmit`/`npm run test`(56파일 562건, 대분류 기본값 변경에 따른
     3개 테스트 수정 포함)/`npm run build` 통과. 상세:
     `implementation/2026-08-29-nearby-category-order-map-center-and-filter-perf.md`.
+
+- [x] **[스팟픽 카테고리 필터 토글 시 지도 클러스터 숫자 누적 버그 긴급 수정]**
+  (2026-08-29 완료 — 직전 Step 55의 회귀)
+  - 사용자 제보: "필터 껐다 켰다 반복하면 숫자가 계속 누적된다".
+  - 원인: Step 55에서 도입한 "마커 id 기준 diff(재사용/추가/제거)" 최적화가
+    `MarkerClusterer.removeMarker`로 제거 표시한 마커를 실제로는 완전히 제거하지 못해,
+    같은 항목이 필터 재선택마다 중복 등록되는 리크였다. Playwright 실측으로 재현
+    (선택→해제 반복 시 클러스터 합계가 62→95→124→153으로 계속 증가) 및 수정 후 재검증
+    (동일 반복에서 [10,7,6]↔[62,31,33,16,23,9,12,12,2]로 정확히 왕복, 누적 없음) 완료.
+  - 조치: Step 54 시점의 "매번 전체 마커 파괴 후 재생성" 방식으로 되돌림(데이터 정합성 >
+    성능). 겹친 마커 클릭 시 목록 표시 기능(Step 54)은 그대로 유지.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(56파일 562건)/`npm run build` 통과,
+    실측 재현/재검증 완료. 상세:
+    `implementation/2026-08-29-nearby-marker-cluster-count-leak-fix.md`.

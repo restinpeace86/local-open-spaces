@@ -46,15 +46,6 @@ export function KakaoMapView({
   const mapRef = useRef<kakao.maps.Map | null>(null);
   const clustererRef = useRef<kakao.maps.MarkerClusterer | null>(null);
   const markersRef = useRef<kakao.maps.Marker[]>([]);
-  // [카테고리 필터 성능 개선](2026-08-29 사용자 제보 "카테고리 필터 선택 시 지도 반응이
-  // 느리다"): Playwright 실측 결과 필터 토글은 네트워크 호출 없이 전량 클라이언트 렌더링
-  // 비용(마커 전체 파괴 후 재생성)이었다. id 기준으로 마커를 유지/추가/제거만 하도록 바꿔
-  // 실제로 바뀐 만큼만 작업하게 한다. 마커 클릭 핸들러는 생성 시점의 값을 클로저로 가두지
-  // 않고 아래 ref들을 매번 조회해, 마커가 재사용되는 동안에도(카테고리 필터만 바뀌고 같은
-  // id가 계속 보이는 경우) 최신 아이템/겹침 정보를 반영한다.
-  const markersByIdRef = useRef<Map<string, kakao.maps.Marker>>(new Map());
-  const itemsByIdRef = useRef<Map<string, NearbyItem>>(new Map());
-  const groupsByPositionRef = useRef<Map<string, NearbyItem[]>>(new Map());
   const userPulseOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null);
   const onDragEndRef = useRef(onDragEnd);
   onDragEndRef.current = onDragEnd;
@@ -215,9 +206,17 @@ export function KakaoMapView({
   useEffect(() => {
     if (!mapRef.current || !clustererRef.current) return;
 
-    // 최신 아이템 스냅샷 갱신 — 재사용되는(재생성되지 않는) 마커의 클릭 핸들러도 이 ref를
-    // 통해 항상 최신 데이터를 참조한다.
-    itemsByIdRef.current = new Map(items.map((item) => [item.id, item]));
+    // [카테고리 필터 클러스터 카운트 누적 버그 수정](2026-08-29 사용자 제보: "필터를
+    // 껐다 켰다 반복하면 지도 위 숫자가 계속 누적된다"): 이전에 "필터 토글마다 마커를
+    // id 기준으로 diff해서 유지되는 항목은 재생성하지 않는" 최적화를 시도했으나, 실측
+    // 결과 `MarkerClusterer.removeMarker(marker, true)`로 제거한 마커가 클러스터러
+    // 내부 카운트에서 완전히 빠지지 않고, 이후 그 항목이 다시 필터에 포함될 때 새 마커
+    // 객체가 추가로 등록되어 같은 항목이 중복 집계되는 것을 확인했다(반복할수록
+    // 클러스터 숫자가 계속 불어남 — 실제 재현 및 원인 확인 완료). 안정성을 위해
+    // "매번 전체 제거 후 전체 재생성" 방식으로 되돌린다 — 필터 토글 시 약간의 렌더링
+    // 비용이 있지만(최대 200개), 데이터 정합성이 성능보다 우선한다.
+    clustererRef.current.clear();
+    markersRef.current.forEach((marker) => marker.setMap(null));
 
     // 좌표가 완전히 동일한(소수 6자리 기준, 약 0.1m 이내) 항목들을 한 그룹으로 묶어,
     // 마커 클릭 시 몇 건이 겹쳐 있는지 판별한다.
@@ -231,25 +230,8 @@ export function KakaoMapView({
         groupsByPosition.set(key, [item]);
       }
     }
-    groupsByPositionRef.current = groupsByPosition;
 
-    const nextIds = new Set(items.map((item) => item.id));
-    const markersById = markersByIdRef.current;
-
-    // 더 이상 보이지 않는 항목의 마커만 제거한다(redraw는 아래에서 한 번에 처리).
-    for (const [id, marker] of markersById) {
-      if (!nextIds.has(id)) {
-        clustererRef.current.removeMarker(marker, true);
-        markersById.delete(id);
-      }
-    }
-
-    // 새로 나타난 항목만 마커를 생성한다 — 계속 보이는 항목은 기존 마커 인스턴스를
-    // 그대로 유지해(파괴 후 재생성하지 않아) 불필요한 렌더링 비용을 없앤다.
-    const newMarkers: kakao.maps.Marker[] = [];
-    for (const item of items) {
-      if (markersById.has(item.id)) continue;
-
+    const markers = items.map((item) => {
       const meta = getCategoryMeta(item.category);
       const image = new window.kakao.maps.MarkerImage(
         buildMarkerSvgDataUrl(meta.color),
@@ -262,33 +244,22 @@ export function KakaoMapView({
         image,
       });
 
-      const itemId = item.id;
       window.kakao.maps.event.addListener(marker, 'click', () => {
-        const current = itemsByIdRef.current.get(itemId);
-        if (!current) return;
-        const key = `${current.lat.toFixed(6)},${current.lng.toFixed(6)}`;
-        const group = groupsByPositionRef.current.get(key) ?? [current];
+        const key = `${item.lat.toFixed(6)},${item.lng.toFixed(6)}`;
+        const group = groupsByPosition.get(key) ?? [item];
         if (group.length > 1 && onSelectGroup) {
           onSelectGroup(group);
         } else {
-          onSelectItem(current);
+          onSelectItem(item);
         }
       });
 
-      markersById.set(item.id, marker);
-      newMarkers.push(marker);
-    }
+      return marker;
+    });
 
-    if (newMarkers.length > 0) {
-      clustererRef.current.addMarkers(newMarkers);
-    } else {
-      clustererRef.current.redraw();
-    }
-
-    markersRef.current = Array.from(markersById.values());
-    // onSelectItem/onSelectGroup은 상위에서 안정적으로 전달되지 않을 수 있어 의도적으로
-    // 의존성에서 제외한다(클릭 핸들러는 ref를 통해 최신 아이템을 조회하므로 stale closure
-    // 문제 없음).
+    markersRef.current = markers;
+    clustererRef.current.addMarkers(markers);
+    // onSelectItem은 상위에서 안정적으로 전달되지 않을 수 있어 의도적으로 의존성에서 제외한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items]);
 
