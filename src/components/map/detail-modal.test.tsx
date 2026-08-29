@@ -169,6 +169,59 @@ describe('DetailModal 조건부 CTA 3분류 (Task 9-6-11, Decision 011)', () => 
   });
 });
 
+// [농장 및 전체 스팟 상세 바텀시트 네이버 딥링크 연동](2026-08-29 사용자 지시)
+describe('DetailModal 네이버 딥링크 버튼', () => {
+  beforeEach(() => {
+    mockUserLocation = { lat: 37.4, lng: 127.2 };
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('info_url이 없으면 이름+주소로 만든 네이버 검색 딥링크를 연결한다', () => {
+    render(
+      <DetailModal
+        item={makeSpaceItem({ name: '버섯구지마을', address: '경기도 가평군 하면 대보간선로 173', info_url: null })}
+        onClose={() => {}}
+      />
+    );
+
+    const link = screen.getByText('🔗 네이버에서 상세/예약 보기').closest('a');
+    expect(link).not.toBeNull();
+    const href = link!.getAttribute('href')!;
+    expect(href).toContain('nmap://search?');
+    const query = new URL(href.replace('nmap://', 'https://x/')).searchParams.get('query');
+    expect(query).toBe('버섯구지마을 경기도 가평군 하면 대보간선로 173');
+  });
+
+  it('info_url이 있으면 네이버 딥링크 대신 그 공식 홈페이지 URL을 그대로 연결한다', () => {
+    render(
+      <DetailModal
+        item={makeSpaceItem({ info_url: 'https://버섯구지마을.kr' })}
+        onClose={() => {}}
+      />
+    );
+
+    const link = screen.getByText('🔗 네이버에서 상세/예약 보기').closest('a');
+    expect(link!.getAttribute('href')).toBe('https://버섯구지마을.kr');
+  });
+
+  it('새 창(target=_blank)으로 안전하게 연다', () => {
+    render(<DetailModal item={makeSpaceItem()} onClose={() => {}} />);
+
+    const link = screen.getByText('🔗 네이버에서 상세/예약 보기').closest('a');
+    expect(link).toHaveAttribute('target', '_blank');
+    expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+  });
+
+  it('이벤트(EVENT)에는 노출하지 않는다(요구사항이 "스팟" 한정)', () => {
+    render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT' })} onClose={() => {}} />);
+
+    expect(screen.queryByText('🔗 네이버에서 상세/예약 보기')).not.toBeInTheDocument();
+  });
+});
+
 // [카드 표준 중분류/연령대상 표시](2026-08-27 사용자 지시)
 describe('DetailModal 표준 중분류 뱃지 및 연령대상 표시', () => {
   beforeEach(() => {

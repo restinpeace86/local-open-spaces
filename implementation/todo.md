@@ -258,3 +258,17 @@
     기존 정의된 안전한 동작).
   - **검증**: `npx tsc --noEmit`/`npm run test`(62파일 640건)/`npm run build` 통과. 상세:
     `implementation/2026-08-29-rural-education-farm-live-verification.md`.
+
+- [x] **[농장 및 전체 스팟 상세 바텀시트 네이버 플레이스/검색 딥링크 연동]** (2026-08-29 완료)
+  - "SpotDetailSheet"는 존재하지 않고 스팟/이벤트 공용 `DetailModal`이 실제 대상임을
+    확인 — 기존 Decision 011 3분류 CTA(공공예약/할인예매/길찾기)는 그대로 두고 네이버
+    버튼을 **추가**로 넣었다.
+  - 지시서 예시 URL(`m.map.naver.com/search.naver?query=`)은 공식 미확인 구형 URL이라
+    쓰지 않고, `buildNaverMapDirectionsUrl`이 이미 세운 원칙대로 네이버 공식 문서
+    (guide.ncloud-docs.com/docs/maps-url-scheme)를 다시 WebFetch로 확인 — 검색 전용
+    스킴(`nmap://search?query=`)이 공식 문서에 정의돼 있음을 확인하고 채택.
+  - `buildNaverPlaceSearchUrl(name, address)` 신규 함수 추가. `DetailModal`에서
+    `info_url` 있으면 그대로, 없으면 이 함수로 항상 딥링크 생성(스팟=open_spaces
+    한정, 이벤트는 기존 3분류로 이미 커버돼 제외).
+  - **검증**: `npx tsc --noEmit`/`npm run test`(62파일 647건, 신규 테스트 7건)/
+    `npm run build` 통과. 상세: `implementation/2026-08-29-spot-detail-naver-deep-link.md`.

@@ -7,7 +7,7 @@ import { getTargetAudienceLabel } from '@/lib/spaces/target-audience-meta';
 import { formatDDay } from '@/lib/spaces/d-day';
 import { getReservationAvailabilityTag } from '@/lib/spaces/event-status';
 import { formatDistance, formatDateRange, formatDateTime } from '@/lib/spaces/format';
-import { buildNaverMapDirectionsUrl } from '@/lib/navigation';
+import { buildNaverMapDirectionsUrl, buildNaverPlaceSearchUrl } from '@/lib/navigation';
 import { useUserLocation } from '@/hooks/use-user-location';
 import { MiniMap } from '@/components/map/mini-map';
 import { MapPreviewModal } from '@/components/map/map-preview-modal';
@@ -78,6 +78,15 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
     : hasExactLocation
     ? { label: '🗺️ 길찾기', href: directionsUrl }
     : null;
+
+  // [농장 및 전체 스팟 상세 바텀시트 네이버 딥링크 연동](2026-08-29 사용자 지시): 위 3분류
+  // CTA(Decision 011)는 공공/제휴 URL이 없고 좌표도 부정확하면 아예 비게 된다 — 신규
+  // 농어촌체험휴양마을/농촌교육농장처럼 홈페이지·예약 URL이 대부분 없는 스팟(요구사항
+  // "전체 스팟")에서 특히 그렇다. info_url(공식 홈페이지)이 있으면 그대로 쓰고, 없으면
+  // 이름+주소로 네이버 검색 딥링크를 만들어 항상 "예약하거나 세부 정보를 확인"할 방법을
+  // 제공한다. 요구사항이 "스팟" 한정이라(이벤트는 이미 위 3분류 CTA로 충분히 커버됨)
+  // isEvent가 아닐 때만 노출한다.
+  const naverLinkUrl = !isEvent ? item.info_url || buildNaverPlaceSearchUrl({ name: item.name, address: item.address }) : null;
 
   async function handleCopyAddress() {
     if (!item.address) return;
@@ -254,6 +263,16 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
                 style={{ backgroundColor: meta.color }}
               >
                 {cta.label}
+              </a>
+            )}
+            {naverLinkUrl && (
+              <a
+                href={naverLinkUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex-1 text-center rounded-lg border border-gray-300 text-gray-700 text-sm font-medium py-2.5 hover:bg-gray-50"
+              >
+                🔗 네이버에서 상세/예약 보기
               </a>
             )}
           </div>
