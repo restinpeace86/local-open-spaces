@@ -26,6 +26,13 @@ function isValidDateString(value: string): boolean {
   return !Number.isNaN(date.getTime());
 }
 
+// [어드민 예약 대시보드 뱃지 및 요약 카운트 폴리싱](2026-08-29 사용자 지시): 상단 요약
+// 카드가 "전체 예약 현황"(페이지네이션과 무관하게 테이블 전체 기준)을 보여줘야 해서,
+// 상태별 건수를 head:true(행 데이터 없이 카운트만) 쿼리 3개로 별도 집계한다 — 전체
+// 목록을 다 내려받아 애플리케이션에서 세는 것보다 가볍고, 신청 건수가 늘어나도 비용이
+// 일정하다(count-only 쿼리는 인덱스만 스캔).
+const RESERVATION_STATUSES = ['PENDING', 'CONFIRMED', 'CANCELLED'] as const;
+
 // [관리자 예약 관리 어드민 대시보드](2026-08-29 사용자 지시): 운영자가 접수된 신청을
 // 최신순으로 확인할 수 있는 목록 조회. category-rules GET과 동일하게 서비스 롤
 // 클라이언트를 쓴다 — reservations는 RLS 정책이 아예 없어 익명 키로는 어차피 아무것도
@@ -41,19 +48,38 @@ export async function GET(request: NextRequest) {
     const from = (page - 1) * pageSize;
 
     const admin = createAdminClient();
-    const { data, error, count } = await admin
-      .from('reservations')
-      .select('id, spot_id, contact, visit_date, headcount, status, created_at, open_spaces(name, address)', {
-        count: 'exact',
-      })
-      .order('created_at', { ascending: false })
-      .range(from, from + pageSize - 1);
+    const [listResult, ...statusCountResults] = await Promise.all([
+      admin
+        .from('reservations')
+        .select('id, spot_id, contact, visit_date, headcount, status, created_at, open_spaces(name, address)', {
+          count: 'exact',
+        })
+        .order('created_at', { ascending: false })
+        .range(from, from + pageSize - 1),
+      ...RESERVATION_STATUSES.map((status) =>
+        admin.from('reservations').select('id', { count: 'exact', head: true }).eq('status', status)
+      ),
+    ]);
 
-    if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 });
+    if (listResult.error) {
+      return NextResponse.json({ error: listResult.error.message }, { status: 500 });
+    }
+    const countError = statusCountResults.find((r) => r.error);
+    if (countError?.error) {
+      return NextResponse.json({ error: countError.error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ reservations: data ?? [], total: count ?? 0, page, pageSize });
+    const statusCounts = Object.fromEntries(
+      RESERVATION_STATUSES.map((status, i) => [status, statusCountResults[i].count ?? 0])
+    ) as Record<(typeof RESERVATION_STATUSES)[number], number>;
+
+    return NextResponse.json({
+      reservations: listResult.data ?? [],
+      total: listResult.count ?? 0,
+      page,
+      pageSize,
+      statusCounts,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : '예약 목록 조회 실패';
     return NextResponse.json({ error: message }, { status: 500 });

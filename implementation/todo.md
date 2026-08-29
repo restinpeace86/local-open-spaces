@@ -316,3 +316,17 @@
     재현 없음 확인).
   - **검증**: `npx tsc --noEmit`/`npm run test`(64파일 662건)/`npm run build` 통과. 상세:
     `implementation/2026-08-29-reservation-form-ux-polish.md`.
+
+- [x] **[어드민 예약 관리 화면 상단 요약 카운트 및 대기(PENDING) 뱃지 강조 폴리싱]**
+  (2026-08-29 완료)
+  - `/api/reservations` GET에 상태별 카운트(head:true 카운트 전용 쿼리 3개, 병렬 실행)를
+    추가해 `statusCounts: {PENDING, CONFIRMED, CANCELLED}` 응답 — 페이지네이션과 무관하게
+    테이블 전체 기준.
+  - 어드민 페이지 상단에 4개 요약 카드(전체/🔴 신규 대기/확정 완료/취소) 신설, 신규
+    대기만 진한 주황 배경으로 강조. 상태 변경 시 목록 재조회 없이 카드 숫자만 로컬 갱신.
+  - 테이블 PENDING 행에 강조 배경(`bg-amber-50`) + 왼쪽 강조선(`border-l-4
+    border-amber-400`) 적용, 상태 뱃지도 PENDING만 채워진 진한 색으로 변경.
+  - **실측 검증**: 실제 스팟에 테스트 신청 생성 → GET 응답에 statusCounts가 정상
+    포함됨을 확인(테스트 데이터 정리 삭제).
+  - **검증**: `npx tsc --noEmit`/`npm run test`(64파일 668건)/`npm run build` 통과. 상세:
+    `implementation/2026-08-29-admin-reservations-summary-badges.md`.
