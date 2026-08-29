@@ -258,6 +258,44 @@ GitHub Actions cron으로 직접 표현할 수 없다는 사실을 확인했다 
 
 </details>
 
+## [2026-08-29 10:43:54] [Daily Events Batch] Ingestion Log
+
+| API 출처 식별자 (`source`) | RAW 수신 건수 | events 적재 건수 | open_spaces 적재 건수 | Safe Merge 건수 | 에러 건수 | 비고 |
+| :--- | ---: | ---: | ---: | ---: | ---: | :--- |
+| GG_CULTURE_EVENTS | - | 0 | 0 | 0 | - | ❌ 실행 실패: GG_DATA_API_KEY 환경변수가 설정되지 않았습니다. |
+| SEOUL_CULTURE_EVENTS | - | 0 | 0 | 0 | - | ❌ 실행 실패: 서울 열린데이터광장 응답이 JSON이 아닙니다: <RESULT><CODE>INFO-100</CODE><MESSAGE><![CDATA[인증키가 유효하지 않습니다.
+인증키가 없는 경우, 열린 데이터 광장 홈페이지에서 인증키를 신청하십시오.]]></MESSAGE></RESULT> |
+| TOUR_API_FESTIVAL | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| SEOUL_YEYAK | - | 0 | 0 | 0 | - | ❌ 실행 실패: SEOUL_OPEN_DATA_KEY 환경변수가 설정되지 않았습니다. |
+| gg_public | - | 0 | 0 | 0 | - | ❌ 실행 실패: GG_CULTURE_EVENTS 실패로 건너뜀 |
+| CATEGORY_RULES_APPLICATION | - | 0 | 0 | 0 | - | ❌ 실행 실패: NEXT_PUBLIC_SUPABASE_URL 또는 SUPABASE_SERVICE_ROLE_KEY가 없습니다. |
+| DETAILED_CATEGORY_FALLBACK | - | 0 | 0 | 0 | - | ❌ 실행 실패: NEXT_PUBLIC_SUPABASE_URL 또는 SUPABASE_SERVICE_ROLE_KEY가 없습니다. |
+| LEGACY_SOURCE_CATEGORY_MAPPING | - | 0 | 0 | 0 | - | ❌ 실행 실패: NEXT_PUBLIC_SUPABASE_URL 또는 SUPABASE_SERVICE_ROLE_KEY가 없습니다. |
+| DEACTIVATE_EXPIRED_EVENTS | - | 0 | 0 | 0 | - | ❌ 실행 실패: NEXT_PUBLIC_SUPABASE_URL 또는 SUPABASE_SERVICE_ROLE_KEY가 없습니다. |
+| DEDUPE_OPEN_SPACES | - | 0 | 0 | 0 | - | ❌ 실행 실패: NEXT_PUBLIC_SUPABASE_URL 또는 SUPABASE_SERVICE_ROLE_KEY가 없습니다. |
+| ANALYZE_OPEN_SPACES | - | 0 | 0 | 0 | - | ❌ 실행 실패: NEXT_PUBLIC_SUPABASE_URL 또는 SUPABASE_SERVICE_ROLE_KEY가 없습니다. |
+
+**검증**: 전체 RAW 수신 0건(일부 소스 실패/미확인 — 완전한 대조 불가) vs DB 적재 0건 (+에러 0건 +범위제외 0건)
+
+## [2026-08-29 10:59:06] [Daily Events Batch] Ingestion Log
+
+| API 출처 식별자 (`source`) | RAW 수신 건수 | events 적재 건수 | open_spaces 적재 건수 | Safe Merge 건수 | 에러 건수 | 비고 |
+| :--- | ---: | ---: | ---: | ---: | ---: | :--- |
+| GG_CULTURE_EVENTS | - | 0 | 0 | 0 | - | ❌ 실행 실패: GG_DATA_API_KEY 환경변수가 설정되지 않았습니다. |
+| SEOUL_CULTURE_EVENTS | - | 0 | 0 | 0 | - | ❌ 실행 실패: 서울 열린데이터광장 응답이 JSON이 아닙니다: <RESULT><CODE>INFO-100</CODE><MESSAGE><![CDATA[인증키가 유효하지 않습니다.
+인증키가 없는 경우, 열린 데이터 광장 홈페이지에서 인증키를 신청하십시오.]]></MESSAGE></RESULT> |
+| TOUR_API_FESTIVAL | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| SEOUL_YEYAK | - | 0 | 0 | 0 | - | ❌ 실행 실패: SEOUL_OPEN_DATA_KEY 환경변수가 설정되지 않았습니다. |
+| gg_public | - | 0 | 0 | 0 | - | ❌ 실행 실패: GG_CULTURE_EVENTS 실패로 건너뜀 |
+| CATEGORY_RULES_APPLICATION | - | 0 | 0 | 0 | - | ❌ 실행 실패: NEXT_PUBLIC_SUPABASE_URL 또는 SUPABASE_SERVICE_ROLE_KEY가 없습니다. |
+| DETAILED_CATEGORY_FALLBACK | - | 0 | 0 | 0 | - | ❌ 실행 실패: NEXT_PUBLIC_SUPABASE_URL 또는 SUPABASE_SERVICE_ROLE_KEY가 없습니다. |
+| LEGACY_SOURCE_CATEGORY_MAPPING | - | 0 | 0 | 0 | - | ❌ 실행 실패: NEXT_PUBLIC_SUPABASE_URL 또는 SUPABASE_SERVICE_ROLE_KEY가 없습니다. |
+| DEACTIVATE_EXPIRED_EVENTS | - | 0 | 0 | 0 | - | ❌ 실행 실패: NEXT_PUBLIC_SUPABASE_URL 또는 SUPABASE_SERVICE_ROLE_KEY가 없습니다. |
+| DEDUPE_OPEN_SPACES | - | 0 | 0 | 0 | - | ❌ 실행 실패: NEXT_PUBLIC_SUPABASE_URL 또는 SUPABASE_SERVICE_ROLE_KEY가 없습니다. |
+| ANALYZE_OPEN_SPACES | - | 0 | 0 | 0 | - | ❌ 실행 실패: NEXT_PUBLIC_SUPABASE_URL 또는 SUPABASE_SERVICE_ROLE_KEY가 없습니다. |
+
+**검증**: 전체 RAW 수신 0건(일부 소스 실패/미확인 — 완전한 대조 불가) vs DB 적재 0건 (+에러 0건 +범위제외 0건)
+
 <details>
 <summary>2026-08-29 11:47 SEOUL_YEYAK 상세 리포트</summary>
 
