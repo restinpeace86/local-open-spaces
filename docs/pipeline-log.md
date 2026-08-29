@@ -49,6 +49,18 @@ GitHub Actions cron으로 직접 표현할 수 없다는 사실을 확인했다 
 
 | 실행 일시 | 수집 권역 | RAW 적재 건수 | Service 적재 건수 | 파싱 에러 | 상태 | 비고 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 2026-08-30 06:27 | SEOUL_YEYAK | - | 0 | N/A | 🚨 [CRITICAL] | Node.js detected but native WebSocket not found.
+
+Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket implementation via the transport option. |
+| 2026-08-30 06:13 | GG_CULTURE_EVENTS | - | 0 | N/A | 🚨 [CRITICAL] | Node.js detected but native WebSocket not found.
+
+Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket implementation via the transport option. |
+| 2026-08-30 05:58 | SEOUL_YEYAK | - | 0 | N/A | 🚨 [CRITICAL] | Node.js detected but native WebSocket not found.
+
+Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket implementation via the transport option. |
+| 2026-08-30 05:52 | GG_CULTURE_EVENTS | - | 0 | N/A | 🚨 [CRITICAL] | Node.js detected but native WebSocket not found.
+
+Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket implementation via the transport option. |
 | 2026-08-29 20:13 | RURAL_EDUCATION_FARM | 253 | 250 | 3 | ✅ [OK] |  |
 | 2026-08-29 19:51 | RURAL_EXPERIENCE_VILLAGE | 1253 | 1253 | 1 | ✅ [OK] |  |
 | 2026-08-29 16:36 | GG_KIDSCAFE | 2897 | 1892 | 1026 | ✅ [OK] |  |
@@ -338,3 +350,79 @@ GitHub Actions cron으로 직접 표현할 수 없다는 사실을 확인했다 
 | ANALYZE_OPEN_SPACES | 0 | 0 | 0 | 0 | 0 | open_spaces 플래너 통계 갱신 완료(신규 적재 아닌 유지보수 후처리) — statement timeout 재발 방지 |
 
 **검증**: 전체 RAW 수신 25900건 vs DB 적재 25029건 (+에러 841건 +범위제외 30건) → **드롭 0건 확인 ✅**
+
+## [2026-08-30 05:58:17] [Daily Events Batch] Ingestion Log
+
+| API 출처 식별자 (`source`) | RAW 수신 건수 | events 적재 건수 | open_spaces 적재 건수 | Safe Merge 건수 | 에러 건수 | 비고 |
+| :--- | ---: | ---: | ---: | ---: | ---: | :--- |
+| GG_CULTURE_EVENTS | - | 0 | 0 | 0 | - | ❌ 실행 실패: Node.js detected but native WebSocket not found.
+
+Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket implementation via the transport option. |
+| SEOUL_CULTURE_EVENTS | - | 0 | 0 | 0 | - | ❌ 실행 실패: Node.js detected but native WebSocket not found.
+
+Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket implementation via the transport option. |
+| TOUR_API_FESTIVAL | - | 0 | 0 | 0 | - | ❌ 실행 실패: Node.js detected but native WebSocket not found.
+
+Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket implementation via the transport option. |
+| SEOUL_YEYAK | - | 0 | 0 | 0 | - | ❌ 실행 실패: Node.js detected but native WebSocket not found.
+
+Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket implementation via the transport option. |
+| gg_public | - | 0 | 0 | 0 | - | ❌ 실행 실패: GG_CULTURE_EVENTS 실패로 건너뜀 |
+| CATEGORY_RULES_APPLICATION | - | 0 | 0 | 0 | - | ❌ 실행 실패: Node.js detected but native WebSocket not found.
+
+Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket implementation via the transport option. |
+| DETAILED_CATEGORY_FALLBACK | - | 0 | 0 | 0 | - | ❌ 실행 실패: Node.js detected but native WebSocket not found.
+
+Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket implementation via the transport option. |
+| LEGACY_SOURCE_CATEGORY_MAPPING | - | 0 | 0 | 0 | - | ❌ 실행 실패: Node.js detected but native WebSocket not found.
+
+Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket implementation via the transport option. |
+| DEACTIVATE_EXPIRED_EVENTS | - | 0 | 0 | 0 | - | ❌ 실행 실패: Node.js detected but native WebSocket not found.
+
+Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket implementation via the transport option. |
+| DEDUPE_OPEN_SPACES | - | 0 | 0 | 0 | - | ❌ 실행 실패: Node.js detected but native WebSocket not found.
+
+Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket implementation via the transport option. |
+| ANALYZE_OPEN_SPACES | - | 0 | 0 | 0 | - | ❌ 실행 실패: Node.js detected but native WebSocket not found.
+
+Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket implementation via the transport option. |
+
+**검증**: 전체 RAW 수신 0건(일부 소스 실패/미확인 — 완전한 대조 불가) vs DB 적재 0건 (+에러 0건 +범위제외 0건)
+
+## [2026-08-30 06:27:28] [Daily Events Batch] Ingestion Log
+
+| API 출처 식별자 (`source`) | RAW 수신 건수 | events 적재 건수 | open_spaces 적재 건수 | Safe Merge 건수 | 에러 건수 | 비고 |
+| :--- | ---: | ---: | ---: | ---: | ---: | :--- |
+| GG_CULTURE_EVENTS | - | 0 | 0 | 0 | - | ❌ 실행 실패: Node.js detected but native WebSocket not found.
+
+Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket implementation via the transport option. |
+| SEOUL_CULTURE_EVENTS | - | 0 | 0 | 0 | - | ❌ 실행 실패: Node.js detected but native WebSocket not found.
+
+Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket implementation via the transport option. |
+| TOUR_API_FESTIVAL | - | 0 | 0 | 0 | - | ❌ 실행 실패: Node.js detected but native WebSocket not found.
+
+Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket implementation via the transport option. |
+| SEOUL_YEYAK | - | 0 | 0 | 0 | - | ❌ 실행 실패: Node.js detected but native WebSocket not found.
+
+Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket implementation via the transport option. |
+| gg_public | - | 0 | 0 | 0 | - | ❌ 실행 실패: GG_CULTURE_EVENTS 실패로 건너뜀 |
+| CATEGORY_RULES_APPLICATION | - | 0 | 0 | 0 | - | ❌ 실행 실패: Node.js detected but native WebSocket not found.
+
+Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket implementation via the transport option. |
+| DETAILED_CATEGORY_FALLBACK | - | 0 | 0 | 0 | - | ❌ 실행 실패: Node.js detected but native WebSocket not found.
+
+Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket implementation via the transport option. |
+| LEGACY_SOURCE_CATEGORY_MAPPING | - | 0 | 0 | 0 | - | ❌ 실행 실패: Node.js detected but native WebSocket not found.
+
+Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket implementation via the transport option. |
+| DEACTIVATE_EXPIRED_EVENTS | - | 0 | 0 | 0 | - | ❌ 실행 실패: Node.js detected but native WebSocket not found.
+
+Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket implementation via the transport option. |
+| DEDUPE_OPEN_SPACES | - | 0 | 0 | 0 | - | ❌ 실행 실패: Node.js detected but native WebSocket not found.
+
+Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket implementation via the transport option. |
+| ANALYZE_OPEN_SPACES | - | 0 | 0 | 0 | - | ❌ 실행 실패: Node.js detected but native WebSocket not found.
+
+Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket implementation via the transport option. |
+
+**검증**: 전체 RAW 수신 0건(일부 소스 실패/미확인 — 완전한 대조 불가) vs DB 적재 0건 (+에러 0건 +범위제외 0건)
