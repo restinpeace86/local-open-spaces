@@ -288,9 +288,9 @@ describe('HomeView', () => {
 
   // Task 9-1-9: 메인 카드(Hero Carousel)는 처음 10개만 슬라이드로 보여주고, 11번째 이상은
   // 마지막 슬라이드의 "전체 보기" CTA 카드로 대체한다(더 이상 아래에 펼치지 않음).
-  // Task 9-6-6(2026-08-23): 지도(/nearby)도 상시 공간 카탈로그(/region)도 아니라 오늘 진행 중인
-  // 행사 전용 카드 그리드 페이지(/events/today)로 연동돼야 한다.
-  it('Hero Carousel 항목이 10개를 넘으면 마지막 슬라이드로 "전체 보기" CTA 카드를 보여준다', () => {
+  // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시) 요구사항 3: 더 이상 /events/today로 이동하지
+  // 않고, 같은 화면 위 바텀시트(EventBrowseSheet)가 뜬다.
+  it('Hero Carousel 항목이 10개를 넘으면 마지막 슬라이드로 "전체 보기" CTA 카드를 보여주고, 누르면 바텀시트가 뜬다', async () => {
     const heroEvents = Array.from({ length: 12 }, (_, i) =>
       makeEventItem({ id: `hero-${i}`, name: `오늘의 행사 ${i}` })
     );
@@ -302,8 +302,33 @@ describe('HomeView', () => {
     expect(screen.queryByText('오늘의 행사 10')).not.toBeInTheDocument();
     expect(screen.queryByText('오늘의 행사 11')).not.toBeInTheDocument();
 
-    const link = screen.getByText('오늘 진행 중인 전체 행사 보기').closest('a');
-    expect(link).toHaveAttribute('href', '/events/today');
+    fireEvent.click(screen.getByText('오늘 진행 중인 전체 행사 보기'));
+    expect(await screen.findByText('🎪 오늘 전체보기')).toBeInTheDocument();
+  });
+
+  // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시) 요구사항 3: "현재 이용 가능"/"예약 가능"의
+  // "전체보기"도 페이지 이동(/events/ongoing, /events/reservation-open) 대신 바텀시트로 뜬다.
+  it('"현재 이용 가능"/"예약 가능" 전체보기를 누르면 각각 해당 바텀시트가 뜬다', async () => {
+    // 위치 온보딩 모달도 동일한 aria-label="닫기" 닫기 버튼을 쓰므로, 위치를 미리 설정해
+    // 온보딩 모달이 함께 뜨는 것을 막아 이 시트의 닫기 버튼만 유일하게 남긴다.
+    localStorage.setItem(
+      'user_location',
+      JSON.stringify({ lat: 37.4, lng: 127.2, address_name: '경기도 성남시 분당구', sigungu_name: '성남시 분당구' })
+    );
+    render(
+      <HomeView
+        initialHeroEvents={[]}
+        initialCurrentlyOngoingEvents={[makeEventItem({ id: 'ongoing-1', name: '진행중 행사' })]}
+        initialReservationOpenEvents={[makeEventItem({ id: 'reservation-1', name: '예약가능 행사' })]}
+      />
+    );
+
+    fireEvent.click(screen.getByText('✅ 현재 이용 가능').parentElement!.querySelector('button')!);
+    expect(await screen.findByText('✅ 현재 이용 가능 전체보기')).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('닫기'));
+
+    fireEvent.click(screen.getByText('📋 예약 가능').parentElement!.querySelector('button')!);
+    expect(await screen.findByText('📋 예약 가능 전체보기')).toBeInTheDocument();
   });
 
   it('Hero Carousel 항목이 10개 이하면 "전체 보기" CTA 카드를 보여주지 않는다', () => {

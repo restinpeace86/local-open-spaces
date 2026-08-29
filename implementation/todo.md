@@ -157,3 +157,25 @@
     1,789), DB 직접 조회로 카테고리 분포 및 데이터 무결성(인코딩 손상 없음) 확인.
   - **검증**: `npx tsc --noEmit`/`npm run test`(60파일 597건)/`npm run build` 통과. 상세:
     `implementation/2026-08-29-gg-kidscafe-adapter.md`.
+
+- [x] **[이벤트픽 UX/UI 개선 — 메인 배너 다이어트/카드 규격 통일/전체보기 바텀시트化]**
+  (2026-08-29 완료)
+  - 메인 배너(Hero Carousel) 이미지 비율을 `aspect-[4/3]`→`aspect-[2/1]`로 슬림화해
+    아래 섹션이 첫 화면에 더 가깝게 보이도록 함.
+  - `EventCard`에 `h-full`/타이틀 `min-h` 예약을 추가하고 `ReservationOpenSlider` 래퍼에
+    고정 높이(`h-64`)를 줘 "현재 이용 가능"/"예약 가능" 슬라이드 카드 규격을 완전히 통일.
+  - **사전 실측**: ongoing 1,972건/reservation-open 918건(중분류 51종) — 스팟픽처럼
+    전량 클라이언트 필터링은 과도하다 판단, 기존 오프셋 페이지네이션 구조를 유지한 채
+    대분류(`CATEGORY_MAJ_OPTIONS`, 기존 카테고리 그리드와 동일 taxonomy 재사용) 칩 클릭
+    시 서버 재조회하는 방식 채택.
+  - 신규 `EventBrowseSheet`(스팟픽 `AiRecommendSheet`와 동일 바텀시트 패턴, 배경 클릭/✕만
+    으로 닫힘 — `useModalBackClose` 미사용) 하나로 기존 3개 전체보기 페이지
+    (`/events/today`, `/events/ongoing`, `/events/reservation-open`)를 완전히 대체,
+    해당 page.tsx 3개 삭제(API 라우트는 재사용을 위해 유지).
+  - `get-home-feed.ts`의 3개 조회 함수 + 3개 API 라우트에 `categoryMins`/`category_maj`
+    파라미터 추가.
+  - **실측 검증**: 로컬 개발 서버 기동 + `/api/events/ongoing` 필터 유무 응답 비교로
+    category_maj 필터가 실제 DB 기준 정상 동작함을 확인.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(60파일 604건, 신규 `event-browse-sheet.
+    test.tsx` 포함)/`npm run build` 통과. 상세:
+    `implementation/2026-08-29-eventpick-ux-bottomsheet-and-card-diet.md`.

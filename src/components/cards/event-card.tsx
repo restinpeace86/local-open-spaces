@@ -13,6 +13,12 @@ import { formatDateRange, formatVenueLine } from '@/lib/spaces/format';
 // 키즈/어린이 뱃지를 빼 달라는 요청 — EventCard는 카테고리 그리드/검색/무료 피드 등 여러
 // 화면에서 공유하는 컴포넌트라(제5장 제4조 기존 구조 우선) 전역으로 뺄 수 없다. 특정 배지
 // key만 선택적으로 숨기는 옵션을 추가해 호출부(ReservationOpenSlider)에서만 적용한다.
+// [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시): 가로 슬라이드에서 뱃지 유무/타이틀 줄바꿈에
+// 따라 카드 높이가 제각각이라 스와이프 시 흔들려 보였다 — 버튼에 h-full을 추가해 부모가
+// 정한 높이(그리드/플렉스 기본 stretch 정렬로 이미 형제 중 가장 큰 높이만큼 늘어난 래퍼)를
+// 그대로 채우게 하고, 타이틀에는 min-h로 2줄 분량을 항상 예약해 1줄짜리 제목도 흔들리지
+// 않게 한다. 부모가 높이를 지정하지 않는 기존 화면(그리드/오늘 전체보기 등)에서는 h-full이
+// height:auto와 동일하게 동작해 기존 모습에 영향이 없다.
 export function EventCard({
   item,
   onSelect,
@@ -38,7 +44,7 @@ export function EventCard({
     <button
       type="button"
       onClick={() => onSelect(item)}
-      className="text-left rounded-2xl border border-gray-200 bg-white overflow-hidden hover:shadow-md transition-shadow flex flex-col"
+      className="h-full text-left rounded-2xl border border-gray-200 bg-white overflow-hidden hover:shadow-md transition-shadow flex flex-col"
     >
       {dateBanner && (
         <div
@@ -80,13 +86,13 @@ export function EventCard({
         </span>
       </div>
 
-      <div className="p-3 flex flex-col gap-1.5">
+      <div className="p-3 flex-1 flex flex-col gap-1.5">
         {showReservationAlert && (
           <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-600 text-white self-start">
             🚨 오늘 예약 마감
           </span>
         )}
-        <p className="text-sm font-medium text-gray-900 line-clamp-2">{item.name}</p>
+        <p className="text-sm font-medium text-gray-900 line-clamp-2 min-h-[2.5rem]">{item.name}</p>
         {venueLine && <p className="text-xs text-gray-400 line-clamp-1">{venueLine}</p>}
         {period && <p className="text-xs text-gray-400 line-clamp-1">{period}</p>}
         {reservationTag && (

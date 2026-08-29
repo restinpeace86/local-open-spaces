@@ -254,6 +254,22 @@ describe('getTodayEvents (Task 9-1-3: 거리 계산 없음 / Task 9-1-6: Strict 
     expect(items[0].id).toBe('no-sigungu');
   });
 
+  // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시) 요구사항 4: 바텀시트 대분류 칩 클릭 시
+  // 서버가 그 대분류에 속한 category_min 목록으로만 좁혀 재조회해야 한다.
+  it('categoryMins를 넘기면 그 목록에 속한 category_min만 반환한다', async () => {
+    const matching = eventRow({ id: 'festival-1', category_min: '지역축제/페스티벌', is_active: true });
+    const other = eventRow({ id: 'camp-1', category_min: '캠핑장', is_active: true });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeFilteringChainable([matching, other]) }),
+    }));
+
+    const { getTodayEvents } = await import('./get-home-feed');
+    const items = await getTodayEvents(10, undefined, ['지역축제/페스티벌', '문화행사', '광장']);
+
+    expect(items.map((i) => i.id)).toEqual(['festival-1']);
+  });
+
   // 긴급 수리(Hotfix, 2026-08-22) 실측 재현: sigunguName에 쉼표가 섞여 있으면(예: Kakao 검색
   // 결과 주소의 건물/층수 부기가 남는 경우) PostgREST `.or()` 필터 문자열이 쉼표 때문에 깨져
   // "failed to parse logic tree" 500 에러가 났고, 그 응답을 그대로 쓰는 클라이언트가 크래시했다.
@@ -1203,6 +1219,25 @@ describe('getCurrentlyOngoingEventsPage', () => {
     expect(page2.items).toHaveLength(10);
     expect(page1.items.map((i) => i.id)).not.toEqual(page2.items.map((i) => i.id));
   });
+
+  // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시) 요구사항 4: 바텀시트 대분류 칩 필터.
+  it('categoryMins를 넘기면 그 목록에 속한 category_min만 반환하고 total도 그 기준으로 좁아진다', async () => {
+    const rows = [
+      eventRow({ id: 'camp-1', category_min: '캠핑장', is_active: true }),
+      eventRow({ id: 'camp-2', category_min: '산림여가', is_active: true }),
+      eventRow({ id: 'festival-1', category_min: '지역축제/페스티벌', is_active: true }),
+    ];
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeRangeChainable(rows) }),
+    }));
+
+    const { getCurrentlyOngoingEventsPage } = await import('./get-home-feed');
+    const result = await getCurrentlyOngoingEventsPage(1, 10, ['캠핑장', '산림여가', '공원탐방']);
+
+    expect(result.items.map((i) => i.id).sort()).toEqual(['camp-1', 'camp-2']);
+    expect(result.total).toBe(2);
+  });
 });
 
 describe('getReservationOpenEventsPage', () => {
@@ -1232,6 +1267,24 @@ describe('getReservationOpenEventsPage', () => {
 
     expect(result.items.map((i) => i.id).sort()).toEqual(['status-open', 'yeyak-open']);
     expect(result.total).toBe(2);
+  });
+
+  // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시) 요구사항 4: 바텀시트 대분류 칩 필터.
+  it('categoryMins를 넘기면 그 목록에 속한 category_min만 반환한다', async () => {
+    const rows = [
+      eventRow({ id: 'edu-1', booking_status: '접수중', category_min: '교육체험', is_active: true }),
+      eventRow({ id: 'camp-1', booking_status: '접수중', category_min: '캠핑장', is_active: true }),
+    ];
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeRangeChainable(rows) }),
+    }));
+
+    const { getReservationOpenEventsPage } = await import('./get-home-feed');
+    const result = await getReservationOpenEventsPage(1, 10, ['교육체험', '교양/어학', '교육시설']);
+
+    expect(result.items.map((i) => i.id)).toEqual(['edu-1']);
+    expect(result.total).toBe(1);
   });
 });
 

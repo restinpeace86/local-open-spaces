@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
 import { getParentalBadges } from '@/lib/spaces/parental-badges';
@@ -19,19 +18,22 @@ const AUTOPLAY_INTERVAL_MS = 5000;
 // 하루짜리인 "오늘 한정")로 교체해 EventCard(그리드 카드)와 동일한 배너 기준을 쓴다.
 // Task 9-1-8(2026-08-22 후속): snap-center만으로는 빠르게 스와이프할 때 두 장 이상 건너뛰기도
 // 해서, 카드마다 [scroll-snap-stop:always]를 추가해 한 번 드래그에 정확히 1장씩만 멈추게 한다.
+// [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시): "오늘 전체보기"가 더 이상 별도 페이지로
+// 이동하지 않고 홈 화면 위 바텀시트(EventBrowseSheet)로 뜬다 — 페이지 경로 문자열(moreHref)
+// 대신 부모(HomeView)가 시트를 여는 콜백(onMoreClick)을 받아 호출한다. CTA 카드 노출 여부는
+// 여전히 hasMore(10개 초과)로만 판단한다.
 
 export function HeroCarousel({
   items,
   onSelect,
-  moreHref,
+  hasMore = false,
+  onMoreClick = () => {},
 }: {
   items: NearbyItem[];
   onSelect: (item: NearbyItem) => void;
   // Task 9-1-9: 후보가 10개를 넘으면 마지막 슬라이드로 "전체 보기" CTA 카드를 노출한다.
-  // 실제 NearbyItem이 아니라 "오늘 전체보기" 전용 화면(/events/today, Task 9-6-6)으로 넘어가는
-  // 링크라 별도 prop으로 분리했다. Task 9-6-7: 아래 Floating 버튼도 항목 10개 이하라 CTA 카드가
-  // 없을 때의 기본 목적지로 이 값을 재사용한다.
-  moreHref?: string;
+  hasMore?: boolean;
+  onMoreClick?: () => void;
 }) {
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -111,7 +113,10 @@ export function HeroCarousel({
             onClick={() => onSelect(item)}
             className="shrink-0 w-[calc(100vw-32px)] sm:w-72 snap-center [scroll-snap-stop:always] text-left rounded-2xl border border-gray-200 bg-white overflow-hidden hover:shadow-md transition-shadow"
           >
-            <div className="relative aspect-[4/3] bg-gray-100">
+            {/* [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시) "메인 배너 크기 다이어트": 기존
+                aspect-[4/3](세로에 가까운 큰 카드)를 가로형 배너 비율로 슬림화해, 카드 아래
+                섹션들이 첫 화면(Above the fold)에서 바로 보이도록 한다. */}
+            <div className="relative aspect-[2/1] bg-gray-100">
               {item.thumbnail_url ? (
                 // Task 9-3-1(2026-08-22): 썸네일이 Supabase Storage 외 다양한 공공 API 도메인에서
                 // 오기 때문에(next.config.ts remotePatterns가 *.supabase.co만 허용) next/image로
@@ -181,35 +186,30 @@ export function HeroCarousel({
         );
       })}
 
-        {moreHref && (
-          <Link
-            href={moreHref}
+        {hasMore && (
+          <button
+            type="button"
+            onClick={onMoreClick}
             className="shrink-0 w-[calc(100vw-32px)] sm:w-72 snap-center [scroll-snap-stop:always] rounded-2xl border border-dashed border-gray-300 bg-gray-50 flex flex-col items-center justify-center gap-2 text-center p-4 hover:bg-gray-100 transition-colors"
           >
             <span className="text-3xl" aria-hidden>
               🗺️
             </span>
             <span className="text-sm font-semibold text-gray-700">오늘 진행 중인 전체 행사 보기</span>
-          </Link>
+          </button>
         )}
       </div>
 
       {/* Task 9-4-2(2026-08-22): 스와이프 상태와 무관하게 항상 노출되는 Floating "오늘 전체보기"
-          버튼. 마지막 슬라이드까지 넘겨야만 나오는 위 moreHref CTA 카드(10개 초과 시에만 존재)와
-          달리, 이 버튼은 카드 개수와 무관하게 항상 눌러서 당일 전체 행사로 바로 이동할 수 있다.
-          Task 9-6-7(2026-08-23) 버그 근본 원인: 이 버튼이 home-view.tsx가 넘기는 moreHref prop과
-          완전히 무관하게 자체 href를 하드코딩하고 있었다("/nearby?filter=TODAY_WEEKEND") — Task
-          9-6-6에서 moreHref만 /events/today로 고쳤을 때 이 파일을 놓쳐, 카드가 10개 이하라
-          moreHref CTA 카드가 아예 없을 때도 항상 보이는 이 Floating 버튼이 여전히 지도로 이동하는
-          실제 원인이었다(실측 확인). moreHref가 없을 때(항목 10개 이하)는 기본 목적지
-          '/events/today'로 고정한다 — 이 버튼은 원래 카드 개수와 무관하게 항상 노출되어야 하므로
-          moreHref 유무에 따라 버튼 자체를 숨기지 않는다. */}
-      <Link
-        href={moreHref ?? '/events/today'}
+          버튼. 마지막 슬라이드까지 넘겨야만 나오는 위 hasMore CTA 카드(10개 초과 시에만 존재)와
+          달리, 이 버튼은 카드 개수와 무관하게 항상 눌러서 바텀시트를 열 수 있다. */}
+      <button
+        type="button"
+        onClick={onMoreClick}
         className="absolute bottom-4 right-4 z-20 flex items-center gap-1 rounded-full bg-white/70 backdrop-blur-md border border-white/40 px-3 py-1.5 text-xs font-semibold text-gray-800 shadow-md hover:bg-white/90 transition-colors"
       >
         ⚡ 오늘 전체보기 +
-      </Link>
+      </button>
     </div>
   );
 }

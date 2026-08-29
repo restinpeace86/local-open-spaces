@@ -1,13 +1,13 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import Link from 'next/link';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { useUserLocation } from '@/hooks/use-user-location';
 import { HomeHeader } from '@/components/home/home-header';
 import { HomeSubTabs, HomeSubTab } from '@/components/home/home-sub-tabs';
 import { HeroCarousel } from '@/components/home/hero-carousel';
 import { ReservationOpenSlider } from '@/components/home/reservation-open-slider';
+import { EventBrowseSheet, EventBrowseSheetMode } from '@/components/home/event-browse-sheet';
 import { MajorCategoryGrid } from '@/components/home/major-category-grid';
 import { FreeFeedSkeleton } from '@/components/home/free-feed-skeleton';
 import { ThemeSpotKey } from '@/lib/theme-spots';
@@ -195,6 +195,9 @@ export function HomeView({
     useUserLocation();
   const [activeTab, setActiveTab] = useState<HomeSubTab>('home');
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
+  // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시) 요구사항 3: "전체보기"가 페이지 이동 대신
+  // 이 화면 위 바텀시트로 뜬다 — 어떤 종류의 전체보기를 열지만 상태로 들고 있으면 된다.
+  const [browseSheetMode, setBrowseSheetMode] = useState<EventBrowseSheetMode | null>(null);
   const [heroEvents, setHeroEvents] = useState<NearbyItem[]>(initialHeroEvents);
   const [reservationOpenEvents, setReservationOpenEvents] = useState<NearbyItem[]>(initialReservationOpenEvents);
   const [currentlyOngoingEvents, setCurrentlyOngoingEvents] = useState<NearbyItem[]>(initialCurrentlyOngoingEvents);
@@ -281,10 +284,9 @@ export function HomeView({
 
   const visibleHeroEvents = heroEvents.slice(0, HERO_VISIBLE_COUNT);
   // Task 9-1-9: 10개 초과 시 "전체 보기" CTA 카드를 마지막 슬라이드에 노출한다.
-  // Task 9-6-6(2026-08-23): 지도(/nearby)도, 상시 공간 카탈로그 화면(/region)도 아니라 오늘
-  // 진행 중인 행사만 모아 보여주는 전용 카드 그리드 페이지(/events/today)로 이동한다 —
-  // 거리(GPS) 기반 정렬 없이 행정구역 계층(구/시 → 도, 타 지자체 완전 차단)으로만 피딩된다.
-  const heroMoreHref = heroEvents.length > HERO_VISIBLE_COUNT ? '/events/today' : undefined;
+  // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시): 더 이상 페이지 이동 링크가 아니라
+  // 바텀시트(EventBrowseSheet, mode='today')를 여는 콜백을 HeroCarousel에 넘긴다.
+  const heroHasMore = heroEvents.length > HERO_VISIBLE_COUNT;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
@@ -327,7 +329,12 @@ export function HomeView({
                 노출: N건이면 N개 그대로, 0건이면 비노출, 10개로 억지로 채우지 않음). */}
             {heroEvents.length > 0 && (
               <section aria-label="오늘의 추천 행사">
-                <HeroCarousel items={visibleHeroEvents} onSelect={setSelectedItem} moreHref={heroMoreHref} />
+                <HeroCarousel
+                  items={visibleHeroEvents}
+                  onSelect={setSelectedItem}
+                  hasMore={heroHasMore}
+                  onMoreClick={() => setBrowseSheetMode('today')}
+                />
               </section>
             )}
 
@@ -343,9 +350,13 @@ export function HomeView({
               <section aria-label="현재 이용 가능">
                 <div className="flex items-center justify-between mb-3 px-4">
                   <h2 className="text-base font-bold text-gray-900">✅ 현재 이용 가능</h2>
-                  <Link href="/events/ongoing" className="text-xs font-semibold text-gray-500 hover:text-gray-800">
+                  <button
+                    type="button"
+                    onClick={() => setBrowseSheetMode('ongoing')}
+                    className="text-xs font-semibold text-gray-500 hover:text-gray-800"
+                  >
                     전체보기 →
-                  </Link>
+                  </button>
                 </div>
                 <ReservationOpenSlider items={currentlyOngoingEvents} onSelect={setSelectedItem} />
               </section>
@@ -360,12 +371,13 @@ export function HomeView({
               <section aria-label="예약 가능">
                 <div className="flex items-center justify-between mb-3 px-4">
                   <h2 className="text-base font-bold text-gray-900">📋 예약 가능</h2>
-                  <Link
-                    href="/events/reservation-open"
+                  <button
+                    type="button"
+                    onClick={() => setBrowseSheetMode('reservation-open')}
                     className="text-xs font-semibold text-gray-500 hover:text-gray-800"
                   >
                     전체보기 →
-                  </Link>
+                  </button>
                 </div>
                 <ReservationOpenSlider items={reservationOpenEvents} onSelect={setSelectedItem} />
               </section>
@@ -458,6 +470,16 @@ export function HomeView({
         )}
       </div>
 
+      {browseSheetMode && (
+        <EventBrowseSheet
+          mode={browseSheetMode}
+          onClose={() => setBrowseSheetMode(null)}
+          onSelectItem={(item) => {
+            setBrowseSheetMode(null);
+            setSelectedItem(item);
+          }}
+        />
+      )}
       {selectedItem && <DetailModal item={selectedItem} onClose={() => setSelectedItem(null)} />}
       {isOnboardingOpen && (
         <LocationOnboardingModal onConfirm={confirmLocation} onClose={closeOnboarding} />

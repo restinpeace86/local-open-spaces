@@ -443,7 +443,8 @@ async function fetchRegionFirstRows<T extends { id: string }>(
 // 자체를 숨기고(home-view.tsx), N건이면 N개만 그대로 보여준다(10개로 억지로 채우지 않음).
 export async function getTodayEvents(
   limit = 10,
-  region: HomeRegion = DEFAULT_HOME_REGION
+  region: HomeRegion = DEFAULT_HOME_REGION,
+  categoryMins?: readonly string[]
 ): Promise<NearbyItem[]> {
   const supabase = await createClient();
   const today = new Date().toISOString().slice(0, 10);
@@ -460,6 +461,7 @@ export async function getTodayEvents(
       .not('category_min', 'in', EXCLUDED_CATEGORY_MIN_FILTER)
       // 예약 필수이면서 이미 마감된 건은 DB 단에서 제외(마감 안 지난 것 OR 예약 불필요)
       .or(`is_reservation_required.eq.false,reservation_end_date.gte.${nowIso},reservation_end_date.is.null`);
+    if (categoryMins && categoryMins.length > 0) query = query.in('category_min', categoryMins);
     if (token) query = query.or(regionOrFilter(token, 'venue_name'));
     return query.order('start_date', { ascending: false }).limit(500);
   };
@@ -636,12 +638,21 @@ export type PagedEvents = { items: NearbyItem[]; total: number };
 
 const BROWSE_ALL_PAGE_SIZE = 24;
 
-export async function getCurrentlyOngoingEventsPage(page = 1, pageSize = BROWSE_ALL_PAGE_SIZE): Promise<PagedEvents> {
+// [이벤트픽 전체보기 바텀시트化](2026-08-29 사용자 지시): 페이지 이동 대신 바텀시트에서
+// 중분류(category_maj) 칩으로 즉시 필터링하려면, 서버가 그 칩에 해당하는 category_min
+// 목록으로 좁혀 재조회해야 한다(실측 확인: 전국 기준 ongoing 1,972건/reservation-open
+// 918건 — 전량을 클라이언트로 내려 필터링하기엔 너무 커서 기존 오프셋 페이지네이션 구조를
+// 그대로 유지하고 필터 조건만 추가한다).
+export async function getCurrentlyOngoingEventsPage(
+  page = 1,
+  pageSize = BROWSE_ALL_PAGE_SIZE,
+  categoryMins?: readonly string[]
+): Promise<PagedEvents> {
   const supabase = await createClient();
   const today = new Date().toISOString().slice(0, 10);
 
   const from = (page - 1) * pageSize;
-  const { data, error, count } = await supabase
+  let query = supabase
     .from('events')
     .select(EVENT_COLUMNS, { count: 'exact' })
     .eq('is_active', true)
@@ -649,7 +660,9 @@ export async function getCurrentlyOngoingEventsPage(page = 1, pageSize = BROWSE_
     .not('category_min', 'is', null)
     .not('category_min', 'in', EXCLUDED_CATEGORY_MIN_FILTER)
     .lte('start_date', today)
-    .gte('end_date', today)
+    .gte('end_date', today);
+  if (categoryMins && categoryMins.length > 0) query = query.in('category_min', categoryMins);
+  const { data, error, count } = await query
     .order('start_date', { ascending: true })
     .range(from, from + pageSize - 1);
 
@@ -658,7 +671,11 @@ export async function getCurrentlyOngoingEventsPage(page = 1, pageSize = BROWSE_
   return { items: ((data ?? []) as EventRow[]).map(toEventItem), total: count ?? 0 };
 }
 
-export async function getReservationOpenEventsPage(page = 1, pageSize = BROWSE_ALL_PAGE_SIZE): Promise<PagedEvents> {
+export async function getReservationOpenEventsPage(
+  page = 1,
+  pageSize = BROWSE_ALL_PAGE_SIZE,
+  categoryMins?: readonly string[]
+): Promise<PagedEvents> {
   const supabase = await createClient();
   const today = new Date().toISOString().slice(0, 10);
 
@@ -668,7 +685,7 @@ export async function getReservationOpenEventsPage(page = 1, pageSize = BROWSE_A
   // 페이지네이션한 뒤 합치면 그 두 조건을 다 만족할 수 없다(제5장 제5조 데이터 중심 —
   // count(*)가 실제 화면과 어긋나면 안 됨).
   const from = (page - 1) * pageSize;
-  const { data, error, count } = await supabase
+  let query = supabase
     .from('events')
     .select(EVENT_COLUMNS, { count: 'exact' })
     .eq('is_active', true)
@@ -676,7 +693,9 @@ export async function getReservationOpenEventsPage(page = 1, pageSize = BROWSE_A
     .not('category_min', 'is', null)
     .not('category_min', 'in', EXCLUDED_CATEGORY_MIN_FILTER)
     .gte('end_date', today)
-    .or(`booking_status.eq.접수중,and(source.eq.seoul_public_reservation,raw_data->>SVCSTATNM.eq.접수중)`)
+    .or(`booking_status.eq.접수중,and(source.eq.seoul_public_reservation,raw_data->>SVCSTATNM.eq.접수중)`);
+  if (categoryMins && categoryMins.length > 0) query = query.in('category_min', categoryMins);
+  const { data, error, count } = await query
     .order('start_date', { ascending: true })
     .range(from, from + pageSize - 1);
 

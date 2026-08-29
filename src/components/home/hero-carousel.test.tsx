@@ -234,8 +234,10 @@ describe('HeroCarousel 뱃지 구분 (Task 9-6-13)', () => {
   });
 });
 
-// Task 9-1-9: 후보가 10개를 넘겨 HomeView가 moreHref를 넘기면 마지막 슬라이드로 "전체 보기"
-// CTA 카드가 노출되고, 지도 화면(오늘/주말 Quick 필터 활성)으로 연동된다.
+// Task 9-1-9: 후보가 10개를 넘겨 HomeView가 hasMore를 넘기면 마지막 슬라이드로 "전체 보기"
+// CTA 카드가 노출된다.
+// [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시): 페이지 이동 링크(moreHref) 대신 바텀시트를
+// 여는 콜백(onMoreClick)을 호출하는 버튼으로 바뀌었다.
 describe('HeroCarousel "전체 보기" CTA (Task 9-1-9)', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -246,26 +248,26 @@ describe('HeroCarousel "전체 보기" CTA (Task 9-1-9)', () => {
     vi.useRealTimers();
   });
 
-  it('moreHref가 있으면 마지막 슬라이드로 "오늘 진행 중인 전체 행사 보기" 링크를 노출한다', () => {
+  it('hasMore가 true면 마지막 슬라이드로 "오늘 진행 중인 전체 행사 보기" 버튼을 노출하고, 누르면 onMoreClick을 호출한다', () => {
     const items = [makeItem('1', '행사1'), makeItem('2', '행사2')];
-    render(<HeroCarousel items={items} onSelect={() => {}} moreHref="/nearby?filter=TODAY_WEEKEND" />);
+    const onMoreClick = vi.fn();
+    render(<HeroCarousel items={items} onSelect={() => {}} hasMore onMoreClick={onMoreClick} />);
 
-    const link = screen.getByText('오늘 진행 중인 전체 행사 보기').closest('a');
-    expect(link).toHaveAttribute('href', '/nearby?filter=TODAY_WEEKEND');
+    fireEvent.click(screen.getByText('오늘 진행 중인 전체 행사 보기'));
+    expect(onMoreClick).toHaveBeenCalledTimes(1);
   });
 
-  it('moreHref가 없으면 "전체 보기" CTA 카드를 노출하지 않는다', () => {
+  it('hasMore가 false면 "전체 보기" CTA 카드를 노출하지 않는다', () => {
     const items = [makeItem('1', '행사1')];
-    render(<HeroCarousel items={items} onSelect={() => {}} />);
+    render(<HeroCarousel items={items} onSelect={() => {}} onMoreClick={() => {}} />);
 
     expect(screen.queryByText('오늘 진행 중인 전체 행사 보기')).not.toBeInTheDocument();
   });
 });
 
 // Task 9-4-2(2026-08-22): 카드 개수/스와이프 상태와 무관하게 항상 노출되는 Floating 버튼.
-// Task 9-6-7(2026-08-23) 버그 수정: 이 버튼이 moreHref prop과 무관하게 자체 href를
-// "/nearby?filter=TODAY_WEEKEND"로 하드코딩하고 있어, Task 9-6-6에서 moreHref를 /events/today로
-// 바꿔도 이 Floating 버튼(카드 10개 이하일 때도 항상 보임)은 여전히 지도로 이동하던 실제 원인이었다.
+// [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시): 페이지 이동 대신 항상 onMoreClick(바텀시트
+// 열기)을 호출한다.
 describe('HeroCarousel Floating "오늘 전체보기" 버튼 (Task 9-4-2/9-6-7)', () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -276,25 +278,12 @@ describe('HeroCarousel Floating "오늘 전체보기" 버튼 (Task 9-4-2/9-6-7)'
     vi.useRealTimers();
   });
 
-  it('아이템이 10개 이하라도(moreHref 없이도) Floating 버튼은 항상 노출되고, 기본 목적지는 /events/today다', () => {
-    render(<HeroCarousel items={[makeItem('1', '행사1')]} onSelect={() => {}} />);
+  it('아이템이 10개 이하라도(hasMore 없이도) Floating 버튼은 항상 노출되고, 누르면 onMoreClick을 호출한다', () => {
+    const onMoreClick = vi.fn();
+    render(<HeroCarousel items={[makeItem('1', '행사1')]} onSelect={() => {}} onMoreClick={onMoreClick} />);
 
-    const link = screen.getByText('⚡ 오늘 전체보기 +').closest('a');
-    expect(link).toHaveAttribute('href', '/events/today');
-  });
-
-  it('moreHref가 있으면 Floating 버튼도 자체 하드코딩 값이 아니라 moreHref를 그대로 따른다', () => {
-    render(
-      <HeroCarousel
-        items={[makeItem('1', '행사1')]}
-        onSelect={() => {}}
-        moreHref="/events/today?region=seoul-seocho"
-      />
-    );
-
-    const link = screen.getByText('⚡ 오늘 전체보기 +').closest('a');
-    expect(link).toHaveAttribute('href', '/events/today?region=seoul-seocho');
-    expect(link).not.toHaveAttribute('href', '/nearby?filter=TODAY_WEEKEND');
+    fireEvent.click(screen.getByText('⚡ 오늘 전체보기 +'));
+    expect(onMoreClick).toHaveBeenCalledTimes(1);
   });
 });
 
