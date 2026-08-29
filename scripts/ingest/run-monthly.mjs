@@ -14,10 +14,11 @@
 // [경기 키즈카페/놀이시설 휴게음식점 수집](2026-08-29): GG_KIDSCAFE(openapi.gg.go.kr의
 // Kidscafe+Resrestrtkidscafe 통합) 신규 추가.
 // [농어촌체험휴양마을 + 농촌교육농장 통합 수집](2026-08-29): RURAL_EXPERIENCE_VILLAGE
-// (data.go.kr tn_pubr_public_frhl_exprn_vilage_api) 신규 추가 — targetTable이 open_spaces라
-// 이 월간 배치 소속. RURAL_EDUCATION_FARM(농사로 api.nongsaro.go.kr)은 실제 서비스에 필요한
-// 인증키가 아직 없어(사용자 확인 대기 — 참고: 이 파일의 STEPS에 이 소스는 아직 추가하지
-// 않았다) 이번 배치에는 포함하지 않았다.
+// (data.go.kr tn_pubr_public_frhl_exprn_vilage_api)와 RURAL_EDUCATION_FARM(농사로
+// api.nongsaro.go.kr) 신규 추가 — 둘 다 targetTable이 open_spaces라 이 월간 배치 소속.
+// RURAL_EDUCATION_FARM은 사용자가 실제 NONGSARO_API_KEY를 발급받아 라이브 검증까지
+// 완료한 뒤 연결했다(253건 수신, 250건 적재 — 나머지 3건은 원본 주소 자체의 오탈자로
+// 지오코딩 실패, 어댑터 파일 상단 주석 참고).
 //
 // KorTour/GoCamping 계열 4종은 증분 수집 파라미터를 지원하지 않아(실측 확인,
 // implementation/todo.md Task 2) 매회 전량 재수집(Full Ingest) 방식을 그대로 유지한다
@@ -47,6 +48,7 @@ import { KorTourAdapter } from './adapters/kor-tour-adapter.mjs';
 import { KorWithTourAdapter } from './adapters/kor-with-tour-adapter.mjs';
 import { KorPetTourAdapter } from './adapters/kor-pet-tour-adapter.mjs';
 import { RuralExperienceVillageAdapter } from './adapters/rural-experience-village-adapter.mjs';
+import { RuralEducationFarmAdapter } from './adapters/rural-education-farm-adapter.mjs';
 import { run as runCulturalSpaces } from './cultural-spaces.mjs';
 
 loadEnv();
@@ -69,6 +71,7 @@ const STEPS = [
   { label: 'KOR_WITH_TOUR', run: ({ dryRun }) => new KorWithTourAdapter().run({ dryRun }) },
   { label: 'KOR_PET_TOUR', run: ({ dryRun }) => new KorPetTourAdapter().run({ dryRun }) },
   { label: 'RURAL_EXPERIENCE_VILLAGE', run: ({ dryRun }) => new RuralExperienceVillageAdapter().run({ dryRun }) },
+  { label: 'RURAL_EDUCATION_FARM', run: ({ dryRun }) => new RuralEducationFarmAdapter().run({ dryRun }) },
 ];
 
 // [카테고리 정제 & 어드민 확장](2026-08-26): run-daily.mjs와 동일한 후처리 — category_min

@@ -245,3 +245,16 @@
     `run-monthly.mjs`에 연결 필요(아직 미연결, 사유 주석 명시).
   - **검증**: `npx tsc --noEmit`/`npm run test`(62파일 640건)/`npm run build` 통과. 상세:
     `implementation/2026-08-29-rural-village-and-education-farm-adapters.md`.
+
+- [x] **[농촌교육농장(RURAL_EDUCATION_FARM) 라이브 검증 및 DB 적재 완료]** (2026-08-29 완료)
+  - 사용자가 실제 NONGSARO_API_KEY를 발급받아 `.env.local`에 설정 후 검증 요청.
+  - 실제 키로 직접 호출해 응답 구조가 이전에 참고 샘플 코드 기반으로 구현한 파싱 로직과
+    정확히 일치함을 확인(코드 수정 없이 그대로 동작) — 총 253건, DB에 250건 적재
+    (3건은 원본 주소 자체의 오탈자로 지오코딩 실패, 어댑터가 안전하게 skip).
+  - `run-monthly.mjs` STEPS에 RURAL_EDUCATION_FARM 연결(자동 월간 배치 편입 완료),
+    어드민 카테고리 "농장/체험" 그룹·필터 안전망 목록에 '교육농장' 추가.
+  - **실측 검증**: DB 직접 조회로 250건 전량 좌표/category_min 확인, 202건
+    sigungu_name 자동 추출 성공(48건은 원본 주소가 시/도 접두어 없이 시작해 결측 —
+    기존 정의된 안전한 동작).
+  - **검증**: `npx tsc --noEmit`/`npm run test`(62파일 640건)/`npm run build` 통과. 상세:
+    `implementation/2026-08-29-rural-education-farm-live-verification.md`.

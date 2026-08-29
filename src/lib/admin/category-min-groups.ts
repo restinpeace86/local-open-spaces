@@ -24,11 +24,10 @@ const OPEN_SPACES_GROUPS_STATIC: CategoryMinGroup[] = [
   },
   {
     // [농어촌체험휴양마을 + 농촌교육농장 통합 수집](2026-08-29 사용자 지시): "농장/체험"
-    // 상위 그룹 신설. 교육농장(RURAL_EDUCATION_FARM)은 실제 API 인증키 확보 후 수집·적재
-    // 완료 시점에 이 목록에 추가한다(아직 DB에 존재하지 않는 값을 미리 넣지 않는다 —
-    // 제5장 제6조 하드코딩 최소화, category-min-fallback.ts와 동일한 "실제 값 스냅샷" 원칙).
+    // 상위 그룹 신설. 교육농장(RURAL_EDUCATION_FARM)은 사용자가 실제 인증키를 발급받아
+    // 라이브 검증·DB 적재까지 완료(250건)한 뒤 추가했다.
     major: '농장/체험',
-    minors: ['체험휴양마을'],
+    minors: ['체험휴양마을', '교육농장'],
   },
   {
     major: '키즈/놀이시설',
