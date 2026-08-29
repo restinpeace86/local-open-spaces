@@ -162,5 +162,40 @@ describe('PlaygroundAdapter', () => {
       const rows = adapter.transform([{ ...BASE_ITEM, idrodrCdNm: '실내' }]);
       expect(rows[0].facility_type).toBe('실내');
     });
+
+    // [행안부 놀이시설 설치장소코드 매핑](2026-08-29): instlPlaceCd 기준으로 나들이 핵심
+    // 중분류에 직접 매핑한다(category_min_source='RAW' — 소스 자체 분류값 사용, 키워드
+    // 추측 아님). 실측 확인한 설치장소코드별 실제 시설명 표본(예: A013='서울형 키즈카페
+    // 마포구 서교동2호점')에 근거한 매핑이다.
+    describe('설치장소코드(instlPlaceCd) 기준 category_min 매핑', () => {
+      it.each([
+        ['A003', '공원'],
+        ['A013', '키즈카페'],
+        ['A022', '종합/기타박물관'],
+        ['A030', '자연휴양림'],
+        ['A032', '캠핑장'],
+        ['A033', '도서관'],
+        ['A092', '육아종합지원센터'],
+        ['A093', '유아교육진흥원'],
+      ])('instlPlaceCd=%s -> category_min=%s (source=RAW)', (instlPlaceCd, expectedCategoryMin) => {
+        const adapter = new PlaygroundAdapter();
+        const rows = adapter.transform([{ ...BASE_ITEM, instlPlaceCd }]);
+        expect(rows[0].category_min).toBe(expectedCategoryMin);
+        expect(rows[0].category_min_source).toBe('RAW');
+      });
+
+      it('매핑 대상 코드가 아니면 category_min을 null로 남겨 배치 후처리(키워드 매칭)에 맡긴다', () => {
+        const adapter = new PlaygroundAdapter();
+        const rows = adapter.transform([{ ...BASE_ITEM, instlPlaceCd: 'A011' }]);
+        expect(rows[0].category_min).toBeNull();
+        expect(rows[0].category_min_source).toBeNull();
+      });
+
+      it('instlPlaceCd 자체가 없어도(기존 데이터) 정상적으로 category_min null로 처리된다', () => {
+        const adapter = new PlaygroundAdapter();
+        const rows = adapter.transform([{ ...BASE_ITEM, instlPlaceCd: undefined }]);
+        expect(rows[0].category_min).toBeNull();
+      });
+    });
   });
 });

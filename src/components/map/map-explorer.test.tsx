@@ -125,15 +125,23 @@ describe('MapExplorer 나들이 전용 핵심 중분류 1단 필터 (2026-08-29)
     expect(screen.queryByText('테니스장')).not.toBeInTheDocument();
   });
 
-  it('핵심 중분류 칩을 6번째로 선택하려 하면 안내 토스트가 뜨고 선택되지 않는다', async () => {
+  // [단일 선택으로 변경](2026-08-29 사용자 지시): 다중 선택(최대 5개)을 철회하고 한 번에
+  // 하나의 칩만 선택 가능하도록 변경했다 — 다른 칩을 누르면 선택이 교체되고, 같은 칩을
+  // 다시 누르면 해제된다.
+  it('핵심 중분류 칩은 한 번에 하나만 선택 가능하다(단일 선택)', () => {
     render(<MapExplorer />);
-    const coreLabels = [/공원/, /문화센터/, /박물관/, /도서관/, /키즈카페/];
-    for (const label of coreLabels) {
-      fireEvent.click(screen.getAllByText(label)[0]);
-    }
-    fireEvent.click(screen.getAllByText(/놀이터/)[0]);
+    const parkChip = screen.getAllByText(/^🌳 공원$/)[0];
+    const libraryChip = screen.getAllByText(/^📚 도서관$/)[0];
 
-    expect(await screen.findByText(/최대 5개까지 선택할 수 있어요/)).toBeInTheDocument();
+    fireEvent.click(parkChip);
+    expect(parkChip.closest('button')?.className).toContain('bg-blue-600');
+
+    fireEvent.click(libraryChip);
+    expect(libraryChip.closest('button')?.className).toContain('bg-blue-600');
+    expect(parkChip.closest('button')?.className).not.toContain('bg-blue-600');
+
+    fireEvent.click(libraryChip);
+    expect(libraryChip.closest('button')?.className).not.toContain('bg-blue-600');
   });
 
   it('AI 추천 칩을 누르면 페이지 이동 없이 추천 바텀시트가 뜬다', () => {

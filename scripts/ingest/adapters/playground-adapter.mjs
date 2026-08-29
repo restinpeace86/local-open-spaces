@@ -44,12 +44,31 @@
 import { BaseCollectorAdapter } from './base-collector-adapter.mjs';
 import { buildOpenSpaceRow } from './lib/schema-mapper.mjs';
 import { deriveIsFreeFallback } from '../lib/ai-tagging.mjs';
+import { INSTALL_PLACE_CODE_TO_CATEGORY_MIN } from '../lib/localdata-playground-install-place-mapping.mjs';
 
 const BASE_URL = 'https://apis.data.go.kr/1741000/pfc3/getPfctInfo3';
 const PAGE_SIZE = 1000;
 const SUCCESS_RESULT_CODE = '00';
 const CLOSED_FLAG = 'Y';
 const SOURCE = 'localdata_playground';
+
+// [행안부 놀이시설 설치장소코드 매핑](2026-08-29 사용자 지시): 이 API는 "어린이놀이시설
+// 자체"가 아니라 "어린이놀이시설이 설치된 장소"를 instlPlaceCd로 분류한다(실측 확인 —
+// 예: instlPlaceCd='A013'/instlPlaceCdNm='놀이제공영업소'인 레코드는 "서울형 키즈카페
+// 마포구 서교동2호점"처럼 실제로 키즈카페 자체가 시설명인 경우가 많고, 'A022'/박물관인
+// 레코드는 "국회 어린이박물관"처럼 박물관 내부에 설치된 놀이시설이다). 나들이 스팟픽
+// 핵심 중분류 칩(src/lib/spaces/spot-category-groups.ts)과 대응시켜, 지정된 설치장소
+// 코드에 한해 category_min을 직접 매핑한다(RAW — 소스 자체가 가진 분류 정보를 그대로
+// 사용, 키워드 추측 아님). 매핑 대상이 아닌 코드는 기존과 동일하게 null로 남아 배치
+// 후처리(category-rules.mjs)의 이름 키워드 매칭에 맡긴다 — 기존에 수집되던 다른
+// 설치장소코드의 데이터를 드롭하지 않는다(범위 축소 없음).
+//
+// 매핑 테이블 자체는 scripts/ingest/lib/localdata-playground-install-place-mapping.mjs에
+// 정의돼 있다(이 어댑터는 신규/upsert 시점에, 그 파일은 기존 행 백필 시점에 같은 테이블을
+// 공유한다 — 값이 갈라지면 안 되므로 단일 출처로 관리한다). upsertRowsSafeMerge()의
+// COALESCE 안전 병합 특성상 이미 category_min이 채워진 기존 행에는 여기서 준 값이 반영되지
+// 않는다(실측 확인) — 그 경우를 위한 명시적 덮어쓰기 백필은 run-monthly.mjs의
+// PLAYGROUND_INSTALL_PLACE_MAPPING 단계가 담당한다.
 
 export class PlaygroundAdapter extends BaseCollectorAdapter {
   constructor() {
@@ -137,6 +156,7 @@ export class PlaygroundAdapter extends BaseCollectorAdapter {
         if (!name || !address || !item.latCrtsVl || !item.lotCrtsVl) return null;
 
         const isPublicProvider = item.prvtPblcYnCdNm === '공공';
+        const categoryMin = INSTALL_PLACE_CODE_TO_CATEGORY_MIN[item.instlPlaceCd] ?? null;
 
         return buildOpenSpaceRow({
           externalId: `LOCALDATA_PLAYGROUND_${item.pfctSn}`,
@@ -151,6 +171,8 @@ export class PlaygroundAdapter extends BaseCollectorAdapter {
           isKidsFriendly: true,
           facilityType: item.idrodrCdNm === '실내' ? '실내' : item.idrodrCdNm === '실외' ? '야외' : '복합',
           rawData: item,
+          categoryMin,
+          categoryMinSource: categoryMin ? 'RAW' : null,
         });
       })
       .filter(Boolean);

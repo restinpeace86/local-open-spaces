@@ -23,6 +23,7 @@ import { createAdminClient, analyzeOpenSpaces } from './lib/supabase-admin.mjs';
 import { dedupeOpenSpaces } from './lib/dedupe-open-spaces.mjs';
 import { applyDetailedCategoryFallback } from './lib/detailed-category-fallback.mjs';
 import { applyLegacySourceCategoryMapping } from './lib/legacy-source-category-mapping.mjs';
+import { applyPlaygroundInstallPlaceCategoryMapping } from './lib/localdata-playground-install-place-mapping.mjs';
 import { recordBatchRun } from './lib/batch-log.mjs';
 import { applyCategoryRules } from './lib/category-rules.mjs';
 import { CityParkAdapter } from './adapters/city-park-adapter.mjs';
@@ -165,6 +166,43 @@ async function runLegacySourceCategoryMapping({ dryRun }) {
   };
 }
 
+// [행안부 놀이시설 설치장소코드 매핑 백필](2026-08-29): playground-adapter.mjs의
+// upsert(COALESCE 안전 병합)는 이미 category_min이 채워진 기존 행에는 새 설치장소코드
+// 매핑을 반영하지 못한다(실측 확인 — LEGACY_SOURCE_CATEGORY_MAPPING과 달리 이 단계는
+// 기존 값도 명시적으로 덮어쓴다, 대표 승인 사항). LOCALDATA_PLAYGROUND 소스 + 지정된 8개
+// instlPlaceCd로 범위를 엄격히 제한해 다른 매핑에는 영향이 없다.
+async function runPlaygroundInstallPlaceMapping({ dryRun }) {
+  if (dryRun) {
+    return {
+      sourceKey: 'PLAYGROUND_INSTALL_PLACE_MAPPING',
+      source: null,
+      targetTable: 'open_spaces',
+      rawCount: 0,
+      count: 0,
+      upserted: false,
+      safeMergeCount: 0,
+      errorCount: 0,
+      excludeFromVerification: true,
+      note: 'dry-run: 실제 UPDATE는 실행하지 않음',
+    };
+  }
+
+  const client = createAdminClient();
+  const result = await applyPlaygroundInstallPlaceCategoryMapping(client);
+  return {
+    sourceKey: 'PLAYGROUND_INSTALL_PLACE_MAPPING',
+    source: null,
+    targetTable: 'open_spaces',
+    rawCount: result.scanned,
+    count: result.updated,
+    upserted: true,
+    safeMergeCount: 0,
+    errorCount: 0,
+    excludeFromVerification: true,
+    note: `행안부 놀이시설 설치장소코드(A003/A013/A022/A030/A032/A033/A092/A093) 매핑 — ${result.updated}/${result.scanned}건, 내역: ${JSON.stringify(result.breakdown)}`,
+  };
+}
+
 // [open_spaces 성능 최적화 및 타임아웃 재발 방지](2026-08-28): 이 배치는 playground
 // (82,373건) 등 대량 open_spaces 적재를 수행한다 — 배치 종료 시점에 통계를 갱신해 다음
 // 배치(다음 Daily/Monthly)의 open_spaces upsert가 stale 통계로 인한 statement timeout을
@@ -238,7 +276,7 @@ async function runDedupeOpenSpaces({ dryRun }) {
 }
 
 export async function runMonthlyBatch({ dryRun = false } = {}) {
-  console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length + 5}개 단계\n`);
+  console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length + 6}개 단계\n`);
 
   const results = [];
 
@@ -275,6 +313,14 @@ export async function runMonthlyBatch({ dryRun = false } = {}) {
   } catch (err) {
     console.error(`❌ [LEGACY_SOURCE_CATEGORY_MAPPING] 실패: ${err.message}`);
     results.push({ failed: true, sourceKey: 'LEGACY_SOURCE_CATEGORY_MAPPING', source: null, note: err.message });
+  }
+
+  console.log('\n=== [PLAYGROUND_INSTALL_PLACE_MAPPING] ===');
+  try {
+    results.push(await runPlaygroundInstallPlaceMapping({ dryRun }));
+  } catch (err) {
+    console.error(`❌ [PLAYGROUND_INSTALL_PLACE_MAPPING] 실패: ${err.message}`);
+    results.push({ failed: true, sourceKey: 'PLAYGROUND_INSTALL_PLACE_MAPPING', source: null, note: err.message });
   }
 
   console.log('\n=== [DEDUPE_OPEN_SPACES] ===');

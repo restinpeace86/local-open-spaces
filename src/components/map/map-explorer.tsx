@@ -1,10 +1,10 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { KakaoMapView } from '@/components/map/kakao-map-view';
 import { SearchBar } from '@/components/map/search-bar';
-import { SpotCategoryFilter, MAX_SPOT_CATEGORY_MIN_SELECTION } from '@/components/map/spot-category-filter';
+import { SpotCategoryFilter } from '@/components/map/spot-category-filter';
 import { ItemListPanel } from '@/components/map/item-list-panel';
 import { EmptyState } from '@/components/map/empty-state';
 import { DetailModal } from '@/components/map/detail-modal';
@@ -22,11 +22,6 @@ import { rankAiRecommendedSpots } from '@/lib/spaces/ai-recommend';
 
 // spec/map/spatial-search.md 3.1: 반경 내 최대 200개 마커만 우선 렌더링
 const MARKER_LIMIT = 200;
-
-// [스팟픽 대분류/중분류 계층적 탐색](2026-08-28): 중분류 6번째 선택 시도 시 안내 토스트를
-// 이 시간 동안만 노출한다(반경 초과 Toast와 달리 조건이 계속 참인 게 아니라 "시도 순간"의
-// 일회성 안내라 자동으로 사라져야 한다).
-const MAX_SELECTION_TOAST_DURATION_MS = 2000;
 
 // [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 3): "지도 상단 Floating 1km/5km/10km
 // 반경 선택 버튼 전면 삭제"에 따라 사용자가 더 이상 반경을 고를 수 없다 — 이전 RadiusSelector의
@@ -47,18 +42,18 @@ export function MapExplorer() {
   const searchParams = useSearchParams();
   const radius = FIXED_RADIUS_METERS;
   const [keyword, setKeyword] = useState(() => searchParams.get('q') ?? '');
-  // [스팟픽 나들이 전용 핵심 중분류 1단 필터 개편](2026-08-29 사용자 지시): 대분류→중분류
-  // 2단 구조를 철회하고 핵심 중분류 칩(최대 5개)만 1단으로 노출한다. UI는 "칩 id" 단위로
-  // 선택 상태를 관리하고(칩 하나가 실제 category_min 여러 개를 아우를 수 있음 — 예: "박물관"
-  // 칩은 3개 category_min을 동시에 포함), 실제 필터링에 쓰는 category_min 배열은 선택된
-  // 칩들의 minors를 모두 펼친 파생값이다.
-  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
+  // [스팟픽 나들이 전용 핵심 중분류 1단 필터 개편](2026-08-28~29 사용자 지시): 대분류→중분류
+  // 2단 구조를 철회하고 핵심 중분류 칩만 1단으로 노출한다. UI는 "칩 id" 단위로 선택 상태를
+  // 관리하고(칩 하나가 실제 category_min 여러 개를 아우를 수 있음 — 예: "박물관" 칩은 2개
+  // category_min을 동시에 포함), 실제 필터링에 쓰는 category_min 배열은 선택된 칩의 minors를
+  // 펼친 파생값이다.
+  // [단일 선택으로 변경](2026-08-29 사용자 지시): 기존 다중 선택(최대 5개)을 철회하고 한 번에
+  // 하나의 칩만 선택 가능하도록 변경 — 배열이 아니라 단일 nullable id로 상태를 단순화한다.
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const selectedCategoryMins = useMemo(
-    () => CORE_SPOT_CATEGORIES.filter((c) => selectedCategoryIds.includes(c.id)).flatMap((c) => c.minors),
-    [selectedCategoryIds]
+    () => CORE_SPOT_CATEGORIES.find((c) => c.id === selectedCategoryId)?.minors ?? [],
+    [selectedCategoryId]
   );
-  const [isMaxSelectionToastVisible, setIsMaxSelectionToastVisible] = useState(false);
-  const maxSelectionToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [items, setItems] = useState<NearbyItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<NearbyItem[] | null>(null);
@@ -133,14 +128,14 @@ export function MapExplorer() {
 
   const resetFilters = useCallback(() => {
     setKeyword('');
-    setSelectedCategoryIds([]);
+    setSelectedCategoryId(null);
   }, []);
 
-  // [스팟픽 나들이 전용 핵심 중분류 1단 필터 개편](2026-08-29): 핵심 중분류 칩(최대
-  // MAX_SPOT_CATEGORY_MIN_SELECTION개)을 id 단위로 토글한다. 제한 초과 시도는
-  // SpotCategoryFilter가 걸러 onLimitExceeded로 알려주므로 여기서는 정상 토글만 담당한다.
-  const handleToggleCategory = useCallback((id: string) => {
-    setSelectedCategoryIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  // [단일 선택으로 변경](2026-08-29 사용자 지시): 이미 선택된 칩을 다시 누르면 선택 해제
+  // (전체보기로 복귀), 다른 칩을 누르면 그 칩으로 선택이 교체된다 — 라디오 버튼과 동일한
+  // 동작. 복수 선택이 아니므로 "최대 개수 초과" 상황 자체가 없다.
+  const handleSelectCategory = useCallback((id: string) => {
+    setSelectedCategoryId((prev) => (prev === id ? null : id));
   }, []);
 
   const handleOpenAiRecommend = useCallback(() => setIsAiRecommendOpen(true), []);
@@ -150,21 +145,6 @@ export function MapExplorer() {
   const handleSelectFromAiRecommend = useCallback((item: NearbyItem) => {
     setIsAiRecommendOpen(false);
     setSelectedItem(item);
-  }, []);
-
-  const handleLimitExceeded = useCallback(() => {
-    if (maxSelectionToastTimerRef.current) clearTimeout(maxSelectionToastTimerRef.current);
-    setIsMaxSelectionToastVisible(true);
-    maxSelectionToastTimerRef.current = setTimeout(
-      () => setIsMaxSelectionToastVisible(false),
-      MAX_SELECTION_TOAST_DURATION_MS
-    );
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (maxSelectionToastTimerRef.current) clearTimeout(maxSelectionToastTimerRef.current);
-    };
   }, []);
 
   // spec/common/search.md 2.3: 카테고리 선택 시 지도 마커와 리스트가 즉시 동기화되어 렌더링
@@ -218,9 +198,8 @@ export function MapExplorer() {
           <LocationHeader addressName={sigunguName ?? addressName} onClick={openOnboarding} />
           <SearchBar value={keyword} onChange={setKeyword} />
           <SpotCategoryFilter
-            selectedCategoryIds={selectedCategoryIds}
-            onToggleCategory={handleToggleCategory}
-            onLimitExceeded={handleLimitExceeded}
+            selectedCategoryId={selectedCategoryId}
+            onSelectCategory={handleSelectCategory}
             onSelectAiRecommend={handleOpenAiRecommend}
           />
         </div>
@@ -268,9 +247,8 @@ export function MapExplorer() {
           <LocationHeader addressName={sigunguName ?? addressName} onClick={openOnboarding} />
           <SearchBar value={keyword} onChange={setKeyword} />
           <SpotCategoryFilter
-            selectedCategoryIds={selectedCategoryIds}
-            onToggleCategory={handleToggleCategory}
-            onLimitExceeded={handleLimitExceeded}
+            selectedCategoryId={selectedCategoryId}
+            onSelectCategory={handleSelectCategory}
             onSelectAiRecommend={handleOpenAiRecommend}
           />
           {/* implementation/todo.md: 지도 드래그 후 재검색 버튼 - 모바일에서는 필터 스택 하단에 노출해 겹침 방지 */}
@@ -319,10 +297,6 @@ export function MapExplorer() {
 
       {isOverLimit && (
         <Toast message="반경 내 시설이 너무 많습니다. 지도를 확대하거나 범위를 좁혀 상세히 탐색하세요." />
-      )}
-
-      {isMaxSelectionToastVisible && (
-        <Toast message={`중분류는 최대 ${MAX_SPOT_CATEGORY_MIN_SELECTION}개까지 선택할 수 있어요.`} />
       )}
 
       {selectedItem && (

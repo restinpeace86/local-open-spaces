@@ -123,3 +123,22 @@
   - **검증**: `npx tsc --noEmit`/`npm run test`(58파일 571건, 신규 `ai-recommend.test.ts`
     포함)/`npm run build` 통과, Playwright 실측(개발+프로덕션 서버) 전체 플로우 확인. 상세:
     `implementation/2026-08-29-spotpick-ai-recommend-and-core-category-filter.md`.
+
+- [x] **[행안부 어린이놀이시설 설치장소코드 매핑 + 박물관/미술관 분리 + 스팟픽 단일 선택]**
+  (2026-08-29 완료)
+  - 사용자가 지정한 URL(exfc5/getExfc5)을 실측 호출한 결과 설명한 필터링 로직(설치장소코드)과
+    맞지 않는 별개 API(우수어린이놀이시설 183건)임을 확인, 대표 확인 하에 이미 구현된
+    pfc3(LOCALDATA_PLAYGROUND) 어댑터를 instlPlaceCd 기준으로 개선하는 것으로 범위 확정.
+  - A003/A013/A022/A030/A032/A033/A092/A093 8개 설치장소코드를 실측 기반으로
+    category_min에 매핑(RAW), 박물관/미술관은 별개 유지, 자연휴양림/육아종합지원센터/
+    유아교육진흥원 신설.
+  - **중대 발견**: upsertRowsSafeMerge의 COALESCE 안전 병합이 이미 RULE로 분류된 기존 행에는
+    새 매핑을 반영하지 못함(A092/A093 143/49건 전량 0건 반영 확인) — 대표 승인 하에 8개
+    코드 한정 명시적 덮어쓰기 백필 스크립트 추가, run-monthly.mjs에 상시 단계로 연결.
+  - 스팟픽 핵심 중분류 필터를 복수 선택(최대 5개)에서 단일 선택(라디오 버튼 방식)으로 변경.
+  - **실측 검증**: 로컬에서 실제 어댑터 실행(85,298건 수신, 82,381건 적재) + 백필 실행
+    (3,841건 UPDATE, 육아종합지원센터 142/유아교육진흥원 48건 포함) 완료, DB 직접 조회로
+    데이터 무결성 확인, Playwright로 /nearby 단일 선택 동작 및 category_min 필터-API 연동
+    확인.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(59파일 585건)/`npm run build` 통과. 상세:
+    `implementation/2026-08-29-localdata-playground-install-place-category-and-single-select.md`.

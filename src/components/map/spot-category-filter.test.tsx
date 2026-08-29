@@ -1,23 +1,20 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { SpotCategoryFilter, MAX_SPOT_CATEGORY_MIN_SELECTION } from './spot-category-filter';
+import { SpotCategoryFilter } from './spot-category-filter';
 
 describe('SpotCategoryFilter', () => {
-  it('핵심 중분류 칩(공원/문화센터/박물관/도서관/키즈카페/놀이터)이 1단으로 모두 노출된다', () => {
-    render(
-      <SpotCategoryFilter
-        selectedCategoryIds={[]}
-        onToggleCategory={vi.fn()}
-        onLimitExceeded={vi.fn()}
-        onSelectAiRecommend={vi.fn()}
-      />
-    );
+  it('핵심 중분류 칩(공원/문화센터/박물관/미술관/도서관/키즈카페/놀이터 등)이 1단으로 모두 노출된다', () => {
+    render(<SpotCategoryFilter selectedCategoryId={null} onSelectCategory={vi.fn()} onSelectAiRecommend={vi.fn()} />);
     expect(screen.getByText(/공원/)).toBeInTheDocument();
     expect(screen.getByText(/문화센터\/문화의집/)).toBeInTheDocument();
-    expect(screen.getByText(/박물관/)).toBeInTheDocument();
+    expect(screen.getByText(/^🏛️ 박물관$/)).toBeInTheDocument();
+    expect(screen.getByText(/미술관/)).toBeInTheDocument();
     expect(screen.getByText(/도서관/)).toBeInTheDocument();
     expect(screen.getByText(/키즈카페/)).toBeInTheDocument();
     expect(screen.getByText(/놀이터/)).toBeInTheDocument();
+    expect(screen.getByText(/자연휴양림/)).toBeInTheDocument();
+    expect(screen.getByText(/육아종합지원센터/)).toBeInTheDocument();
+    expect(screen.getByText(/유아교육진흥원/)).toBeInTheDocument();
     // 체육시설/행정 대관류는 필터 목록에서 제외된다.
     expect(screen.queryByText(/테니스장/)).not.toBeInTheDocument();
     expect(screen.queryByText(/강당/)).not.toBeInTheDocument();
@@ -25,77 +22,38 @@ describe('SpotCategoryFilter', () => {
 
   it('AI 추천 칩을 누르면 onSelectAiRecommend가 호출된다(다른 칩과 달리 선택 상태로 남지 않음)', () => {
     const onSelectAiRecommend = vi.fn();
-    const onToggleCategory = vi.fn();
+    const onSelectCategory = vi.fn();
     render(
       <SpotCategoryFilter
-        selectedCategoryIds={[]}
-        onToggleCategory={onToggleCategory}
-        onLimitExceeded={vi.fn()}
+        selectedCategoryId={null}
+        onSelectCategory={onSelectCategory}
         onSelectAiRecommend={onSelectAiRecommend}
       />
     );
     fireEvent.click(screen.getByText(/AI 추천/));
     expect(onSelectAiRecommend).toHaveBeenCalledTimes(1);
-    expect(onToggleCategory).not.toHaveBeenCalled();
+    expect(onSelectCategory).not.toHaveBeenCalled();
   });
 
-  it('일반 칩을 클릭하면 onToggleCategory가 칩 id로 호출된다', () => {
-    const onToggleCategory = vi.fn();
+  it('일반 칩을 클릭하면 onSelectCategory가 칩 id로 호출된다', () => {
+    const onSelectCategory = vi.fn();
+    render(<SpotCategoryFilter selectedCategoryId={null} onSelectCategory={onSelectCategory} onSelectAiRecommend={vi.fn()} />);
+    fireEvent.click(screen.getByText(/도서관/));
+    expect(onSelectCategory).toHaveBeenCalledWith('library');
+  });
+
+  it('[단일 선택으로 변경](2026-08-29) 이미 선택된 칩을 다시 눌러도 onSelectCategory는 그대로 그 id로 호출된다(해제는 부모 상태에서 처리)', () => {
+    const onSelectCategory = vi.fn();
     render(
-      <SpotCategoryFilter
-        selectedCategoryIds={[]}
-        onToggleCategory={onToggleCategory}
-        onLimitExceeded={vi.fn()}
-        onSelectAiRecommend={vi.fn()}
-      />
+      <SpotCategoryFilter selectedCategoryId="library" onSelectCategory={onSelectCategory} onSelectAiRecommend={vi.fn()} />
     );
     fireEvent.click(screen.getByText(/도서관/));
-    expect(onToggleCategory).toHaveBeenCalledWith('library');
+    expect(onSelectCategory).toHaveBeenCalledWith('library');
   });
 
-  it(`이미 ${MAX_SPOT_CATEGORY_MIN_SELECTION}개 선택된 상태에서 새 칩을 누르면 onLimitExceeded만 호출되고 onToggleCategory는 호출되지 않는다`, () => {
-    const onToggleCategory = vi.fn();
-    const onLimitExceeded = vi.fn();
-    const fiveSelected = ['park', 'culture-center', 'museum', 'library', 'kids-cafe'];
-    render(
-      <SpotCategoryFilter
-        selectedCategoryIds={fiveSelected}
-        onToggleCategory={onToggleCategory}
-        onLimitExceeded={onLimitExceeded}
-        onSelectAiRecommend={vi.fn()}
-      />
-    );
-    fireEvent.click(screen.getByText(/놀이터/));
-    expect(onLimitExceeded).toHaveBeenCalledTimes(1);
-    expect(onToggleCategory).not.toHaveBeenCalled();
-  });
-
-  it('5개 선택된 상태에서 이미 선택된 칩(해제)은 제한과 무관하게 onToggleCategory가 호출된다', () => {
-    const onToggleCategory = vi.fn();
-    const onLimitExceeded = vi.fn();
-    const fiveSelected = ['park', 'culture-center', 'museum', 'library', 'kids-cafe'];
-    render(
-      <SpotCategoryFilter
-        selectedCategoryIds={fiveSelected}
-        onToggleCategory={onToggleCategory}
-        onLimitExceeded={onLimitExceeded}
-        onSelectAiRecommend={vi.fn()}
-      />
-    );
-    fireEvent.click(screen.getByText(/도서관/));
-    expect(onToggleCategory).toHaveBeenCalledWith('library');
-    expect(onLimitExceeded).not.toHaveBeenCalled();
-  });
-
-  it('선택된 칩은 강조 스타일로 표시된다', () => {
-    render(
-      <SpotCategoryFilter
-        selectedCategoryIds={['park']}
-        onToggleCategory={vi.fn()}
-        onLimitExceeded={vi.fn()}
-        onSelectAiRecommend={vi.fn()}
-      />
-    );
+  it('선택된 칩만 강조 스타일로 표시되고 다른 칩은 강조되지 않는다(단일 선택)', () => {
+    render(<SpotCategoryFilter selectedCategoryId="park" onSelectCategory={vi.fn()} onSelectAiRecommend={vi.fn()} />);
     expect(screen.getByText(/^🌳 공원$/).className).toContain('bg-blue-600');
+    expect(screen.getByText(/^📚 도서관$/).className).not.toContain('bg-blue-600');
   });
 });

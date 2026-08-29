@@ -2,9 +2,22 @@ import { describe, expect, it } from 'vitest';
 import { AI_RECOMMEND_CATEGORY_ID, CORE_SPOT_CATEGORIES, isKnownSpotCategoryMin } from './spot-category-groups';
 
 describe('CORE_SPOT_CATEGORIES', () => {
-  it('AI 추천 액션 칩 + 나들이 핵심 중분류 6종으로 구성된다', () => {
-    expect(CORE_SPOT_CATEGORIES).toHaveLength(7);
+  it('AI 추천 액션 칩 + 나들이 핵심 중분류로 구성된다', () => {
+    expect(CORE_SPOT_CATEGORIES).toHaveLength(11);
     expect(CORE_SPOT_CATEGORIES[0].id).toBe(AI_RECOMMEND_CATEGORY_ID);
+  });
+
+  it('[행안부 놀이시설 매핑](2026-08-29) 박물관과 미술관은 별개 칩이다', () => {
+    const museum = CORE_SPOT_CATEGORIES.find((c) => c.id === 'museum');
+    const artMuseum = CORE_SPOT_CATEGORIES.find((c) => c.id === 'art-museum');
+    expect(museum?.minors).not.toContain('미술관');
+    expect(artMuseum?.minors).toEqual(['미술관']);
+  });
+
+  it('[행안부 놀이시설 매핑](2026-08-29) 자연휴양림/육아종합지원센터/유아교육진흥원 칩이 존재한다', () => {
+    expect(CORE_SPOT_CATEGORIES.find((c) => c.minors.includes('자연휴양림'))).toBeTruthy();
+    expect(CORE_SPOT_CATEGORIES.find((c) => c.minors.includes('육아종합지원센터'))).toBeTruthy();
+    expect(CORE_SPOT_CATEGORIES.find((c) => c.minors.includes('유아교육진흥원'))).toBeTruthy();
   });
 
   it('AI 추천 칩은 실제 category_min을 가지지 않는다(별도 추천 액션이라 필터 대상이 아님)', () => {
