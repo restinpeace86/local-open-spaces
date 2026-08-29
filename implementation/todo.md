@@ -217,3 +217,14 @@
     개선), 초기 SSR HTML에 스켈레톤이 이미 포함됨을 curl로 확인.
   - **검증**: `npx tsc --noEmit`/`npm run test`(60파일 613건)/`npm run build` 통과. 상세:
     `implementation/2026-08-29-home-performance-lazy-loading.md`.
+
+- [x] **[EventCard 이미지:텍스트 4:6 포션 고정]** (2026-08-29 완료)
+  - 지시서 문구("카테고리 뱃지, 제목, 날짜 등이 텍스트 영역에 배치")가 기존 이미지 위
+    오버레이 뱃지(중분류/상태/마감임박)를 텍스트 영역으로 옮기라는 뜻인지 모호해
+    AskUserQuestion으로 확인 — "이미지 위 오버레이 유지(권장)"로 확정, 두 컨테이너의
+    flex-basis만 명시적으로 바꾸는 보수적 변경으로 진행.
+  - 이미지 컨테이너 `aspect-[16/9]`→`flex-[4]`, 텍스트 컨테이너 `flex-1`→`flex-[6]
+    min-h-0 overflow-hidden`(콘텐츠가 60%를 넘겨도 강제로 4:6 비율 유지, 넘치는 내용은
+    클립).
+  - **검증**: `npx tsc --noEmit`/`npm run test`(60파일 616건, 신규 4:6 포션 테스트 3건
+    포함)/`npm run build` 통과. 상세: `implementation/2026-08-29-eventcard-4-6-portion.md`.

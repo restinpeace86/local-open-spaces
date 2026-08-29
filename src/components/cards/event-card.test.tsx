@@ -71,3 +71,34 @@ describe('EventCard hideBadgeKeys', () => {
     expect(screen.queryByText('🎁 완전 무료')).not.toBeInTheDocument();
   });
 });
+
+// [EventCard 이미지:텍스트 4:6 포션 고정](2026-08-29 사용자 지시): 카드 고정 높이 안에서
+// 이미지/텍스트 영역이 flex-[4]/flex-[6]로 정확히 나뉘는지 검증한다(사용자 확인: 중분류
+// 태그·상태 라벨·마감임박 배너는 이미지 위 오버레이로 그대로 유지).
+describe('EventCard 이미지:텍스트 4:6 포션', () => {
+  it('이미지 영역은 flex-[4], 텍스트 영역은 flex-[6]으로 고정된다', () => {
+    render(<EventCard item={makeEventItem()} onSelect={() => {}} />);
+
+    const title = screen.getByText('도시농업 체험');
+    const textArea = title.parentElement!;
+    const imageArea = textArea.previousElementSibling!;
+
+    expect(imageArea).toHaveClass('flex-[4]');
+    expect(textArea).toHaveClass('flex-[6]');
+  });
+
+  it('이미지는 object-cover로 꽉 채워 찌그러짐을 방지한다', () => {
+    const { container } = render(
+      <EventCard item={makeEventItem({ thumbnail_url: 'https://example.com/thumb.jpg' })} onSelect={() => {}} />
+    );
+
+    const img = container.querySelector('img');
+    expect(img).toHaveClass('w-full', 'h-full', 'object-cover');
+  });
+
+  it('제목은 line-clamp-2로 줄 수가 제한된다', () => {
+    render(<EventCard item={makeEventItem()} onSelect={() => {}} />);
+
+    expect(screen.getByText('도시농업 체험')).toHaveClass('line-clamp-2');
+  });
+});
