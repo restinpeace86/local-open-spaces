@@ -6,11 +6,13 @@
 // 자체는 변경 없음, 스케줄 주기만 조정).
 //
 // 실제 코드 확인 결과(각 파일의 super({ targetTable: ... }) 호출 대상을 직접 조사, targetTable
-// 이 예외 없이 'open_spaces'인 어댑터 12개 + 레거시 스크립트 1개 = 13개):
-//   CITY_PARK, CULTURAL_FACILITY_SUMMARY, LOCALDATA_AMUSEMENT, GG_EVENTS, GO_CAMPING,
-//   NATIONAL_PARK_ECOTOUR, LOCALDATA_PLAYGROUND, PUBLIC_FACILITY_OPEN, SWIMMING_POOL,
-//   KOR_TOUR_API_V4(×3: KorTour/KorWithTour/KorPetTour — 공유 베이스 TourApiV4AreaBasedAdapter),
-//   CULTURE_FACILITY(cultural-spaces.mjs, 레거시 독립 스크립트).
+// 이 예외 없이 'open_spaces'인 어댑터 13개 + 레거시 스크립트 1개 = 14개):
+//   CITY_PARK, CULTURAL_FACILITY_SUMMARY, LOCALDATA_AMUSEMENT, GG_EVENTS, GG_KIDSCAFE,
+//   GO_CAMPING, NATIONAL_PARK_ECOTOUR, LOCALDATA_PLAYGROUND, PUBLIC_FACILITY_OPEN,
+//   SWIMMING_POOL, KOR_TOUR_API_V4(×3: KorTour/KorWithTour/KorPetTour — 공유 베이스
+//   TourApiV4AreaBasedAdapter), CULTURE_FACILITY(cultural-spaces.mjs, 레거시 독립 스크립트).
+// [경기 키즈카페/놀이시설 휴게음식점 수집](2026-08-29): GG_KIDSCAFE(openapi.gg.go.kr의
+// Kidscafe+Resrestrtkidscafe 통합) 신규 추가.
 //
 // KorTour/GoCamping 계열 4종은 증분 수집 파라미터를 지원하지 않아(실측 확인,
 // implementation/todo.md Task 2) 매회 전량 재수집(Full Ingest) 방식을 그대로 유지한다
@@ -30,6 +32,7 @@ import { CityParkAdapter } from './adapters/city-park-adapter.mjs';
 import { CulturalFacilitySummaryAdapter } from './adapters/cultural-facility-summary-adapter.mjs';
 import { AmusementParkAdapter } from './adapters/amusement-park-adapter.mjs';
 import { GgEventsAdapter } from './adapters/gg-events-adapter.mjs';
+import { GgKidscafeAdapter } from './adapters/gg-kidscafe-adapter.mjs';
 import { GoCampingAdapter } from './adapters/go-camping-adapter.mjs';
 import { NationalParkEcotourAdapter } from './adapters/national-park-ecotour-adapter.mjs';
 import { PlaygroundAdapter } from './adapters/playground-adapter.mjs';
@@ -50,6 +53,7 @@ const STEPS = [
   { label: 'CULTURAL_FACILITY_SUMMARY', run: ({ dryRun }) => new CulturalFacilitySummaryAdapter().run({ dryRun }) },
   { label: 'LOCALDATA_AMUSEMENT', run: ({ dryRun }) => new AmusementParkAdapter().run({ dryRun }) },
   { label: 'GG_EVENTS', run: ({ dryRun }) => new GgEventsAdapter().run({ dryRun }) },
+  { label: 'GG_KIDSCAFE', run: ({ dryRun }) => new GgKidscafeAdapter().run({ dryRun }) },
   { label: 'GO_CAMPING', run: ({ dryRun }) => new GoCampingAdapter().run({ dryRun }) },
   { label: 'NATIONAL_PARK_ECOTOUR', run: ({ dryRun }) => new NationalParkEcotourAdapter().run({ dryRun }) },
   { label: 'LOCALDATA_PLAYGROUND', run: ({ dryRun }) => new PlaygroundAdapter().run({ dryRun }) },

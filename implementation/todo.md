@@ -142,3 +142,18 @@
     확인.
   - **검증**: `npx tsc --noEmit`/`npm run test`(59파일 585건)/`npm run build` 통과. 상세:
     `implementation/2026-08-29-localdata-playground-install-place-category-and-single-select.md`.
+
+- [x] **[경기도 키즈카페 및 놀이시설 포함 휴게음식점 데이터 수집 어댑터 구축]**
+  (2026-08-29 완료)
+  - 경기데이터드림 Kidscafe(264건)/Resrestrtkidscafe(2,654건) 실측 확인 — 응답 봉투는
+    gg-events-adapter.mjs와 동일, 대부분 좌표 직접 제공(결측 시에만 VWorld 보정).
+  - Resrestrtkidscafe는 API 이름과 달리 한식/커피숍/편의점 등 34종 다양한 업종이
+    섞여 있음을 실측 확인, 업종 세분화 없이 소스 전체를 '놀이방식당' 신규 category_min
+    으로 매핑(Kidscafe는 기존 '키즈카페' 매핑).
+  - `GgKidscafeAdapter` 신규 구축(run-monthly.mjs STEPS 연결, `npm run
+    ingest:gg-kidscafe` 추가), 신규 소스라 이전 작업에서 발견한 COALESCE 안전 병합
+    이슈 없음(최초 upsert라 기존 값 충돌 자체가 없음).
+  - **실측 검증**: 로컬 실행(2,918건 수신 → 1,892건 실제 적재: 키즈카페 103/놀이방식당
+    1,789), DB 직접 조회로 카테고리 분포 및 데이터 무결성(인코딩 손상 없음) 확인.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(60파일 597건)/`npm run build` 통과. 상세:
+    `implementation/2026-08-29-gg-kidscafe-adapter.md`.
