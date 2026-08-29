@@ -105,6 +105,54 @@ export type Database = {
         }
         Relationships: []
       }
+      event_tickets: {
+        Row: {
+          booking_url: string
+          category: string | null
+          created_at: string
+          description: string | null
+          discount_price: number
+          discount_rate: number
+          event_period: string | null
+          id: string
+          image_url: string | null
+          is_active: boolean
+          location_name: string | null
+          original_price: number
+          title: string
+        }
+        Insert: {
+          booking_url: string
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          discount_price: number
+          discount_rate: number
+          event_period?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          location_name?: string | null
+          original_price: number
+          title: string
+        }
+        Update: {
+          booking_url?: string
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          discount_price?: number
+          discount_rate?: number
+          event_period?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          location_name?: string | null
+          original_price?: number
+          title?: string
+        }
+        Relationships: []
+      }
       events: {
         Row: {
           booking_status: string | null

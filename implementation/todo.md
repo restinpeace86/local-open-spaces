@@ -352,3 +352,29 @@
     삭제 완료).
   - **검증**: `npx tsc --noEmit`/`npm run test`(65파일 679건)/`npm run build` 통과. 상세:
     `implementation/2026-08-29-deals-affiliate-system-mvp.md`.
+
+- [x] **[이벤트픽 & 티켓 할인 정보 MVP: 이벤트/티켓 데이터베이스, API 및 UI 구축]**
+  (2026-08-29 완료)
+  - **사전 확인에서 테이블명 충돌 발견**: 지시서가 `events` 테이블 생성을 요구했으나,
+    이미 위치/일정 기반으로 20개 이상 수집 어댑터가 채우는 핵심 `events` 테이블이
+    존재하고(홈 "이벤트픽" 탭 전체가 이걸로 동작 중) 스키마도 전혀 다름 —
+    `AskUserQuestion`으로 확인해 사용자가 "새 테이블(`event_tickets`)로 분리"를 선택,
+    기존 events 테이블은 전혀 건드리지 않음.
+  - `event_tickets` 테이블 신설(카테고리/행사기간/장소/정가/할인가/할인율/예매링크/
+    노출여부) — deals와 동일한 RLS(service_role 전용) 패턴.
+  - `GET /api/event-tickets`(활성 이벤트 최신순, 페이지네이션) 신설.
+  - `scripts/seed-event-tickets.mjs`: 지시서가 명시적으로 요구한 샘플 데이터(가을 단풍
+    축제/키즈 체험/워터파크/동물원/농촌 체험 5건) 초기화, 멱등 처리(이미 데이터 있으면
+    스킵).
+  - **실행 중 버그 발견 및 수정**: `import.meta.url`을 `process.argv[1]`과 단순 문자열
+    결합으로 비교하는 "직접 실행 가드"가 Windows에서 항상 false가 되어 스크립트를
+    실행해도 아무 것도 삽입되지 않는 것을 실측 발견 — 기존 `run-monthly.mjs` 등이 쓰던
+    `pathToFileURL(process.argv[1]).href` 비교로 교체해 해결.
+  - 홈 탭(기본 탭)에 상시 노출되는 "🎫 할인 티켓·이벤트" 그리드 섹션 신설(Hero 아래,
+    "현재 이용 가능" 위) — `EventTicketCard`/`EventTicketDetailModal`(설명/기간/장소/
+    가격 + 새 창 예매 버튼, deals와 달리 제휴 문구는 지시서에 없어 추가하지 않음).
+  - **실측 검증**: anon 키로 select/insert 모두 RLS에 차단됨, 시드 스크립트 재실행
+    멱등 확인, 실행 중인 로컬 서버의 `GET /api/event-tickets`가 시드된 5건을 정상
+    반환함을 확인.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(66파일 685건)/`npm run build` 통과. 상세:
+    `implementation/2026-08-29-event-tickets-mvp.md`.

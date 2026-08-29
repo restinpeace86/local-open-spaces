@@ -15,9 +15,11 @@ import { themeOptionsFor } from '@/lib/home-categories';
 import { SpaceGridCard } from '@/components/region/space-grid-card';
 import { EventCard } from '@/components/cards/event-card';
 import { DealCard, Deal } from '@/components/cards/deal-card';
+import { EventTicketCard, EventTicket } from '@/components/cards/event-ticket-card';
 import { EmptyState } from '@/components/map/empty-state';
 import { DetailModal } from '@/components/map/detail-modal';
 import { DealDetailModal } from '@/components/map/deal-detail-modal';
+import { EventTicketDetailModal } from '@/components/map/event-ticket-detail-modal';
 import { LocationOnboardingModal } from '@/components/map/location-onboarding-modal';
 
 // docs/spec.md 2.2: 메인 홈 레이아웃 스택 — Hero Carousel → 5대 카테고리 Quick 그리드 → 큐레이션 카드 피드
@@ -98,6 +100,31 @@ function useDealsFeed() {
   }, []);
 
   return { deals, ensureLoaded };
+}
+
+// [이벤트픽 & 티켓 할인 정보 MVP](2026-08-29 사용자 지시): "홈" 탭에 상시 노출되는 축제/
+// 체험/입장권 할인 카드 그리드 전용 — useDealsFeed와 동일하게 지역 개념이 없어(수동 큐레이션
+// 콘텐츠) 처음 'home' 탭이 보일 때 한 번만 페칭한다.
+function useEventTicketsFeed() {
+  const [eventTickets, setEventTickets] = useState<EventTicket[] | null>(null);
+  const loadedRef = useRef(false);
+
+  const ensureLoaded = useCallback(() => {
+    if (loadedRef.current) return;
+    loadedRef.current = true;
+
+    fetch('/api/event-tickets')
+      .then((res) => res.json())
+      .then((data: { eventTickets?: EventTicket[] }) => {
+        if (Array.isArray(data.eventTickets)) setEventTickets(data.eventTickets);
+        else loadedRef.current = false;
+      })
+      .catch(() => {
+        loadedRef.current = false;
+      });
+  }, []);
+
+  return { eventTickets, ensureLoaded };
 }
 
 // Task 9-5-1(2026-08-22): "🏞️ 목적별 추천 스팟" 칩 — 기본으로 선택된 테마가 없어(6개 중
@@ -219,6 +246,7 @@ export function HomeView({
   const [activeTab, setActiveTab] = useState<HomeSubTab>('home');
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
   const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
+  const [selectedEventTicket, setSelectedEventTicket] = useState<EventTicket | null>(null);
   // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시) 요구사항 3: "전체보기"가 페이지 이동 대신
   // 이 화면 위 바텀시트로 뜬다 — 어떤 종류의 전체보기를 열지만 상태로 들고 있으면 된다.
   const [browseSheetMode, setBrowseSheetMode] = useState<EventBrowseSheetMode | null>(null);
@@ -242,6 +270,7 @@ export function HomeView({
   // Task 9-6-18: 홈 탭의 "가성비 행복" 섹션이 제거되어 이제 "🎁 무료·공공" 서브탭 전용이다.
   const { freeFeed, ensureLoaded } = useFreeFeed(region, dataType);
   const { deals, ensureLoaded: ensureDealsLoaded } = useDealsFeed();
+  const { eventTickets, ensureLoaded: ensureEventTicketsLoaded } = useEventTicketsFeed();
   const {
     selectedTheme,
     items: themeSpotItems,
@@ -327,6 +356,13 @@ export function HomeView({
     if (activeTab === 'hotdeal') ensureDealsLoaded();
   }, [activeTab, ensureDealsLoaded]);
 
+  // [이벤트픽 & 티켓 할인 정보 MVP](2026-08-29 사용자 지시): "홈" 탭에 상시 노출되는
+  // 섹션이라 'hotdeal'/'free'와 달리 'home' 탭에서 로드를 시작한다(기본 탭이라 사실상
+  // 마운트 직후 한 번 페칭됨).
+  useEffect(() => {
+    if (activeTab === 'home') ensureEventTicketsLoaded();
+  }, [activeTab, ensureEventTicketsLoaded]);
+
   const visibleHeroEvents = heroEvents.slice(0, HERO_VISIBLE_COUNT);
   // Task 9-1-9: 10개 초과 시 "전체 보기" CTA 카드를 마지막 슬라이드에 노출한다.
   // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시): 더 이상 페이지 이동 링크가 아니라
@@ -380,6 +416,31 @@ export function HomeView({
                   hasMore={heroHasMore}
                   onMoreClick={() => setBrowseSheetMode('today')}
                 />
+              </section>
+            )}
+
+            {/* [이벤트픽 & 티켓 할인 정보 MVP](2026-08-29 사용자 지시): 지역 축제/체험
+                프로그램/입장권 할인 정보를 그리드로 보여주는 상시 섹션. 다른 섹션과 동일한
+                가변 노출 원칙 — 로드 전(null)이면 스켈레톤, 로드 후 0건이면 섹션 자체를
+                숨긴다. */}
+            {(eventTickets === null || eventTickets.length > 0) && (
+              <section aria-label="이벤트·티켓 할인">
+                <h2 className="text-base font-bold text-gray-900 mb-3 px-4">🎫 할인 티켓·이벤트</h2>
+                {eventTickets === null ? (
+                  <div className="px-4">
+                    <FreeFeedSkeleton label="할인 티켓·이벤트 불러오는 중" />
+                  </div>
+                ) : (
+                  <div className="px-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                    {eventTickets.map((eventTicket) => (
+                      <EventTicketCard
+                        key={eventTicket.id}
+                        eventTicket={eventTicket}
+                        onSelect={setSelectedEventTicket}
+                      />
+                    ))}
+                  </div>
+                )}
               </section>
             )}
 
@@ -558,6 +619,9 @@ export function HomeView({
       )}
       {selectedItem && <DetailModal item={selectedItem} onClose={() => setSelectedItem(null)} />}
       {selectedDeal && <DealDetailModal deal={selectedDeal} onClose={() => setSelectedDeal(null)} />}
+      {selectedEventTicket && (
+        <EventTicketDetailModal eventTicket={selectedEventTicket} onClose={() => setSelectedEventTicket(null)} />
+      )}
       {isOnboardingOpen && (
         <LocationOnboardingModal onConfirm={confirmLocation} onClose={closeOnboarding} />
       )}

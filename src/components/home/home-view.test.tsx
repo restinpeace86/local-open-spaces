@@ -265,6 +265,70 @@ describe('HomeView', () => {
     });
   });
 
+  // [이벤트픽 & 티켓 할인 정보 MVP](2026-08-29 사용자 지시): "홈" 탭(기본 탭)에 상시
+  // 노출되는 축제/체험/입장권 할인 그리드 — 별도 탭 클릭 없이 마운트만으로 페칭된다.
+  describe('할인 티켓·이벤트 섹션', () => {
+    function stubFetchEventTickets(eventTickets: unknown[]) {
+      const fetchMock = vi.fn((url: string) => {
+        if (url.startsWith('/api/event-tickets')) {
+          return Promise.resolve({ json: () => Promise.resolve({ eventTickets }) } as Response);
+        }
+        return Promise.resolve({ json: () => Promise.resolve({ heroEvents: [] }) } as Response);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      return fetchMock;
+    }
+
+    function makeEventTicket(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 'ticket-1',
+        title: '가을 단풍 나들이 축제',
+        description: '온 가족이 함께 즐기는 가을 단풍길 산책 축제',
+        category: '지역축제',
+        event_period: '2026-10-01 ~ 2026-10-10',
+        location_name: '중앙공원 일대',
+        original_price: 10000,
+        discount_price: 6000,
+        discount_rate: 40,
+        image_url: null,
+        booking_url: 'https://example.com/tickets/autumn-festival',
+        is_active: true,
+        created_at: '2026-08-29T00:00:00+00:00',
+        ...overrides,
+      };
+    }
+
+    it('홈 탭에 마운트되면 별도 클릭 없이 할인 티켓 카드를 보여준다', async () => {
+      stubFetchEventTickets([makeEventTicket()]);
+      render(<HomeView initialHeroEvents={[]} />);
+
+      expect(await screen.findByText('가을 단풍 나들이 축제')).toBeInTheDocument();
+      expect(screen.getByText('📅 2026-10-01 ~ 2026-10-10')).toBeInTheDocument();
+      expect(screen.getByText('📍 중앙공원 일대')).toBeInTheDocument();
+    });
+
+    it('할인 티켓이 0건이면 섹션 자체를 숨긴다', async () => {
+      stubFetchEventTickets([]);
+      render(<HomeView initialHeroEvents={[]} />);
+
+      await waitFor(() => {
+        expect(screen.queryByLabelText('이벤트·티켓 할인')).not.toBeInTheDocument();
+      });
+    });
+
+    it('카드를 클릭하면 상세 모달에 설명/가격/예매 버튼을 보여준다', async () => {
+      stubFetchEventTickets([makeEventTicket()]);
+      render(<HomeView initialHeroEvents={[]} />);
+
+      fireEvent.click(await screen.findByText('가을 단풍 나들이 축제'));
+
+      expect(await screen.findByText('🎟️ 할인 티켓 예매하기')).toBeInTheDocument();
+      const bookingLink = screen.getByText('🎟️ 할인 티켓 예매하기').closest('a');
+      expect(bookingLink).toHaveAttribute('href', 'https://example.com/tickets/autumn-festival');
+      expect(bookingLink).toHaveAttribute('target', '_blank');
+    });
+  });
+
   // Task 9-3-1: "무료·공공" 탭은 스크롤 여부와 무관하게 탭 선택 즉시 지연 페칭을 트리거한다.
   it('무료·공공 서브탭 클릭 시 지연 페칭된 무료 피드만 보여준다', async () => {
     stubFetchFreeFeed([makeSpaceItem()]);
