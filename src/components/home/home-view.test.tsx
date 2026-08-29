@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HomeView } from './home-view';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
@@ -117,7 +117,15 @@ describe('HomeView', () => {
     stubFetchFreeFeed([]);
   });
 
-  afterEach(() => {
+  // [홈 화면 성능 최적화](2026-08-29 사용자 지시): "현재 이용 가능"/"예약 가능" 지연 페칭
+  // effect가 이제 addressName 유무와 무관하게 마운트 시 항상 실행돼, 이 effect의 결과를
+  // 검증하지 않는 기존 동기(sync) 테스트들에서도 테스트 종료 후 상태 업데이트가 걸려
+  // "not wrapped in act(...)" 경고가 뜬다 — 다음 테스트로 넘어가기 전에 대기 중인 마이크로
+  // 태스크를 한 번 비워 정리한다(테스트 결과 자체에는 영향 없음, 콘솔 경고 제거 목적).
+  afterEach(async () => {
+    await act(async () => {
+      await Promise.resolve();
+    });
     vi.unstubAllGlobals();
   });
 
@@ -236,7 +244,7 @@ describe('HomeView', () => {
   // Task 9-1-3: 유저가 실제 위치를 설정하면(온보딩 확정 시 이미 계산돼 저장된 sigungu_name)
   // 그 값을 그대로 넘겨 홈 피드를 즉시 재조회한다(재계산 없음).
   // 사용자 피드백(2026-08-22): 실제 좌표(lat/lng)도 함께 넘겨 서버가 가까운 순으로 재정렬하도록 한다.
-  it('유저 위치가 설정돼 있으면 저장된 sigungu_name과 좌표로 /api/home/feed를 재조회한다(Hero만)', async () => {
+  it('유저 위치가 설정돼 있으면 저장된 sigungu_name과 좌표로 /api/home/feed를 재조회한다', async () => {
     localStorage.setItem(
       'user_location',
       JSON.stringify({
@@ -260,9 +268,18 @@ describe('HomeView', () => {
     render(<HomeView initialHeroEvents={[makeEventItem()]} />);
 
     expect(await screen.findByText('재조회된 행사')).toBeInTheDocument();
-    expect(fetchMock).toHaveBeenCalledWith(
-      `/api/home/feed?sigungu=${encodeURIComponent('성남시 분당구')}&lat=37.4&lng=127.2`
-    );
+
+    // [홈 화면 성능 최적화](2026-08-29 사용자 지시): useUserLocation의 localStorage 읽기가
+    // 마운트 이후 effect에서 비동기로 끝나 addressName이 null→값 순으로 바뀌므로, 이 재조회
+    // effect가 (a) 주소 미확정 상태로 한 번, (b) 주소 확정 후 다시 한 번, 총 두 번 호출될 수
+    // 있다 — 정확한 파라미터를 실은 호출이 "그 중 하나"이기만 하면 된다(호출 횟수 자체는
+    // 검증 대상이 아님). URLSearchParams는 공백을 %20이 아니라 +로 인코딩하므로 문자열
+        // 그대로 비교하지 않고 파싱해서 비교한다.
+    const matchedExpectedCall = fetchMock.mock.calls.some(([url]) => {
+      const params = new URL(url as string, 'http://localhost').searchParams;
+      return params.get('sigungu') === '성남시 분당구' && params.get('lat') === '37.4' && params.get('lng') === '127.2';
+    });
+    expect(matchedExpectedCall).toBe(true);
   });
 
   // 사용자 피드백(2026-08-22): 헤더 위치 표기가 상세 도로명주소라서 검색바를 가릴 정도였다 —
@@ -315,13 +332,29 @@ describe('HomeView', () => {
       'user_location',
       JSON.stringify({ lat: 37.4, lng: 127.2, address_name: '경기도 성남시 분당구', sigungu_name: '성남시 분당구' })
     );
-    render(
-      <HomeView
-        initialHeroEvents={[]}
-        initialCurrentlyOngoingEvents={[makeEventItem({ id: 'ongoing-1', name: '진행중 행사' })]}
-        initialReservationOpenEvents={[makeEventItem({ id: 'reservation-1', name: '예약가능 행사' })]}
-      />
+    // [홈 화면 성능 최적화](2026-08-29 사용자 지시): 이 두 섹션은 더 이상 initial props가
+    // 아니라 마운트 후 /api/home/feed 지연 페칭으로 채워진다.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.startsWith('/api/home/feed')) {
+          return Promise.resolve({
+            json: () =>
+              Promise.resolve({
+                heroEvents: [],
+                currentlyOngoingEvents: [makeEventItem({ id: 'ongoing-1', name: '진행중 행사' })],
+                reservationOpenEvents: [makeEventItem({ id: 'reservation-1', name: '예약가능 행사' })],
+              }),
+          } as Response);
+        }
+        return Promise.resolve({ json: () => Promise.resolve({ freeFeed: [] }) } as Response);
+      })
     );
+
+    render(<HomeView initialHeroEvents={[]} />);
+
+    await screen.findByText('진행중 행사');
+    await screen.findByText('예약가능 행사');
 
     fireEvent.click(screen.getByText('✅ 현재 이용 가능').parentElement!.querySelector('button')!);
     expect(await screen.findByText('✅ 현재 이용 가능 전체보기')).toBeInTheDocument();
@@ -329,6 +362,72 @@ describe('HomeView', () => {
 
     fireEvent.click(screen.getByText('📋 예약 가능').parentElement!.querySelector('button')!);
     expect(await screen.findByText('📋 예약 가능 전체보기')).toBeInTheDocument();
+  });
+
+  // [홈 화면 성능 최적화](2026-08-29 사용자 지시) 요구사항 2: "현재 이용 가능"/"예약 가능"은
+  // 더 이상 SSR로 채워지지 않고 마운트 후 클라이언트에서 지연 페칭된다 — 그동안 스켈레톤을
+  // 먼저 보여줘야 한다.
+  describe('홈 슬라이드 Lazy Loading', () => {
+    it('데이터 도착 전에는 스켈레톤을 보여주고, 도착 후 실제 카드로 바뀐다', async () => {
+      let resolveFeed: (value: { json: () => Promise<unknown> }) => void = () => {};
+      vi.stubGlobal(
+        'fetch',
+        vi.fn((url: string) => {
+          if (url.startsWith('/api/home/feed')) {
+            return new Promise((resolve) => {
+              resolveFeed = resolve;
+            });
+          }
+          return Promise.resolve({ json: () => Promise.resolve({ freeFeed: [] }) } as Response);
+        })
+      );
+
+      render(<HomeView initialHeroEvents={[]} />);
+
+      expect(screen.getByLabelText('현재 이용 가능 불러오는 중')).toBeInTheDocument();
+      expect(screen.getByLabelText('예약 가능 불러오는 중')).toBeInTheDocument();
+      // 로딩 중에는 아직 몇 건인지 몰라 "전체보기" 버튼을 노출하지 않는다.
+      expect(screen.queryByText('전체보기 →')).not.toBeInTheDocument();
+
+      resolveFeed({
+        json: () =>
+          Promise.resolve({
+            heroEvents: [],
+            currentlyOngoingEvents: [makeEventItem({ id: 'ongoing-1', name: '진행중 행사' })],
+            reservationOpenEvents: [makeEventItem({ id: 'reservation-1', name: '예약가능 행사' })],
+          }),
+      });
+
+      expect(await screen.findByText('진행중 행사')).toBeInTheDocument();
+      expect(screen.getByText('예약가능 행사')).toBeInTheDocument();
+      expect(screen.queryByLabelText('현재 이용 가능 불러오는 중')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('예약 가능 불러오는 중')).not.toBeInTheDocument();
+    });
+
+    it('로드 결과가 0건이면 스켈레톤 대신 섹션 자체를 숨긴다', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn((url: string) => {
+          if (url.startsWith('/api/home/feed')) {
+            return Promise.resolve({
+              json: () =>
+                Promise.resolve({ heroEvents: [], currentlyOngoingEvents: [], reservationOpenEvents: [] }),
+            } as Response);
+          }
+          return Promise.resolve({ json: () => Promise.resolve({ freeFeed: [] }) } as Response);
+        })
+      );
+
+      render(<HomeView initialHeroEvents={[]} />);
+
+      await waitFor(() => {
+        expect(screen.queryByLabelText('현재 이용 가능 불러오는 중')).not.toBeInTheDocument();
+      });
+      expect(screen.queryByLabelText(/현재 이용 가능/)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/예약 가능/)).not.toBeInTheDocument();
+      expect(screen.queryByText('✅ 현재 이용 가능')).not.toBeInTheDocument();
+      expect(screen.queryByText('📋 예약 가능')).not.toBeInTheDocument();
+    });
   });
 
   it('Hero Carousel 항목이 10개 이하면 "전체 보기" CTA 카드를 보여주지 않는다', () => {

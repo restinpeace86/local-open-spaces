@@ -6,7 +6,7 @@ import { useUserLocation } from '@/hooks/use-user-location';
 import { HomeHeader } from '@/components/home/home-header';
 import { HomeSubTabs, HomeSubTab } from '@/components/home/home-sub-tabs';
 import { HeroCarousel } from '@/components/home/hero-carousel';
-import { ReservationOpenSlider } from '@/components/home/reservation-open-slider';
+import { ReservationOpenSlider, ReservationOpenSliderSkeleton } from '@/components/home/reservation-open-slider';
 import { EventBrowseSheet, EventBrowseSheetMode } from '@/components/home/event-browse-sheet';
 import { MajorCategoryGrid } from '@/components/home/major-category-grid';
 import { FreeFeedSkeleton } from '@/components/home/free-feed-skeleton';
@@ -184,12 +184,8 @@ function useEventSearch() {
 
 export function HomeView({
   initialHeroEvents,
-  initialReservationOpenEvents = [],
-  initialCurrentlyOngoingEvents = [],
 }: {
   initialHeroEvents: NearbyItem[];
-  initialReservationOpenEvents?: NearbyItem[];
-  initialCurrentlyOngoingEvents?: NearbyItem[];
 }) {
   const { center, addressName, sigunguName, isOnboardingOpen, confirmLocation, openOnboarding, closeOnboarding } =
     useUserLocation();
@@ -199,8 +195,12 @@ export function HomeView({
   // 이 화면 위 바텀시트로 뜬다 — 어떤 종류의 전체보기를 열지만 상태로 들고 있으면 된다.
   const [browseSheetMode, setBrowseSheetMode] = useState<EventBrowseSheetMode | null>(null);
   const [heroEvents, setHeroEvents] = useState<NearbyItem[]>(initialHeroEvents);
-  const [reservationOpenEvents, setReservationOpenEvents] = useState<NearbyItem[]>(initialReservationOpenEvents);
-  const [currentlyOngoingEvents, setCurrentlyOngoingEvents] = useState<NearbyItem[]>(initialCurrentlyOngoingEvents);
+  // [홈 화면 성능 최적화](2026-08-29 사용자 지시): 이 두 섹션은 더 이상 Server Component가
+  // 미리 계산해 넘겨주지 않는다(라운드로빈 믹스 연산 포함 3개 쿼리를 SSR에서 한 번에 처리하던
+  // 것이 초기 응답을 지연시키는 원인이었음) — 대신 null(아직 로드 전, 스켈레톤 노출)로 시작해
+  // 마운트 직후 클라이언트에서 지연 페칭한다. Hero만 SSR로 즉시 렌더링된다.
+  const [reservationOpenEvents, setReservationOpenEvents] = useState<NearbyItem[] | null>(null);
+  const [currentlyOngoingEvents, setCurrentlyOngoingEvents] = useState<NearbyItem[] | null>(null);
   const { keyword: searchKeyword, results: searchResults, isSearching, search: handleSearchChange } = useEventSearch();
   const isSearchActive = searchKeyword.trim().length > 0;
   // Task 9-6-10(2026-08-23): 하단 탭 재편으로 이 화면이 "이벤트픽"(시한성 이벤트 전용)이
@@ -239,36 +239,47 @@ export function HomeView({
   );
 
   // Task 9-1-1: Server Component는 기본 지역(성남시 분당구)으로만 렌더링할 수 있으므로,
-  // 유저가 실제로 위치를 설정한 경우(addressName이 채워짐)에만 그 지역으로 재조회한다.
-  // 위치 미설정 상태(온보딩 대기 중, addressName === null)에서는 기본값 렌더링을 그대로 둔다.
+  // 유저가 실제로 위치를 설정한 경우(addressName이 채워짐)에만 좌표까지 함께 넘겨 그 지역
+  // 기준으로 재조회한다. 위치 미설정 상태(addressName === null)에서는 좌표 없이 기본 지역
+  // (서버가 DEFAULT_HOME_REGION으로 폴백)으로 조회한다.
   // Task 9-1-3: 위치 온보딩 확정 시 한 번만 계산해 저장해 둔 sigunguName을 그대로 넘긴다 —
   // 피드를 불러올 때마다(요청마다) 주소 문자열을 다시 파싱하지 않는다.
   // 사용자 피드백(2026-08-22): 위치가 설정/재설정되면(addressName 변경) 실제 좌표(center)도
   // 함께 넘겨, 서버가 이미 걸러둔 후보군 안에서 가까운 순서로 재정렬하도록 한다.
-  // Task 9-3-1: 재조회 대상은 Hero뿐이다 — 무료·공공 피드는 useFreeFeed가 region 변경을
-  // 직접 감지해(정확히는 아래 effect가 이미 로드된 경우에만) 별도로 다시 페칭한다.
+  // [홈 화면 성능 최적화](2026-08-29 사용자 지시): 이전에는 addressName이 없으면(대부분의
+  // 첫 방문자) 이 effect 자체가 아무것도 하지 않아 "현재 이용 가능"/"예약 가능"이 항상 빈
+  // 배열(SSR 기본값)로 남아 있었다 — 이제 그 두 섹션이 SSR로 채워지지 않으므로, 주소 설정
+  // 여부와 무관하게 마운트 시 항상 한 번 조회해야 한다(가드 제거). heroEvents는 이미
+  // SSR로 채워져 있으니 재조회는 그저 최신값으로 덮어쓰는 것뿐이라 안전하다.
   useEffect(() => {
-    if (!addressName) return;
-
     let cancelled = false;
-    fetch(`/api/home/feed?sigungu=${encodeURIComponent(sigunguName ?? '')}&lat=${center.lat}&lng=${center.lng}`)
+    const params = new URLSearchParams({ sigungu: sigunguName ?? '' });
+    if (addressName) {
+      params.set('lat', String(center.lat));
+      params.set('lng', String(center.lng));
+    }
+
+    fetch(`/api/home/feed?${params.toString()}`)
       .then((res) => res.json())
       // 긴급 수리(2026-08-22) 실측 재현: API가 500과 함께 { error: "..." }를 반환해도 이 then은
       // 그대로 실행되므로(HTTP 상태와 무관하게 body만 있으면 resolve), heroEvents가 배열인지
       // 확인 없이 그대로 setHeroEvents에 넘기면 undefined가 들어가 이후 heroEvents.slice(...)가
       // 던지며 홈 화면이 통째로 크래시했다(실제 재현: sigungu 쿼리에 콤마가 섞이면 항상 발생).
       .then((data: { heroEvents?: NearbyItem[]; reservationOpenEvents?: NearbyItem[]; currentlyOngoingEvents?: NearbyItem[] }) => {
-        if (!cancelled && Array.isArray(data.heroEvents)) setHeroEvents(data.heroEvents);
-        if (!cancelled && Array.isArray(data.reservationOpenEvents)) {
-          setReservationOpenEvents(data.reservationOpenEvents);
-        }
-        if (!cancelled && Array.isArray(data.currentlyOngoingEvents)) {
-          setCurrentlyOngoingEvents(data.currentlyOngoingEvents);
-        }
-        // 배열이 아니면(에러 응답 등) 기존 피드를 그대로 유지한다(Fail-Safe).
+        if (cancelled) return;
+        if (Array.isArray(data.heroEvents)) setHeroEvents(data.heroEvents);
+        // "현재 이용 가능"/"예약 가능"은 이제 이 요청이 유일한 데이터 출처라, 배열이 아니어도
+        // (에러 응답 등) 빈 배열로 확정해 스켈레톤이 영원히 떠 있지 않게 한다(제5장 제11조).
+        setCurrentlyOngoingEvents(Array.isArray(data.currentlyOngoingEvents) ? data.currentlyOngoingEvents : []);
+        setReservationOpenEvents(Array.isArray(data.reservationOpenEvents) ? data.reservationOpenEvents : []);
       })
       .catch(() => {
-        // 재조회 실패 시 기존 피드를 그대로 유지한다(Fail-Safe — 화면이 깨지지 않게).
+        if (cancelled) return;
+        // 재조회 실패 시 heroEvents는 SSR 값을 그대로 유지한다(Fail-Safe). "현재 이용 가능"/
+        // "예약 가능"은 아직 한 번도 못 불러왔다면(null) 빈 배열로 확정해 스켈레톤을 걷어낸다
+        // (이미 이전에 로드된 값이 있다면 그대로 유지 — 재조회 실패로 기존 데이터를 지우지 않음).
+        setCurrentlyOngoingEvents((prev) => prev ?? []);
+        setReservationOpenEvents((prev) => prev ?? []);
       });
 
     return () => {
@@ -346,19 +357,28 @@ export function HomeView({
                 [전체보기 페이지](2026-08-27 후속 지시): 미리보기가 최대 20건만 보여주고
                 끝나는 게 이상하다는 지적 — Hero Carousel의 "오늘 전체보기"와 동일하게
                 전용 페이지(/events/ongoing)로 가는 링크를 추가한다. */}
-            {currentlyOngoingEvents.length > 0 && (
+            {/* [홈 화면 성능 최적화](2026-08-29 사용자 지시): 이 섹션의 데이터는 더 이상
+                SSR로 미리 오지 않는다 — null(로드 전)이면 스켈레톤을, 로드 후 0건이면
+                섹션 자체를 숨기고(가변 노출 원칙 유지), 1건 이상이면 실제 슬라이더를 보여준다. */}
+            {(currentlyOngoingEvents === null || currentlyOngoingEvents.length > 0) && (
               <section aria-label="현재 이용 가능">
                 <div className="flex items-center justify-between mb-3 px-4">
                   <h2 className="text-base font-bold text-gray-900">✅ 현재 이용 가능</h2>
-                  <button
-                    type="button"
-                    onClick={() => setBrowseSheetMode('ongoing')}
-                    className="text-xs font-semibold text-gray-500 hover:text-gray-800"
-                  >
-                    전체보기 →
-                  </button>
+                  {currentlyOngoingEvents !== null && (
+                    <button
+                      type="button"
+                      onClick={() => setBrowseSheetMode('ongoing')}
+                      className="text-xs font-semibold text-gray-500 hover:text-gray-800"
+                    >
+                      전체보기 →
+                    </button>
+                  )}
                 </div>
-                <ReservationOpenSlider items={currentlyOngoingEvents} onSelect={setSelectedItem} />
+                {currentlyOngoingEvents === null ? (
+                  <ReservationOpenSliderSkeleton label="현재 이용 가능 불러오는 중" />
+                ) : (
+                  <ReservationOpenSlider items={currentlyOngoingEvents} onSelect={setSelectedItem} />
+                )}
               </section>
             )}
 
@@ -367,19 +387,25 @@ export function HomeView({
                 접수중인 이벤트가 없으면 섹션 자체를 숨긴다(Hero와 동일한 가변 노출 원칙).
                 [전체보기 페이지](2026-08-27 후속 지시): /events/reservation-open로 가는
                 전체보기 링크 추가. */}
-            {reservationOpenEvents.length > 0 && (
+            {(reservationOpenEvents === null || reservationOpenEvents.length > 0) && (
               <section aria-label="예약 가능">
                 <div className="flex items-center justify-between mb-3 px-4">
                   <h2 className="text-base font-bold text-gray-900">📋 예약 가능</h2>
-                  <button
-                    type="button"
-                    onClick={() => setBrowseSheetMode('reservation-open')}
-                    className="text-xs font-semibold text-gray-500 hover:text-gray-800"
-                  >
-                    전체보기 →
-                  </button>
+                  {reservationOpenEvents !== null && (
+                    <button
+                      type="button"
+                      onClick={() => setBrowseSheetMode('reservation-open')}
+                      className="text-xs font-semibold text-gray-500 hover:text-gray-800"
+                    >
+                      전체보기 →
+                    </button>
+                  )}
                 </div>
-                <ReservationOpenSlider items={reservationOpenEvents} onSelect={setSelectedItem} />
+                {reservationOpenEvents === null ? (
+                  <ReservationOpenSliderSkeleton label="예약 가능 불러오는 중" />
+                ) : (
+                  <ReservationOpenSlider items={reservationOpenEvents} onSelect={setSelectedItem} />
+                )}
               </section>
             )}
 

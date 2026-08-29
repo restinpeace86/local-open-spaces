@@ -199,3 +199,21 @@
     확인.
   - **검증**: `npx tsc --noEmit`/`npm run test`(60파일 611건)/`npm run build` 통과. 상세:
     `implementation/2026-08-29-eventpick-slide-mix-and-deadline-sort.md`.
+
+- [x] **[홈 화면 성능 최적화 — DB 인덱스 점검 및 슬라이드 영역 Lazy Loading]** (2026-08-29 완료)
+  - DB 인덱스 실측 점검: `is_completed` 컬럼은 events/open_spaces 어디에도 존재하지 않음을
+    확인(지시서 예시가 실제와 다름, 추측으로 만들지 않음). end_date/category_min/
+    category_maj는 이미 인덱스 존재. `EXPLAIN ANALYZE`로 "예약 가능" 쿼리 99ms를 재현했으나,
+    실험적 인덱스 추가 후 재측정(13ms)·삭제 후 재측정(12ms, 동일)으로 **콜드 캐시 효과였지
+    인덱스 문제가 아님**을 실측으로 확인 — 불필요한 인덱스를 추가하지 않기로 결정.
+  - 진짜 병목은 SSR(`page.tsx`)이 Hero+현재 이용 가능+예약 가능 3개 쿼리(카테고리 믹스
+    연산 포함)를 모두 기다린 뒤에야 첫 응답을 보내던 구조였다.
+  - `page.tsx`에서 Hero(`getTodayEvents`)만 SSR로 남기고 나머지 두 SSR 호출 제거.
+    `home-view.tsx`의 두 슬라이더 state를 `null`(로드 전) 시작으로 바꿔 마운트 시
+    `/api/home/feed`로 클라이언트 지연 페칭(기존 "위치 설정 시에만 재조회" 가드 제거).
+  - 신규 `ReservationOpenSliderSkeleton`(w-40 h-64 규격 펄스 플레이스홀더)으로 로드 전
+    스켈레톤 노출, 로드 후 0건이면 섹션 숨김 유지.
+  - **실측 검증**: 프로덕션 빌드 기동 후 `/` 응답 0.4~0.6초(기존 3쿼리 합산 시 1.3초에서
+    개선), 초기 SSR HTML에 스켈레톤이 이미 포함됨을 curl로 확인.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(60파일 613건)/`npm run build` 통과. 상세:
+    `implementation/2026-08-29-home-performance-lazy-loading.md`.
