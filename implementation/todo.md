@@ -287,3 +287,16 @@
     직접 SELECT/INSERT 시도 시 RLS가 완전히 차단함을 실측 확인**(개인정보 보호 핵심 검증).
   - **검증**: `npx tsc --noEmit`/`npm run test`(63파일 649건)/`npm run build` 통과. 상세:
     `implementation/2026-08-29-spot-self-service-reservation-mvp.md`.
+
+- [x] **[관리자 예약 관리 어드민 대시보드 구축]** (2026-08-29 완료)
+  - `/api/reservations`에 GET(서비스 롤 키, open_spaces 이름/주소 PostgREST 임베딩 조인,
+    페이지네이션)과 PATCH(id+status → CONFIRMED/CANCELLED만 허용) 추가.
+  - `/admin/reservations` 페이지 신설 — 스팟명/주소/방문 예정일/인원/연락처/접수 시각/
+    상태 뱃지/확정·취소 액션 버튼(PENDING 건에만 노출), 기존 `Pagination` 컴포넌트 재사용.
+    /admin/data-grid와 동일하게 별도 로그인 인증 없음(기존 관례, 이번 범위 밖).
+  - **실측 검증 중 버그 발견 및 수정**: 존재하지 않는 id로 PATCH 시 `.single()`의 원본
+    PostgREST 에러 문구가 그대로 노출되던 것을 발견 — PGRST116(no rows) 분기로 사람이
+    이해할 수 있는 404 메시지로 교체.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(64파일 654건)/`npm run build` 통과, 로컬
+    개발 서버+실제 DB로 GET 조인/PATCH 상태 전환/에러 처리 전부 실측 확인(테스트 데이터
+    정리 삭제). 상세: `implementation/2026-08-29-admin-reservations-dashboard.md`.
