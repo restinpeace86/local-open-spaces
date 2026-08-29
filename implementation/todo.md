@@ -228,3 +228,20 @@
     클립).
   - **검증**: `npx tsc --noEmit`/`npm run test`(60파일 616건, 신규 4:6 포션 테스트 3건
     포함)/`npm run build` 통과. 상세: `implementation/2026-08-29-eventcard-4-6-portion.md`.
+
+- [x] **[농어촌체험휴양마을 + 농촌교육농장 통합 수집 어댑터 구현]** (2026-08-29 완료,
+  소스 B는 인증키 대기로 부분 보류)
+  - **소스 A(전국농어촌체험휴양마을, data.go.kr)**: 완전히 구현·라이브 검증 완료.
+    실측 확인(전량 1,254건 좌표/명칭/주소 결측 없음), '체험휴양마을' category_min
+    RAW 태깅, 어드민 카테고리에 신규 대분류 "농장/체험" 신설. `run-monthly.mjs` 연결.
+    **실제 DB 적재 완료**: RAW 1,254건 → open_spaces 1,253건(중복 1쌍 병합).
+  - **소스 B(농촌교육농장, 농사로 api.nongsaro.go.kr)**: 참고자료(`reference/
+    농촌교육농장`) 확인 결과 data.go.kr과 무관한 별도 인증키(NONGSARO_API_KEY)가
+    필요함을 실측(더미 키로 실제 호출해 "인증키 미등록" 응답 확인) — data.go.kr 동일
+    등록 사례도 검색으로 못 찾음. AskUserQuestion으로 확인해 "코드만 먼저 완성"으로
+    진행 — 어댑터(XML 파싱용 `fast-xml-parser` 신규 의존성)/CLI/테스트 10건 모두
+    완성했으나 **실제 인증키가 없어 라이브 호출·DB 적재는 검증하지 못했다**. 사용자가
+    농사로에서 키를 발급받아 `NONGSARO_API_KEY`에 설정하면 `--dry-run`으로 먼저 확인 후
+    `run-monthly.mjs`에 연결 필요(아직 미연결, 사유 주석 명시).
+  - **검증**: `npx tsc --noEmit`/`npm run test`(62파일 640건)/`npm run build` 통과. 상세:
+    `implementation/2026-08-29-rural-village-and-education-farm-adapters.md`.

@@ -64,6 +64,13 @@ describe('buildOpenSpacesCategoryMinGroups', () => {
     const etc = result.find((g) => g.major === '기타');
     expect(etc?.minors).toContain('알수없는깨진값');
   });
+
+  // [농어촌체험휴양마을 + 농촌교육농장 통합 수집](2026-08-29 사용자 지시)
+  it('체험휴양마을은 "농장/체험" 그룹에 배정된다', () => {
+    const result = buildOpenSpacesCategoryMinGroups(['체험휴양마을']);
+    const group = result.find((g) => g.major === '농장/체험');
+    expect(group?.minors).toContain('체험휴양마을');
+  });
 });
 
 describe('buildEventsCategoryMinGroups', () => {
