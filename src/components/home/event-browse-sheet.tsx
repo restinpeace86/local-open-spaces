@@ -149,19 +149,11 @@ export function EventBrowseSheet({
               </select>
             </div>
           )}
+          {/* [전체보기 바텀시트 칩 정리](2026-08-29 사용자 지시): 무의미한 "전체" 칩을
+              제거했다 — 필터를 해제하려면 이미 눌러둔 칩을 다시 누르면 된다(아래
+              onClick의 토글 동작, EmptyState의 "필터 초기화" 버튼도 여전히 selectedMaj를
+              null로 되돌린다). */}
           <div className="flex gap-1.5 overflow-x-auto px-1 pb-1">
-            <button
-              type="button"
-              aria-pressed={selectedMaj === null}
-              onClick={() => setSelectedMaj(null)}
-              className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                selectedMaj === null
-                  ? 'bg-gray-900 text-white'
-                  : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              전체
-            </button>
             {CATEGORY_MAJ_OPTIONS.map((opt) => {
               const isActive = selectedMaj === opt.maj;
               return (

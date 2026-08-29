@@ -314,16 +314,26 @@ function regionTier(item: NearbyItem, region: HomeRegion): 0 | 1 | 2 {
 // 넘기면 그 기준으로 순위를 매긴다(기본값은 기존 regionTier 그대로 — 다른 호출부의 동작은
 // 변경 없음). getTodayEvents만 heroRegionTier를 넘겨 "그 외 수도권" 안에서도 경기/서울 우선순위를
 // 추가로 가른다.
+// [이벤트픽 홈 슬라이드 정렬 개선](2026-08-29 사용자 지시): selectRegionFirst가 하던 "지역
+// 우선순위로 정렬"과 "limit만큼 자르기"를 분리했다 — getTodayEvents가 자르기 전에
+// interleaveByCategoryMin(카테고리 교차배치)을 한 번 더 거쳐야 하기 때문. 기존 유일한
+// 호출부(getCategoryMinFeed)는 selectRegionFirst를 그대로 쓰므로 동작 변화가 없다.
+function rankByRegion(
+  items: NearbyItem[],
+  region: HomeRegion,
+  tierFn: (item: NearbyItem, region: HomeRegion) => number = regionTier
+): NearbyItem[] {
+  if (!region.sigunguName) return items;
+  return [...items].sort((a, b) => tierFn(a, region) - tierFn(b, region));
+}
+
 function selectRegionFirst(
   items: NearbyItem[],
   region: HomeRegion,
   limit: number,
   tierFn: (item: NearbyItem, region: HomeRegion) => number = regionTier
 ): NearbyItem[] {
-  if (!region.sigunguName) return items.slice(0, limit);
-
-  const ranked = [...items].sort((a, b) => tierFn(a, region) - tierFn(b, region));
-  return ranked.slice(0, limit);
+  return rankByRegion(items, region, tierFn).slice(0, limit);
 }
 
 // [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "Hero 카드 구역"): "사용자 위치가
@@ -441,10 +451,17 @@ async function fetchRegionFirstRows<T extends { id: string }>(
 // 9-1-9에서 도입한 "이번 주 시작 예정 마감임박으로 최소 10개 채우기"(HERO_MIN_COUNT/
 // getUpcomingDeadlineFill)를 완전히 제거한다 — 조건에 맞는 당일 한정 행사가 0건이면 섹션
 // 자체를 숨기고(home-view.tsx), N건이면 N개만 그대로 보여준다(10개로 억지로 채우지 않음).
+// [이벤트픽 홈 슬라이드/전체보기 정렬 개선](2026-08-29 사용자 지시): 이 함수는 홈 Hero
+// Carousel 미리보기(diversifyByCategory=true, 카테고리 믹스 필요)와 "오늘 전체보기" 바텀시트
+// (EventBrowseSheet, diversifyByCategory 생략=false, 단순 마감임박순만 필요) 양쪽에서
+// 공유된다 — 바텀시트는 전체 목록을 있는 그대로 훑어보는 화면이라 카테고리 교차배치를 적용하면
+// 오히려 순서가 뒤섞여 보이므로, 새 파라미터로 명시적으로 켤 때만 interleaveByCategoryMin을
+// 적용한다(기본값 false로 기존 바텀시트 호출부는 변경 없이 그대로 동작).
 export async function getTodayEvents(
   limit = 10,
   region: HomeRegion = DEFAULT_HOME_REGION,
-  categoryMins?: readonly string[]
+  categoryMins?: readonly string[],
+  diversifyByCategory = false
 ): Promise<NearbyItem[]> {
   const supabase = await createClient();
   const today = new Date().toISOString().slice(0, 10);
@@ -463,14 +480,16 @@ export async function getTodayEvents(
       .or(`is_reservation_required.eq.false,reservation_end_date.gte.${nowIso},reservation_end_date.is.null`);
     if (categoryMins && categoryMins.length > 0) query = query.in('category_min', categoryMins);
     if (token) query = query.or(regionOrFilter(token, 'venue_name'));
-    return query.order('start_date', { ascending: false }).limit(500);
+    return query.order('end_date', { ascending: true }).limit(500);
   };
 
   const data = await fetchRegionFirstRows<EventRow>(buildQuery, region, limit);
 
   const items = dedupeAndMergeFree(data.map(toEventItem));
-  const ordered = sortByDistanceIfKnown(items, region);
-  return selectRegionFirst(ordered, region, limit, heroRegionTier);
+  const distanceOrdered = sortByDistanceIfKnown(items, region);
+  const dateOrdered = sortByEndDateAscending(distanceOrdered);
+  const regionOrdered = rankByRegion(dateOrdered, region, heroRegionTier);
+  return diversifyByCategory ? interleaveByCategoryMin(regionOrdered, limit) : regionOrdered.slice(0, limit);
 }
 
 // [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "당일 예약 필요 카드 구역"): "당일
@@ -502,7 +521,7 @@ export async function getReservationOpenEvents(
       .not('category_min', 'in', EXCLUDED_CATEGORY_MIN_FILTER)
       .gte('end_date', today);
     if (token) query = query.or(regionOrFilter(token, 'venue_name'));
-    return query.order('start_date', { ascending: false }).limit(500);
+    return query.order('end_date', { ascending: true }).limit(500);
   };
 
   const buildSeoulYeyakOpenQuery = (token: string | readonly string[] | null) => {
@@ -517,7 +536,7 @@ export async function getReservationOpenEvents(
       .not('category_min', 'in', EXCLUDED_CATEGORY_MIN_FILTER)
       .gte('end_date', today);
     if (token) query = query.or(regionOrFilter(token, 'venue_name'));
-    return query.order('start_date', { ascending: false }).limit(500);
+    return query.order('end_date', { ascending: true }).limit(500);
   };
 
   const buildQuery = async (token: string | readonly string[] | null) => {
@@ -542,54 +561,53 @@ export async function getReservationOpenEvents(
   const data = await fetchRegionFirstRows<EventRow>(buildQuery, region, limit);
 
   const items = dedupeAndMergeFree(data.map(toEventItem));
-  const ordered = sortByDistanceIfKnown(items, region);
-  const regionOrdered = ordered.sort(byRegionPriority(region));
-  return sortByCategoryMinPriority(regionOrdered, limit).slice(0, limit);
+  const distanceOrdered = sortByDistanceIfKnown(items, region);
+  const dateOrdered = sortByEndDateAscending(distanceOrdered);
+  const regionOrdered = dateOrdered.sort(byRegionPriority(region));
+  return interleaveByCategoryMin(regionOrdered, limit);
 }
 
-// [카드 순서 우선순위](2026-08-27 사용자 지시): "현재 이용 가능"/"예약 가능" 두 섹션에서
-// 공공키즈카페류(유아/어린이 특화)는 좀 더 앞으로, 자연/과학·교육체험(상대적으로 덜 특화된
-// 일반 프로그램)은 뒤로 가면 좋겠다는 지적. 이 두 섹션에만 적용하는 부드러운 우선순위
-// 정렬이다 — 지시받지 않은 나머지 카테고리는 전부 동일한 중간 순위로 그대로 둔다(추측으로
-// 전체 카테고리 순위를 매기지 않는다, 제3장 제5조).
-//
-// [카드 순서 우선순위 — 쏠림 수정](2026-08-27 후속 버그 수정): 처음 구현(전체를 우선순위로
-// 정렬 후 limit만큼 자르기)은 "부드러운 정렬"이 아니었다 — 공공키즈카페류 공급이 넉넉하면
-// (실측 확인: is_active=true만 265건) limit(20) 전체를 공공키즈카페류가 독점해 다른 카테고리가
-// 한 건도 안 보이는 상태가 됐다(실제 재현: "현재 이용 가능"/"예약 가능"이 전부 공공키즈카페로만
-// 채워짐). "앞으로 가면 좋겠다"는 지시는 "그것만 보이게 해달라"는 뜻이 아니므로, 앞 우선순위가
-// 차지할 수 있는 자리를 전체의 절반으로 제한(FRONT_TIER_MAX_SHARE)해 나머지 절반은 반드시
-// 중간/뒤 우선순위 카테고리로 채워지도록 한다. 잘려나간 앞 우선순위 항목은 완전히 버리지
-// 않고 중간 우선순위 뒤·뒤 우선순위 앞에 이어붙여, limit 안에 못 들어가면 자연스럽게
-// 잘려나가되 여전히 뒤 우선순위보다는 앞서도록 한다.
-const CATEGORY_MIN_PRIORITY_FRONT = new Set(['공공키즈카페', '어린이실내놀이터']);
-const CATEGORY_MIN_PRIORITY_BACK = new Set(['자연/과학', '교육체험']);
-const FRONT_TIER_MAX_SHARE = 0.5;
-
-function categoryMinPriorityTier(categoryMin: string | null | undefined): 0 | 1 | 2 {
-  if (categoryMin && CATEGORY_MIN_PRIORITY_FRONT.has(categoryMin)) return 0;
-  if (categoryMin && CATEGORY_MIN_PRIORITY_BACK.has(categoryMin)) return 2;
-  return 1;
-}
-
-// 지역/거리 정렬이 끝난 배열에 마지막으로 적용한다. limit을 함께 받아, 앞 우선순위 항목이
-// 전체 노출 자리의 절반을 넘게 차지하지 못하도록 상한을 둔다(각 그룹 내부의 상대 순서는
-// 원래의 지역/거리 정렬 순서를 그대로 유지한다).
-function sortByCategoryMinPriority(items: NearbyItem[], limit: number): NearbyItem[] {
-  const front: NearbyItem[] = [];
-  const middle: NearbyItem[] = [];
-  const back: NearbyItem[] = [];
+// [이벤트픽 홈 슬라이드 카테고리 믹스 정렬](2026-08-29 사용자 지시): 이전에는 "공공키즈카페/
+// 어린이실내놀이터는 앞으로, 자연/과학·교육체험은 뒤로"처럼 특정 카테고리 2~4개만 하드코딩해
+// 봐주는 방식(sortByCategoryMinPriority, FRONT_TIER_MAX_SHARE 50% 상한)이었다. 이번 지시는
+// "특정 카테고리(공공 키즈카페 등)가 슬라이드를 독점하지 않도록" 상한/교차배치를 요구하는
+// 더 일반적인 요구라, 어떤 카테고리 조합이 오더라도 자동으로 골고루 섞이는 라운드로빈
+// 교차배치로 완전히 대체한다(하드코딩된 카테고리 목록 없음). 카테고리별로 그룹을 나눈 뒤
+// 그룹을 한 바퀴씩 돌며 한 건씩 채우므로, 어떤 카테고리도 실질적으로
+// ceil(limit / 등장한 카테고리 수)를 넘게 차지할 수 없다. 각 그룹 내부 순서(호출부가 미리
+// 정렬해 둔 종료일 임박순 → 거리/지역 우선순위)는 그대로 유지된다.
+function interleaveByCategoryMin(items: NearbyItem[], limit: number): NearbyItem[] {
+  const groups = new Map<string, NearbyItem[]>();
   for (const item of items) {
-    const tier = categoryMinPriorityTier(item.category_min);
-    if (tier === 0) front.push(item);
-    else if (tier === 2) back.push(item);
-    else middle.push(item);
+    const key = item.category_min ?? '';
+    const group = groups.get(key);
+    if (group) group.push(item);
+    else groups.set(key, [item]);
   }
 
-  const frontCap = Math.max(1, Math.ceil(limit * FRONT_TIER_MAX_SHARE));
-  const frontShown = front.slice(0, frontCap);
-  const frontOverflow = front.slice(frontCap);
-  return [...frontShown, ...middle, ...frontOverflow, ...back];
+  const groupArrays = [...groups.values()];
+  const result: NearbyItem[] = [];
+  for (let round = 0; result.length < limit; round++) {
+    let addedAny = false;
+    for (const group of groupArrays) {
+      if (round >= group.length) continue;
+      result.push(group[round]);
+      addedAny = true;
+      if (result.length >= limit) break;
+    }
+    if (!addedAny) break;
+  }
+  return result;
+}
+
+// [이벤트픽 홈 슬라이드 마감임박순 정렬](2026-08-29 사용자 지시): "각 카테고리 내부에서
+// 종료일(end_date)이 가까운 순서로 정렬"— distance/region 우선순위 정렬보다 먼저 적용해
+// 둔다. Array.prototype.sort는 안정 정렬이라, 이후 sortByDistanceIfKnown/byRegionPriority가
+// 정확히 동일한 값(같은 거리·같은 지역 우선순위)을 가진 항목끼리 묶을 때는 이 종료일 순서가
+// 그대로 유지된다 — 즉 최종 순위는 "지역 우선순위 > 거리 > 종료일" 순으로 결정되지만, 같은
+// 지역·거리 조건이면 종료일이 임박한 것부터 보인다.
+function sortByEndDateAscending(items: NearbyItem[]): NearbyItem[] {
+  return [...items].sort((a, b) => (a.end_date ?? '').localeCompare(b.end_date ?? ''));
 }
 
 // [이벤트픽 화면 개편] "현재 이용 가능" 카드 구역(2026-08-27 사용자 지시): "예약 가능"
@@ -615,15 +633,16 @@ export async function getCurrentlyOngoingEvents(
       .lte('start_date', today)
       .gte('end_date', today);
     if (token) query = query.or(regionOrFilter(token, 'venue_name'));
-    return query.order('start_date', { ascending: false }).limit(500);
+    return query.order('end_date', { ascending: true }).limit(500);
   };
 
   const data = await fetchRegionFirstRows<EventRow>(buildQuery, region, limit);
 
   const items = dedupeAndMergeFree(data.map(toEventItem));
-  const ordered = sortByDistanceIfKnown(items, region);
-  const regionOrdered = ordered.sort(byRegionPriority(region));
-  return sortByCategoryMinPriority(regionOrdered, limit).slice(0, limit);
+  const distanceOrdered = sortByDistanceIfKnown(items, region);
+  const dateOrdered = sortByEndDateAscending(distanceOrdered);
+  const regionOrdered = dateOrdered.sort(byRegionPriority(region));
+  return interleaveByCategoryMin(regionOrdered, limit);
 }
 
 // [전체보기 페이지](2026-08-27 사용자 지시): 홈 미리보기(getCurrentlyOngoingEvents/
@@ -631,9 +650,11 @@ export async function getCurrentlyOngoingEvents(
 // Hero Carousel의 "오늘 전체보기"(/events/today)와 동일하게, 두 섹션에도 실제 DB 페이지네이션
 // (.range())으로 전부 훑어볼 수 있는 전용 페이지를 만든다. 미리보기와 달리 지역/거리 큐레이션
 // (Strict Location-First, 카드 순서 우선순위)은 적용하지 않는다 — "전부 보여달라"는 목적과
-// "일부를 앞으로 당겨 보여주는" 큐레이션은 상충하므로, 여기서는 안정적인 페이지 경계를 위해
-// start_date 오름차순 단일 정렬만 쓴다. 같은 이유로 제목 유사 병합(dedupeAndMergeFree)도 하지
-// 않는다 — 오프셋 페이지네이션과 사후 병합을 같이 쓰면 페이지마다 건수가 들쭉날쭉해진다.
+// "일부를 앞으로 당겨 보여주는" 큐레이션은 상충하므로 dedupeAndMergeFree(제목 유사 병합)도 하지
+// 않는다(오프셋 페이지네이션과 사후 병합을 같이 쓰면 페이지마다 건수가 들쭉날쭉해진다).
+// [전체보기 마감임박순 정렬](2026-08-29 사용자 지시): 기간이 매우 긴 이벤트가 start_date
+// 기준으로는 맨 앞에 고정돼 버리는 문제가 있어, 정렬 기준을 end_date 오름차순(마감임박순)으로
+// 바꿨다.
 export type PagedEvents = { items: NearbyItem[]; total: number };
 
 const BROWSE_ALL_PAGE_SIZE = 24;
@@ -662,8 +683,10 @@ export async function getCurrentlyOngoingEventsPage(
     .lte('start_date', today)
     .gte('end_date', today);
   if (categoryMins && categoryMins.length > 0) query = query.in('category_min', categoryMins);
+  // [전체보기 마감임박순 정렬](2026-08-29 사용자 지시): start_date 오름차순은 기간이 매우 긴
+  // 이벤트가 맨 앞에 고정되는 문제가 있어 end_date 오름차순(마감임박순)으로 바꿨다.
   const { data, error, count } = await query
-    .order('start_date', { ascending: true })
+    .order('end_date', { ascending: true })
     .range(from, from + pageSize - 1);
 
   if (error) throw new Error(error.message);
@@ -695,8 +718,10 @@ export async function getReservationOpenEventsPage(
     .gte('end_date', today)
     .or(`booking_status.eq.접수중,and(source.eq.seoul_public_reservation,raw_data->>SVCSTATNM.eq.접수중)`);
   if (categoryMins && categoryMins.length > 0) query = query.in('category_min', categoryMins);
+  // [전체보기 마감임박순 정렬](2026-08-29 사용자 지시): start_date 오름차순은 기간이 매우 긴
+  // 이벤트가 맨 앞에 고정되는 문제가 있어 end_date 오름차순(마감임박순)으로 바꿨다.
   const { data, error, count } = await query
-    .order('start_date', { ascending: true })
+    .order('end_date', { ascending: true })
     .range(from, from + pageSize - 1);
 
   if (error) throw new Error(error.message);
@@ -977,7 +1002,7 @@ export const CURRENTLY_ONGOING_FETCH_LIMIT = 20;
 
 export async function getHomeFeed(region: HomeRegion = DEFAULT_HOME_REGION): Promise<HomeFeed> {
   const [heroEvents, freeFeed, reservationOpenEvents, currentlyOngoingEvents] = await Promise.all([
-    getTodayEvents(HERO_FETCH_LIMIT, region),
+    getTodayEvents(HERO_FETCH_LIMIT, region, undefined, true),
     getFreeFeed(12, region),
     getReservationOpenEvents(RESERVATION_OPEN_FETCH_LIMIT, region),
     getCurrentlyOngoingEvents(CURRENTLY_ONGOING_FETCH_LIMIT, region),

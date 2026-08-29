@@ -149,6 +149,13 @@ function makeFilteringChainable(rows: Array<Record<string, unknown>>) {
 // 오늘"을 기본값으로 써서 날짜에 무관하게 안정적으로 통과하게 한다.
 const TODAY_STR = new Date().toISOString().slice(0, 10);
 
+// [이벤트픽 홈 슬라이드 마감임박순 정렬](2026-08-29 사용자 지시) 테스트용: 위 TODAY_STR와
+// 같은 이유로 종료일 정렬 테스트도 고정 날짜 문자열 대신 "오늘로부터 N일 후"를 써서 실행
+// 시점과 무관하게 안정적으로 통과하게 한다.
+function daysFromToday(offsetDays: number): string {
+  return new Date(Date.now() + offsetDays * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
 function eventRow(overrides: Record<string, unknown> = {}) {
   return {
     id: 'e1',
@@ -268,6 +275,42 @@ describe('getTodayEvents (Task 9-1-3: 거리 계산 없음 / Task 9-1-6: Strict 
     const items = await getTodayEvents(10, undefined, ['지역축제/페스티벌', '문화행사', '광장']);
 
     expect(items.map((i) => i.id)).toEqual(['festival-1']);
+  });
+
+  // [이벤트픽 홈 슬라이드 카테고리 믹스 정렬](2026-08-29 사용자 지시): 메인 배너(Hero
+  // Carousel)가 특정 카테고리로 쏠리지 않도록, diversifyByCategory=true일 때만 카테고리
+  // 교차배치를 적용한다(기본값 false — "오늘 전체보기" 바텀시트는 원래 순서 그대로 유지).
+  it('diversifyByCategory=true면 카테고리를 교차배치해 특정 카테고리가 쏠리지 않는다', async () => {
+    const kidsCafeRows = Array.from({ length: 5 }, (_, i) =>
+      eventRow({ id: `kids-cafe-${i}`, title: `키즈카페 행사 ${i}`, category_min: '공공키즈카페', is_active: true })
+    );
+    const generalRow = eventRow({ id: 'general-1', title: '일반 행사', category_min: '문화행사', is_active: true });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeFilteringChainable([...kidsCafeRows, generalRow]) }),
+    }));
+
+    const { getTodayEvents } = await import('./get-home-feed');
+    const items = await getTodayEvents(2, undefined, undefined, true);
+
+    // 라운드로빈이므로 카테고리 2종(공공키즈카페/문화행사)이 각각 1건씩 먼저 채워진다.
+    expect(items.map((i) => i.id).sort()).toEqual(['general-1', 'kids-cafe-0']);
+  });
+
+  it('diversifyByCategory를 생략하면(기본값 false) 교차배치 없이 원래 순서 그대로 반환한다', async () => {
+    const kidsCafeRows = Array.from({ length: 5 }, (_, i) =>
+      eventRow({ id: `kids-cafe-${i}`, title: `키즈카페 행사 ${i}`, category_min: '공공키즈카페', is_active: true })
+    );
+    const generalRow = eventRow({ id: 'general-1', title: '일반 행사', category_min: '문화행사', is_active: true });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeFilteringChainable([...kidsCafeRows, generalRow]) }),
+    }));
+
+    const { getTodayEvents } = await import('./get-home-feed');
+    const items = await getTodayEvents(2, undefined, undefined);
+
+    expect(items.map((i) => i.id)).toEqual(['kids-cafe-0', 'kids-cafe-1']);
   });
 
   // 긴급 수리(Hotfix, 2026-08-22) 실측 재현: sigunguName에 쉼표가 섞여 있으면(예: Kakao 검색
@@ -983,8 +1026,11 @@ describe('getReservationOpenEvents', () => {
     expect(items.map((item) => item.id)).toEqual(['dup']);
   });
 
-  // [카드 순서 우선순위](2026-08-27 사용자 지시): getCurrentlyOngoingEvents와 동일한 규칙.
-  it('공공키즈카페류는 앞으로, 자연/과학·교육체험은 뒤로 정렬한다', async () => {
+  // [이벤트픽 홈 슬라이드 카테고리 믹스 정렬](2026-08-29 사용자 지시): 이전의 "공공키즈카페는
+  // 앞으로, 자연/과학·교육체험은 뒤로" 하드코딩 우선순위를 일반화된 카테고리 교차배치로
+  // 대체했다 — 서로 다른 카테고리 1건씩이면 원래(입력) 순서 그대로 섞여 나온다(어떤 카테고리도
+  // 임의로 앞/뒤로 밀리지 않음).
+  it('서로 다른 카테고리가 섞여 있으면 특정 카테고리로 쏠리지 않고 그대로 노출된다', async () => {
     const nature = eventRow({ id: 'nature', title: '자연 행사', category_min: '자연/과학', booking_status: '접수중', is_active: true });
     const kidsCafe = eventRow({ id: 'kids-cafe', title: '키즈카페 행사', category_min: '공공키즈카페', booking_status: '접수중', is_active: true });
     const general = eventRow({ id: 'general', title: '일반 행사', category_min: '문화행사', booking_status: '접수중', is_active: true });
@@ -996,7 +1042,31 @@ describe('getReservationOpenEvents', () => {
     const { getReservationOpenEvents } = await import('./get-home-feed');
     const items = await getReservationOpenEvents(10, { sigunguName: null });
 
-    expect(items.map((item) => item.id)).toEqual(['kids-cafe', 'general', 'nature']);
+    expect(items.map((item) => item.id).sort()).toEqual(['general', 'kids-cafe', 'nature']);
+  });
+
+  // [전체보기/홈 슬라이드 마감임박순 정렬](2026-08-29 사용자 지시): 같은 카테고리 안에서는
+  // 종료일(end_date)이 임박한 순서로 노출돼야 한다.
+  it('같은 카테고리 안에서는 종료일이 임박한 순서로 정렬한다', async () => {
+    const category = '문화행사';
+    const endsLate = eventRow({
+      id: 'ends-late', title: '늦게 마감', category_min: category, booking_status: '접수중', is_active: true, end_date: daysFromToday(90),
+    });
+    const endsSoon = eventRow({
+      id: 'ends-soon', title: '곧 마감', category_min: category, booking_status: '접수중', is_active: true, end_date: daysFromToday(10),
+    });
+    const endsMiddle = eventRow({
+      id: 'ends-middle', title: '중간 마감', category_min: category, booking_status: '접수중', is_active: true, end_date: daysFromToday(40),
+    });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeFilteringChainable([endsLate, endsSoon, endsMiddle]) }),
+    }));
+
+    const { getReservationOpenEvents } = await import('./get-home-feed');
+    const items = await getReservationOpenEvents(10, { sigunguName: null });
+
+    expect(items.map((item) => item.id)).toEqual(['ends-soon', 'ends-middle', 'ends-late']);
   });
 });
 
@@ -1046,9 +1116,11 @@ describe('getCurrentlyOngoingEvents', () => {
     expect(items.map((item) => item.id)).toEqual(['one-day']);
   });
 
-  // [카드 순서 우선순위](2026-08-27 사용자 지시): 공공키즈카페류는 앞으로, 자연/과학·교육체험은
-  // 뒤로 — 나머지는 중간 순위(기존 순서 그대로).
-  it('공공키즈카페류는 앞으로, 자연/과학·교육체험은 뒤로 정렬한다', async () => {
+  // [이벤트픽 홈 슬라이드 카테고리 믹스 정렬](2026-08-29 사용자 지시): 이전의 "공공키즈카페는
+  // 앞으로, 자연/과학·교육체험은 뒤로" 하드코딩 우선순위를 일반화된 카테고리 교차배치로
+  // 대체했다 — 서로 다른 카테고리 1건씩이면 전부 노출되고, 어떤 카테고리도 임의로 앞/뒤로
+  // 밀리지 않는다(카테고리 목록을 하드코딩하지 않으므로 새 카테고리가 추가돼도 그대로 동작).
+  it('서로 다른 카테고리 5종이 섞여 있으면 특정 카테고리로 쏠리지 않고 모두 노출된다', async () => {
     const nature = eventRow({ id: 'nature', title: '자연 행사', category_min: '자연/과학', is_active: true });
     const general = eventRow({ id: 'general', title: '일반 행사', category_min: '문화행사', is_active: true });
     const kidsCafe = eventRow({ id: 'kids-cafe', title: '키즈카페 행사', category_min: '공공키즈카페', is_active: true });
@@ -1068,8 +1140,33 @@ describe('getCurrentlyOngoingEvents', () => {
     const { getCurrentlyOngoingEvents } = await import('./get-home-feed');
     const items = await getCurrentlyOngoingEvents(10, { sigunguName: null });
 
-    // 앞: 공공키즈카페/어린이실내놀이터(입력 순서 그대로, stable) → 중간: 문화행사 → 뒤: 자연/과학·교육체험
-    expect(items.map((item) => item.id)).toEqual(['kids-cafe', 'indoor-playground', 'general', 'nature', 'education']);
+    expect(items.map((item) => item.id).sort()).toEqual(
+      ['education', 'general', 'indoor-playground', 'kids-cafe', 'nature'].sort()
+    );
+  });
+
+  // [이벤트픽 홈 슬라이드 마감임박순 정렬](2026-08-29 사용자 지시): 같은 카테고리 안에서는
+  // 종료일이 임박한 순서로 노출돼야 한다 — 기간이 긴 이벤트가 먼저 나오지 않는다.
+  it('같은 카테고리 안에서는 종료일이 임박한 순서로 정렬한다', async () => {
+    const category = '문화행사';
+    const endsLate = eventRow({
+      id: 'ends-late', title: '늦게 마감', category_min: category, start_date: daysFromToday(-60), end_date: daysFromToday(90), is_active: true,
+    });
+    const endsSoon = eventRow({
+      id: 'ends-soon', title: '곧 마감', category_min: category, start_date: daysFromToday(-10), end_date: daysFromToday(10), is_active: true,
+    });
+    const endsMiddle = eventRow({
+      id: 'ends-middle', title: '중간 마감', category_min: category, start_date: daysFromToday(-30), end_date: daysFromToday(40), is_active: true,
+    });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeFilteringChainable([endsLate, endsSoon, endsMiddle]) }),
+    }));
+
+    const { getCurrentlyOngoingEvents } = await import('./get-home-feed');
+    const items = await getCurrentlyOngoingEvents(10, { sigunguName: null });
+
+    expect(items.map((item) => item.id)).toEqual(['ends-soon', 'ends-middle', 'ends-late']);
   });
 
   // [카드 순서 우선순위 — 쏠림 수정](2026-08-27 후속 버그 수정): 대표가 실측으로 발견한 버그 —
@@ -1171,7 +1268,7 @@ function makeRangeChainable(rows: Array<Record<string, unknown>>) {
     orFilterGroups.push(expr);
     return builder;
   };
-  builder.order = () => builder;
+  builder.order = vi.fn(() => builder);
   builder.range = (from: number, to: number) => {
     let filtered = rows;
     filtered = filtered.filter((row) => Object.entries(eqFilters).every(([col, val]) => row[col] === val));
@@ -1238,6 +1335,21 @@ describe('getCurrentlyOngoingEventsPage', () => {
     expect(result.items.map((i) => i.id).sort()).toEqual(['camp-1', 'camp-2']);
     expect(result.total).toBe(2);
   });
+
+  // [전체보기 마감임박순 정렬](2026-08-29 사용자 지시): 기간이 매우 긴 이벤트가 맨 앞에
+  // 고정되지 않도록 start_date 대신 end_date 오름차순으로 정렬해야 한다.
+  it('end_date 오름차순으로 정렬한다(start_date 아님)', async () => {
+    const builder = makeRangeChainable([eventRow({ id: 'e1', is_active: true })]);
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => builder }),
+    }));
+
+    const { getCurrentlyOngoingEventsPage } = await import('./get-home-feed');
+    await getCurrentlyOngoingEventsPage(1, 10);
+
+    expect(builder.order).toHaveBeenCalledWith('end_date', { ascending: true });
+  });
 });
 
 describe('getReservationOpenEventsPage', () => {
@@ -1285,6 +1397,21 @@ describe('getReservationOpenEventsPage', () => {
 
     expect(result.items.map((i) => i.id)).toEqual(['edu-1']);
     expect(result.total).toBe(1);
+  });
+
+  // [전체보기 마감임박순 정렬](2026-08-29 사용자 지시): 기간이 매우 긴 이벤트가 맨 앞에
+  // 고정되지 않도록 start_date 대신 end_date 오름차순으로 정렬해야 한다.
+  it('end_date 오름차순으로 정렬한다(start_date 아님)', async () => {
+    const builder = makeRangeChainable([eventRow({ id: 'e1', booking_status: '접수중', is_active: true })]);
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => builder }),
+    }));
+
+    const { getReservationOpenEventsPage } = await import('./get-home-feed');
+    await getReservationOpenEventsPage(1, 10);
+
+    expect(builder.order).toHaveBeenCalledWith('end_date', { ascending: true });
   });
 });
 

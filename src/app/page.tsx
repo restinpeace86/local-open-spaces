@@ -22,7 +22,9 @@ import {
 export default async function HomePage() {
   let heroEvents: Awaited<ReturnType<typeof getTodayEvents>> = [];
   try {
-    heroEvents = await getTodayEvents(HERO_FETCH_LIMIT);
+    // [이벤트픽 홈 슬라이드 카테고리 믹스 정렬](2026-08-29 사용자 지시): 특정 카테고리가
+    // 메인 배너를 독점하지 않도록 카테고리 교차배치를 켠다(마지막 diversifyByCategory 인자).
+    heroEvents = await getTodayEvents(HERO_FETCH_LIMIT, undefined, undefined, true);
   } catch {
     // 폴백: 빈 배열이면 HomeView가 "오늘 진행 중인 추천 행사가 아직 없습니다" 안내를 보여준다.
   }

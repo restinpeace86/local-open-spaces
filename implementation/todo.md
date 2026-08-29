@@ -179,3 +179,23 @@
   - **검증**: `npx tsc --noEmit`/`npm run test`(60파일 604건, 신규 `event-browse-sheet.
     test.tsx` 포함)/`npm run build` 통과. 상세:
     `implementation/2026-08-29-eventpick-ux-bottomsheet-and-card-diet.md`.
+
+- [x] **[이벤트픽 홈 슬라이드 카테고리 믹스 + 전체보기 마감임박순 정렬 및 '전체' 칩 제거]**
+  (2026-08-29 완료)
+  - 기존 "공공키즈카페는 앞으로, 자연/과학·교육체험은 뒤로" 하드코딩 우선순위
+    (`sortByCategoryMinPriority`)를 일반화된 라운드로빈 교차배치(`interleaveByCategoryMin`)
+    로 완전히 대체 — 카테고리 목록을 하드코딩하지 않아 어떤 조합이 와도 자동으로 골고루
+    섞인다.
+  - `sortByEndDateAscending` 신설, 지역 우선순위/거리 정렬 사이에 끼워 넣어 "지역 우선순위 >
+    종료일 임박순 > 거리" 순으로 최종 정렬(Strict Location-First Decision은 그대로 유지).
+  - `getTodayEvents`는 Hero 미리보기와 "오늘 전체보기" 바텀시트가 공유하는 함수라 신규
+    `diversifyByCategory` 파라미터(기본 false)로 분기 — 홈 Hero 호출부만 `true`로 카테고리
+    교차배치를 켬.
+  - 전체보기 바텀시트 3개 API(`getTodayEvents`/`getCurrentlyOngoingEventsPage`/
+    `getReservationOpenEventsPage`)의 SQL 정렬을 `start_date`→`end_date` 오름차순으로 변경.
+  - `EventBrowseSheet`의 무의미한 '전체' 칩 제거(필터 해제는 토글/EmptyState로 계속 가능).
+  - **실측 검증**: 로컬 개발 서버 + 실제 DB로 `/api/events/ongoing`(마감임박순 확인)과
+    `/api/home/feed`(카테고리 라운드로빈 확인, ONGOING 섹션 20개 서로 다른 카테고리 순환)
+    확인.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(60파일 611건)/`npm run build` 통과. 상세:
+    `implementation/2026-08-29-eventpick-slide-mix-and-deadline-sort.md`.
