@@ -300,3 +300,19 @@
   - **검증**: `npx tsc --noEmit`/`npm run test`(64파일 654건)/`npm run build` 통과, 로컬
     개발 서버+실제 DB로 GET 조인/PATCH 상태 전환/에러 처리 전부 실측 확인(테스트 데이터
     정리 삭제). 상세: `implementation/2026-08-29-admin-reservations-dashboard.md`.
+
+- [x] **[예약 신청 폼 UI/UX 고도화 (ReservationRequestModal)]** (2026-08-29 완료)
+  - 인원수를 문자열 state로 바꿔 0/빈 값을 실제로 입력해볼 수 있게 하고, 제출 시점에
+    필드별 구체적 안내 메시지(날짜/인원수/연락처 각각 다른 문구)로 검증.
+  - 연락처 입력창 아래 상시 힌트 텍스트 추가(placeholder 힌트 + label 밖 별도 안내문 —
+    label 안에 넣으면 접근성 트리상 라벨 이름이 오염되는 것을 실측으로 발견해 밖으로 뺌).
+  - `handleSubmit` 맨 앞에 `if (isSubmitting) return` 이중 방어선 추가(버튼 disabled와
+    별개로 중복 제출 완벽 차단).
+  - 상단 안내 문구 추가, `window.alert()` + 즉시 닫힘을 제거하고 모달 내 완료 화면
+    (✅ + 메시지)을 보여준 뒤 1.8초 후 자동으로 부드럽게 닫히도록 교체.
+  - **테스트 안정성 이슈 발견 및 수정**: 자동 닫힘 검증에 `vi.useFakeTimers()`를 쓰면
+    단일 파일 실행은 통과하지만 전체 스위트 실행 시 간헐적으로 실패하는 것을 실측
+    확인 — 실제 시간 기반 `waitFor`로 교체해 안정화(2회 연속 전체 스위트 실행으로
+    재현 없음 확인).
+  - **검증**: `npx tsc --noEmit`/`npm run test`(64파일 662건)/`npm run build` 통과. 상세:
+    `implementation/2026-08-29-reservation-form-ux-polish.md`.
