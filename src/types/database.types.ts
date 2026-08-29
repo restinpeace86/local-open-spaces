@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.17"
+    PostgrestVersion: "14.5"
   }
   graphql_public: {
     Tables: {
@@ -281,6 +281,44 @@ export type Database = {
         }
         Relationships: []
       }
+      reservations: {
+        Row: {
+          contact: string
+          created_at: string
+          headcount: number
+          id: string
+          spot_id: string
+          status: string
+          visit_date: string
+        }
+        Insert: {
+          contact: string
+          created_at?: string
+          headcount: number
+          id?: string
+          spot_id: string
+          status?: string
+          visit_date: string
+        }
+        Update: {
+          contact?: string
+          created_at?: string
+          headcount?: number
+          id?: string
+          spot_id?: string
+          status?: string
+          visit_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reservations_spot_id_fkey"
+            columns: ["spot_id"]
+            isOneToOne: false
+            referencedRelation: "open_spaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       spatial_ref_sys: {
         Row: {
           auth_name: string | null
@@ -478,6 +516,7 @@ export type Database = {
             }
             Returns: string
           }
+      analyze_open_spaces: { Args: never; Returns: undefined }
       disablelongtransactions: { Args: never; Returns: string }
       dropgeometrycolumn:
         | {
@@ -624,71 +663,42 @@ export type Database = {
           svc_stat_nms: string[]
         }[]
       }
-      get_nearby_spaces_and_events:
-        | {
-            Args: { radius_meters?: number; user_lat: number; user_lng: number }
-            Returns: {
-              address: string
-              booking_status: string
-              category: string
-              distance_meters: number
-              end_date: string
-              facility_type: string
-              has_parking: boolean
-              id: string
-              info_url: string
-              is_free: boolean
-              is_kids_friendly: boolean
-              is_reservation_required: boolean
-              item_type: string
-              lat: number
-              lng: number
-              name: string
-              operating_hours: string
-              reservation_end_date: string
-              reservation_start_date: string
-              reservation_url: string
-              start_date: string
-              stroller_accessible: boolean
-              target_age_group: string
-              thumbnail_url: string
-            }[]
-          }
-        | {
-            Args: {
-              p_item_type?: string
-              radius_meters?: number
-              user_lat: number
-              user_lng: number
-            }
-            Returns: {
-              address: string
-              booking_status: string
-              category: string
-              distance_meters: number
-              end_date: string
-              facility_type: string
-              has_parking: boolean
-              id: string
-              info_url: string
-              is_free: boolean
-              is_kids_friendly: boolean
-              is_reservation_required: boolean
-              item_type: string
-              lat: number
-              lng: number
-              name: string
-              operating_hours: string
-              reservation_end_date: string
-              reservation_start_date: string
-              reservation_url: string
-              source_type: string
-              start_date: string
-              stroller_accessible: boolean
-              target_age_group: string
-              thumbnail_url: string
-            }[]
-          }
+      get_nearby_spaces_and_events: {
+        Args: {
+          p_item_type?: string
+          radius_meters?: number
+          user_lat: number
+          user_lng: number
+        }
+        Returns: {
+          address: string
+          booking_status: string
+          category: string
+          category_min: string
+          distance_meters: number
+          end_date: string
+          facility_type: string
+          has_parking: boolean
+          id: string
+          info_url: string
+          is_free: boolean
+          is_kids_friendly: boolean
+          is_reservation_required: boolean
+          item_type: string
+          lat: number
+          lng: number
+          name: string
+          operating_hours: string
+          reservation_end_date: string
+          reservation_start_date: string
+          reservation_url: string
+          source_type: string
+          start_date: string
+          stroller_accessible: boolean
+          target_age_group: string
+          thumbnail_url: string
+        }[]
+      }
       get_open_spaces_category_options: {
         Args: never
         Returns: {

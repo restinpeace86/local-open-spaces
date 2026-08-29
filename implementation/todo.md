@@ -272,3 +272,18 @@
     한정, 이벤트는 기존 3분류로 이미 커버돼 제외).
   - **검증**: `npx tsc --noEmit`/`npm run test`(62파일 647건, 신규 테스트 7건)/
     `npm run build` 통과. 상세: `implementation/2026-08-29-spot-detail-naver-deep-link.md`.
+
+- [x] **[스팟 자체 간편 예약/신청 시스템 MVP 구축]** (2026-08-29 완료)
+  - 직전 작업의 네이버 검색 딥링크 폴백(`buildNaverPlaceSearchUrl`)을 완전히 제거하고,
+    `DetailModal`을 info_url 있으면 [🌐 공식 홈페이지 바로가기], 없으면 [📝 간편
+    예약/신청하기](자체 폼 모달 오픈)로 분기하도록 교체.
+  - `reservations` 테이블 신설(spot_id→open_spaces FK, contact/visit_date/headcount/
+    status/created_at) — RLS 켜고 정책 없음(service_role만 접근 가능, PII 보호).
+    `npm run gen:types`로 타입 갱신.
+  - `ReservationRequestModal`(날짜/인원수/연락처 3항목 MVP 폼) + `POST /api/reservations`
+    (서버 검증 4종 + service-role insert) 신규 구현.
+  - **실측 검증**: 실제 스팟에 대해 curl로 정상 접수 확인(테스트 데이터 정리 삭제),
+    검증 실패 4종(연락처 누락/날짜 오류/인원수 0/존재하지 않는 spot_id) 확인, **anon 키로
+    직접 SELECT/INSERT 시도 시 RLS가 완전히 차단함을 실측 확인**(개인정보 보호 핵심 검증).
+  - **검증**: `npx tsc --noEmit`/`npm run test`(63파일 649건)/`npm run build` 통과. 상세:
+    `implementation/2026-08-29-spot-self-service-reservation-mvp.md`.

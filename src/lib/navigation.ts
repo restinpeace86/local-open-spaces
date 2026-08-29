@@ -33,26 +33,8 @@ export function buildNaverMapDirectionsUrl(
   return `nmap://route/car?${params.toString()}`;
 }
 
-// [농장 및 전체 스팟 상세 바텀시트 네이버 딥링크 연동](2026-08-29 사용자 지시): 공식
-// 홈페이지가 없는 스팟(특히 신규 농어촌체험휴양마을/농촌교육농장 — is_free/reservation_url/
-// affiliate_url이 전부 없어 기존 3분류 CTA가 빈칸이 되는 경우가 많음)에서도 "예약하거나
-// 세부 정보를 확인"할 방법이 필요하다는 요청.
-//
-// 위 buildNaverMapDirectionsUrl과 동일한 근거(guide.ncloud-docs.com/docs/maps-url-scheme,
-// WebFetch로 직접 확인)로, 이 문서는 길찾기(`nmap://route`) 외에 검색 전용 스킴도 정의한다:
-// `nmap://search?query=`(검색어로 찾기)와 `nmap://place?lat=&lng=&name=`(좌표에 마커 표시).
-// 후자는 정확한 좌표에 핀만 찍을 뿐 네이버 플레이스의 리뷰·영업정보·예약 버튼이 있는
-// "장소 상세 페이지"로 반드시 연결된다는 보장이 없다 — "예약하거나 세부 정보를 확인"이라는
-// 목적에는 이름(+주소)으로 검색해 실제 플레이스 리스팅을 찾아주는 `search` 스킴이 더
-// 부합한다(요청사항의 "이름과 주소를 조합" 문구와도 일치). 주소를 함께 붙이는 이유는 동명
-// 장소가 다른 지역에도 있을 때 검색 정확도를 높이기 위함이다(요청사항 그대로).
-export function buildNaverPlaceSearchUrl(
-  spot: { name: string; address?: string | null },
-  appOrigin?: string
-): string {
-  const resolvedAppOrigin = appOrigin ?? (typeof window !== 'undefined' ? window.location.origin : '');
-  const query = [spot.name, spot.address].filter(Boolean).join(' ');
-
-  const params = new URLSearchParams({ query, appname: resolvedAppOrigin });
-  return `nmap://search?${params.toString()}`;
-}
+// [스팟 자체 간편 예약/신청 시스템 MVP](2026-08-29 사용자 지시): 직전 작업에서 추가했던
+// "공식 홈페이지가 없으면 이름+주소로 네이버 검색 딥링크를 만들어 보여주는" 폴백
+// (buildNaverPlaceSearchUrl)을 완전히 제거했다 — 이제 그 자리는 자체 간편 예약/신청 폼
+// (ReservationRequestModal, POST /api/reservations)이 대신한다. 유저를 외부 앱/사이트로
+// 내보내지 않고 우리 서비스 안에서 신청 접수까지 끝내기 위함이다.

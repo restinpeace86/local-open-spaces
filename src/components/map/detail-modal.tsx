@@ -7,10 +7,11 @@ import { getTargetAudienceLabel } from '@/lib/spaces/target-audience-meta';
 import { formatDDay } from '@/lib/spaces/d-day';
 import { getReservationAvailabilityTag } from '@/lib/spaces/event-status';
 import { formatDistance, formatDateRange, formatDateTime } from '@/lib/spaces/format';
-import { buildNaverMapDirectionsUrl, buildNaverPlaceSearchUrl } from '@/lib/navigation';
+import { buildNaverMapDirectionsUrl } from '@/lib/navigation';
 import { useUserLocation } from '@/hooks/use-user-location';
 import { MiniMap } from '@/components/map/mini-map';
 import { MapPreviewModal } from '@/components/map/map-preview-modal';
+import { ReservationRequestModal } from '@/components/map/reservation-request-modal';
 
 const NO_INFO_TEXT = '정보 준비 중 (공공 기관 문의)';
 
@@ -26,6 +27,7 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
   const [copied, setCopied] = useState(false);
   const [isMapPreviewOpen, setIsMapPreviewOpen] = useState(false);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
+  const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
   // [실측 디버깅 발견 — 뒤로가기 인터셉트 제거](2026-08-29): 이 모달을 React onClick 경로
   // (리스트/카드 클릭 등)로 열면 useModalBackClose 내부의 history.pushState 호출이 Next.js
   // App Router의 자체 라우팅 감지와 충돌해 모달이 아예 커밋되지 않거나(상태가 조용히
@@ -79,14 +81,16 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
     ? { label: '🗺️ 길찾기', href: directionsUrl }
     : null;
 
-  // [농장 및 전체 스팟 상세 바텀시트 네이버 딥링크 연동](2026-08-29 사용자 지시): 위 3분류
-  // CTA(Decision 011)는 공공/제휴 URL이 없고 좌표도 부정확하면 아예 비게 된다 — 신규
-  // 농어촌체험휴양마을/농촌교육농장처럼 홈페이지·예약 URL이 대부분 없는 스팟(요구사항
-  // "전체 스팟")에서 특히 그렇다. info_url(공식 홈페이지)이 있으면 그대로 쓰고, 없으면
-  // 이름+주소로 네이버 검색 딥링크를 만들어 항상 "예약하거나 세부 정보를 확인"할 방법을
-  // 제공한다. 요구사항이 "스팟" 한정이라(이벤트는 이미 위 3분류 CTA로 충분히 커버됨)
-  // isEvent가 아닐 때만 노출한다.
-  const naverLinkUrl = !isEvent ? item.info_url || buildNaverPlaceSearchUrl({ name: item.name, address: item.address }) : null;
+  // [스팟 자체 간편 예약/신청 시스템 MVP](2026-08-29 사용자 지시): 직전에 붙였던 "정보
+  // 없으면 네이버 검색 딥링크로 내보내기" 폴백을 완전히 제거하고, 대신 공식 홈페이지가
+  // 없는 스팟은 우리 플랫폼 자체 신청 폼으로 흡수한다 — 유저를 외부로 보내지 않고
+  // 서비스 안에서 신청 접수까지 끝낸다. reservations 테이블의 FK가 open_spaces만
+  // 참조하므로(스팟 전용) 위 3분류 CTA와 마찬가지로 isEvent가 아닐 때만 노출한다.
+  const secondaryAction = isEvent
+    ? null
+    : item.info_url
+    ? { type: 'link' as const, label: '🌐 공식 홈페이지 바로가기', href: item.info_url }
+    : { type: 'reservation' as const, label: '📝 간편 예약/신청하기' };
 
   async function handleCopyAddress() {
     if (!item.address) return;
@@ -265,15 +269,24 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
                 {cta.label}
               </a>
             )}
-            {naverLinkUrl && (
+            {secondaryAction?.type === 'link' && (
               <a
-                href={naverLinkUrl}
+                href={secondaryAction.href}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex-1 text-center rounded-lg border border-gray-300 text-gray-700 text-sm font-medium py-2.5 hover:bg-gray-50"
               >
-                🔗 네이버에서 상세/예약 보기
+                {secondaryAction.label}
               </a>
+            )}
+            {secondaryAction?.type === 'reservation' && (
+              <button
+                type="button"
+                onClick={() => setIsReservationModalOpen(true)}
+                className="flex-1 text-center rounded-lg border border-gray-300 text-gray-700 text-sm font-medium py-2.5 hover:bg-gray-50"
+              >
+                {secondaryAction.label}
+              </button>
             )}
           </div>
         </div>
@@ -285,6 +298,14 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
           lng={item.lng}
           name={item.name}
           onClose={() => setIsMapPreviewOpen(false)}
+        />
+      )}
+
+      {isReservationModalOpen && (
+        <ReservationRequestModal
+          spotId={item.id}
+          spotName={item.name}
+          onClose={() => setIsReservationModalOpen(false)}
         />
       )}
     </div>

@@ -169,8 +169,10 @@ describe('DetailModal 조건부 CTA 3분류 (Task 9-6-11, Decision 011)', () => 
   });
 });
 
-// [농장 및 전체 스팟 상세 바텀시트 네이버 딥링크 연동](2026-08-29 사용자 지시)
-describe('DetailModal 네이버 딥링크 버튼', () => {
+// [스팟 자체 간편 예약/신청 시스템 MVP](2026-08-29 사용자 지시): 이전에 있던 네이버 검색
+// 딥링크 폴백을 완전히 제거하고, info_url 유무에 따라 [공식 홈페이지 바로가기] 또는
+// [간편 예약/신청하기]로 분기한다.
+describe('DetailModal 보조 액션(공식 홈페이지 / 간편 예약·신청)', () => {
   beforeEach(() => {
     mockUserLocation = { lat: 37.4, lng: 127.2 };
   });
@@ -179,46 +181,33 @@ describe('DetailModal 네이버 딥링크 버튼', () => {
     vi.unstubAllGlobals();
   });
 
-  it('info_url이 없으면 이름+주소로 만든 네이버 검색 딥링크를 연결한다', () => {
-    render(
-      <DetailModal
-        item={makeSpaceItem({ name: '버섯구지마을', address: '경기도 가평군 하면 대보간선로 173', info_url: null })}
-        onClose={() => {}}
-      />
-    );
+  it('info_url이 있으면 [🌐 공식 홈페이지 바로가기]가 그 URL로 새 창 연결된다(간편 예약 버튼은 없음)', () => {
+    render(<DetailModal item={makeSpaceItem({ info_url: 'https://버섯구지마을.kr' })} onClose={() => {}} />);
 
-    const link = screen.getByText('🔗 네이버에서 상세/예약 보기').closest('a');
+    const link = screen.getByText('🌐 공식 홈페이지 바로가기').closest('a');
     expect(link).not.toBeNull();
-    const href = link!.getAttribute('href')!;
-    expect(href).toContain('nmap://search?');
-    const query = new URL(href.replace('nmap://', 'https://x/')).searchParams.get('query');
-    expect(query).toBe('버섯구지마을 경기도 가평군 하면 대보간선로 173');
-  });
-
-  it('info_url이 있으면 네이버 딥링크 대신 그 공식 홈페이지 URL을 그대로 연결한다', () => {
-    render(
-      <DetailModal
-        item={makeSpaceItem({ info_url: 'https://버섯구지마을.kr' })}
-        onClose={() => {}}
-      />
-    );
-
-    const link = screen.getByText('🔗 네이버에서 상세/예약 보기').closest('a');
     expect(link!.getAttribute('href')).toBe('https://버섯구지마을.kr');
-  });
-
-  it('새 창(target=_blank)으로 안전하게 연다', () => {
-    render(<DetailModal item={makeSpaceItem()} onClose={() => {}} />);
-
-    const link = screen.getByText('🔗 네이버에서 상세/예약 보기').closest('a');
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+    expect(screen.queryByText('📝 간편 예약/신청하기')).not.toBeInTheDocument();
   });
 
-  it('이벤트(EVENT)에는 노출하지 않는다(요구사항이 "스팟" 한정)', () => {
-    render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT' })} onClose={() => {}} />);
+  it('info_url이 없으면 [📝 간편 예약/신청하기] 버튼이 뜨고, 누르면 신청 폼 모달이 열린다', () => {
+    render(<DetailModal item={makeSpaceItem({ name: '버섯구지마을', info_url: null })} onClose={() => {}} />);
 
-    expect(screen.queryByText('🔗 네이버에서 상세/예약 보기')).not.toBeInTheDocument();
+    expect(screen.queryByText('🌐 공식 홈페이지 바로가기')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('📝 간편 예약/신청하기'));
+
+    expect(screen.getByText('📝 간편 예약/신청')).toBeInTheDocument();
+    // "버섯구지마을"은 DetailModal 제목과 신청 폼 모달 부제 두 곳에 함께 표시된다.
+    expect(screen.getAllByText('버섯구지마을')).toHaveLength(2);
+  });
+
+  it('이벤트(EVENT)에는 두 버튼 다 노출하지 않는다(요구사항이 "스팟" 한정)', () => {
+    render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT', info_url: null })} onClose={() => {}} />);
+
+    expect(screen.queryByText('🌐 공식 홈페이지 바로가기')).not.toBeInTheDocument();
+    expect(screen.queryByText('📝 간편 예약/신청하기')).not.toBeInTheDocument();
   });
 });
 
