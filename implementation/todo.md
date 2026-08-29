@@ -88,3 +88,20 @@
   - **검증**: `npx tsc --noEmit`/`npm run test`(56파일 562건)/`npm run build` 통과,
     실측 재현/재검증 완료. 상세:
     `implementation/2026-08-29-nearby-marker-cluster-count-leak-fix.md`.
+
+- [x] **[배치 수집 로그 검증, Admin 상세 모달 링크/이미지 개선, 기본 조회일자 오늘로 설정]**
+  (2026-08-29 완료)
+  - **배치 로그 검증**: "주말 수집 0건"은 공공데이터 포털 미업데이트가 아니라, GitHub
+    Actions 저장소 시크릿(`GG_DATA_API_KEY`/`SEOUL_OPEN_DATA_KEY`/
+    `NEXT_PUBLIC_SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY` 누락, `PUBLIC_DATA_API_KEY`
+    무효)이 원인으로 확인됨. GitHub Actions API로 2026-08-20 이후 전체 스케줄 실행이
+    100% failure임을 확인, 로컬 재현은 동일 스크립트가 완전히 성공함을 확인, 대표 승인 하에
+    실제 잡 원문 로그(PAT 1회성 사용)로 정확한 에러 메시지 확보. **코드 수정 아님 — 대표의
+    GitHub 저장소 시크릿 재설정 필요**(운영 조치).
+  - Admin 상세 모달(`raw-data-modal.tsx`): http(s) URL을 새 창 링크로, 이미지 URL
+    (thumbnail_url 또는 이미지 확장자)은 실제 미리보기 `<img>`로 렌더링.
+  - `/admin/data-grid` 진입 시 기본 조회 조건을 `createdFrom`/`createdTo` 오늘 날짜로
+    고정(`data-grid-client.tsx`).
+  - **검증**: `npx tsc --noEmit`/`npm run test`(57파일 565건, 신규 `raw-data-modal.test.tsx`
+    포함)/`npm run build` 통과. 상세:
+    `implementation/2026-08-29-batch-log-verification-admin-modal-and-default-filter.md`.

@@ -7,6 +7,18 @@ import { AdminTable, AdminRow, AdminOpenSpaceRow, AdminEventRow, AdminRawIngestR
 // 함께 보여주는 Read-Only 뷰어. 3개 탭(open_spaces/events/raw_ingest_data) 행 형태가 서로
 // 달라 탭별로 제목/부제/원문 필드를 분기한다. 데스크톱은 중앙 모달, 모바일은 하단 바텀시트로
 // 표시해 spec/common의 모달 관례를 따른다(기존 구현 유지).
+// [상세 모달 URL/이미지 UX 개선](2026-08-29 사용자 지시): "전체 컬럼" 목록의 URL 값이
+// 그냥 텍스트라 오퍼레이터가 매번 복사해서 새 탭에 붙여넣어야 했다. http(s) URL은 클릭 시
+// 새 창으로 열리는 링크로, 그중 이미지 URL(썸네일 등)은 실제 미리보기 이미지로 렌더링한다.
+function isHttpUrl(value: unknown): value is string {
+  return typeof value === 'string' && /^https?:\/\//i.test(value);
+}
+
+function isImageUrlField(key: string, value: string): boolean {
+  if (key === 'thumbnail_url') return true;
+  return /\.(jpe?g|png|gif|webp|svg|avif)(\?.*)?$/i.test(value);
+}
+
 function getModalContent(table: AdminTable, row: AdminRow): { title: string; subtitle: string; raw: unknown } {
   if (table === 'raw_ingest_data') {
     const r = row as AdminRawIngestRow;
@@ -231,13 +243,39 @@ export function RawDataModal({
           )}
 
           <h3 className="mt-4 text-xs font-semibold text-gray-500">전체 컬럼</h3>
-          <div className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-            {structuredEntries.map(([key, value]) => (
-              <div key={key} className="flex gap-1.5 overflow-hidden">
-                <span className="shrink-0 text-gray-400">{key}:</span>
-                <span className="text-gray-700 truncate">{value === null || value === undefined ? 'NULL' : String(value)}</span>
-              </div>
-            ))}
+          <div className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+            {structuredEntries.map(([key, value]) => {
+              const isUrl = isHttpUrl(value);
+              return (
+                <div key={key} className="flex gap-1.5 overflow-hidden">
+                  <span className="shrink-0 text-gray-400">{key}:</span>
+                  {isUrl && isImageUrlField(key, value) ? (
+                    <a href={value} target="_blank" rel="noopener noreferrer" className="shrink-0">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={value}
+                        alt={key}
+                        className="h-14 w-14 object-cover rounded border border-gray-200"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                        }}
+                      />
+                    </a>
+                  ) : isUrl ? (
+                    <a
+                      href={value}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-blue-600 underline truncate hover:text-blue-700"
+                    >
+                      {value}
+                    </a>
+                  ) : (
+                    <span className="text-gray-700 truncate">{value === null || value === undefined ? 'NULL' : String(value)}</span>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           <h3 className="mt-4 text-xs font-semibold text-gray-500">

@@ -545,8 +545,11 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
   // 요구사항 2: 단축 필터([오늘 등록건 보기]/[최근 3일건 보기]) + 달력 기간 조회. 다른 즉시
   // 반영 필터(검색어/칩 등)와 같은 관례로, 값이 바뀌면 바로 쿼리가 나간다(체크박스 필터만
   // pending/applied 2단계인 것과 다름 — 날짜는 오조작 빈도가 낮고 즉시 반영이 자연스럽다).
-  const [createdFrom, setCreatedFrom] = useState('');
-  const [createdTo, setCreatedTo] = useState('');
+  // [기본 조회일자 오늘로 설정](2026-08-29 사용자 지시): 오퍼레이터가 페이지에 처음 들어왔을
+  // 때 매번 "오늘 등록건 보기"를 눌러야 했던 불편을 없애기 위해, 초기값 자체를 오늘로 고정한다
+  // (isActive 필터가 기본값을 'all'이 아니라 'true'로 두는 것과 동일한 관례).
+  const [createdFrom, setCreatedFrom] = useState(todayDateStr());
+  const [createdTo, setCreatedTo] = useState(todayDateStr());
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0]);
 
@@ -567,8 +570,8 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     setPendingTargetAudience([]);
     setAppliedTargetAudience([]);
     setIsActive('true');
-    setCreatedFrom('');
-    setCreatedTo('');
+    setCreatedFrom(todayDateStr());
+    setCreatedTo(todayDateStr());
   };
 
   const switchTab = (next: AdminTable) => {
