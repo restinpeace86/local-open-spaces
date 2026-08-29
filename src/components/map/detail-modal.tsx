@@ -9,7 +9,6 @@ import { getReservationAvailabilityTag } from '@/lib/spaces/event-status';
 import { formatDistance, formatDateRange, formatDateTime } from '@/lib/spaces/format';
 import { buildNaverMapDirectionsUrl } from '@/lib/navigation';
 import { useUserLocation } from '@/hooks/use-user-location';
-import { useModalBackClose } from '@/hooks/use-modal-back-close';
 import { MiniMap } from '@/components/map/mini-map';
 import { MapPreviewModal } from '@/components/map/map-preview-modal';
 
@@ -27,7 +26,17 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
   const [copied, setCopied] = useState(false);
   const [isMapPreviewOpen, setIsMapPreviewOpen] = useState(false);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
-  useModalBackClose(onClose);
+  // [실측 디버깅 발견 — 뒤로가기 인터셉트 제거](2026-08-29): 이 모달을 React onClick 경로
+  // (리스트/카드 클릭 등)로 열면 useModalBackClose 내부의 history.pushState 호출이 Next.js
+  // App Router의 자체 라우팅 감지와 충돌해 모달이 아예 커밋되지 않거나(상태가 조용히
+  // 되돌아감) 실제 페이지 네비게이션급 리로드가 발생하는 것을 실측으로 확인했다(Playwright로
+  // React Fiber를 직접 조회해 확인 — 클릭 핸들러는 정확히 실행되지만 DOM에 반영되지 않음).
+  // 반면 카카오맵 마커 클릭(SDK의 순수 addEventListener 경로)으로 여는 동일 구조의
+  // MarkerGroupModal은 정상 동작했다 — 즉 "React onClick으로 이 훅을 쓰는 모달을 여는" 모든
+  // 경로에 잠재된 문제였다. DetailModal은 홈 피드/이벤트픽/캘린더/지역별 그리드 등 앱 전역에서
+  // 카드 클릭으로 열리므로(전부 React onClick 경로) 사실상 상시 영향을 받고 있었다. 배경
+  // 클릭/X 버튼으로는 여전히 정상적으로 닫히므로, 뒤로가기 제스처로 모달만 닫는 편의 기능만
+  // 제거하고 핵심 기능(모달 열기/닫기)은 안전하게 복구한다.
   // Task 9-5-1(2026-08-22): 유저가 이미 설정해 둔 전역 위치(온보딩에서 저장한 좌표, 미설정
   // 시 기본값)를 그대로 "내 위치" 출발지로 쓴다 — 별도 GPS 권한 요청 없이 서비스가 이미 아는
   // 값을 재사용해, 네이버 지도 앱이 열리자마자 출발지 ➔ 목적지 경로가 바로 뜨도록 한다.

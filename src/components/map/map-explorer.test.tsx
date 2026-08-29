@@ -103,9 +103,9 @@ describe('MapExplorer 상시 공간 전용 단일화 (Task 9-6-10)', () => {
   });
 });
 
-// [스팟픽 대분류/중분류 계층적 탐색](2026-08-28): 기존 목적별 테마 단일 선택 칩과 키즈/무료/
-// 오늘·주말 Quick 필터를 표준 중분류(category_min) 다중 선택(최대 5개)으로 전면 교체했다.
-describe('MapExplorer 대분류/중분류 계층적 탐색 (2026-08-28)', () => {
+// [스팟픽 나들이 전용 핵심 중분류 1단 필터 개편](2026-08-29): 대분류→중분류 2단 구조를
+// 철회하고, 나들이 목적에 맞는 핵심 중분류(+AI 추천 액션 칩)만 1단으로 노출한다.
+describe('MapExplorer 나들이 전용 핵심 중분류 1단 필터 (2026-08-29)', () => {
   it('기존 목적별 테마 칩과 키즈/무료/오늘·주말 Quick 필터가 더 이상 렌더링되지 않는다', () => {
     render(<MapExplorer />);
     expect(screen.queryByText('공원·광장')).not.toBeInTheDocument();
@@ -114,26 +114,31 @@ describe('MapExplorer 대분류/중분류 계층적 탐색 (2026-08-28)', () => 
     expect(screen.queryByText('⚡ 오늘/주말')).not.toBeInTheDocument();
   });
 
-  it('새 대분류 탭(체육시설/문화시설/자연·공원/키즈·놀이시설)이 노출되고 기본 대분류의 중분류만 보인다', () => {
+  it('핵심 중분류 칩(공원/도서관/키즈카페/놀이터 등)과 AI 추천 칩이 1단으로 바로 노출되고, 체육시설은 제외된다', () => {
     render(<MapExplorer />);
-    expect(screen.getAllByText(/체육시설/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/문화시설/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/자연\/공원/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/키즈\/놀이시설/).length).toBeGreaterThan(0);
-    // 기본 대분류(키즈/놀이시설)의 중분류만 보이고 다른 대분류(체육시설)의 중분류는 안 보인다
-    expect(screen.getAllByText('어린이놀이터').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/AI 추천/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/공원/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/도서관/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/키즈카페/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/놀이터/).length).toBeGreaterThan(0);
+    // 대분류 탭 클릭 없이 처음부터 노출되고, 체육시설(비나들이성)은 필터 목록에서 제외된다.
     expect(screen.queryByText('테니스장')).not.toBeInTheDocument();
   });
 
-  it('중분류를 6번째로 선택하려 하면 안내 토스트가 뜨고 선택되지 않는다', async () => {
+  it('핵심 중분류 칩을 6번째로 선택하려 하면 안내 토스트가 뜨고 선택되지 않는다', async () => {
     render(<MapExplorer />);
-    fireEvent.click(screen.getAllByText(/체육시설/)[0]);
-    const desktopMinors = ['테니스장', '골프장', '풋살장', '축구장', '농구장'];
-    for (const minor of desktopMinors) {
-      fireEvent.click(screen.getAllByText(minor)[0]);
+    const coreLabels = [/공원/, /문화센터/, /박물관/, /도서관/, /키즈카페/];
+    for (const label of coreLabels) {
+      fireEvent.click(screen.getAllByText(label)[0]);
     }
-    fireEvent.click(screen.getAllByText('족구장')[0]);
+    fireEvent.click(screen.getAllByText(/놀이터/)[0]);
 
     expect(await screen.findByText(/최대 5개까지 선택할 수 있어요/)).toBeInTheDocument();
+  });
+
+  it('AI 추천 칩을 누르면 페이지 이동 없이 추천 바텀시트가 뜬다', () => {
+    render(<MapExplorer />);
+    fireEvent.click(screen.getAllByText(/AI 추천/)[0]);
+    expect(screen.getByText(/AI가 추천하는 나들이 장소/)).toBeInTheDocument();
   });
 });

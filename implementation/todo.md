@@ -105,3 +105,21 @@
   - **검증**: `npx tsc --noEmit`/`npm run test`(57파일 565건, 신규 `raw-data-modal.test.tsx`
     포함)/`npm run build` 통과. 상세:
     `implementation/2026-08-29-batch-log-verification-admin-modal-and-default-filter.md`.
+
+- [x] **[스팟픽 AI 추천 칩 + 나들이 전용 핵심 중분류 1단 필터 개편]** (2026-08-29 완료)
+  - 사용자 확인 결과 하단 탭 이름은 그대로 유지, "AI 추천"은 스팟픽 화면 안의 중분류
+    칩으로 신규 추가되어 페이지 이동 없이 바텀시트로 추천 나들이 장소를 보여주는 기능으로
+    범위 확정(2회 AskUserQuestion으로 확인).
+  - 대분류→중분류 2단 구조를 철회, 실제 DB category_min 분포 실측 기반 핵심 중분류
+    6종(공원/문화센터·문화의집/박물관/도서관/키즈카페/놀이터) 1단 칩으로 개편, 체육시설
+    등 비나들이성 항목 제외.
+  - AI 추천: LLM 미사용, 거리/나들이 편의성/무료 여부 기반 규칙 점수 + 카테고리 라운드로빈
+    스마트 정렬(`ai-recommend.ts`)로 즉시 응답. `ai-recommend-sheet.tsx` 신규.
+  - **중대 기존 버그 발견 및 수정**: 실측 디버깅 중 `useModalBackClose`(history.pushState
+    호출)가 React onClick 경로로 여는 모달(DetailModal 등)을 무력화시키는 버그를 발견
+    (`git stash`로 확인한 결과 이번 작업 이전부터 존재 — 홈피드/이벤트픽/캘린더/지역별
+    그리드 등 앱 전역 영향 가능성). DetailModal에서 해당 훅 호출 제거로 수정, 개발 서버 +
+    프로덕션 빌드 서버 양쪽에서 전체 플로우 재검증 완료.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(58파일 571건, 신규 `ai-recommend.test.ts`
+    포함)/`npm run build` 통과, Playwright 실측(개발+프로덕션 서버) 전체 플로우 확인. 상세:
+    `implementation/2026-08-29-spotpick-ai-recommend-and-core-category-filter.md`.

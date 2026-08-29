@@ -9,6 +9,7 @@ import { ItemListPanel } from '@/components/map/item-list-panel';
 import { EmptyState } from '@/components/map/empty-state';
 import { DetailModal } from '@/components/map/detail-modal';
 import { MarkerGroupModal } from '@/components/map/marker-group-modal';
+import { AiRecommendSheet } from '@/components/map/ai-recommend-sheet';
 import { Toast } from '@/components/map/toast';
 import { LocationHeader } from '@/components/map/location-header';
 import { LocationOnboardingModal } from '@/components/map/location-onboarding-modal';
@@ -16,6 +17,8 @@ import { RecenterButton } from '@/components/map/recenter-button';
 import { MyLocationButton } from '@/components/map/my-location-button';
 import { getNearbySpacesAndEvents, NearbyItem } from '@/lib/spaces/get-nearby';
 import { useUserLocation } from '@/hooks/use-user-location';
+import { CORE_SPOT_CATEGORIES } from '@/lib/spaces/spot-category-groups';
+import { rankAiRecommendedSpots } from '@/lib/spaces/ai-recommend';
 
 // spec/map/spatial-search.md 3.1: 반경 내 최대 200개 마커만 우선 렌더링
 const MARKER_LIMIT = 200;
@@ -44,15 +47,25 @@ export function MapExplorer() {
   const searchParams = useSearchParams();
   const radius = FIXED_RADIUS_METERS;
   const [keyword, setKeyword] = useState(() => searchParams.get('q') ?? '');
-  // [스팟픽 대분류/중분류 계층적 탐색](2026-08-28): 기존 목적별 테마 단일 선택(category,
-  // classifyThemeSpot)과 키즈/무료/오늘·주말 Quick 필터를 표준 중분류(category_min) 다중
-  // 선택(최대 5개)으로 전면 교체한다 — 대표 확인 후 결정.
-  const [selectedCategoryMins, setSelectedCategoryMins] = useState<string[]>([]);
+  // [스팟픽 나들이 전용 핵심 중분류 1단 필터 개편](2026-08-29 사용자 지시): 대분류→중분류
+  // 2단 구조를 철회하고 핵심 중분류 칩(최대 5개)만 1단으로 노출한다. UI는 "칩 id" 단위로
+  // 선택 상태를 관리하고(칩 하나가 실제 category_min 여러 개를 아우를 수 있음 — 예: "박물관"
+  // 칩은 3개 category_min을 동시에 포함), 실제 필터링에 쓰는 category_min 배열은 선택된
+  // 칩들의 minors를 모두 펼친 파생값이다.
+  const [selectedCategoryIds, setSelectedCategoryIds] = useState<string[]>([]);
+  const selectedCategoryMins = useMemo(
+    () => CORE_SPOT_CATEGORIES.filter((c) => selectedCategoryIds.includes(c.id)).flatMap((c) => c.minors),
+    [selectedCategoryIds]
+  );
   const [isMaxSelectionToastVisible, setIsMaxSelectionToastVisible] = useState(false);
   const maxSelectionToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [items, setItems] = useState<NearbyItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<NearbyItem[] | null>(null);
+  // [스팟픽 AI 추천](2026-08-29 사용자 지시): "AI 추천" 칩 클릭 시 페이지 이동 없이 지도
+  // 화면 위 바텀시트로 나들이 장소를 바로 추천한다. 다른 카테고리 필터와 무관하게 항상
+  // 반경 내 전체 items(원본, 필터링 전)를 대상으로 추천한다.
+  const [isAiRecommendOpen, setIsAiRecommendOpen] = useState(false);
   const [isSheetExpanded, setIsSheetExpanded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -120,14 +133,23 @@ export function MapExplorer() {
 
   const resetFilters = useCallback(() => {
     setKeyword('');
-    setSelectedCategoryMins([]);
+    setSelectedCategoryIds([]);
   }, []);
 
-  // [스팟픽 대분류/중분류 계층적 탐색](2026-08-28): 중분류 다중 선택(최대
-  // MAX_SPOT_CATEGORY_MIN_SELECTION개)을 토글한다. 제한 초과 시도는
+  // [스팟픽 나들이 전용 핵심 중분류 1단 필터 개편](2026-08-29): 핵심 중분류 칩(최대
+  // MAX_SPOT_CATEGORY_MIN_SELECTION개)을 id 단위로 토글한다. 제한 초과 시도는
   // SpotCategoryFilter가 걸러 onLimitExceeded로 알려주므로 여기서는 정상 토글만 담당한다.
-  const handleToggleCategoryMin = useCallback((minor: string) => {
-    setSelectedCategoryMins((prev) => (prev.includes(minor) ? prev.filter((m) => m !== minor) : [...prev, minor]));
+  const handleToggleCategory = useCallback((id: string) => {
+    setSelectedCategoryIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+  }, []);
+
+  const handleOpenAiRecommend = useCallback(() => setIsAiRecommendOpen(true), []);
+
+  const aiRecommendedItems = useMemo(() => rankAiRecommendedSpots(items), [items]);
+
+  const handleSelectFromAiRecommend = useCallback((item: NearbyItem) => {
+    setIsAiRecommendOpen(false);
+    setSelectedItem(item);
   }, []);
 
   const handleLimitExceeded = useCallback(() => {
@@ -196,9 +218,10 @@ export function MapExplorer() {
           <LocationHeader addressName={sigunguName ?? addressName} onClick={openOnboarding} />
           <SearchBar value={keyword} onChange={setKeyword} />
           <SpotCategoryFilter
-            selectedMinors={selectedCategoryMins}
-            onToggleMinor={handleToggleCategoryMin}
+            selectedCategoryIds={selectedCategoryIds}
+            onToggleCategory={handleToggleCategory}
             onLimitExceeded={handleLimitExceeded}
+            onSelectAiRecommend={handleOpenAiRecommend}
           />
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -245,9 +268,10 @@ export function MapExplorer() {
           <LocationHeader addressName={sigunguName ?? addressName} onClick={openOnboarding} />
           <SearchBar value={keyword} onChange={setKeyword} />
           <SpotCategoryFilter
-            selectedMinors={selectedCategoryMins}
-            onToggleMinor={handleToggleCategoryMin}
+            selectedCategoryIds={selectedCategoryIds}
+            onToggleCategory={handleToggleCategory}
             onLimitExceeded={handleLimitExceeded}
+            onSelectAiRecommend={handleOpenAiRecommend}
           />
           {/* implementation/todo.md: 지도 드래그 후 재검색 버튼 - 모바일에서는 필터 스택 하단에 노출해 겹침 방지 */}
           {pendingRecenter && (
@@ -310,6 +334,14 @@ export function MapExplorer() {
           items={selectedGroup}
           onSelectItem={handleSelectFromGroup}
           onClose={() => setSelectedGroup(null)}
+        />
+      )}
+
+      {isAiRecommendOpen && (
+        <AiRecommendSheet
+          items={aiRecommendedItems}
+          onSelectItem={handleSelectFromAiRecommend}
+          onClose={() => setIsAiRecommendOpen(false)}
         />
       )}
 

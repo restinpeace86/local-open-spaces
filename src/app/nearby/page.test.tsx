@@ -23,9 +23,9 @@ describe('NearbyPage', () => {
     render(<NearbyPage />);
     // Task 9-6-10(2026-08-23): /nearby가 상시 공간 전용으로 단일화되면서 on/off 토글
     // ("상시 시설 보기")이 제거됐다.
-    // [스팟픽 대분류/중분류 계층적 탐색](2026-08-28): 목적별 테마 칩 대신 표준 중분류
-    // 대분류 탭이 항상 노출된다.
-    expect((await screen.findAllByText(/체육시설/)).length).toBeGreaterThan(0);
+    // [스팟픽 나들이 전용 핵심 중분류 1단 필터 개편](2026-08-29): 대분류 탭 없이 핵심
+    // 중분류 칩(+AI 추천)이 처음부터 1단으로 노출된다.
+    expect((await screen.findAllByText(/AI 추천/)).length).toBeGreaterThan(0);
     // [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판): 반경 선택 버튼(1km/5km/10km)이
     // 전면 삭제됐다 — 더 이상 화면에 노출되지 않아야 한다.
     expect(screen.queryByText('5km')).not.toBeInTheDocument();
