@@ -4,10 +4,11 @@ export type HomeSubTab = 'home' | 'hotdeal' | 'free';
 
 const TABS: { key: HomeSubTab; label: string; enabled: boolean }[] = [
   { key: 'home', label: '🏠 홈', enabled: true },
-  // 특가·핫딜(쿠팡 파트너스/네이버 쇼핑 등 커머스 API 연동, project/overview.md "신규 확장 목표")은
-  // 아직 미착수라 실제 데이터가 전혀 없다 — spec/common/feature-flags.md 원칙대로 탭 자체는
-  // 노출하되 클릭 불가(Disabled) 처리한다. 가짜 데이터를 만들어 채우지 않는다(추측 금지).
-  { key: 'hotdeal', label: '🏷️ 특가·핫딜', enabled: false },
+  // [제휴 특가 Deals 시스템 및 수집 어댑터 MVP](2026-08-29 사용자 지시): deals 테이블/
+  // /api/deals가 마련되어 탭을 활성화한다. 실제 제휴 API 연동 전이라 deals가 비어 있을
+  // 수 있는데, 그 경우는 home-view.tsx에서 기존 "무료·공공" 탭과 동일한 EmptyState로
+  // 처리한다(가짜 데이터로 채우지 않음, 추측 금지).
+  { key: 'hotdeal', label: '🏷️ 특가·핫딜', enabled: true },
   { key: 'free', label: '🎁 무료·공공', enabled: true },
 ];
 

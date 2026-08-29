@@ -199,10 +199,70 @@ describe('HomeView', () => {
     });
   });
 
-  it('특가·핫딜 서브탭은 비활성화 상태로 노출된다(커머스 API 미연동)', () => {
-    render(<HomeView initialHeroEvents={[]} />);
-    const hotdealTab = screen.getByText('🏷️ 특가·핫딜');
-    expect(hotdealTab).toHaveAttribute('aria-disabled', 'true');
+  // [제휴 특가 Deals 시스템 및 수집 어댑터 MVP](2026-08-29 사용자 지시): deals 테이블/
+  // /api/deals가 마련되어 탭이 활성화됐다(이전에는 데이터가 전혀 없어 비활성 노출이었음).
+  describe('특가·핫딜 서브탭', () => {
+    function stubFetchDeals(deals: unknown[]) {
+      const fetchMock = vi.fn((url: string) => {
+        if (url.startsWith('/api/deals')) {
+          return Promise.resolve({ json: () => Promise.resolve({ deals }) } as Response);
+        }
+        return Promise.resolve({ json: () => Promise.resolve({ heroEvents: [] }) } as Response);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      return fetchMock;
+    }
+
+    function makeDeal(overrides: Record<string, unknown> = {}) {
+      return {
+        id: 'deal-1',
+        title: '한우 세트 특가',
+        description: '설 명절 한우 선물세트',
+        original_price: 100000,
+        discount_price: 70000,
+        discount_rate: 30,
+        image_url: null,
+        affiliate_url: 'https://link.coupang.com/a/beef',
+        is_active: true,
+        created_at: '2026-08-29T00:00:00+00:00',
+        ...overrides,
+      };
+    }
+
+    it('탭을 클릭하면 지연 페칭된 특가 카드를 보여준다', async () => {
+      stubFetchDeals([makeDeal()]);
+      render(<HomeView initialHeroEvents={[]} />);
+
+      fireEvent.click(screen.getByText('🏷️ 특가·핫딜'));
+
+      expect(await screen.findByText('한우 세트 특가')).toBeInTheDocument();
+      expect(screen.getByText('70,000원')).toBeInTheDocument();
+      expect(screen.getByText('30% 할인')).toBeInTheDocument();
+    });
+
+    it('특가가 없으면 빈 상태 안내를 보여준다', async () => {
+      stubFetchDeals([]);
+      render(<HomeView initialHeroEvents={[]} />);
+
+      fireEvent.click(screen.getByText('🏷️ 특가·핫딜'));
+
+      expect(await screen.findByText('검색 결과가 없습니다.')).toBeInTheDocument();
+    });
+
+    it('카드를 클릭하면 상세 모달이 뜨고 제휴 안내 문구와 구매 버튼을 보여준다', async () => {
+      stubFetchDeals([makeDeal()]);
+      render(<HomeView initialHeroEvents={[]} />);
+
+      fireEvent.click(screen.getByText('🏷️ 특가·핫딜'));
+      fireEvent.click(await screen.findByText('한우 세트 특가'));
+
+      expect(
+        await screen.findByText('이 포스팅은 제휴 링크를 포함하며, 이에 따른 일정액의 수수료를 제공받을 수 있습니다.')
+      ).toBeInTheDocument();
+      const buyLink = screen.getByText('🛍️ 특가로 구매하러 가기').closest('a');
+      expect(buyLink).toHaveAttribute('href', 'https://link.coupang.com/a/beef');
+      expect(buyLink).toHaveAttribute('target', '_blank');
+    });
   });
 
   // Task 9-3-1: "무료·공공" 탭은 스크롤 여부와 무관하게 탭 선택 즉시 지연 페칭을 트리거한다.

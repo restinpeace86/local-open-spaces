@@ -14,8 +14,10 @@ import { ThemeSpotKey } from '@/lib/theme-spots';
 import { themeOptionsFor } from '@/lib/home-categories';
 import { SpaceGridCard } from '@/components/region/space-grid-card';
 import { EventCard } from '@/components/cards/event-card';
+import { DealCard, Deal } from '@/components/cards/deal-card';
 import { EmptyState } from '@/components/map/empty-state';
 import { DetailModal } from '@/components/map/detail-modal';
+import { DealDetailModal } from '@/components/map/deal-detail-modal';
 import { LocationOnboardingModal } from '@/components/map/location-onboarding-modal';
 
 // docs/spec.md 2.2: 메인 홈 레이아웃 스택 — Hero Carousel → 5대 카테고리 Quick 그리드 → 큐레이션 카드 피드
@@ -71,6 +73,31 @@ function useFreeFeed(region: { sigunguName: string | null; lat?: number; lng?: n
   }, [regionKey]);
 
   return { freeFeed, ensureLoaded };
+}
+
+// [제휴 특가 Deals 시스템 및 수집 어댑터 MVP](2026-08-29 사용자 지시): "특가·핫딜" 탭 전용 —
+// deals는 위치/지역 개념이 없는 커머스 상품이라(useFreeFeed와 달리 region이 바뀌어도 다시
+// 페칭할 이유가 없음) 탭이 처음 선택될 때 딱 한 번만 지연 페칭한다.
+function useDealsFeed() {
+  const [deals, setDeals] = useState<Deal[] | null>(null);
+  const loadedRef = useRef(false);
+
+  const ensureLoaded = useCallback(() => {
+    if (loadedRef.current) return;
+    loadedRef.current = true;
+
+    fetch('/api/deals')
+      .then((res) => res.json())
+      .then((data: { deals?: Deal[] }) => {
+        if (Array.isArray(data.deals)) setDeals(data.deals);
+        else loadedRef.current = false;
+      })
+      .catch(() => {
+        loadedRef.current = false;
+      });
+  }, []);
+
+  return { deals, ensureLoaded };
 }
 
 // Task 9-5-1(2026-08-22): "🏞️ 목적별 추천 스팟" 칩 — 기본으로 선택된 테마가 없어(6개 중
@@ -191,6 +218,7 @@ export function HomeView({
     useUserLocation();
   const [activeTab, setActiveTab] = useState<HomeSubTab>('home');
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
+  const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
   // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시) 요구사항 3: "전체보기"가 페이지 이동 대신
   // 이 화면 위 바텀시트로 뜬다 — 어떤 종류의 전체보기를 열지만 상태로 들고 있으면 된다.
   const [browseSheetMode, setBrowseSheetMode] = useState<EventBrowseSheetMode | null>(null);
@@ -213,6 +241,7 @@ export function HomeView({
   const region = { sigunguName, lat: addressName ? center.lat : undefined, lng: addressName ? center.lng : undefined };
   // Task 9-6-18: 홈 탭의 "가성비 행복" 섹션이 제거되어 이제 "🎁 무료·공공" 서브탭 전용이다.
   const { freeFeed, ensureLoaded } = useFreeFeed(region, dataType);
+  const { deals, ensureLoaded: ensureDealsLoaded } = useDealsFeed();
   const {
     selectedTheme,
     items: themeSpotItems,
@@ -292,6 +321,11 @@ export function HomeView({
   useEffect(() => {
     if (activeTab === 'free') ensureLoaded();
   }, [activeTab, ensureLoaded]);
+
+  // "🏷️ 특가·핫딜" 탭이 선택되면 로드를 시작한다(위와 동일한 지연 페칭 패턴).
+  useEffect(() => {
+    if (activeTab === 'hotdeal') ensureDealsLoaded();
+  }, [activeTab, ensureDealsLoaded]);
 
   const visibleHeroEvents = heroEvents.slice(0, HERO_VISIBLE_COUNT);
   // Task 9-1-9: 10개 초과 시 "전체 보기" CTA 카드를 마지막 슬라이드에 노출한다.
@@ -492,6 +526,22 @@ export function HomeView({
             )}
           </section>
         )}
+
+        {activeTab === 'hotdeal' && (
+          <section aria-label="특가·핫딜" className="px-4">
+            {deals === null ? (
+              <FreeFeedSkeleton label="특가·핫딜 불러오는 중" />
+            ) : deals.length > 0 ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                {deals.map((deal) => (
+                  <DealCard key={deal.id} deal={deal} onSelect={setSelectedDeal} />
+                ))}
+              </div>
+            ) : (
+              <EmptyState onReset={() => setActiveTab('home')} />
+            )}
+          </section>
+        )}
           </>
         )}
       </div>
@@ -507,6 +557,7 @@ export function HomeView({
         />
       )}
       {selectedItem && <DetailModal item={selectedItem} onClose={() => setSelectedItem(null)} />}
+      {selectedDeal && <DealDetailModal deal={selectedDeal} onClose={() => setSelectedDeal(null)} />}
       {isOnboardingOpen && (
         <LocationOnboardingModal onConfirm={confirmLocation} onClose={closeOnboarding} />
       )}

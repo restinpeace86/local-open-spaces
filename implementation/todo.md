@@ -330,3 +330,25 @@
     포함됨을 확인(테스트 데이터 정리 삭제).
   - **검증**: `npx tsc --noEmit`/`npm run test`(64파일 668건)/`npm run build` 통과. 상세:
     `implementation/2026-08-29-admin-reservations-summary-badges.md`.
+
+- [x] **[제휴 특가(Deals) 데이터베이스 스키마, 수집 어댑터 및 이벤트픽 연동 MVP]**
+  (2026-08-29 완료)
+  - `deals` 테이블 신설(정가/할인가/할인율/이미지/제휴 링크/노출 여부) — reservations와
+    동일하게 RLS 활성화 + 정책 없음(service_role 전용), `affiliate_url unique`로 수집
+    어댑터 upsert 충돌 키 확보.
+  - `GET /api/deals`(활성 특가 최신순, 페이지네이션) 신설.
+  - `scripts/ingest/adapters/deals-collector.mjs`: 실제 제휴 API(쿠팡파트너스/네이버쇼핑
+    등)가 아직 확정/발급되지 않아 지시서 표현대로 "뼈대"만 구현 — `fetchDealsFromAffiliateApi()`는
+    명시적 미구현 에러, `transformDealItem`/`upsertDeals`/`collectDeals`는 실제 동작하며
+    단위 테스트로 검증. `BaseCollectorAdapter`는 상속하지 않음(그 인프라가 위치 기반
+    소스 전용 `external_id` dedup에 결합돼 있어 억지 재사용 시 기존 15종+ 어댑터 공유
+    인프라를 넓게 건드리는 위험).
+  - 기존에 "실제 데이터 없음"을 이유로 `enabled: false`였던 홈 서브탭 "🏷️ 특가·핫딜"을
+    `enabled: true`로 전환(전제였던 데이터 부재가 이번 작업으로 해소됨) — `DealCard`/
+    `DealDetailModal`(제휴 마케팅 필수 안내 문구 + 새 창 구매 버튼) 신설, `home-view.tsx`에
+    지연 페칭 훅과 렌더 분기 연결.
+  - **실측 검증**: anon 키로 deals select/insert 모두 RLS에 차단됨, service-role로 만든
+    테스트 특가가 실행 중인 로컬 서버의 `GET /api/deals` 응답에 정상 반영됨을 확인(정리
+    삭제 완료).
+  - **검증**: `npx tsc --noEmit`/`npm run test`(65파일 679건)/`npm run build` 통과. 상세:
+    `implementation/2026-08-29-deals-affiliate-system-mvp.md`.

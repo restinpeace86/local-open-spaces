@@ -66,6 +66,45 @@ export type Database = {
         }
         Relationships: []
       }
+      deals: {
+        Row: {
+          affiliate_url: string
+          created_at: string
+          description: string | null
+          discount_price: number
+          discount_rate: number
+          id: string
+          image_url: string | null
+          is_active: boolean
+          original_price: number
+          title: string
+        }
+        Insert: {
+          affiliate_url: string
+          created_at?: string
+          description?: string | null
+          discount_price: number
+          discount_rate: number
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          original_price: number
+          title: string
+        }
+        Update: {
+          affiliate_url?: string
+          created_at?: string
+          description?: string | null
+          discount_price?: number
+          discount_rate?: number
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          original_price?: number
+          title?: string
+        }
+        Relationships: []
+      }
       events: {
         Row: {
           booking_status: string | null
