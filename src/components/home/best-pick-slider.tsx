@@ -23,36 +23,53 @@ export type EventTicket = {
   created_at: string;
 };
 
+// [큐레이션 카드 내부 '이미지 vs 텍스트' 영역 비율 고정](2026-08-30 사용자 지시): 카드마다
+// location_name 유무/제목 줄바꿈 여부가 달라 카드 전체 높이가 들쭉날쭉했다 — 카드 자체의
+// 크기(폭/높이)는 바깥 래퍼(w-36 h-[220px], ReservationOpenSlider와 동일한 "래퍼가 고정
+// 크기를 잡고 안쪽 카드는 h-full로 채우는" 기존 관례)에서 고정하고, 카드 내부는
+// `flex flex-col h-full`로 세로 배치한다. 이미지 영역은 h-36(폭과 동일해 정사각에 가까움)로
+// 고정 높이를 주고 `w-full h-full object-cover`로 어떤 이미지든 비율이 깨지지 않게 채운다.
+// 텍스트 영역은 `flex-1 min-h-0`로 이미지가 차지하고 남은 공간을 정확히 채우되,
+// `overflow-hidden`으로 제목 2줄(line-clamp-2) + 장소명 1줄을 다 채워도 절대 카드 밖으로
+// 넘치지 않는다 — location_name이 없어도(빈 공간으로 남을 뿐) 카드 전체 높이는 항상 동일하다.
+const CARD_WIDTH_CLASS = 'w-36';
+const CARD_HEIGHT_CLASS = 'h-[220px]';
+const IMAGE_HEIGHT_CLASS = 'h-36';
+
 export function BestPickSlider({ items }: { items: EventTicket[] }) {
   if (items.length === 0) return null;
 
   return (
     <div className="flex gap-3 overflow-x-auto px-4 pb-1 snap-x snap-mandatory">
       {items.map((item) => (
-        <a
+        <div
           key={item.id}
-          href={item.booking_url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="shrink-0 w-36 snap-start [scroll-snap-stop:always] rounded-2xl border border-gray-200 bg-white overflow-hidden hover:shadow-md transition-shadow"
+          className={`shrink-0 ${CARD_WIDTH_CLASS} ${CARD_HEIGHT_CLASS} snap-start [scroll-snap-stop:always]`}
         >
-          <div className="relative aspect-square bg-gray-100">
-            {item.image_url ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={item.image_url} alt="" className="w-full h-full object-cover" loading="lazy" />
-            ) : (
-              <div className="w-full h-full flex items-center justify-center text-2xl bg-gray-50" aria-hidden>
-                🧭
-              </div>
-            )}
-          </div>
-          <div className="p-2.5">
-            <p className="text-xs font-medium text-gray-900 line-clamp-2 min-h-[2rem]">{item.title}</p>
-            {item.location_name && (
-              <p className="text-[11px] text-gray-400 mt-0.5 line-clamp-1">{item.location_name}</p>
-            )}
-          </div>
-        </a>
+          <a
+            href={item.booking_url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="h-full flex flex-col rounded-2xl border border-gray-200 bg-white overflow-hidden hover:shadow-md transition-shadow"
+          >
+            <div className={`relative w-full ${IMAGE_HEIGHT_CLASS} shrink-0 bg-gray-100`}>
+              {item.image_url ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={item.image_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-2xl bg-gray-50" aria-hidden>
+                  🧭
+                </div>
+              )}
+            </div>
+            <div className="flex-1 min-h-0 p-2.5 overflow-hidden flex flex-col gap-0.5">
+              <p className="text-xs font-medium text-gray-900 line-clamp-2">{item.title}</p>
+              {item.location_name && (
+                <p className="text-[11px] text-gray-400 line-clamp-1">{item.location_name}</p>
+              )}
+            </div>
+          </a>
+        </div>
       ))}
     </div>
   );
@@ -66,7 +83,7 @@ export function BestPickSliderSkeleton() {
       {Array.from({ length: SKELETON_COUNT }, (_, i) => (
         <div
           key={i}
-          className="shrink-0 w-36 h-[172px] rounded-2xl border border-gray-200 bg-gray-100 animate-pulse"
+          className={`shrink-0 ${CARD_WIDTH_CLASS} ${CARD_HEIGHT_CLASS} rounded-2xl border border-gray-200 bg-gray-100 animate-pulse`}
           aria-hidden
         />
       ))}

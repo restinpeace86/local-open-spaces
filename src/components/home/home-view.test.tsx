@@ -265,6 +265,23 @@ describe('HomeView', () => {
       expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
     });
 
+    // [큐레이션 카드 내부 '이미지 vs 텍스트' 영역 비율 고정](2026-08-30 사용자 지시):
+    // location_name 유무와 무관하게 카드 전체 높이가 항상 동일해야 한다 — 바깥 래퍼가
+    // 폭/높이를 고정하고, 카드 내부는 flex flex-col h-full로 이미지/텍스트 영역을 나눈다.
+    it('장소명이 있든 없든 카드 바깥 래퍼의 크기(w-36 h-[220px])는 항상 동일하다', async () => {
+      stubFetchBestPicks([
+        makeEventTicket({ id: 't1', title: '장소명 있는 티켓', location_name: '중앙공원 일대' }),
+        makeEventTicket({ id: 't2', title: '장소명 없는 티켓', location_name: null }),
+      ]);
+      render(<HomeView initialHeroEvents={[]} />);
+
+      const withLocation = (await screen.findByText('장소명 있는 티켓')).closest('a')!.parentElement!;
+      const withoutLocation = screen.getByText('장소명 없는 티켓').closest('a')!.parentElement!;
+
+      expect(withLocation).toHaveClass('w-36', 'h-[220px]');
+      expect(withoutLocation).toHaveClass('w-36', 'h-[220px]');
+    });
+
     it('베스트 픽이 0건이면 섹션 자체를 숨긴다', async () => {
       stubFetchBestPicks([]);
       render(<HomeView initialHeroEvents={[]} />);

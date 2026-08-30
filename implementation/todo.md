@@ -499,3 +499,17 @@
     인앱 모달 오픈 검증으로 교체)/`npm run build` 통과. `/nearby` 페이지 HTML에
     `nmap://` 문자열이 전혀 없음을 실측 확인. 상세:
     `implementation/2026-08-30-inapp-map-remove-external-nav.md`.
+
+- [x] **[UI/UX 수정] 큐레이션 카드 내부 '이미지 vs 텍스트' 영역 비율 고정**
+  (2026-08-30 완료)
+  - "베스트 나들이 픽" 카드(`best-pick-slider.tsx`)가 `location_name` 유무에 따라
+    카드 전체 높이가 들쭉날쭉했던 것을 발견 — 바깥 래퍼에 고정 크기(`w-36
+    h-[220px]`)를 잡고 카드는 `h-full flex flex-col`로 채우는 기존
+    `ReservationOpenSlider` 관례를 재사용해 수정.
+  - 이미지 영역을 `aspect-square`에서 고정 높이 `h-36` + `w-full h-full
+    object-cover`로 교체, 텍스트 영역은 `flex-1 min-h-0 overflow-hidden`으로 남는
+    공간을 정확히 채우되 넘쳐도 카드 밖으로 나오지 않게 함. 스켈레톤도 동일 크기로
+    맞춰 CLS 없음.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(67파일 692건 — 장소명 유무와 무관하게
+    카드 크기가 항상 동일한지 검증하는 신규 테스트)/`npm run build` 통과. 상세:
+    `implementation/2026-08-30-best-pick-card-ratio-fix.md`.
