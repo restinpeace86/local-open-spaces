@@ -15,7 +15,9 @@ import { themeOptionsFor } from '@/lib/home-categories';
 import { SpaceGridCard } from '@/components/region/space-grid-card';
 import { EventCard } from '@/components/cards/event-card';
 import { DealCard, Deal } from '@/components/cards/deal-card';
-import { EventTicketCard, EventTicket } from '@/components/cards/event-ticket-card';
+import { EventTicket } from '@/components/cards/event-ticket-card';
+import { EventTicketBannerCard } from '@/components/cards/event-ticket-banner-card';
+import { EventTicketBrowseSheet } from '@/components/home/event-ticket-browse-sheet';
 import { EmptyState } from '@/components/map/empty-state';
 import { DetailModal } from '@/components/map/detail-modal';
 import { DealDetailModal } from '@/components/map/deal-detail-modal';
@@ -250,6 +252,9 @@ export function HomeView({
   // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시) 요구사항 3: "전체보기"가 페이지 이동 대신
   // 이 화면 위 바텀시트로 뜬다 — 어떤 종류의 전체보기를 열지만 상태로 들고 있으면 된다.
   const [browseSheetMode, setBrowseSheetMode] = useState<EventBrowseSheetMode | null>(null);
+  // [홈 화면 할인 티켓(event_tickets) 섹션 UI 개편](2026-08-29 사용자 지시) 요구사항 1:
+  // "전체보기 ›" 클릭 시 여는 전체 리스트 바텀시트 개폐 상태.
+  const [isEventTicketBrowseOpen, setIsEventTicketBrowseOpen] = useState(false);
   const [heroEvents, setHeroEvents] = useState<NearbyItem[]>(initialHeroEvents);
   // [홈 화면 성능 최적화](2026-08-29 사용자 지시): 이 두 섹션은 더 이상 Server Component가
   // 미리 계산해 넘겨주지 않는다(라운드로빈 믹스 연산 포함 3개 쿼리를 SSR에서 한 번에 처리하던
@@ -419,21 +424,33 @@ export function HomeView({
               </section>
             )}
 
-            {/* [이벤트픽 & 티켓 할인 정보 MVP](2026-08-29 사용자 지시): 지역 축제/체험
-                프로그램/입장권 할인 정보를 그리드로 보여주는 상시 섹션. 다른 섹션과 동일한
-                가변 노출 원칙 — 로드 전(null)이면 스켈레톤, 로드 후 0건이면 섹션 자체를
-                숨긴다. */}
+            {/* [홈 화면 할인 티켓(event_tickets) 섹션 UI 개편](2026-08-29 사용자 지시):
+                지역 축제/체험 프로그램/입장권 할인 정보 중 최신 4건만 Hero 스타일 배너
+                카드로 스포트라이트 노출한다(전체 목록은 "전체보기 ›" 바텀시트에서 확인).
+                다른 섹션과 동일한 가변 노출 원칙 — 로드 전(null)이면 스켈레톤, 로드 후
+                0건이면 섹션 자체를 숨긴다. */}
             {(eventTickets === null || eventTickets.length > 0) && (
               <section aria-label="이벤트·티켓 할인">
-                <h2 className="text-base font-bold text-gray-900 mb-3 px-4">🎫 할인 티켓·이벤트</h2>
+                <div className="flex items-center justify-between mb-3 px-4">
+                  <h2 className="text-base font-bold text-gray-900">🔥 이번 주말 놓치면 후회할 특가</h2>
+                  {eventTickets !== null && (
+                    <button
+                      type="button"
+                      onClick={() => setIsEventTicketBrowseOpen(true)}
+                      className="text-xs font-semibold text-gray-500 hover:text-gray-800"
+                    >
+                      전체보기 ›
+                    </button>
+                  )}
+                </div>
                 {eventTickets === null ? (
                   <div className="px-4">
                     <FreeFeedSkeleton label="할인 티켓·이벤트 불러오는 중" />
                   </div>
                 ) : (
-                  <div className="px-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                    {eventTickets.map((eventTicket) => (
-                      <EventTicketCard
+                  <div className="px-4 grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {eventTickets.slice(0, 4).map((eventTicket) => (
+                      <EventTicketBannerCard
                         key={eventTicket.id}
                         eventTicket={eventTicket}
                         onSelect={setSelectedEventTicket}
@@ -621,6 +638,15 @@ export function HomeView({
       {selectedDeal && <DealDetailModal deal={selectedDeal} onClose={() => setSelectedDeal(null)} />}
       {selectedEventTicket && (
         <EventTicketDetailModal eventTicket={selectedEventTicket} onClose={() => setSelectedEventTicket(null)} />
+      )}
+      {isEventTicketBrowseOpen && (
+        <EventTicketBrowseSheet
+          onClose={() => setIsEventTicketBrowseOpen(false)}
+          onSelectEventTicket={(eventTicket) => {
+            setIsEventTicketBrowseOpen(false);
+            setSelectedEventTicket(eventTicket);
+          }}
+        />
       )}
       {isOnboardingOpen && (
         <LocationOnboardingModal onConfirm={confirmLocation} onClose={closeOnboarding} />

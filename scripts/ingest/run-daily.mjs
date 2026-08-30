@@ -19,6 +19,7 @@
 // 리포트를 남긴다.
 import { pathToFileURL } from 'url';
 import { loadEnv } from '../lib/load-env.mjs';
+import { getMissingEnvVars, formatMissingEnvVarsMessage } from './lib/env-precheck.mjs';
 import { createAdminClient, analyzeOpenSpaces } from './lib/supabase-admin.mjs';
 import { dedupeOpenSpaces } from './lib/dedupe-open-spaces.mjs';
 import { applyDetailedCategoryFallback } from './lib/detailed-category-fallback.mjs';
@@ -35,6 +36,19 @@ import { deactivateExpiredEvents } from './lib/deactivate-expired-events.mjs';
 loadEnv();
 
 const BATCH_NAME = 'Daily Events Batch';
+
+// [핵심 events 수집 파이프라인 장애 점검](2026-08-30 사용자 지시): 아래 4개 소스 어댑터의
+// 실제 소스 코드(각 파일의 `throw new Error('... 환경변수가 설정되지 않았습니다.')` 가드)를
+// 조사해 확정한, 없으면 반드시 실패하는 필수 환경변수 목록이다. GEMINI_API_KEY(AI 분류)/
+// VWORLD_API_KEY(지오코딩)는 없어도 각 어댑터가 경고만 남기고 계속 진행하도록 이미
+// 설계돼 있어(우아한 성능 저하) 여기 포함하지 않는다.
+const REQUIRED_ENV_VARS = [
+  'NEXT_PUBLIC_SUPABASE_URL',
+  'SUPABASE_SERVICE_ROLE_KEY',
+  'GG_DATA_API_KEY',
+  'SEOUL_OPEN_DATA_KEY',
+  'PUBLIC_DATA_API_KEY',
+];
 
 // { label, run } — run()은 BaseCollectorAdapter.run()과 동일한 반환 형태를 따른다.
 const STEPS = [
@@ -287,6 +301,23 @@ async function runDedupeOpenSpaces({ dryRun }) {
 
 export async function runDailyBatch({ dryRun = false } = {}) {
   console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length + 7}개 단계\n`);
+
+  // [핵심 events 수집 파이프라인 장애 점검](2026-08-30 사용자 지시): 필수 환경변수가 하나라도
+  // 없으면 이후 11개 단계가 각자 다른 형태로 실패해(외부 API 키 누락 예외/Supabase 클라이언트
+  // 생성 실패/원본 서버의 "인증키 무효" 응답 등) 카스케이드 에러를 하나하나 해석해야만
+  // 원인을 알 수 있다 — 실제로 2026-08-29 01:59 UTC 실행에서 이 카스케이드 실패가
+  // 재현됐다(docs/pipeline-log.md, 로컬 .env.local 기준 dry-run은 11/11 성공해 코드 문제가
+  // 아님을 확인). 시작 시점에 한 번에 검사해 즉시 명확한 원인과 함께 중단한다.
+  const missingEnvVars = getMissingEnvVars(REQUIRED_ENV_VARS);
+  if (missingEnvVars.length > 0) {
+    const message = formatMissingEnvVarsMessage(missingEnvVars);
+    console.error(`❌ ${BATCH_NAME} 시작 불가: ${message}`);
+    const precheckResult = { failed: true, sourceKey: 'ENV_PRECHECK', source: null, note: message };
+    if (!dryRun) {
+      recordBatchRun({ batchName: BATCH_NAME, results: [precheckResult] });
+    }
+    return { results: [precheckResult], failedCount: 1 };
+  }
 
   const results = [];
 

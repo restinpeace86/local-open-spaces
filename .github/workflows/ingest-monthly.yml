@@ -75,6 +75,11 @@ jobs:
           PUBLIC_DATA_API_KEY: ${{ secrets.PUBLIC_DATA_API_KEY }}
           GG_DATA_API_KEY: ${{ secrets.GG_DATA_API_KEY }}
           VWORLD_API_KEY: ${{ secrets.VWORLD_API_KEY }}
+          # [핵심 events 수집 파이프라인 장애 점검](2026-08-30 사용자 지시) 실측 발견: 이 워크플로가
+          # RURAL_EDUCATION_FARM(농사로 API, 2026-08-29 신규 추가)을 실행하는데도 이 시크릿이
+          # env 블록에 빠져 있어, GitHub Actions에서는 이 소스만 매번 조용히 실패하고 있었다
+          # (로컬 .env.local에는 있어 로컬 실행/테스트에서는 드러나지 않던 문제).
+          NONGSARO_API_KEY: ${{ secrets.NONGSARO_API_KEY }}
         run: |
           set +e
           node scripts/ingest/run-monthly.mjs

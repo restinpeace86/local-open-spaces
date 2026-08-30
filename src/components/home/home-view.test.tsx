@@ -298,13 +298,30 @@ describe('HomeView', () => {
       };
     }
 
-    it('홈 탭에 마운트되면 별도 클릭 없이 할인 티켓 카드를 보여준다', async () => {
+    it('홈 탭에 마운트되면 별도 클릭 없이 Hero 배너 카드로 할인 티켓을 보여준다', async () => {
       stubFetchEventTickets([makeEventTicket()]);
       render(<HomeView initialHeroEvents={[]} />);
 
+      expect(await screen.findByText('🔥 이번 주말 놓치면 후회할 특가')).toBeInTheDocument();
       expect(await screen.findByText('가을 단풍 나들이 축제')).toBeInTheDocument();
-      expect(screen.getByText('📅 2026-10-01 ~ 2026-10-10')).toBeInTheDocument();
       expect(screen.getByText('📍 중앙공원 일대')).toBeInTheDocument();
+      expect(screen.getByText('40% 할인특가')).toBeInTheDocument();
+      expect(screen.getByText('예매하기 ›')).toBeInTheDocument();
+    });
+
+    it('할인 티켓이 5건 이상이어도 홈 섹션에는 최신 4건만 노출한다', async () => {
+      stubFetchEventTickets([
+        makeEventTicket({ id: 't1', title: '첫 번째 티켓' }),
+        makeEventTicket({ id: 't2', title: '두 번째 티켓' }),
+        makeEventTicket({ id: 't3', title: '세 번째 티켓' }),
+        makeEventTicket({ id: 't4', title: '네 번째 티켓' }),
+        makeEventTicket({ id: 't5', title: '다섯 번째 티켓' }),
+      ]);
+      render(<HomeView initialHeroEvents={[]} />);
+
+      expect(await screen.findByText('첫 번째 티켓')).toBeInTheDocument();
+      expect(screen.getByText('네 번째 티켓')).toBeInTheDocument();
+      expect(screen.queryByText('다섯 번째 티켓')).not.toBeInTheDocument();
     });
 
     it('할인 티켓이 0건이면 섹션 자체를 숨긴다', async () => {
@@ -326,6 +343,23 @@ describe('HomeView', () => {
       const bookingLink = screen.getByText('🎟️ 할인 티켓 예매하기').closest('a');
       expect(bookingLink).toHaveAttribute('href', 'https://example.com/tickets/autumn-festival');
       expect(bookingLink).toHaveAttribute('target', '_blank');
+    });
+
+    it('"전체보기 ›"를 누르면 전체 목록 바텀시트가 뜨고, 거기서 카드를 누르면 시트가 닫히며 상세 모달이 열린다', async () => {
+      stubFetchEventTickets([makeEventTicket()]);
+      render(<HomeView initialHeroEvents={[]} />);
+
+      await screen.findByText('가을 단풍 나들이 축제');
+      fireEvent.click(screen.getByText('전체보기 ›'));
+
+      expect(await screen.findByText('🔥 이번 주말 놓치면 후회할 특가 전체보기')).toBeInTheDocument();
+      // 바텀시트 안에서는 기존 그리드형 카드를 쓴다(행사 기간까지 보여줌).
+      expect(await screen.findByText('📅 2026-10-01 ~ 2026-10-10')).toBeInTheDocument();
+
+      fireEvent.click(screen.getAllByText('가을 단풍 나들이 축제')[1]);
+
+      expect(screen.queryByText('🔥 이번 주말 놓치면 후회할 특가 전체보기')).not.toBeInTheDocument();
+      expect(await screen.findByText('🎟️ 할인 티켓 예매하기')).toBeInTheDocument();
     });
   });
 

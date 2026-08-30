@@ -378,3 +378,33 @@
     반환함을 확인.
   - **검증**: `npx tsc --noEmit`/`npm run test`(66파일 685건)/`npm run build` 통과. 상세:
     `implementation/2026-08-29-event-tickets-mvp.md`.
+
+- [x] **[홈 화면 할인 티켓(event_tickets) 섹션 UI 개편]** (2026-08-30 완료)
+  - 섹션 헤더를 "🔥 이번 주말 놓치면 후회할 특가" + "전체보기 ›" 버튼으로 교체.
+  - 홈 섹션은 최신 4건만 `EventTicketBannerCard`(신설, h-[320px]/다크 그라데이션/좌상단
+    할인율 뱃지/하단 장소·상품명·가격·예매 버튼의 Hero 스타일 배너)로 노출, 클릭 시
+    기존과 동일하게 상세 모달이 열린다. 기존 그리드형 `EventTicketCard`는 그대로 두고
+    "전체보기 ›" 클릭 시 뜨는 새 바텀시트(`EventTicketBrowseSheet`, 기존
+    `EventBrowseSheet`와 동일한 관례)의 전체 목록에서 재사용한다.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(67파일 691건)/`npm run build` 통과. 상세:
+    `implementation/2026-08-30-event-tickets-home-section-redesign.md`.
+
+- [x] **[핵심 events 테이블 수집 파이프라인 장애 점검]** (2026-08-30 완료)
+  - `docs/pipeline-log.md`의 유일한 실제 GitHub Actions 실행 기록(github-actions[bot]
+    커밋 1건, 2026-08-29 01:59 UTC)을 조사한 결과 Daily 배치 4개 소스 + 후처리 7개
+    단계가 전부 실패 — 표면 에러는 제각각이었지만(API 키 누락/서버의 "인증키 무효"
+    응답/Supabase 클라이언트 생성 실패) 코드 조사 결과 전부 "필수 환경변수가 프로세스에
+    아예 주입되지 않음"이라는 동일 근본 원인의 다른 증상으로 진단됨.
+  - `node scripts/ingest/run-daily.mjs --dry-run`을 `.env.local`(실제 키)로 실행 →
+    11/11개 단계 전부 성공 — 코드/어댑터 자체는 건강함을 확인, 원인은 GitHub 저장소
+    Actions Secrets 설정 쪽으로 추정(구현 AI가 직접 접근 불가 — 사용자 확인 필요).
+  - **재발 방지 조치**: `scripts/ingest/lib/env-precheck.mjs` 신설, `run-daily.mjs`/
+    `run-monthly.mjs`에 배치 시작 시점 필수 환경변수 사전 검사 추가(누락 시 카스케이드
+    에러 대신 한 줄로 즉시 원인 노출).
+  - **부수 발견 및 수정**: 이 조사 과정에서 `RURAL_EDUCATION_FARM`(농사로 API)이
+    요구하는 `NONGSARO_API_KEY`가 `.github/workflows/ingest-monthly.yml`의 `env:`
+    블록에 아예 빠져 있는 실제 버그를 발견 — 추가로 수정.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(67파일 691건 — env-precheck 4건 신규)/
+    `npm run build` 통과. `GG_DATA_API_KEY`를 `.env.local`에서 일시 제거해 사전 검사가
+    실제로 배치를 중단시키는지 실측 확인 후 원상 복구. 상세:
+    `implementation/2026-08-30-events-pipeline-outage-investigation.md`.

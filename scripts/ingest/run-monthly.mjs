@@ -27,6 +27,7 @@
 // 순차 실행(레이트리밋/DB 커넥션 과부하 방지) 후 docs/pipeline-log.md에 배치 리포트를 남긴다.
 import { pathToFileURL } from 'url';
 import { loadEnv } from '../lib/load-env.mjs';
+import { getMissingEnvVars, formatMissingEnvVarsMessage } from './lib/env-precheck.mjs';
 import { createAdminClient, analyzeOpenSpaces } from './lib/supabase-admin.mjs';
 import { dedupeOpenSpaces } from './lib/dedupe-open-spaces.mjs';
 import { applyDetailedCategoryFallback } from './lib/detailed-category-fallback.mjs';
@@ -54,6 +55,21 @@ import { run as runCulturalSpaces } from './cultural-spaces.mjs';
 loadEnv();
 
 const BATCH_NAME = 'Monthly Spaces Batch';
+
+// [핵심 events 수집 파이프라인 장애 점검](2026-08-30 사용자 지시): run-daily.mjs와 동일한
+// 이유로, 아래 14개 소스 어댑터의 실제 소스 코드(`throw new Error('... 환경변수가
+// 설정되지 않았습니다.')` 가드)를 조사해 확정한 필수 환경변수 목록이다. 이 조사 과정에서
+// RURAL_EDUCATION_FARM가 요구하는 NONGSARO_API_KEY가 .github/workflows/ingest-monthly.yml의
+// env 블록에 아예 빠져 있는 것을 발견해 함께 추가했다(이 사전 검사가 없었다면 CI에서
+// 이 소스만 매번 조용히 실패했을 것). VWORLD_API_KEY(지오코딩)는 없어도 각 어댑터가
+// 경고만 남기고 계속 진행하도록 이미 설계돼 있어 포함하지 않는다.
+const REQUIRED_ENV_VARS = [
+  'NEXT_PUBLIC_SUPABASE_URL',
+  'SUPABASE_SERVICE_ROLE_KEY',
+  'PUBLIC_DATA_API_KEY',
+  'GG_DATA_API_KEY',
+  'NONGSARO_API_KEY',
+];
 
 const STEPS = [
   { label: 'CITY_PARK', run: ({ dryRun }) => new CityParkAdapter().run({ dryRun }) },
@@ -291,6 +307,20 @@ async function runDedupeOpenSpaces({ dryRun }) {
 
 export async function runMonthlyBatch({ dryRun = false } = {}) {
   console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length + 6}개 단계\n`);
+
+  // [핵심 events 수집 파이프라인 장애 점검](2026-08-30 사용자 지시): run-daily.mjs와 동일한
+  // 사전 검사 — 필수 환경변수가 하나라도 없으면 카스케이드 실패 대신 즉시 명확한 원인과
+  // 함께 중단한다.
+  const missingEnvVars = getMissingEnvVars(REQUIRED_ENV_VARS);
+  if (missingEnvVars.length > 0) {
+    const message = formatMissingEnvVarsMessage(missingEnvVars);
+    console.error(`❌ ${BATCH_NAME} 시작 불가: ${message}`);
+    const precheckResult = { failed: true, sourceKey: 'ENV_PRECHECK', source: null, note: message };
+    if (!dryRun) {
+      recordBatchRun({ batchName: BATCH_NAME, results: [precheckResult] });
+    }
+    return { results: [precheckResult], failedCount: 1 };
+  }
 
   const results = [];
 
