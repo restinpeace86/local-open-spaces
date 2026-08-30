@@ -27,15 +27,24 @@ import { formatDateRange, formatVenueLine } from '@/lib/spaces/format';
 // 위함이다 — 이게 없으면 뱃지+제목+장소+날짜가 많은 카드에서 텍스트 영역이 60%를 넘겨
 // 버튼 전체 높이가 h-64보다 커져 버릴 수 있다(사용자 확인: 이미지 위 뱃지/마감임박 배너는
 // 그대로 오버레이 유지, 텍스트 영역으로 옮기지 않음).
-// [카드 내 이미지/텍스트 영역 비율 불일치 수정](2026-08-30 사용자 지시): dateBanner(오늘
-// 한정/오늘 마감, 당일 종료 이벤트에만 뜸 — getDateBannerBadge 참고)가 flex-col의 별도
-// 행으로 버튼 최상단에 있었다 — 이 행이 실제 높이를 차지하면서, 배너가 있는 카드는
-// "버튼 전체 높이 - 배너 높이"만 4:6으로 나누고, 배너가 없는 카드는 전체 높이를 4:6으로
-// 나눠 같은 h-64 래퍼 안에서도 카드마다 이미지/텍스트 크기가 달라지는 원인이었다(실측
-// 확인). 배너를 별도 행이 아니라 이미지 영역(flex-[4]) 위에 절대 위치로 겹쳐 그려
-// 레이아웃 흐름에서 완전히 빼면, 배너 유무와 무관하게 4:6 분할이 항상 동일해진다.
-// 이미지 좌/우상단 뱃지(category_min/status)는 배너와 겹치지 않도록 배너가 있을 때만
-// top-8로 한 칸 내린다.
+// [카드 내 이미지/텍스트 영역 비율 불일치 수정 1차 시도](2026-08-30): dateBanner(오늘
+// 한정/오늘 마감, 당일 종료 이벤트에만 뜸)를 flex-col의 별도 행에서 이미지 영역 위
+// 절대 위치 오버레이로 옮겼다 — 이 자체는 유효한 개선이라 유지하지만, Playwright로
+// 실제 렌더링 높이를 실측해 보니 진짜 원인이 아니었다(배너 유무와 무관하게 여전히
+// 카드마다 이미지 높이가 92px~224px로 제각각이었음, 아래 2차 원인 참고).
+//
+// [카드 내 이미지/텍스트 영역 비율 불일치 진짜 원인 및 수정 2차](2026-08-30 사용자 재확인):
+// 이미지 영역 div(flex-[4])에 min-h-0이 빠져 있었다 — flex 아이템의 기본값
+// min-height:auto는 내용물의 min-content 크기 밑으로는 줄어들지 않으려 하는데,
+// <img>(교체 요소)의 min-content 크기는 그 이미지의 **실제 원본 가로세로 비율**을
+// 폭(w-full, w-40 카드 기준 고정폭)에 대입한 높이다. 즉 원본 이미지 비율이 제각각인
+// 썸네일마다 이미지 영역이 flex-[4]가 지정한 40%가 아니라 "그 이미지의 실제 비율이
+// 요구하는 높이"로 늘어나 버렸고, 텍스트 영역(flex-[6], 이쪽은 이미 min-h-0이 있어
+// 정상)은 남은 공간만큼만 줄어들어 카드 전체 높이(h-64)는 항상 256px로 같아도 내부
+// 이미지:텍스트 분할은 카드마다 완전히 달랐다(실측: 92:162, 223:31, 224:30 등). 이미지
+// 영역에도 min-h-0을 추가해 flex-[4]/flex-[6] 비율이 이미지 내용물과 무관하게 항상
+// 정확히 지켜지도록 고쳤다(Playwright로 실제 브라우저 렌더링 높이를 재측정해 8장 카드
+// 전부 102px:154px로 고정됨을 확인 — 상세 검증 로그는 구현 기록 참고).
 export function EventCard({
   item,
   onSelect,
@@ -63,7 +72,7 @@ export function EventCard({
       onClick={() => onSelect(item)}
       className="h-full text-left rounded-2xl border border-gray-200 bg-white overflow-hidden hover:shadow-md transition-shadow flex flex-col"
     >
-      <div className="relative flex-[4] bg-gray-100">
+      <div className="relative flex-[4] min-h-0 bg-gray-100">
         {dateBanner && (
           <div
             className={`absolute top-0 left-0 right-0 z-10 px-2 py-1 text-[11px] font-bold text-white text-center ${

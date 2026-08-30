@@ -624,6 +624,30 @@
   - 배너를 이미지 영역(flex-[4]) 내부 절대 위치 오버레이로 옮겨 레이아웃 흐름에서
     완전히 제외 — 배너 유무와 무관하게 4:6 분할이 항상 동일해진다. 기존 중분류/상태
     뱃지는 배너와 겹치지 않도록 배너가 있을 때만 한 칸(top-8) 내렸다.
-  - **검증**: `npx tsc --noEmit`/`npm run test`(71파일 722건 — `event-card.test.tsx`
-    2건 신규)/`npm run build` 통과. 상세:
+  - **정정(사용자 재확인 후)**: 배포 후에도 여전히 깨진다는 재확인을 받고
+    Playwright로 실제 브라우저 렌더링 높이를 직접 측정 — dateBanner는 진짜 원인이
+    아니었다(수정 후에도 이미지 높이가 92~224px로 제각각, 배너 유무와 무상관).
+    **진짜 원인**: 이미지 영역 div(flex-[4])에 `min-h-0`이 빠져 있어, flex 기본값
+    (min-height:auto)이 `<img>`의 min-content 크기(원본 이미지 가로세로 비율을
+    고정폭에 대입한 높이)를 존중해 버렸다 — 썸네일마다 원본 비율이 달라 이미지
+    영역이 flex-[4]가 아니라 "그 이미지가 요구하는 높이"로 늘어났던 것. 이미지
+    영역에도 min-h-0을 추가(텍스트 영역엔 이미 있었음)해 재측정 결과 16장 카드
+    전부 92px:162px로 완전히 동일해짐을 Playwright로 확인했다.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(71파일 723건 — `event-card.test.tsx`
+    3건 신규)/`npm run build` 통과 + Playwright 실측 렌더링 검증. 상세:
     `implementation/2026-08-30-event-card-image-text-ratio-fix.md`.
+
+- [x] **[개발 요청] 스팟픽(/nearby) 중분류 필터에 "키즈친화 식당" 칩 누락 수정**
+  (2026-08-30 완료)
+  - **원인**: "경기 키즈카페/놀이시설 휴게음식점 수집 어댑터"(gg-kidscafe-adapter.mjs)가
+    `category_min='놀이방식당'`(놀이시설을 갖춘 음식점 전체, is_kids_friendly=true
+    고정)으로 이미 1,788건을 적재하고 있었으나, 2026-08-29 중분류 1단 필터 개편
+    당시 이 값에 대응하는 칩이 없어 화면에서 찾아볼 방법이 전혀 없었다(실측 확인).
+  - `CORE_SPOT_CATEGORIES`(`spot-category-groups.ts`)에
+    `{ id: 'kids-restaurant', label: '키즈친화 식당', minors: ['놀이방식당'] }` 추가.
+    필터/선택 로직은 이미 이 배열을 순회하는 구조라 코드 변경 없이 데이터 추가만으로
+    자동 반영됨.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(71파일 724건 —
+    `spot-category-groups.test.ts` 1건 신규, 칩 개수 11→12 갱신)/`npm run build`
+    통과 + Playwright로 실제 `/nearby` 페이지에 칩이 노출됨을 확인. 상세:
+    `implementation/2026-08-30-nearby-kids-restaurant-category-chip.md`.

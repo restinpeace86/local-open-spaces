@@ -87,6 +87,22 @@ describe('EventCard 이미지:텍스트 4:6 포션', () => {
     expect(textArea).toHaveClass('flex-[6]');
   });
 
+  // [카드 내 이미지/텍스트 영역 비율 불일치 진짜 원인](2026-08-30 사용자 재확인): 이미지
+  // 영역(flex-[4])에 min-h-0이 없으면, flex 아이템 기본값(min-height:auto)이 <img>의
+  // min-content 크기(원본 이미지 가로세로 비율을 폭에 대입한 높이)를 존중해 버려 썸네일마다
+  // 이미지 영역 실제 렌더링 높이가 제각각이 된다(jsdom은 실제 레이아웃을 계산하지 않아 이
+  // 버그 자체를 유닛 테스트로 재현할 수는 없다 — Playwright로 실제 브라우저 렌더링 높이를
+  // 실측해 8장 전부 92px:162px로 고정됨을 확인했다, 구현 기록 참고). 이 테스트는 최소한
+  // 그 수정에 필요한 min-h-0 클래스가 유지되는지만 회귀 방지한다.
+  it('이미지 영역에 min-h-0이 있어 원본 이미지 비율과 무관하게 flex-[4] 높이가 강제된다', () => {
+    render(<EventCard item={makeEventItem()} onSelect={() => {}} />);
+
+    const title = screen.getByText('도시농업 체험');
+    const imageArea = title.parentElement!.previousElementSibling!;
+
+    expect(imageArea).toHaveClass('min-h-0');
+  });
+
   it('이미지는 object-cover로 꽉 채워 찌그러짐을 방지한다', () => {
     const { container } = render(
       <EventCard item={makeEventItem({ thumbnail_url: 'https://example.com/thumb.jpg' })} onSelect={() => {}} />

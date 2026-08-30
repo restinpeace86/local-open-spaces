@@ -3,8 +3,17 @@ import { AI_RECOMMEND_CATEGORY_ID, CORE_SPOT_CATEGORIES, isKnownSpotCategoryMin 
 
 describe('CORE_SPOT_CATEGORIES', () => {
   it('AI 추천 액션 칩 + 나들이 핵심 중분류로 구성된다', () => {
-    expect(CORE_SPOT_CATEGORIES).toHaveLength(11);
+    expect(CORE_SPOT_CATEGORIES).toHaveLength(12);
     expect(CORE_SPOT_CATEGORIES[0].id).toBe(AI_RECOMMEND_CATEGORY_ID);
+  });
+
+  // [키즈친화 식당 칩 누락 수정](2026-08-30 사용자 지시): gg-kidscafe-adapter.mjs가
+  // category_min='놀이방식당'으로 이미 1,788건을 적재하고 있었는데(실측 확인) 필터
+  // 칩이 없어 찾을 방법이 없었다.
+  it('키즈친화 식당(놀이방식당) 칩이 존재한다', () => {
+    const kidsRestaurant = CORE_SPOT_CATEGORIES.find((c) => c.minors.includes('놀이방식당'));
+    expect(kidsRestaurant).toBeTruthy();
+    expect(kidsRestaurant?.label).toBe('키즈친화 식당');
   });
 
   it('[행안부 놀이시설 매핑](2026-08-29) 박물관과 미술관은 별개 칩이다', () => {

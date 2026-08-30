@@ -15,6 +15,14 @@
 // category_min에 대응하는 칩을 추가한다(scripts/ingest/adapters/playground-adapter.mjs 참고).
 // '캠핑장'(instlPlaceCd A032 야영장 매핑 대상)은 이번 사용자 지시에 신규 칩으로 명시되지
 // 않아 필터 칩은 추가하지 않았다 — 데이터 자체는 계속 category_min='캠핑장'으로 적재된다.
+//
+// [키즈친화 식당 칩 누락 수정](2026-08-30 사용자 지시): "경기 키즈카페/놀이시설 휴게음식점
+// 수집 어댑터 구축"(gg-kidscafe-adapter.mjs, GG_KIDSCAFE Resrestrtkidscafe API)이
+// category_min='놀이방식당'(놀이시설을 갖춘 음식점 전체, 특정 업종으로 세분화하지 않고
+// 소스 전체를 하나로 묶은 값 — 어댑터 주석 참고, is_kids_friendly=true 고정)으로 실제
+// 1,788건을 이미 적재하고 있었는데, 이 필터 개편(2026-08-29) 당시 새 칩으로 추가되지
+// 않아 스팟픽 화면에서 이 데이터를 중분류로 찾아볼 방법이 없었다(실측 확인). 신규 칩을
+// 추가한다.
 export type CoreSpotCategory = {
   id: string;
   label: string;
@@ -35,6 +43,7 @@ export const CORE_SPOT_CATEGORIES: CoreSpotCategory[] = [
   { id: 'art-museum', label: '미술관', emoji: '🖼️', minors: ['미술관'] },
   { id: 'library', label: '도서관', emoji: '📚', minors: ['도서관'] },
   { id: 'kids-cafe', label: '키즈카페', emoji: '☕', minors: ['키즈카페'] },
+  { id: 'kids-restaurant', label: '키즈친화 식당', emoji: '🍽️', minors: ['놀이방식당'] },
   {
     id: 'playground',
     label: '놀이터',
