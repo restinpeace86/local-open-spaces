@@ -49,6 +49,10 @@ GitHub Actions cron으로 직접 표현할 수 없다는 사실을 확인했다 
 
 | 실행 일시 | 수집 권역 | RAW 적재 건수 | Service 적재 건수 | 파싱 에러 | 상태 | 비고 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 2026-08-31 07:04 | SEOUL_YEYAK | 2787 | 2787 | 29 | ✅ [OK] |  |
+| 2026-08-31 06:46 | GG_CULTURE_EVENTS | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed (원인: UND_ERR_CONNECT_TIMEOUT: Connect Timeout Error (attempted address: openapi.gg.go.kr:443, timeout: 10000ms)) |
+| 2026-08-31 06:26 | SEOUL_YEYAK | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-08-31 06:00 | GG_CULTURE_EVENTS | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed (원인: UND_ERR_CONNECT_TIMEOUT: Connect Timeout Error (attempted address: openapi.gg.go.kr:443, timeout: 10000ms)) |
 | 2026-08-30 10:45 | SEOUL_YEYAK | 2790 | 2790 | 29 | ✅ [OK] |  |
 | 2026-08-30 10:35 | GG_CULTURE_EVENTS | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
 | 2026-08-30 10:16 | SEOUL_YEYAK | 2790 | 2790 | 29 | ✅ [OK] |  |
@@ -506,3 +510,59 @@ Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket im
 | ANALYZE_OPEN_SPACES | 0 | 0 | 0 | 0 | 0 | open_spaces 플래너 통계 갱신 완료(신규 적재 아닌 유지보수 후처리) — statement timeout 재발 방지 |
 
 **검증**: 전체 RAW 수신 22316건(일부 소스 실패/미확인 — 완전한 대조 불가) vs DB 적재 21740건 (+에러 547건 +범위제외 29건)
+
+## [2026-08-31 06:30:23] [Daily Events Batch] Ingestion Log
+
+| API 출처 식별자 (`source`) | RAW 수신 건수 | events 적재 건수 | open_spaces 적재 건수 | Safe Merge 건수 | 에러 건수 | 비고 |
+| :--- | ---: | ---: | ---: | ---: | ---: | :--- |
+| GG_CULTURE_EVENTS | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed (원인: UND_ERR_CONNECT_TIMEOUT: Connect Timeout Error (attempted address: openapi.gg.go.kr:443, timeout: 10000ms)) |
+| SEOUL_CULTURE_EVENTS | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| TOUR_API_FESTIVAL | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed (원인: UND_ERR_CONNECT_TIMEOUT: Connect Timeout Error (attempted address: apis.data.go.kr:443, timeout: 10000ms)) |
+| SEOUL_YEYAK | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| gg_public | - | 0 | 0 | 0 | - | ❌ 실행 실패: GG_CULTURE_EVENTS 실패로 건너뜀 |
+| CATEGORY_RULES_APPLICATION | 17442 | 0 | 0 | 0 | 0 | category_min 신규 룰 매칭 후처리(신규 적재 아님) — open_spaces 0/2090건, events 0/15352건 |
+| DETAILED_CATEGORY_FALLBACK | 0 | 0 | 0 | 0 | 0 | 세부 중분류 미분류 잔여를 '기타'로 안전 적재(8개 대상 source_type 한정) — 0/0건 |
+| LEGACY_SOURCE_CATEGORY_MAPPING | 0 | 0 | 0 | 0 | 0 | docs/null-category-analysis.md 적용 범위(어린이놀이시설/수영장/키즈카페/바닥분수·물놀이시설) 매핑 — 0건, 내역: {} |
+| DEACTIVATE_EXPIRED_EVENTS | 0 | 0 | 0 | 0 | 0 | end_date < 2026-08-30 이면서 is_active=true였던 행 0건을 false로 전환(신규 적재 아닌 만료 정리 후처리) |
+| DEDUPE_OPEN_SPACES | 0 | 0 | 0 | 0 | 0 | 교차 출처 중복 정제 완료 — 0개 그룹, survivor 병합 0건, 삭제 0건 |
+| ANALYZE_OPEN_SPACES | 0 | 0 | 0 | 0 | 0 | open_spaces 플래너 통계 갱신 완료(신규 적재 아닌 유지보수 후처리) — statement timeout 재발 방지 |
+
+**검증**: 전체 RAW 수신 0건(일부 소스 실패/미확인 — 완전한 대조 불가) vs DB 적재 0건 (+에러 0건 +범위제외 0건)
+
+<details>
+<summary>2026-08-31 07:04 SEOUL_YEYAK 상세 리포트</summary>
+
+**테이블별 적재**
+
+| 테이블 | 가져온 건수 | DB 적재 건수 | 배치 내 중복(NULL 병합) | 기존 DB 병합 |
+| :--- | ---: | ---: | ---: | ---: |
+| open_spaces | 1291 | 1291 | 0 | 1291 |
+| events | 1496 | 1496 | 0 | 1495 |
+
+**범위 제외**: 29건
+
+**에러 상세**
+
+| 원인 | 건수 |
+| :--- | ---: |
+| COORDINATE_PARSE_FAIL | 15 |
+
+</details>
+
+## [2026-08-31 07:08:22] [Daily Events Batch] Ingestion Log
+
+| API 출처 식별자 (`source`) | RAW 수신 건수 | events 적재 건수 | open_spaces 적재 건수 | Safe Merge 건수 | 에러 건수 | 비고 |
+| :--- | ---: | ---: | ---: | ---: | ---: | :--- |
+| GG_CULTURE_EVENTS | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed (원인: UND_ERR_CONNECT_TIMEOUT: Connect Timeout Error (attempted address: openapi.gg.go.kr:443, timeout: 10000ms)) |
+| seoul_public_culture | 19494 | 18947 | 0 | 18965 | 547 |  |
+| TOUR_API_FESTIVAL | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed (원인: UND_ERR_CONNECT_TIMEOUT: Connect Timeout Error (attempted address: apis.data.go.kr:443, timeout: 10000ms)) |
+| seoul_public_reservation | 2816 | 1496 | 1291 | 2786 | 0 |  |
+| gg_public | - | 0 | 0 | 0 | - | ❌ 실행 실패: GG_CULTURE_EVENTS 실패로 건너뜀 |
+| CATEGORY_RULES_APPLICATION | 17442 | 0 | 0 | 0 | 0 | category_min 신규 룰 매칭 후처리(신규 적재 아님) — open_spaces 0/2090건, events 0/15352건 |
+| DETAILED_CATEGORY_FALLBACK | 0 | 0 | 0 | 0 | 0 | 세부 중분류 미분류 잔여를 '기타'로 안전 적재(8개 대상 source_type 한정) — 0/0건 |
+| LEGACY_SOURCE_CATEGORY_MAPPING | 0 | 0 | 0 | 0 | 0 | docs/null-category-analysis.md 적용 범위(어린이놀이시설/수영장/키즈카페/바닥분수·물놀이시설) 매핑 — 0건, 내역: {} |
+| DEACTIVATE_EXPIRED_EVENTS | 0 | 0 | 0 | 0 | 0 | end_date < 2026-08-30 이면서 is_active=true였던 행 0건을 false로 전환(신규 적재 아닌 만료 정리 후처리) |
+| DEDUPE_OPEN_SPACES | 0 | 0 | 0 | 0 | 0 | 교차 출처 중복 정제 완료 — 0개 그룹, survivor 병합 0건, 삭제 0건 |
+| ANALYZE_OPEN_SPACES | 0 | 0 | 0 | 0 | 0 | open_spaces 플래너 통계 갱신 완료(신규 적재 아닌 유지보수 후처리) — statement timeout 재발 방지 |
+
+**검증**: 전체 RAW 수신 22310건(일부 소스 실패/미확인 — 완전한 대조 불가) vs DB 적재 21734건 (+에러 547건 +범위제외 29건)
