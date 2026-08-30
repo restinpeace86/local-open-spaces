@@ -390,17 +390,26 @@
     `implementation/2026-08-30-event-tickets-home-section-redesign.md`.
 
 - [x] **[핵심 events 테이블 수집 파이프라인 장애 점검]** (2026-08-30 완료)
-  - `docs/pipeline-log.md`의 유일한 실제 GitHub Actions 실행 기록(github-actions[bot]
-    커밋 1건, 2026-08-29 01:59 UTC)을 조사한 결과 Daily 배치 4개 소스 + 후처리 7개
-    단계가 전부 실패 — 표면 에러는 제각각이었지만(API 키 누락/서버의 "인증키 무효"
-    응답/Supabase 클라이언트 생성 실패) 코드 조사 결과 전부 "필수 환경변수가 프로세스에
-    아예 주입되지 않음"이라는 동일 근본 원인의 다른 증상으로 진단됨.
-  - `node scripts/ingest/run-daily.mjs --dry-run`을 `.env.local`(실제 키)로 실행 →
-    11/11개 단계 전부 성공 — 코드/어댑터 자체는 건강함을 확인, 원인은 GitHub 저장소
-    Actions Secrets 설정 쪽으로 추정(구현 AI가 직접 접근 불가 — 사용자 확인 필요).
-  - **재발 방지 조치**: `scripts/ingest/lib/env-precheck.mjs` 신설, `run-daily.mjs`/
-    `run-monthly.mjs`에 배치 시작 시점 필수 환경변수 사전 검사 추가(누락 시 카스케이드
-    에러 대신 한 줄로 즉시 원인 노출).
+  - **근본 원인 확정**: 조사 도중 원격에 새로 올라온 최신 실제 실행 기록(2026-08-30
+    05:52~06:27 UTC 4회 연속, github-actions[bot] 커밋)이 Daily 배치 전 단계에서
+    완전히 동일한 메시지("Node.js detected but native WebSocket not found")로 실패한
+    것을 발견 — `npm view @supabase/supabase-js@2.112.2 engines`로 직접 조회해
+    `{node: '>=22.0.0'}`을 확인, 반면 세 워크플로(daily/monthly/e2e) 전부
+    `node-version: 20`으로 고정돼 있었다. Node 22 미만은 native WebSocket이 없어
+    Supabase 클라이언트 생성 자체가 크래시하는 것으로 확정 — 세 워크플로 모두
+    `node-version: 22`로 상향해 근본 수정했다.
+  - 더 이전 실행(2026-08-29 01:59 UTC, github-actions[bot] 최초 커밋)은 API 키 누락/
+    Supabase 클라이언트 생성 실패 등 표면 에러가 제각각이었는데, 코드 조사 결과
+    "필수 환경변수가 프로세스에 주입되지 않음"이라는 별개의 과거 이슈로 추정되나
+    (`gh` CLI 미설치로 Actions 실행 환경 직접 조회 불가) 완전히 규명하지는 못함 —
+    사용자가 GitHub Secrets 등록 상태를 한 번 확인해두길 권장.
+  - `node scripts/ingest/run-daily.mjs --dry-run`을 `.env.local`(로컬 Node v24, 실제
+    키)로 실행 → 11/11개 단계 전부 성공 — 어댑터 로직 자체는 건강함을 확인(단, 로컬
+    Node가 22 이상이라 위 CI 전용 회귀는 로컬에서 애초에 재현되지 않음).
+  - **방어적 재발 방지 조치**: `scripts/ingest/lib/env-precheck.mjs` 신설,
+    `run-daily.mjs`/`run-monthly.mjs`에 배치 시작 시점 필수 환경변수 사전 검사 추가
+    (누락 시 카스케이드 에러 대신 한 줄로 즉시 원인 노출) — 과거 이슈 재발 시 진단
+    속도 향상 목적.
   - **부수 발견 및 수정**: 이 조사 과정에서 `RURAL_EDUCATION_FARM`(농사로 API)이
     요구하는 `NONGSARO_API_KEY`가 `.github/workflows/ingest-monthly.yml`의 `env:`
     블록에 아예 빠져 있는 실제 버그를 발견 — 추가로 수정.

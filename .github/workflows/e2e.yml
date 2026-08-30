@@ -21,9 +21,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # [핵심 events 수집 파이프라인 장애 점검](2026-08-30 사용자 지시) 실측 발견: 최근 GitHub
+      # Actions 실행이 전부 "Node.js detected but native WebSocket not found" 크래시로
+      # 실패하고 있음을 docs/pipeline-log.md에서 확인했다 — `npm view @supabase/supabase-js
+      # engines`로 직접 조회한 결과 이 라이브러리(현재 설치 버전 2.112.3)가
+      # `"engines": {"node": ">=22.0.0"}`를 명시하는 것을 확인, Node 20에서는 native
+      # WebSocket이 없어 Supabase 클라이언트 생성 자체가 크래시한다. 세 워크플로(daily/
+      # monthly/e2e) 모두 동일하게 Node 20을 쓰고 있어 함께 올린다.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install dependencies
         run: npm ci

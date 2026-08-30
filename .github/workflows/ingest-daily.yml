@@ -37,9 +37,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # [핵심 events 수집 파이프라인 장애 점검](2026-08-30 사용자 지시) 실측 발견: 최근 실행이
+      # 전부 "Node.js detected but native WebSocket not found"로 실패했다(docs/pipeline-log.md,
+      # 2026-08-30 05:52~06:27 UTC 4회 연속 재현) — `@supabase/supabase-js`(설치 버전 2.112.3)의
+      # package.json이 `"engines": {"node": ">=22.0.0"}`를 명시함을 `npm view`로 직접
+      # 확인했다. Node 20에는 native WebSocket이 없어 Supabase 클라이언트 생성 자체가
+      # 크래시한다.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install dependencies
         run: npm ci

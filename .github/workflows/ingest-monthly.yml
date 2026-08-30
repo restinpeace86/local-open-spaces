@@ -45,9 +45,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # [핵심 events 수집 파이프라인 장애 점검](2026-08-30 사용자 지시) 실측 발견: ingest-daily.yml과
+      # 동일한 원인("Node.js detected but native WebSocket not found" — @supabase/supabase-js
+      # 2.112.3의 engines가 node >=22.0.0을 요구) — 상세 배경은 ingest-daily.yml 상단 주석 참고.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install dependencies
         run: npm ci
