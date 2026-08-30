@@ -8,11 +8,13 @@ export function MapPreviewModal({
   lat,
   lng,
   name,
+  address = null,
   onClose,
 }: {
   lat: number;
   lng: number;
   name: string;
+  address?: string | null;
   onClose: () => void;
 }) {
   // Task 9-6-17: DetailModal 위에 겹쳐 열리는 레이어이므로 자체 히스토리 state를 하나 더
@@ -43,7 +45,7 @@ export function MapPreviewModal({
         >
           ✕
         </button>
-        <MiniMap lat={lat} lng={lng} name={name} interactive className="w-full h-full" />
+        <MiniMap lat={lat} lng={lng} name={name} address={address} interactive className="w-full h-full" />
       </div>
     </div>
   );

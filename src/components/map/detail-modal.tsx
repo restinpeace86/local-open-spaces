@@ -239,7 +239,7 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
               안내 문구만 보여준다(정확한 핀처럼 오인시키지 않기 위함). */}
           {hasExactLocation ? (
             <div className="mt-4 relative rounded-xl overflow-hidden border border-gray-200">
-              <MiniMap lat={item.lat} lng={item.lng} name={item.name} className="w-full h-40" />
+              <MiniMap lat={item.lat} lng={item.lng} name={item.name} address={item.address} className="w-full h-40" />
               <button
                 type="button"
                 onClick={() => setIsMapPreviewOpen(true)}
@@ -304,6 +304,7 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
           lat={item.lat}
           lng={item.lng}
           name={item.name}
+          address={item.address}
           onClose={() => setIsMapPreviewOpen(false)}
         />
       )}

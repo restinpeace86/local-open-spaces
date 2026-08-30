@@ -540,3 +540,20 @@
   - **검증**: `npx tsc --noEmit`/`npm run test`(69파일 699건 — curated-items-panel
     5건, data-grid-client 스모크 테스트 2건 신규)/`npm run build` 통과. 상세:
     `implementation/2026-08-30-curated-items-admin-crud.md`.
+
+- [x] **[개발 요청] 상세 모달 내 인앱 지도 및 위치 핀 표시 기능 구현** (2026-08-30 완료)
+  - **사전 조사**: 요구사항 1(외부 지도 링크 제거)/2(인앱 지도+핀)는 직전 작업["외부
+    지도 앱 연동 제거 및 '스팟픽' 인앱 지도/위치 표시 기능 구현"]에서 이미 구현돼
+    있었음을 grep 전수 확인(window.open/map.kakao.com/map.naver.com/nmap:// 등 앱
+    전체에서 외부 지도 연동 지점 0건). 실제로 남아 있던 갭은 요구사항 3(로딩
+    스켈레톤/실패 폴백)뿐이었다.
+  - `MiniMap`에 로딩 상태 관리(`loading`/`loaded`/`error`) 추가 — 로딩 중엔 스켈레톤,
+    SDK 로드 실패 시엔 "지도를 불러올 수 없습니다" + (address 있으면) 주소 텍스트와
+    "주소 복사" 버튼을 보여준다(지도가 없어도 위치 정보는 확인 가능). `DetailModal`/
+    `MapPreviewModal`이 `item.address`를 새로 전달하도록 연결.
+  - **부수 발견 및 정리**: 예전 카카오맵 길찾기 링크 유틸이었으나 네이버 지도로
+    전환되며 완전히 버려진 죽은 코드 `src/lib/kakao/directions-url.ts`(소비처 0건)를
+    발견해 삭제.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(70파일 703건 — `mini-map.test.tsx`
+    4건 신규, loadKakaoMapSdk 모킹으로 로딩/성공/실패 상태 전이 검증)/`npm run build`
+    통과. 상세: `implementation/2026-08-30-inapp-map-loading-fallback.md`.
