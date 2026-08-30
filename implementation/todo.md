@@ -413,7 +413,16 @@
   - **부수 발견 및 수정**: 이 조사 과정에서 `RURAL_EDUCATION_FARM`(농사로 API)이
     요구하는 `NONGSARO_API_KEY`가 `.github/workflows/ingest-monthly.yml`의 `env:`
     블록에 아예 빠져 있는 실제 버그를 발견 — 추가로 수정.
-  - **검증**: `npx tsc --noEmit`/`npm run test`(67파일 691건 — env-precheck 4건 신규)/
-    `npm run build` 통과. `GG_DATA_API_KEY`를 `.env.local`에서 일시 제거해 사전 검사가
-    실제로 배치를 중단시키는지 실측 확인 후 원상 복구. 상세:
+  - **후속 실측(사용자가 Node 22 적용 후 workflow_dispatch로 수동 재실행)**: WebSocket
+    크래시는 완전히 사라지고 `SEOUL_YEYAK`/`seoul_public_culture` 및 후처리 7개
+    단계가 전부 정상 성공(근본 원인 진단이 정확했음을 확인) — 다만 `GG_CULTURE_EVENTS`/
+    `TOUR_API_FESTIVAL` 2개 소스는 여전히 `fetch failed`로 실패해 완전 해결은 아님.
+    두 소스 다 국가/광역 단위 포털(data.go.kr/gg.go.kr)을 쓴다는 공통점이 있어 IP
+    제한 가설을 세웠으나 확정하지 못함 — `scripts/ingest/lib/fetch-with-cause.mjs`
+    신설해 Node 네이티브 fetch가 숨기던 `err.cause`(실제 네트워크 실패 원인)를 다음
+    실패부터 메시지에 노출하도록 관측성을 개선(재시도 로직에는 영향 없음, 단위
+    테스트로 확인). 남은 원인 규명은 다음 실행 로그를 봐야 한다.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(68파일 695건 — env-precheck 4건,
+    fetch-with-cause 4건 신규)/`npm run build` 통과. `GG_DATA_API_KEY`를 `.env.local`에서
+    일시 제거해 사전 검사가 실제로 배치를 중단시키는지 실측 확인 후 원상 복구. 상세:
     `implementation/2026-08-30-events-pipeline-outage-investigation.md`.

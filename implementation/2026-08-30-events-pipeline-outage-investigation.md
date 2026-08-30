@@ -114,7 +114,8 @@ GG_DATA_API_KEY" 메시지로 즉시 중단됨을 실측 확인했다(검증 후
 
 ### 코드 검증
 - `npx tsc --noEmit` 통과.
-- `npm run test`(67파일 691건 — 신규: `env-precheck.test.mjs` 4건) 통과.
+- `npm run test`(68파일 695건 — 신규: `env-precheck.test.mjs` 4건, `fetch-with-cause.test.mjs`
+  4건) 통과.
 - `npm run build` 통과.
 
 ### 실측 검증
@@ -126,19 +127,58 @@ GG_DATA_API_KEY" 메시지로 즉시 중단됨을 실측 확인했다(검증 후
   중단시키는지 확인, 검증 후 파일 원상 복구(백업 후 복사 방식, 임시 백업은 검증 직후
   삭제).
 
+## 5. 후속 실측(2026-08-30, Node 22 적용 후 사용자가 workflow_dispatch로 수동 재실행)
+
+Node 22 수정을 반영한 뒤 사용자가 GitHub Actions에서 직접 워크플로를 수동 실행했다.
+결과(`docs/pipeline-log.md` 커밋 `c8b0d6f`):
+
+- **`SEOUL_YEYAK`/`seoul_public_culture`(SEOUL_CULTURE_EVENTS) 및 7개 후처리 단계
+  전부 정상 성공** — SEOUL_YEYAK 2790건 수신/적재, seoul_public_culture 19497건
+  수신(18950건 적재). **"Node.js ... WebSocket not found" 크래시가 완전히
+  사라졌다 — 4절의 진단과 수정이 정확했음을 실측으로 확인.**
+- 다만 **`GG_CULTURE_EVENTS`와 `TOUR_API_FESTIVAL` 2개 소스가 여전히 `fetch failed`로
+  실패**해(재시도 3회 전부 소진) 워크플로 전체는 여전히 exit code 1로 종료됐다. 이
+  둘은 로컬 dry-run(3절)에서는 정상 동작했던 소스라 GitHub Actions 환경에서만
+  재현되는 별개의 문제로 보인다.
+
+**원인 후보(미확정)**: 두 실패 소스 모두 국가/광역 단위 공공데이터 포털
+(`apis.data.go.kr`, `openapi.gg.go.kr`)을 쓰는 반면, 정상 동작한 두 소스는 서울시
+자체 포털(`openapi.seoul.go.kr`)을 쓴다는 공통점이 있다 — 일부 공공데이터 API는
+활용신청 시 고정 IP를 등록해야 호출이 허용되는 경우가 있어(널리 알려진 제약), 매번
+IP가 바뀌는 GitHub Actions 러너에서 특히 문제가 될 수 있다는 가설을 세웠으나, 이
+가설을 코드나 로그만으로 확정할 방법은 없었다(외부 포털의 API 키 관리 화면에서
+IP 제한 설정 여부를 사용자가 직접 확인해야 함).
+
+**즉시 조치(관측성 개선)**: 기존 코드가 Node의 네이티브 fetch(undici) 에러를 그대로
+전파해, 실패 원인이 항상 "fetch failed"라는 동일하고 무의미한 문구로만 남고
+실제 원인(DNS 실패/연결 거부/타임아웃/TLS 오류 등, `err.cause`에만 담겨 있음)이
+유실되고 있었다 — `scripts/ingest/lib/fetch-with-cause.mjs`(`fetchWithCause`) 신설,
+`gg-culture-events-adapter.mjs`/`tour-api-festival.mjs`의 원본 `fetch()` 호출
+3곳을 교체해 다음 실패부터는 `err.cause`가 메시지에 포함되도록 했다. retry.mjs의
+재시도 판별은 부분 문자열 매칭이라 동작에 영향 없음(단위 테스트로 확인).
+
 ## 특이 사항 — 사용자 확인 필요
 
-1. **Node 버전 상향 조치는 다음 스케줄 실행(매일 KST 03:07)에서 효과를 확인할 수
-   있다** — `workflow_dispatch`로 수동 즉시 실행도 가능하니(GitHub 저장소의 Actions
-   탭에서), 급하면 그쪽으로 바로 확인해도 된다.
-2. (A)번 실패(2026-08-29 01:59 UTC)의 정확한 원인은 완전히 규명하지 못했다 — GitHub
-   저장소 Actions Secrets(`Settings → Secrets and variables → Actions`)에
-   `NEXT_PUBLIC_SUPABASE_URL`/`SUPABASE_SERVICE_ROLE_KEY`/`SEOUL_OPEN_DATA_KEY`/
-   `PUBLIC_DATA_API_KEY`/`GG_DATA_API_KEY`/`VWORLD_API_KEY`/`GEMINI_API_KEY`/
-   `KAKAO_REST_API_KEY`/`NONGSARO_API_KEY`(이번에 워크플로에 새로 추가— 저장소에
-   등록 자체가 안 돼 있을 가능성 있음)가 모두 있는지 한 번 확인해두면 좋다 — 이 화면은
-   구현 AI가 접근할 수 없다. (B)번 수정(Node 22)으로 재발이 멈추면 (A)는 그 시점의
-   일시적 이슈였을 가능성이 높다.
-3. Gemini AI 분류가 로컬 dry-run 중 간헐적으로 HTTP 429(레이트 리밋)를 반환하는 것을
+1. **`GG_CULTURE_EVENTS`/`TOUR_API_FESTIVAL`의 "fetch failed"는 아직 미해결이다.**
+   다음 실행부터는 `err.cause`가 메시지에 포함되니, 그 내용을 보고 원인을 좁힐 수
+   있다 — 만약 DNS/타임아웃 계열이면 일시적 네트워크 문제일 가능성이, "connection
+   reset"/타 명확한 거부 계열이면 IP 제한 가설에 무게가 실린다. `apis.data.go.kr`
+   (공공데이터포털)과 `openapi.gg.go.kr`(경기데이터드림) 각각의 API 키 관리
+   화면에서 "활용신청 시 등록한 IP" 또는 "서비스 URL/IP 제한" 설정이 있는지 확인해
+   보시길 권장한다 — 이 화면들은 구현 AI가 접근할 수 없다.
+2. (A) 2026-08-29 01:59 UTC 실패의 정확한 원인은 완전히 규명하지 못했다 — GitHub
+   저장소 Actions Secrets(`Settings → Secrets and variables → Actions`)에 아래 값이
+   모두 있는지 한 번 확인해두면 좋다: `NEXT_PUBLIC_SUPABASE_URL`,
+   `SUPABASE_SERVICE_ROLE_KEY`, `SEOUL_OPEN_DATA_KEY`, `PUBLIC_DATA_API_KEY`,
+   `GG_DATA_API_KEY`, `VWORLD_API_KEY`, `GEMINI_API_KEY`, `KAKAO_REST_API_KEY`,
+   `NONGSARO_API_KEY`(이번에 워크플로에 새로 추가 — 저장소에 등록 자체가 안 돼
+   있을 가능성 있음). 2026-08-30 재실행에서는 이 계열 에러가 재현되지 않아, 일시적
+   이슈였을 가능성이 있다.
+3. GitHub Actions 로그에 보이는 "Node.js 20 is deprecated ... forced to run on
+   Node.js 24" 경고는 `actions/checkout@v4`/`actions/setup-node@v4` 액션 자체의
+   실행 런타임에 대한 GitHub 인프라 공지이며, 우리가 지정한 `node-version: 22`(스크립트
+   실행용)와는 무관하다 — 액션 작성자 쪽에서 처리할 사안이라 우리 워크플로에서
+   조치할 부분은 없다.
+4. Gemini AI 분류가 로컬 dry-run 중 간헐적으로 HTTP 429(레이트 리밋)를 반환하는 것을
    관찰했으나, 코드가 이미 "ETC로 분류" 폴백으로 처리해 데이터 유실은 없다(분류 품질만
    일부 저하) — 이번 지시서의 "누락" 증상과는 무관해 별도 조치하지 않았다.

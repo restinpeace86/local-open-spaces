@@ -48,6 +48,7 @@ import { BaseCollectorAdapter } from './base-collector-adapter.mjs';
 import { buildEventRow, extractSigunguName } from './lib/schema-mapper.mjs';
 import { cleanText, classifyEventTypeWithAI, deriveBookingStatus, deriveParentalTags } from '../lib/ai-tagging.mjs';
 import { geocode, hasVworldApiKey } from './lib/vworld-geocoder.mjs';
+import { fetchWithCause } from '../lib/fetch-with-cause.mjs';
 
 const CULTURE_EVENT_BASE_URL = 'https://openapi.gg.go.kr/GGCULTUREVENTSTUS';
 const FOUNDATION_EVENT_BASE_URL = 'https://openapi.gg.go.kr/GGCULFOUEVENSTM';
@@ -160,7 +161,7 @@ export class GgCultureEventsAdapter extends BaseCollectorAdapter {
     });
 
     const url = `${baseUrl}?${params.toString()}`;
-    const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
+    const res = await fetchWithCause(url, { headers: { 'User-Agent': USER_AGENT } });
     const text = await res.text();
 
     if (!res.ok) {
