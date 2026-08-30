@@ -448,3 +448,18 @@
     마운트 렌더링·직접 링크 클릭·0건 숨김·섹션 위치 순서 신규 테스트)/`npm run build`
     통과. 로컬 서버 SSR 응답으로 신규 섹션 타이틀 노출 및 구 탭 라벨 완전 제거 확인.
     상세: `implementation/2026-08-30-home-curation-and-tab-removal.md`.
+
+- [x] **[워크플로 "Commit pipeline log" 푸시 경합 수정]** (2026-08-30 완료)
+  - 사용자가 공유한 GitHub Actions 로그에서 Daily 배치의 "Commit pipeline log" 스텝이
+    `git push`에서 `[rejected] (fetch first)`로 실패한 것을 확인 — 이 세션이 같은
+    시간대에 main에 다른 커밋을 계속 푸시하고 있어 발생한 non-fast-forward 경합.
+    러너 워크스페이스가 잡 종료와 함께 사라져 그 실행의 리포트 커밋 자체가 유실됨.
+  - **실측 확인**: git 푸시 실패는 리포트 커밋 단계에서만 발생, 그 이전 Supabase
+    데이터 적재 스텝은 이미 끝난 뒤라 데이터 유실은 없음을 확인(events 테이블에서
+    최근 6시간 내 `seoul_public_reservation` 11건 신규 적재 확인).
+  - `ingest-daily.yml`/`ingest-monthly.yml`의 "Commit pipeline log" 스텝에 push 실패
+    시 fetch+rebase 후 최대 5회 재시도하는 로직 추가(docs/pipeline-log.md는 이 두
+    워크플로만 건드리는 파일이라 rebase 충돌 위험 낮음).
+  - **검증**: `npx js-yaml` CLI로 두 워크플로 YAML 구문 유효성 확인(앱 코드 변경이
+    아니라 tsc/test/build 대상 범위 밖). 상세:
+    `implementation/2026-08-30-workflow-push-race-fix.md`.
