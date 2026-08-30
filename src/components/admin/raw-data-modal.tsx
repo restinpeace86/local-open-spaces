@@ -225,7 +225,7 @@ export function RawDataModal({
             </button>
           </div>
 
-          {table !== 'raw_ingest_data' && onCategoryMinUpdated && (
+          {table !== 'raw_ingest_data' && table !== 'curated_items' && onCategoryMinUpdated && (
             <CategoryMinEditor
               table={table}
               row={row as AdminOpenSpaceRow | AdminEventRow}

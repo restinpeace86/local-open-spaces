@@ -212,13 +212,15 @@ describe('HomeView', () => {
 
   // [홈 화면 큐레이션 섹션 추가 및 상단 탭 정리](2026-08-30 사용자 지시) 요구사항 2/3/4/5:
   // "이번 주말 실패 없는 베스트 나들이 픽" 가로 슬라이드 섹션 — 탭이 사라져 별도 클릭
-  // 없이 마운트만으로 event_tickets를 페칭하고, 카드는 상세 모달 없이 곧바로 booking_url을
+  // 없이 마운트만으로 curated_items를 페칭하고, 카드는 상세 모달 없이 곧바로 booking_url을
   // 새 창으로 연다.
+  // [관리자 화면 기능 고도화 및 범용 제휴 상품 테이블 개편](2026-08-30 사용자 지시): 데이터
+  // 소스가 event_tickets → curated_items(`/api/curated-items`)로 바뀌었다.
   describe('베스트 나들이 픽 섹션', () => {
-    function stubFetchBestPicks(eventTickets: unknown[]) {
+    function stubFetchBestPicks(items: unknown[]) {
       const fetchMock = vi.fn((url: string) => {
-        if (url.startsWith('/api/event-tickets')) {
-          return Promise.resolve({ json: () => Promise.resolve({ eventTickets }) } as Response);
+        if (url.startsWith('/api/curated-items')) {
+          return Promise.resolve({ json: () => Promise.resolve({ items }) } as Response);
         }
         return Promise.resolve({ json: () => Promise.resolve({ heroEvents: [] }) } as Response);
       });
@@ -226,60 +228,55 @@ describe('HomeView', () => {
       return fetchMock;
     }
 
-    function makeEventTicket(overrides: Record<string, unknown> = {}) {
+    function makeCuratedItem(overrides: Record<string, unknown> = {}) {
       return {
-        id: 'ticket-1',
-        title: '가을 단풍 나들이 축제',
-        description: '온 가족이 함께 즐기는 가을 단풍길 산책 축제',
-        category: '지역축제',
-        event_period: '2026-10-01 ~ 2026-10-10',
-        location_name: '중앙공원 일대',
-        original_price: 10000,
-        discount_price: 6000,
-        discount_rate: 40,
+        id: 'item-1',
+        title: '가을 단풍 나들이 축제 입장권',
         image_url: null,
         booking_url: 'https://example.com/tickets/autumn-festival',
+        category: 'ticket',
         is_active: true,
+        operation_start_date: null,
+        operation_end_date: null,
         created_at: '2026-08-29T00:00:00+00:00',
         ...overrides,
       };
     }
 
     it('마운트되면 별도 클릭 없이 타이틀/서브 텍스트와 카드를 보여준다', async () => {
-      stubFetchBestPicks([makeEventTicket()]);
+      stubFetchBestPicks([makeCuratedItem()]);
       render(<HomeView initialHeroEvents={[]} />);
 
       expect(await screen.findByText('이번 주말 실패 없는 베스트 나들이 픽')).toBeInTheDocument();
       expect(screen.getByText('에디터가 직접 검증한 나들이 코스만 엄선했어요.')).toBeInTheDocument();
-      expect(await screen.findByText('가을 단풍 나들이 축제')).toBeInTheDocument();
-      expect(screen.getByText('중앙공원 일대')).toBeInTheDocument();
+      expect(await screen.findByText('가을 단풍 나들이 축제 입장권')).toBeInTheDocument();
     });
 
     it('카드를 클릭하면 상세 모달 없이 booking_url을 새 창(target=_blank)으로 곧바로 연다', async () => {
-      stubFetchBestPicks([makeEventTicket()]);
+      stubFetchBestPicks([makeCuratedItem()]);
       render(<HomeView initialHeroEvents={[]} />);
 
-      const link = (await screen.findByText('가을 단풍 나들이 축제')).closest('a');
+      const link = (await screen.findByText('가을 단풍 나들이 축제 입장권')).closest('a');
       expect(link).toHaveAttribute('href', 'https://example.com/tickets/autumn-festival');
       expect(link).toHaveAttribute('target', '_blank');
       expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
     });
 
     // [큐레이션 카드 내부 '이미지 vs 텍스트' 영역 비율 고정](2026-08-30 사용자 지시):
-    // location_name 유무와 무관하게 카드 전체 높이가 항상 동일해야 한다 — 바깥 래퍼가
+    // 제목 줄바꿈 여부와 무관하게 카드 전체 높이가 항상 동일해야 한다 — 바깥 래퍼가
     // 폭/높이를 고정하고, 카드 내부는 flex flex-col h-full로 이미지/텍스트 영역을 나눈다.
-    it('장소명이 있든 없든 카드 바깥 래퍼의 크기(w-36 h-[220px])는 항상 동일하다', async () => {
+    it('제목 길이가 다르든 카드 바깥 래퍼의 크기(w-36 h-[220px])는 항상 동일하다', async () => {
       stubFetchBestPicks([
-        makeEventTicket({ id: 't1', title: '장소명 있는 티켓', location_name: '중앙공원 일대' }),
-        makeEventTicket({ id: 't2', title: '장소명 없는 티켓', location_name: null }),
+        makeCuratedItem({ id: 't1', title: '짧은 제목' }),
+        makeCuratedItem({ id: 't2', title: '아주 아주 아주 아주 아주 긴 제목의 상품입니다' }),
       ]);
       render(<HomeView initialHeroEvents={[]} />);
 
-      const withLocation = (await screen.findByText('장소명 있는 티켓')).closest('a')!.parentElement!;
-      const withoutLocation = screen.getByText('장소명 없는 티켓').closest('a')!.parentElement!;
+      const short = (await screen.findByText('짧은 제목')).closest('a')!.parentElement!;
+      const long = screen.getByText('아주 아주 아주 아주 아주 긴 제목의 상품입니다').closest('a')!.parentElement!;
 
-      expect(withLocation).toHaveClass('w-36', 'h-[220px]');
-      expect(withoutLocation).toHaveClass('w-36', 'h-[220px]');
+      expect(short).toHaveClass('w-36', 'h-[220px]');
+      expect(long).toHaveClass('w-36', 'h-[220px]');
     });
 
     it('베스트 픽이 0건이면 섹션 자체를 숨긴다', async () => {
@@ -297,8 +294,8 @@ describe('HomeView', () => {
       vi.stubGlobal(
         'fetch',
         vi.fn((url: string) => {
-          if (url.startsWith('/api/event-tickets')) {
-            return Promise.resolve({ json: () => Promise.resolve({ eventTickets: [makeEventTicket()] }) } as Response);
+          if (url.startsWith('/api/curated-items')) {
+            return Promise.resolve({ json: () => Promise.resolve({ items: [makeCuratedItem()] }) } as Response);
           }
           if (url.startsWith('/api/home/feed')) {
             return Promise.resolve({
@@ -314,7 +311,7 @@ describe('HomeView', () => {
         })
       );
       const { container } = render(<HomeView initialHeroEvents={[]} />);
-      await screen.findByText('가을 단풍 나들이 축제');
+      await screen.findByText('가을 단풍 나들이 축제 입장권');
 
       const labels = Array.from(container.querySelectorAll('section[aria-label]')).map((el) =>
         el.getAttribute('aria-label')

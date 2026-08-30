@@ -513,3 +513,30 @@
   - **검증**: `npx tsc --noEmit`/`npm run test`(67파일 692건 — 장소명 유무와 무관하게
     카드 크기가 항상 동일한지 검증하는 신규 테스트)/`npm run build` 통과. 상세:
     `implementation/2026-08-30-best-pick-card-ratio-fix.md`.
+
+- [x] **[개발 요청] 관리자 화면(/admin/data-grid) 기능 고도화 및 범용 제휴 상품
+  테이블 개편** (2026-08-30 완료)
+  - **사전 조사**: 지시서가 말한 "/admin/data-grid의 기존 상품명 검색/등록일 필터"는
+    실제로 open_spaces/events/raw_ingest_data 3개 탭을 다루는 기존 관리자 그리드에
+    이미 있었다(대상 데이터만 시설/행사였을 뿐) — 그 UX 패턴을 큐레이션 상품에도
+    적용하는 것으로 해석. 이 그리드는 표준 중분류 체계에 깊게 결합돼 있고
+    curated_items는 데이터 모양이 근본적으로 달라(제휴 상품 vs 위치 기반) 공유 테이블
+    로직에 끼워넣지 않고, 네 번째 탭으로 추가하되 자기완결적인 `CuratedItemsPanel`로
+    통째로 대체 렌더링(기존 3개 탭 코드는 전혀 손대지 않음).
+  - `curated_items` 테이블 신설(id/title/image_url/booking_url/category/is_active/
+    operation_start_date/operation_end_date/created_at) — deals/event_tickets와
+    동일한 RLS(service_role 전용). `event_tickets`는 삭제하지 않고 그대로 둠(프런트
+    연결만 이동).
+  - `GET/POST/PATCH /api/admin/curated-items`(검색+등록일+운영기간 필터, 등록/수정/
+    원클릭 토글) + `GET /api/curated-items`(홈 화면 공개 조회, is_active와 운영기간
+    둘 다 반영) 신설.
+  - 홈 화면 "베스트 나들이 픽"을 `curated_items`로 연결(location_name 등 event_tickets
+    전용 필드가 사라져 카드가 더 단순해짐).
+  - 관리자 UI: 상품명 검색/등록일 필터(기존 UX 재사용) + 운영기간 필터(신규) +
+    원클릭 노출 토글(로컬 갱신, 목록 재조회 없음) + 등록/수정 겸용 모달.
+  - **실측 검증**: RLS 차단, 관리자 등록→공개 노출→토글로 즉시 비노출→어드민에는
+    계속 노출 전체 흐름 확인, 운영기간 지난/미래 상품이 공개 GET에서 제외되고
+    어드민 기간 필터로는 정상 조회됨을 확인. 테스트 데이터 정리 완료.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(69파일 699건 — curated-items-panel
+    5건, data-grid-client 스모크 테스트 2건 신규)/`npm run build` 통과. 상세:
+    `implementation/2026-08-30-curated-items-admin-crud.md`.

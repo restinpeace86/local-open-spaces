@@ -101,6 +101,10 @@ export default async function AdminDataGridPage() {
         raw_ingest_data: {
           sources: raw?.sources ?? [],
         },
+        // [관리자 화면 기능 고도화 및 범용 제휴 상품 테이블 개편](2026-08-30 사용자 지시):
+        // curated_items 탭은 자기완결적인 CuratedItemsPanel이 자체 API로 필터 옵션 없이
+        // 동작해 이 필터 체계가 필요 없다 — 타입만 맞춰주는 빈 객체.
+        curated_items: {},
       }}
     />
   );

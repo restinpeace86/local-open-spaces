@@ -11,8 +11,16 @@ import {
 import { RawDataModal } from '@/components/admin/raw-data-modal';
 import { CategoryRulesModal } from '@/components/admin/category-rules-modal';
 import { Pagination } from '@/components/admin/pagination';
+import { CuratedItemsPanel } from '@/components/admin/curated-items-panel';
 
-export type AdminTable = 'open_spaces' | 'events' | 'raw_ingest_data';
+// [관리자 화면(/admin/data-grid) 기능 고도화 및 범용 제휴 상품 테이블 개편](2026-08-30
+// 사용자 지시): 'curated_items'를 네 번째 탭으로 추가한다. 아래 나머지 탭 3개(open_spaces/
+// events/raw_ingest_data)는 표준 중분류/타겟 연령 체계에 깊게 결합된 공유 테이블 렌더링
+// 로직을 그대로 쓰지만, curated_items는 데이터 모양이 근본적으로 달라(제휴 상품 vs
+// 위치 기반 시설/행사) 그 공유 로직에 억지로 끼워넣지 않고 별도의 자기완결적 패널
+// (CuratedItemsPanel)로 렌더링한다 — 기존 3개 탭의 필터/테이블 코드는 전혀 건드리지
+// 않는다(아래에서 tab === 'curated_items'일 때 이 컴포넌트로 조기 분기).
+export type AdminTable = 'open_spaces' | 'events' | 'raw_ingest_data' | 'curated_items';
 
 export type AdminOpenSpaceRow = {
   id: string;
@@ -104,6 +112,10 @@ type FilterOptions = {
     categoryMinsFetchFailed?: boolean;
   };
   raw_ingest_data: { sources: string[] };
+  // curated_items는 표준 중분류/타겟 연령 등 이 필터 체계를 전혀 쓰지 않는다(자기완결적인
+  // CuratedItemsPanel이 담당) — currentOptions/categoryMinGroups 계산이 타입 에러 없이
+  // 안전하게 통과하도록 최소 형태만 둔다.
+  curated_items: Record<string, never>;
 };
 
 type TriState = 'all' | 'true' | 'false';
@@ -128,6 +140,7 @@ const TAB_LABEL: Record<AdminTable, string> = {
   open_spaces: 'open_spaces (공간·시설)',
   events: 'events (행사·체험)',
   raw_ingest_data: 'raw_ingest_data (원천 보존)',
+  curated_items: '🏷️ 큐레이션/제휴 상품',
 };
 
 // [매일 배치 신규 데이터 모니터링](2026-08-28): get-home-feed.ts와 동일한 관례로 날짜 문자열을
@@ -689,7 +702,17 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
             </button>
           ))}
         </div>
+      </div>
 
+      {/* [관리자 화면 기능 고도화 및 범용 제휴 상품 테이블 개편](2026-08-30 사용자 지시):
+          curated_items는 데이터 모양이 근본적으로 달라 아래 공유 필터 바/테이블(open_spaces/
+          events/raw_ingest_data 전용)을 타지 않고 자기완결적인 CuratedItemsPanel을
+          그대로 렌더링한다 — 기존 3개 탭 로직은 이 분기 밖에 있어 전혀 영향받지 않는다. */}
+      {tab === 'curated_items' ? (
+        <CuratedItemsPanel />
+      ) : (
+      <>
+      <div className="shrink-0 p-4 border-b border-gray-100 flex flex-col gap-3">
         {/* 3. 필터 및 검색 바 */}
         <input
           type="text"
@@ -1019,8 +1042,10 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
           <Pagination page={page} totalPages={totalPages} onChange={setPage} />
         </div>
       </div>
+      </>
+      )}
 
-      {selectedRow && tab !== 'raw_ingest_data' && (
+      {selectedRow && tab !== 'raw_ingest_data' && tab !== 'curated_items' && (
         <RawDataModal
           table={tab}
           row={selectedRow}

@@ -66,6 +66,42 @@ export type Database = {
         }
         Relationships: []
       }
+      curated_items: {
+        Row: {
+          booking_url: string
+          category: string
+          created_at: string
+          id: string
+          image_url: string | null
+          is_active: boolean
+          operation_end_date: string | null
+          operation_start_date: string | null
+          title: string
+        }
+        Insert: {
+          booking_url: string
+          category?: string
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          operation_end_date?: string | null
+          operation_start_date?: string | null
+          title: string
+        }
+        Update: {
+          booking_url?: string
+          category?: string
+          created_at?: string
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          operation_end_date?: string | null
+          operation_start_date?: string | null
+          title?: string
+        }
+        Relationships: []
+      }
       deals: {
         Row: {
           affiliate_url: string

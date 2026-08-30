@@ -6,7 +6,7 @@ import { useUserLocation } from '@/hooks/use-user-location';
 import { HomeHeader } from '@/components/home/home-header';
 import { HeroCarousel } from '@/components/home/hero-carousel';
 import { ReservationOpenSlider, ReservationOpenSliderSkeleton } from '@/components/home/reservation-open-slider';
-import { BestPickSlider, BestPickSliderSkeleton, EventTicket } from '@/components/home/best-pick-slider';
+import { BestPickSlider, BestPickSliderSkeleton, CuratedItem } from '@/components/home/best-pick-slider';
 import { EventBrowseSheet, EventBrowseSheetMode } from '@/components/home/event-browse-sheet';
 import { MajorCategoryGrid } from '@/components/home/major-category-grid';
 import { FreeFeedSkeleton } from '@/components/home/free-feed-skeleton';
@@ -32,18 +32,23 @@ const HERO_VISIBLE_COUNT = 10;
 
 // [홈 화면 큐레이션 섹션 추가 및 상단 탭 정리](2026-08-30 사용자 지시): "이번 주말 실패 없는
 // 베스트 나들이 픽" 전용 데이터 훅. 상단 탭이 전부 삭제되어 더 이상 "탭 선택 시 지연
-// 페칭" 트리거가 없으므로, deals/event_tickets 데이터가 위치와 무관한 수동 큐레이션
-// 콘텐츠라는 전제(기존 useDealsFeed/useEventTicketsFeed와 동일)를 살려 마운트 시 곧바로
-// 한 번 페칭한다("현재 이용 가능"/"예약 가능"과 동일한 마운트-이펙트 패턴).
+// 페칭" 트리거가 없으므로, 큐레이션 콘텐츠가 위치와 무관한 수동 큐레이션 콘텐츠라는
+// 전제를 살려 마운트 시 곧바로 한 번 페칭한다("현재 이용 가능"/"예약 가능"과 동일한
+// 마운트-이펙트 패턴).
+// [관리자 화면 기능 고도화 및 범용 제휴 상품 테이블 개편](2026-08-30 사용자 지시): 데이터
+// 소스를 event_tickets 전용 `/api/event-tickets`에서 범용 curated_items 테이블을 읽는
+// `/api/curated-items`로 교체했다 — 어드민에서 is_active를 토글하면 이 엔드포인트의
+// 응답이 그대로 바뀌어 홈 화면 노출 여부가 즉시 반영된다(요구사항: "토글 즉시 유저 홈
+// 화면 노출 여부가 제어되어야 한다").
 function useBestPicksFeed() {
-  const [bestPicks, setBestPicks] = useState<EventTicket[] | null>(null);
+  const [bestPicks, setBestPicks] = useState<CuratedItem[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/event-tickets')
+    fetch('/api/curated-items')
       .then((res) => res.json())
-      .then((data: { eventTickets?: EventTicket[] }) => {
-        if (!cancelled) setBestPicks(Array.isArray(data.eventTickets) ? data.eventTickets : []);
+      .then((data: { items?: CuratedItem[] }) => {
+        if (!cancelled) setBestPicks(Array.isArray(data.items) ? data.items : []);
       })
       .catch(() => {
         if (!cancelled) setBestPicks((prev) => prev ?? []);
