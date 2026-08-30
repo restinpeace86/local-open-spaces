@@ -586,3 +586,28 @@
     서버사이드 스팟 검색은 별도 지시 필요.
   - **검증**: `npx tsc --noEmit`/`npm run test`(71파일 715건)/`npm run build` 통과.
     상세: `implementation/2026-08-30-search-keyword-flexibility.md`.
+
+- [x] **[개발 요청] 스팟픽 전국구 서버사이드 검색 구현 및 큐레이션(베스트 나들이 픽)
+  실제 DB 연동 마무리** (2026-08-30 완료)
+  - **요구사항 1(전국구 검색)**: 앞선 지시서에서 남겨둔 "지도 반경 안에서만 텍스트로
+    거르는" 구조적 한계를 해소. `searchSpacesNationwide`(신규, `get-home-feed.ts`) +
+    `GET /api/spots/search` 신설 — `searchEvents`와 동일한 토큰 단위 다중 필드(name/
+    address) ILIKE 패턴으로 open_spaces 전체를 지도 중심과 무관하게 검색한다.
+    `map-explorer.tsx`는 검색어가 있을 때 기존 반경 RPC 결과 대신 이 응답을 쓰도록
+    전환하고, 기존 클라이언트 텍스트 필터는 완전히 제거했다. panTo+핀 활성화는 이미
+    있던 `focusPosition`/`setSelectedItem` 흐름을 그대로 재사용해 신규 코드 없이
+    "그냥 작동"함을 확인했다.
+  - **실측으로 발견한 추가 성능 함정**: "부산"처럼 흔한 지명은 매치 건수가
+    6,000건+이라 `order('name')`을 걸면 정렬 비용 때문에 1.9~5초가 걸리고, **라이브
+    서버에서 PostgREST 8초 statement_timeout 타임아웃까지 실제 재현**했다. `order()`를
+    제거해(검색 결과는 "관련도" 정렬 기준이 없어 이름순을 포기해도 무방) 같은 쿼리를
+    200~300ms로 안정화했다(반복 측정 0.36~0.94초).
+  - **요구사항 2(베스트 나들이 픽 Mock 제거 재확인)**: `best-pick-slider.tsx`/
+    `home-view.tsx`/`api/curated-items` 전수 재확인 — 이미 Mock 데이터 경로 0건,
+    is_active+운영기간 필터 정확함을 코드로 재확인. 관리자 POST(실제 등록 엔드포인트)
+    → 공개 GET 즉시 반영 → is_active 토글 시 즉시 비노출까지 실측 검증(테스트 데이터
+    삭제로 원상 복구). 코드 변경 없음(기존 구현이 이미 요구사항 충족).
+  - **검증**: `npx tsc --noEmit`/`npm run test`(71파일 720건 — `searchSpacesNationwide`
+    5건 신규, `map-explorer.test.tsx` 검색 테스트를 전국구 아키텍처에 맞게 교체)/
+    `npm run build` 통과(`/api/spots/search` 라우트 정상 등록 확인). 상세:
+    `implementation/2026-08-30-nationwide-spot-search-and-curated-items-verification.md`.

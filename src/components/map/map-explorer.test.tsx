@@ -26,11 +26,22 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => mockSearchParams,
 }));
 
+// [스팟픽 전국구 서버사이드 검색](2026-08-30 사용자 지시) 테스트를 위해 focusPosition도
+// 노출한다 — 검색 결과 클릭 시 실제 panTo 좌표가 selectedItem의 좌표와 일치하는지 확인한다.
 vi.mock('@/components/map/kakao-map-view', () => ({
-  KakaoMapView: ({ onDragEnd }: { onDragEnd?: (center: { lat: number; lng: number }) => void }) => (
-    <button type="button" onClick={() => onDragEnd?.({ lat: 37.5, lng: 127.1 })}>
-      simulate-dragend
-    </button>
+  KakaoMapView: ({
+    onDragEnd,
+    focusPosition,
+  }: {
+    onDragEnd?: (center: { lat: number; lng: number }) => void;
+    focusPosition?: { lat: number; lng: number } | null;
+  }) => (
+    <div>
+      <button type="button" onClick={() => onDragEnd?.({ lat: 37.5, lng: 127.1 })}>
+        simulate-dragend
+      </button>
+      {focusPosition && <div data-testid="focus-position">{`${focusPosition.lat},${focusPosition.lng}`}</div>}
+    </div>
   ),
 }));
 
@@ -106,80 +117,108 @@ describe('MapExplorer 상시 공간 전용 단일화 (Task 9-6-10)', () => {
   });
 });
 
-// [검색창/지도 검색 키워드 유연성 대폭 개선](2026-08-30 사용자 지시): 이 화면의 키워드
-// 검색은 RPC가 이미 내려준 반경 내 items를 클라이언트에서 name/address로 다시 거르는
-// 방식이다 — 그 필터 로직 자체의 유연성(공백 토큰 분리, 다중 필드)을 검증한다.
-describe('MapExplorer 검색 키워드 유연성', () => {
-  function makeSpaceRow(overrides: Record<string, unknown> = {}) {
-    return {
-      id: 'space-1',
-      name: '용인어린이상상의숲',
-      category: 'KIDS_ACTIVITY',
-      distance_meters: 100,
-      item_type: 'SPACE',
-      lng: 127.1,
-      lat: 37.5,
-      address: '경기도 용인시 처인구 동백죽전대로 61',
-      thumbnail_url: null,
-      start_date: null,
-      end_date: null,
-      reservation_start_date: null,
-      reservation_end_date: null,
-      reservation_url: null,
-      is_reservation_required: null,
-      operating_hours: null,
-      is_free: null,
-      info_url: null,
-      is_kids_friendly: null,
-      has_parking: null,
-      stroller_accessible: null,
-      facility_type: null,
-      target_age_group: null,
-      booking_status: null,
-      ...overrides,
-    };
+function makeSpaceRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'space-1',
+    name: '용인어린이상상의숲',
+    category: 'KIDS_ACTIVITY',
+    distance_meters: 100,
+    item_type: 'SPACE',
+    lng: 127.1,
+    lat: 37.5,
+    address: '경기도 용인시 처인구 동백죽전대로 61',
+    thumbnail_url: null,
+    start_date: null,
+    end_date: null,
+    reservation_start_date: null,
+    reservation_end_date: null,
+    reservation_url: null,
+    is_reservation_required: null,
+    operating_hours: null,
+    is_free: null,
+    info_url: null,
+    is_kids_friendly: null,
+    has_parking: null,
+    stroller_accessible: null,
+    facility_type: null,
+    target_age_group: null,
+    booking_status: null,
+    ...overrides,
+  };
+}
+
+// [스팟픽 전국구 서버사이드 검색](2026-08-30 사용자 지시): 지도 중심/반경 안에서만 텍스트로
+// 거르던 기존 방식을 걷어내고, 검색어가 있으면 /api/spots/search(open_spaces 전체 대상)를
+// 호출해 지도 화면 위치와 무관한 결과를 렌더링하도록 바뀌었다. 검색 결과 클릭 시 지도가
+// 해당 좌표로 panTo하고 상세 모달이 열리는지도 함께 검증한다.
+describe('MapExplorer 전국구 서버사이드 검색 (2026-08-30)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  function mockSearchResponse(items: unknown[]) {
+    (fetch as unknown as ReturnType<typeof vi.fn>).mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ items }),
+    });
   }
 
-  it('검색어에 띄어쓰기가 있어도 이름이 붙어있는 데이터를 찾아낸다("용인 어린이상상")', async () => {
-    rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow()], error: null });
+  it('검색어를 입력하면 지도 반경(RPC 결과)과 무관하게 /api/spots/search 결과를 렌더링한다', async () => {
+    rpcMock.mockResolvedValueOnce({ data: [], error: null });
+    mockSearchResponse([makeSpaceRow({ id: 'nationwide-1', name: '용인어린이상상의숲' })]);
+
     render(<MapExplorer />);
     await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
-    await screen.findAllByText('용인어린이상상의숲');
 
     const searchInputs = screen.getAllByPlaceholderText('공간/행사 이름, 키워드 검색');
     fireEvent.change(searchInputs[0], { target: { value: '용인 어린이상상' } });
 
-    await waitFor(
-      () => expect(screen.getAllByText('용인어린이상상의숲').length).toBeGreaterThan(0),
-      { timeout: 1000 }
-    );
-  });
+    await waitFor(() => expect(fetch).toHaveBeenCalled(), { timeout: 1000 });
+    const calledUrl = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    expect(decodeURIComponent(calledUrl)).toBe('/api/spots/search?q=용인 어린이상상');
 
-  it('이름에는 없어도 주소에만 있는 키워드로 검색된다', async () => {
-    rpcMock.mockResolvedValueOnce({
-      data: [makeSpaceRow({ name: '숲속 놀이터', address: '경기도 용인시 처인구' })],
-      error: null,
+    await waitFor(() => expect(screen.getAllByText('용인어린이상상의숲').length).toBeGreaterThan(0), {
+      timeout: 1000,
     });
-    render(<MapExplorer />);
-    await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
-    await screen.findAllByText('숲속 놀이터');
-
-    const searchInputs = screen.getAllByPlaceholderText('공간/행사 이름, 키워드 검색');
-    fireEvent.change(searchInputs[0], { target: { value: '용인' } });
-
-    await waitFor(() => expect(screen.getAllByText('숲속 놀이터').length).toBeGreaterThan(0), { timeout: 1000 });
   });
 
-  it('여러 단어 중 하나라도 매치되지 않으면 결과에서 제외된다', async () => {
-    rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow()], error: null });
+  it('검색 결과를 클릭하면 지도가 해당 좌표로 이동(panTo)하고 상세 모달이 열린다', async () => {
+    rpcMock.mockResolvedValueOnce({ data: [], error: null });
+    mockSearchResponse([
+      makeSpaceRow({ id: 'nationwide-2', name: '부산 씨사이드파크', lat: 35.15, lng: 129.05 }),
+    ]);
+
     render(<MapExplorer />);
     await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
-    await screen.findAllByText('용인어린이상상의숲');
 
     const searchInputs = screen.getAllByPlaceholderText('공간/행사 이름, 키워드 검색');
-    fireEvent.change(searchInputs[0], { target: { value: '용인 부산' } }); // "부산"은 이름/주소 어디에도 없음
+    fireEvent.change(searchInputs[0], { target: { value: '씨사이드' } });
 
-    await waitFor(() => expect(screen.queryAllByText('용인어린이상상의숲').length).toBe(0), { timeout: 1000 });
+    const results = await screen.findAllByText('부산 씨사이드파크', {}, { timeout: 1000 });
+    fireEvent.click(results[0]);
+
+    await waitFor(() => expect(screen.getByTestId('focus-position').textContent).toBe('35.15,129.05'));
+    expect(screen.getAllByLabelText('닫기').length).toBeGreaterThan(0);
+  });
+
+  it('검색어를 지우면 다시 지도 반경 기반 결과로 돌아간다', async () => {
+    rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow({ id: 'nearby-1', name: '분당 놀이터' })], error: null });
+    mockSearchResponse([makeSpaceRow({ id: 'nationwide-3', name: '제주 오름공원' })]);
+
+    render(<MapExplorer />);
+    await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
+    await screen.findAllByText('분당 놀이터');
+
+    const searchInputs = screen.getAllByPlaceholderText('공간/행사 이름, 키워드 검색');
+    fireEvent.change(searchInputs[0], { target: { value: '제주' } });
+
+    await screen.findAllByText('제주 오름공원', {}, { timeout: 1000 });
+    expect(screen.queryAllByText('분당 놀이터').length).toBe(0);
+
+    fireEvent.change(searchInputs[0], { target: { value: '' } });
+
+    await waitFor(() => expect(screen.getAllByText('분당 놀이터').length).toBeGreaterThan(0), { timeout: 1000 });
+    expect(screen.queryAllByText('제주 오름공원').length).toBe(0);
   });
 });
 

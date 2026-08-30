@@ -1488,3 +1488,125 @@ describe('searchEvents', () => {
     expect(orMock).toHaveBeenCalledWith('title.ilike.%50\\%%,description.ilike.%50\\%%,venue_name.ilike.%50\\%%');
   });
 });
+
+// [스팟픽 전국구 서버사이드 검색](2026-08-30 사용자 지시): /nearby(스팟픽) 지도 검색이 지도
+// 중심/반경 안으로만 좁혀진 결과를 클라이언트에서 다시 텍스트로 거르던 구조를 걷어내고,
+// open_spaces 전체를 대상으로 서버에서 검색한다. searchEvents와 동일한 토큰 단위 다중 필드
+// ilike .or() 체이닝 패턴을 쓰되, 대상 테이블/컬럼이 다르고(name/address, events처럼
+// is_active/target_audience 필터가 없음 — Decision 010: open_spaces는 상시 공간 전용이라
+// 이벤트픽 전용 콘텐츠 큐레이션 정책 대상이 아님) location_precision='EXACT' 필터를
+// get_nearby_spaces_and_events RPC와 동일하게 유지한다.
+describe('searchSpacesNationwide', () => {
+  afterEach(() => {
+    vi.doUnmock('@/lib/supabase/server');
+    vi.resetModules();
+  });
+
+  function spaceRow(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 's1',
+      name: '용인어린이상상의숲',
+      category: 'KIDS_ACTIVITY',
+      address: '경기도 용인시 처인구 동백죽전대로 61',
+      location: { coordinates: [127.1, 37.5] },
+      is_free: null,
+      operating_hours: null,
+      info_url: null,
+      is_kids_friendly: null,
+      has_parking: null,
+      stroller_accessible: null,
+      facility_type: null,
+      target_age_group: null,
+      sigungu_name: '용인시 처인구',
+      source_type: null,
+      ...overrides,
+    };
+  }
+
+  function makeSearchBuilder(row: ReturnType<typeof spaceRow>) {
+    const orMock = vi.fn(() => builder);
+    const eqMock = vi.fn(() => builder);
+    const builder: Record<string, unknown> = {};
+    builder.select = () => builder;
+    builder.eq = eqMock;
+    builder.or = orMock;
+    builder.order = () => builder;
+    builder.limit = () => Promise.resolve({ data: [row], error: null });
+    return { builder, orMock, eqMock };
+  }
+
+  it('검색어가 비어있으면(공백만 있어도) DB를 조회하지 않고 빈 배열을 반환한다', async () => {
+    const fromMock = vi.fn();
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: fromMock }),
+    }));
+
+    const { searchSpacesNationwide } = await import('./get-home-feed');
+    const items = await searchSpacesNationwide('   ');
+
+    expect(items).toEqual([]);
+    expect(fromMock).not.toHaveBeenCalled();
+  });
+
+  it('지도 중심/반경과 무관하게 open_spaces 전체를 name/address ilike .or()로 검색한다(location_precision=EXACT 유지)', async () => {
+    const row = spaceRow({ id: 'nationwide-1' });
+    const { builder, orMock, eqMock } = makeSearchBuilder(row);
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => builder }),
+    }));
+
+    const { searchSpacesNationwide } = await import('./get-home-feed');
+    const items = await searchSpacesNationwide('물놀이');
+
+    expect(eqMock).toHaveBeenCalledWith('location_precision', 'EXACT');
+    expect(orMock).toHaveBeenCalledWith('name.ilike.%물놀이%,address.ilike.%물놀이%');
+    expect(items[0].id).toBe('nationwide-1');
+    expect(items[0].item_type).toBe('SPACE');
+    expect(items[0].distance_meters).toBe(-1);
+  });
+
+  it('공백으로 구분된 여러 단어는 토큰마다 별도 .or()를 체이닝한다("용인 어린이상상" 같은 사례)', async () => {
+    const row = spaceRow({ id: 'nationwide-2', name: '용인어린이상상의숲' });
+    const { builder, orMock } = makeSearchBuilder(row);
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => builder }),
+    }));
+
+    const { searchSpacesNationwide } = await import('./get-home-feed');
+    await searchSpacesNationwide('용인 어린이상상');
+
+    expect(orMock).toHaveBeenNthCalledWith(1, 'name.ilike.%용인%,address.ilike.%용인%');
+    expect(orMock).toHaveBeenNthCalledWith(2, 'name.ilike.%어린이상상%,address.ilike.%어린이상상%');
+  });
+
+  it('ILIKE 와일드카드 특수문자(%, _)가 포함된 검색어는 이스케이프해 리터럴로 취급한다', async () => {
+    const row = spaceRow({ id: 'nationwide-3', name: '50% 할인 매장' });
+    const { builder, orMock } = makeSearchBuilder(row);
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => builder }),
+    }));
+
+    const { searchSpacesNationwide } = await import('./get-home-feed');
+    await searchSpacesNationwide('50%');
+
+    expect(orMock).toHaveBeenCalledWith('name.ilike.%50\\%%,address.ilike.%50\\%%');
+  });
+
+  it('반환된 좌표(location geometry)를 NearbyItem의 lng/lat으로 변환한다', async () => {
+    const row = spaceRow({ id: 'nationwide-4', location: { coordinates: [129.05, 35.15] } });
+    const { builder } = makeSearchBuilder(row);
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => builder }),
+    }));
+
+    const { searchSpacesNationwide } = await import('./get-home-feed');
+    const items = await searchSpacesNationwide('씨사이드');
+
+    expect(items[0].lng).toBe(129.05);
+    expect(items[0].lat).toBe(35.15);
+  });
+});

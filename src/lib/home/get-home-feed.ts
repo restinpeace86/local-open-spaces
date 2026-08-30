@@ -774,6 +774,53 @@ export async function searchEvents(keyword: string, limit = 30): Promise<NearbyI
   return ((data ?? []) as EventRow[]).map(toEventItem);
 }
 
+// [스팟픽 전국구 서버사이드 검색](2026-08-30 사용자 지시): /nearby(스팟픽) 지도 검색이
+// 지도 중심/반경 RPC(get_nearby_spaces_and_events)가 이미 내려준 항목을 클라이언트에서
+// 다시 텍스트로 거르던 구조였다 — 찾으려는 장소가 현재 지도 화면 밖에 있으면 텍스트
+// 매칭을 아무리 잘 고쳐도 애초에 후보 목록에 없어 검색되지 않는 근본적 한계가 있었다
+// (2026-08-30-search-keyword-flexibility.md 특이 사항 1번). 지도 중심 좌표와 무관하게
+// open_spaces 전체(현재 141,980행)에서 이름/주소로 찾도록 별도 함수로 분리한다 —
+// searchEvents와 같은 토큰 단위 다중 필드 ILIKE 패턴을 쓰되, 대상 테이블/컬럼과
+// 반환 타입(SPACE 전용)이 달라 하나로 합치지 않는다. 방금 추가한 pg_trgm GIN 트라이그램
+// 인덱스(open_spaces.name/address)가 이 전국 스캔의 성능 기반이다.
+//
+// location_precision='EXACT' 필터는 get_nearby_spaces_and_events RPC와 동일하게
+// 유지한다(Decision 009/017) — 좌표가 부정확한 행을 지도에 판으로 찍으면 엉뚱한
+// 위치로 이동(panTo)하게 되어 이번 요구사항의 "정확한 좌표로 이동" 취지에 어긋난다.
+// 검색어가 비어있으면(공백만 있는 경우 포함) "전체 목록"이라는 의미 없는 결과를 만들지
+// 않도록 빈 배열을 반환한다(호출부가 키워드 존재 여부를 판단해 호출하는 게 정상 흐름).
+// limit 기본값 201은 get_nearby_spaces_and_events RPC의 기존 관례(마커 상한 200보다
+// 하나 더 받아 "더 많은 결과가 있다"는 초과 안내 토스트를 클라이언트가 판단할 수 있게 함,
+// 2026-08-28-nearby-rpc-category-min.sql 참고)를 그대로 따른 것이다.
+//
+// [실측으로 발견한 추가 성능 함정] "부산"처럼 흔한 2글자 지명은 141,980행 중 6,000건
+// 이상과 매치되는데, 여기에 order('name')을 걸면 매치된 행 전체를 정렬한 뒤에야
+// limit을 적용할 수 있어(정렬은 인덱스로 조기 종료가 안 됨) 1.9~5초가 걸리고, 실제
+// PostgREST 8초 statement_timeout 앞에서 라이브 서버로는 실제 타임아웃까지 재현됐다
+// (2026-08-25-admin-data-grid-rpcs.sql에 기록된 것과 동일한 PostgREST 8초 제약).
+// order를 완전히 빼면 GIN 인덱스 스캔이 limit 건수만 채우고 조기 종료할 수 있어 같은
+// 쿼리가 200~300ms로 떨어짐을 실측 확인했다 — 검색 결과는 어차피 "관련도"라는 뚜렷한
+// 정렬 기준이 없어(뷰포트 RPC의 distance_meters 같은 개념이 없음) 이름순 정렬을
+// 포기해도 손해가 없다.
+export async function searchSpacesNationwide(keyword: string, limit = 201): Promise<NearbyItem[]> {
+  const tokens = splitSearchTokens(keyword);
+  if (tokens.length === 0) return [];
+
+  const supabase = await createClient();
+  let query = supabase.from('open_spaces').select(SPACE_COLUMNS).eq('location_precision', 'EXACT');
+
+  for (const token of tokens) {
+    const escaped = escapeIlikePattern(token);
+    query = query.or(`name.ilike.%${escaped}%,address.ilike.%${escaped}%`);
+  }
+
+  const { data, error } = await query.limit(limit);
+
+  if (error) throw new Error(error.message);
+
+  return ((data ?? []) as SpaceRow[]).map(toSpaceItem);
+}
+
 // Task 9-5-1(2026-08-22): source_type을 추가했다 — 목적별 테마 스팟 분류(src/lib/theme-spots.ts)에
 // 쓰인다(events 테이블에는 이 컬럼 자체가 없어 EVENT_COLUMNS에는 추가하지 않음, 실측 확인).
 const SPACE_COLUMNS =

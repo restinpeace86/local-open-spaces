@@ -16,7 +16,6 @@ import { LocationOnboardingModal } from '@/components/map/location-onboarding-mo
 import { RecenterButton } from '@/components/map/recenter-button';
 import { MyLocationButton } from '@/components/map/my-location-button';
 import { getNearbySpacesAndEvents, NearbyItem } from '@/lib/spaces/get-nearby';
-import { splitSearchTokens } from '@/lib/search/keyword-search';
 import { useUserLocation } from '@/hooks/use-user-location';
 import { CORE_SPOT_CATEGORIES } from '@/lib/spaces/spot-category-groups';
 import { rankAiRecommendedSpots } from '@/lib/spaces/ai-recommend';
@@ -65,6 +64,14 @@ export function MapExplorer() {
   const [isSheetExpanded, setIsSheetExpanded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [스팟픽 전국구 서버사이드 검색](2026-08-30 사용자 지시): searchResults가 null이면
+  // "검색 미실행" 상태, 배열(빈 배열 포함)이면 "검색 결과" 상태를 뜻한다. 검색어가 있으면
+  // 지도 중심/반경과 무관하게 이 결과를 보여주고, 검색어를 지우면 다시 반경 기반 items로
+  // 돌아간다(SearchBar 자체가 이미 300ms debounce를 적용해 keyword를 넘겨주므로 여기서
+  // 별도 debounce는 불필요하다).
+  const [searchResults, setSearchResults] = useState<NearbyItem[] | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
   // implementation/todo.md: 지도 드래그로 이동한 위치를 새로운 검색 기준점으로 지정하기 위한 override 상태.
   // '내 위치' 원본 좌표(useUserLocation)는 그대로 유지하고, 재검색 버튼 클릭 시에만 탐색 기준점을 갱신한다.
   const [searchOverrideCenter, setSearchOverrideCenter] = useState<{ lat: number; lng: number } | null>(
@@ -95,6 +102,46 @@ export function MapExplorer() {
       cancelled = true;
     };
   }, [effectiveCenter.lat, effectiveCenter.lng, radius]);
+
+  // [스팟픽 전국구 서버사이드 검색](2026-08-30 사용자 지시): 검색어가 있으면 현재 지도
+  // 중심/반경과 무관하게 open_spaces 전체를 대상으로 한 /api/spots/search를 호출한다 —
+  // 기존에는 이미 반경 내로 좁혀진 items를 클라이언트에서 다시 텍스트로 거르기만 해서,
+  // 찾으려는 장소가 현재 지도 화면 밖에 있으면 원천적으로 검색되지 않는 한계가 있었다.
+  useEffect(() => {
+    const trimmed = keyword.trim();
+    if (!trimmed) {
+      setSearchResults(null);
+      setSearchError(null);
+      setIsSearching(false);
+      return;
+    }
+
+    let cancelled = false;
+    setIsSearching(true);
+    setSearchError(null);
+
+    fetch(`/api/spots/search?q=${encodeURIComponent(trimmed)}`)
+      .then((res) => res.json())
+      .then((data: { items?: NearbyItem[]; error?: string }) => {
+        if (cancelled) return;
+        if (data.error) {
+          setSearchError(data.error);
+          setSearchResults([]);
+          return;
+        }
+        setSearchResults(Array.isArray(data.items) ? data.items : []);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setSearchError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setIsSearching(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [keyword]);
 
   // implementation/todo.md: '내 동네' 재설정 시 지도 드래그로 인한 임시 재검색 기준점은 초기화한다.
   const handleConfirmLocation = useCallback(
@@ -154,34 +201,29 @@ export function MapExplorer() {
   // [스팟픽 대분류/중분류 계층적 탐색](2026-08-28): 목적별 테마(classifyThemeSpot) 대신
   // 표준 중분류(category_min) 다중 선택으로 거른다 — get_nearby_spaces_and_events RPC가
   // 이제 category_min을 반환한다(2026-08-28-nearby-rpc-category-min.sql).
+  // [스팟픽 전국구 서버사이드 검색](2026-08-30 사용자 지시): 검색어가 있으면(searchResults가
+  // null이 아니면) 텍스트 매칭이 이미 서버에서 끝난 전국구 결과를 기반으로 하고, 없으면
+  // 기존처럼 지도 반경 내 items를 기반으로 한다. 중분류 필터는 두 경우 모두 동일하게
+  // 클라이언트에서 한 번 더 좁힌다(검색 결과 안에서도 카테고리로 추가 탐색 가능).
+  const isSearchMode = keyword.trim().length > 0;
   const filteredItems = useMemo(() => {
-    let result = items;
+    let result = isSearchMode ? (searchResults ?? []) : items;
 
     if (selectedCategoryMins.length > 0) {
       result = result.filter((item) => item.category_min && selectedCategoryMins.includes(item.category_min));
     }
 
-    // [검색창/지도 검색 키워드 유연성 대폭 개선](2026-08-30 사용자 지시): name 한 필드만,
-    // 검색어 전체를 하나의 문자열로 매칭해 "용인 어린이상상"처럼 띄어 쓰면 실제 데이터
-    // ("용인어린이상상의숲")와 어긋나 누락되는 경우가 있었다 — 공백 기준 토큰으로 나눠
-    // 각 토큰이 name 또는 address 어디에든 부분 문자열로(대소문자 무시) 존재하기만
-    // 하면 매치되도록 넓혔다(요구사항 1/2/3). 이 목록(items) 자체는 현재 지도 화면에
-    // 보이는 반경 내 결과로 이미 좁혀져 있다는 점은 여전하다 — 이 필터는 그 안에서
-    // 텍스트로 더 좁히는 역할만 한다.
-    const searchTokens = splitSearchTokens(keyword);
-    if (searchTokens.length > 0) {
-      result = result.filter((item) => {
-        const haystack = `${item.name} ${item.address ?? ''}`.toLowerCase();
-        return searchTokens.every((token) => haystack.includes(token.toLowerCase()));
-      });
-    }
-
     return result;
-  }, [items, selectedCategoryMins, keyword]);
+  }, [isSearchMode, searchResults, items, selectedCategoryMins]);
 
   const visibleItems = useMemo(() => filteredItems.slice(0, MARKER_LIMIT), [filteredItems]);
   const isOverLimit = filteredItems.length > MARKER_LIMIT;
-  const isEmptyByFilter = !isLoading && !errorMessage && items.length > 0 && visibleItems.length === 0;
+  const isBusy = isSearchMode ? isSearching : isLoading;
+  const activeError = isSearchMode ? searchError : errorMessage;
+  const isEmptyByFilter =
+    !isBusy &&
+    !activeError &&
+    (isSearchMode ? searchResults !== null && visibleItems.length === 0 : items.length > 0 && visibleItems.length === 0);
 
   // spec/space/space-card.md 3, spec/event/event-card.md 3: 카드/마커 클릭 시 지도 panTo + 상세 모달 활성화
   const handleSelectItem = useCallback((item: NearbyItem) => {
@@ -215,10 +257,10 @@ export function MapExplorer() {
           />
         </div>
         <div className="flex-1 overflow-y-auto">
-          {isLoading && <p className="p-4 text-sm text-gray-400">불러오는 중...</p>}
-          {errorMessage && <p className="p-4 text-sm text-red-500">{errorMessage}</p>}
+          {isBusy && <p className="p-4 text-sm text-gray-400">불러오는 중...</p>}
+          {activeError && <p className="p-4 text-sm text-red-500">{activeError}</p>}
           {isEmptyByFilter && <EmptyState onReset={resetFilters} />}
-          {!isLoading && !errorMessage && !isEmptyByFilter && (
+          {!isBusy && !activeError && !isEmptyByFilter && (
             <ItemListPanel
               items={visibleItems}
               selectedId={selectedItem?.id ?? null}
@@ -286,14 +328,14 @@ export function MapExplorer() {
         >
           <span className="w-10 h-1 rounded-full bg-gray-300" aria-hidden />
           <span className="mt-2 text-sm text-gray-600">
-            주변 {visibleItems.length}건 {isSheetExpanded ? '접기' : '목록 보기'}
+            {isSearchMode ? '검색결과' : '주변'} {visibleItems.length}건 {isSheetExpanded ? '접기' : '목록 보기'}
           </span>
         </button>
         <div className="h-[calc(100%-56px)] overflow-y-auto">
-          {isLoading && <p className="p-4 text-sm text-gray-400">불러오는 중...</p>}
-          {errorMessage && <p className="p-4 text-sm text-red-500">{errorMessage}</p>}
+          {isBusy && <p className="p-4 text-sm text-gray-400">불러오는 중...</p>}
+          {activeError && <p className="p-4 text-sm text-red-500">{activeError}</p>}
           {isEmptyByFilter && <EmptyState onReset={resetFilters} />}
-          {!isLoading && !errorMessage && !isEmptyByFilter && (
+          {!isBusy && !activeError && !isEmptyByFilter && (
             <ItemListPanel
               items={visibleItems}
               selectedId={selectedItem?.id ?? null}
@@ -307,7 +349,13 @@ export function MapExplorer() {
       </div>
 
       {isOverLimit && (
-        <Toast message="반경 내 시설이 너무 많습니다. 지도를 확대하거나 범위를 좁혀 상세히 탐색하세요." />
+        <Toast
+          message={
+            isSearchMode
+              ? '검색 결과가 너무 많습니다. 검색어를 더 구체적으로 입력해 보세요.'
+              : '반경 내 시설이 너무 많습니다. 지도를 확대하거나 범위를 좁혀 상세히 탐색하세요.'
+          }
+        />
       )}
 
       {selectedItem && (
