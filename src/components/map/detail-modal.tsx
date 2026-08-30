@@ -7,8 +7,6 @@ import { getTargetAudienceLabel } from '@/lib/spaces/target-audience-meta';
 import { formatDDay } from '@/lib/spaces/d-day';
 import { getReservationAvailabilityTag } from '@/lib/spaces/event-status';
 import { formatDistance, formatDateRange, formatDateTime } from '@/lib/spaces/format';
-import { buildNaverMapDirectionsUrl } from '@/lib/navigation';
-import { useUserLocation } from '@/hooks/use-user-location';
 import { MiniMap } from '@/components/map/mini-map';
 import { MapPreviewModal } from '@/components/map/map-preview-modal';
 import { ReservationRequestModal } from '@/components/map/reservation-request-modal';
@@ -39,10 +37,6 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
   // 카드 클릭으로 열리므로(전부 React onClick 경로) 사실상 상시 영향을 받고 있었다. 배경
   // 클릭/X 버튼으로는 여전히 정상적으로 닫히므로, 뒤로가기 제스처로 모달만 닫는 편의 기능만
   // 제거하고 핵심 기능(모달 열기/닫기)은 안전하게 복구한다.
-  // Task 9-5-1(2026-08-22): 유저가 이미 설정해 둔 전역 위치(온보딩에서 저장한 좌표, 미설정
-  // 시 기본값)를 그대로 "내 위치" 출발지로 쓴다 — 별도 GPS 권한 요청 없이 서비스가 이미 아는
-  // 값을 재사용해, 네이버 지도 앱이 열리자마자 출발지 ➔ 목적지 경로가 바로 뜨도록 한다.
-  const { center: userLocation } = useUserLocation();
   const meta = getCategoryMeta(item.category);
   const isEvent = item.item_type === 'EVENT';
   // Task 9-6-2(2026-08-23, Decision 009): location_precision이 없으면(SPACE, 기존 EXACT 전용
@@ -65,20 +59,23 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
   // 여부를 알 수 없었다 — 예약불필요/현장방문 vs 사전예약필요(링크미제공)를 구분해 안내한다.
   const reservationTag = isEvent ? getReservationAvailabilityTag(item) : null;
 
-  const directionsUrl = buildNaverMapDirectionsUrl({ name: item.name, lat: item.lat, lng: item.lng }, userLocation);
-  // Task 9-6-11(2026-08-25, Decision 011): 상세 CTA 조건부 3분류 —
+  // [외부 지도 앱 연동 제거 및 인앱 위치 보기](2026-08-30 사용자 지시): Decision 011의
+  // 3분류 중 세 번째("길찾기")가 네이버 지도 앱/웹으로 유저를 내보내던 것을 제거하고,
+  // 이미 존재하는 인앱 미니맵의 "🔍 크게보기"(MapPreviewModal, Kakao Maps SDK)를 여는
+  // 버튼으로 대체한다 — 유저가 앱을 이탈하지 않고 위치를 확인할 수 있게 한다(요구사항 1).
+  // Task 9-6-11(2026-08-25, Decision 011 개정): 상세 CTA 조건부 3분류 —
   // 1) 공공/무료(is_free=true 또는 reservation_url 존재) → 공공 예약하기
   // 2) 유료/민간 제휴(is_free=false 및 affiliate_url 존재) → 할인 예매하기
-  // 3) 그 외(위 링크 미존재) → 길찾기(정확한 좌표가 있을 때만)
+  // 3) 그 외(위 링크 미존재) → 지도에서 보기(정확한 좌표가 있을 때만, 인앱 지도 모달 오픈)
   // 공간은 reservation_url 컬럼이 없어(project/database_schema.md 3.1) 늘 null이므로,
   // is_free=true인데 reservation_url이 없는 공간은 기존처럼 info_url을 공식 링크로 대신 쓴다.
   const publicReservationUrl = item.reservation_url ?? (isEvent ? null : item.info_url);
   const cta = (item.is_free === true || !!item.reservation_url) && publicReservationUrl
-    ? { label: '🏛️ 공공 예약하기', href: publicReservationUrl }
+    ? { type: 'link' as const, label: '🏛️ 공공 예약하기', href: publicReservationUrl }
     : item.is_free === false && item.affiliate_url
-    ? { label: '🎟️ 할인 예매하기', href: item.affiliate_url }
+    ? { type: 'link' as const, label: '🎟️ 할인 예매하기', href: item.affiliate_url }
     : hasExactLocation
-    ? { label: '🗺️ 길찾기', href: directionsUrl }
+    ? { type: 'map' as const, label: '🗺️ 지도에서 보기' }
     : null;
 
   // [스팟 자체 간편 예약/신청 시스템 MVP](2026-08-29 사용자 지시): 직전에 붙였던 "정보
@@ -258,7 +255,7 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
           )}
 
           <div className="mt-5 flex gap-2">
-            {cta && (
+            {cta?.type === 'link' && (
               <a
                 href={cta.href}
                 target="_blank"
@@ -268,6 +265,16 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
               >
                 {cta.label}
               </a>
+            )}
+            {cta?.type === 'map' && (
+              <button
+                type="button"
+                onClick={() => setIsMapPreviewOpen(true)}
+                className="flex-1 text-center rounded-lg text-white text-sm font-medium py-2.5"
+                style={{ backgroundColor: meta.color }}
+              >
+                {cta.label}
+              </button>
             )}
             {secondaryAction?.type === 'link' && (
               <a

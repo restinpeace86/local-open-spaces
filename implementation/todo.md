@@ -481,3 +481,21 @@
   - **검증**: `npx tsc --noEmit`/`npm run test`(68파일 694건)/`npm run build` 통과,
     `npx js-yaml`로 워크플로 YAML 유효성 확인. 상세:
     `implementation/2026-08-30-events-pipeline-outage-investigation.md` 6절.
+
+- [x] **[UI/UX 개선] 외부 지도 앱 연동 제거 및 '스팟픽' 인앱 지도/위치 표시 기능**
+  (2026-08-30 완료)
+  - **사전 조사에서 발견**: 인앱 지도 인프라(`MiniMap`/`MapPreviewModal`, Kakao Maps
+    SDK, 핀 표시, EXACT 좌표만 노출하는 오도 방지 로직)는 이미 Task 9-5-1(2026-08-22)
+    때 구현돼 있었다 — 실제로 남아 있던 문제는 `DetailModal`의 조건부 CTA 3분류
+    (Decision 011) 중 세 번째 옵션이 여전히 `buildNaverMapDirectionsUrl()`로 만든
+    `nmap://route/car` 딥링크를 새 창으로 여는 것뿐이었다(grep으로 앱 전체에서 유일한
+    외부 지도 연동 지점임을 확인, `/nearby`도 동일 `DetailModal` 재사용이라 함께 해결).
+  - `detail-modal.tsx`의 3번째 CTA를 외부 `<a target="_blank">`에서 이미 존재하던
+    `MapPreviewModal`을 여는 `<button>`("🗺️ 지도에서 보기")으로 교체 — 새 지도
+    컴포넌트를 만들지 않고 기존 미니맵의 "🔍 크게보기"와 동일한 모달을 재사용.
+  - 유일한 소비처를 잃어 완전히 미사용이 된 `src/lib/navigation.ts`/`navigation.test.ts`
+    (buildNaverMapDirectionsUrl) 삭제.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(67파일 691건 — 네이버 딥링크 검증을
+    인앱 모달 오픈 검증으로 교체)/`npm run build` 통과. `/nearby` 페이지 HTML에
+    `nmap://` 문자열이 전혀 없음을 실측 확인. 상세:
+    `implementation/2026-08-30-inapp-map-remove-external-nav.md`.

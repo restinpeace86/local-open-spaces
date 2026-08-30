@@ -1,17 +1,13 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DetailModal } from './detail-modal';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 
 // Task 9-5-1(2026-08-22): MiniMap은 Kakao Maps SDK를 비동기 로드하는데, jsdom 환경에서는
 // 스크립트 태그가 실제로 로드되지 않아 loadKakaoMapSdk()의 Promise가 해소되지 않는다(정상 —
 // 실제 지도 렌더링 자체는 kakao-map-view.tsx처럼 이 프로젝트에서 별도 단위 테스트 대상이
-// 아니다). 여기서는 그 위젯을 감싸는 DetailModal의 나머지 동작(네이버 길안내 링크, 크게보기
+// 아니다). 여기서는 그 위젯을 감싸는 DetailModal의 나머지 동작(인앱 지도 CTA 버튼, 크게보기
 // 버튼 토글)만 검증한다.
-let mockUserLocation = { lat: 37.4, lng: 127.2 };
-vi.mock('@/hooks/use-user-location', () => ({
-  useUserLocation: () => ({ center: mockUserLocation }),
-}));
 
 function makeSpaceItem(overrides: Partial<NearbyItem> = {}): NearbyItem {
   return {
@@ -43,27 +39,23 @@ function makeSpaceItem(overrides: Partial<NearbyItem> = {}): NearbyItem {
   };
 }
 
-describe('DetailModal (Task 9-5-1: 네이버 지도 길안내 출발지 자동 매핑 + 미니맵)', () => {
-  beforeEach(() => {
-    mockUserLocation = { lat: 37.4, lng: 127.2 };
-  });
-
+describe('DetailModal (외부 지도 앱 연동 제거 및 인앱 위치 보기)', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('"🗺️ 길찾기" 링크에 유저의 전역 위치가 출발지(slat/slng)로 자동 채워진다', () => {
+  // [외부 지도 앱 연동 제거 및 인앱 위치 보기](2026-08-30 사용자 지시): 예약/예매 링크가
+  // 없을 때 뜨는 CTA가 더 이상 네이버 지도 외부 링크가 아니라, 인앱 미니맵의 "🔍 크게보기"와
+  // 동일한 MapPreviewModal을 여는 버튼이어야 한다(유저가 앱을 이탈하지 않음).
+  it('"🗺️ 지도에서 보기" 버튼을 누르면 외부로 나가지 않고 인앱 지도 모달이 열린다', () => {
     render(<DetailModal item={makeSpaceItem()} onClose={() => {}} />);
 
-    const link = screen.getByText('🗺️ 길찾기').closest('a');
-    expect(link).not.toBeNull();
-    const href = link!.getAttribute('href')!;
+    const button = screen.getByText('🗺️ 지도에서 보기');
+    expect(button.closest('a')).toBeNull(); // 외부 링크(<a>)가 아니라 버튼이어야 한다.
+    expect(button.closest('button')).not.toBeNull();
 
-    expect(href).toContain('nmap://route/car?');
-    expect(href).toContain('slat=37.4');
-    expect(href).toContain('slng=127.2');
-    expect(href).toContain('dlat=37.38');
-    expect(href).toContain('dlng=127.12');
+    fireEvent.click(button);
+    expect(screen.getByLabelText('지도 닫기')).toBeInTheDocument();
   });
 
   it('"🔍 크게보기" 버튼을 누르면 풀스크린 지도 모달이 열리고, 닫기 버튼으로 닫힌다', () => {
@@ -80,10 +72,6 @@ describe('DetailModal (Task 9-5-1: 네이버 지도 길안내 출발지 자동 �
 });
 
 describe('DetailModal 조건부 CTA 3분류 (Task 9-6-11, Decision 011)', () => {
-  beforeEach(() => {
-    mockUserLocation = { lat: 37.4, lng: 127.2 };
-  });
-
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -136,7 +124,7 @@ describe('DetailModal 조건부 CTA 3분류 (Task 9-6-11, Decision 011)', () => 
     expect(link!.getAttribute('href')).toBe('https://link.coupang.com/a/example');
   });
 
-  it('is_free=false이지만 affiliate_url이 없으면 "🎟️ 할인 예매하기" 대신 "🗺️ 길찾기"로 폴백한다', () => {
+  it('is_free=false이지만 affiliate_url이 없으면 "🎟️ 할인 예매하기" 대신 "🗺️ 지도에서 보기"로 폴백한다', () => {
     render(
       <DetailModal
         item={makeSpaceItem({ is_free: false, reservation_url: null, info_url: null, affiliate_url: null })}
@@ -145,7 +133,7 @@ describe('DetailModal 조건부 CTA 3분류 (Task 9-6-11, Decision 011)', () => 
     );
 
     expect(screen.queryByText('🎟️ 할인 예매하기')).not.toBeInTheDocument();
-    expect(screen.getByText('🗺️ 길찾기')).toBeInTheDocument();
+    expect(screen.getByText('🗺️ 지도에서 보기')).toBeInTheDocument();
   });
 
   it('예약/예매 URL이 전혀 없고 정확한 좌표도 없으면(CITY_APPROX) CTA 버튼이 아예 렌더링되지 않는다', () => {
@@ -165,7 +153,7 @@ describe('DetailModal 조건부 CTA 3분류 (Task 9-6-11, Decision 011)', () => 
 
     expect(screen.queryByText('🏛️ 공공 예약하기')).not.toBeInTheDocument();
     expect(screen.queryByText('🎟️ 할인 예매하기')).not.toBeInTheDocument();
-    expect(screen.queryByText('🗺️ 길찾기')).not.toBeInTheDocument();
+    expect(screen.queryByText('🗺️ 지도에서 보기')).not.toBeInTheDocument();
   });
 });
 
@@ -173,10 +161,6 @@ describe('DetailModal 조건부 CTA 3분류 (Task 9-6-11, Decision 011)', () => 
 // 딥링크 폴백을 완전히 제거하고, info_url 유무에 따라 [공식 홈페이지 바로가기] 또는
 // [간편 예약/신청하기]로 분기한다.
 describe('DetailModal 보조 액션(공식 홈페이지 / 간편 예약·신청)', () => {
-  beforeEach(() => {
-    mockUserLocation = { lat: 37.4, lng: 127.2 };
-  });
-
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -213,10 +197,6 @@ describe('DetailModal 보조 액션(공식 홈페이지 / 간편 예약·신청)
 
 // [카드 표준 중분류/연령대상 표시](2026-08-27 사용자 지시)
 describe('DetailModal 표준 중분류 뱃지 및 연령대상 표시', () => {
-  beforeEach(() => {
-    mockUserLocation = { lat: 37.4, lng: 127.2 };
-  });
-
   afterEach(() => {
     vi.unstubAllGlobals();
   });
@@ -260,10 +240,6 @@ describe('DetailModal 표준 중분류 뱃지 및 연령대상 표시', () => {
 
 // [상세보기 설명 추가](2026-08-27 사용자 지시)
 describe('DetailModal 설명(description) 표시', () => {
-  beforeEach(() => {
-    mockUserLocation = { lat: 37.4, lng: 127.2 };
-  });
-
   afterEach(() => {
     vi.unstubAllGlobals();
   });
