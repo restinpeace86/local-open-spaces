@@ -426,3 +426,25 @@
     fetch-with-cause 4건 신규)/`npm run build` 통과. `GG_DATA_API_KEY`를 `.env.local`에서
     일시 제거해 사전 검사가 실제로 배치를 중단시키는지 실측 확인 후 원상 복구. 상세:
     `implementation/2026-08-30-events-pipeline-outage-investigation.md`.
+
+- [x] **[UI/UX 개발 요청] 홈 화면 큐레이션 섹션 추가 및 상단 탭(네비게이션) 정리**
+  (2026-08-30 완료)
+  - **사전 확인에서 직전 작업과의 중복 발견**: 새로 요청된 "베스트 나들이 픽" 가로
+    슬라이드 섹션이 바로 전 작업의 "🔥 이번 주말 놓치면 후회할 특가" 배너 섹션과
+    목적(event_tickets 큐레이션)이 거의 동일 — `AskUserQuestion`으로 확인해 "새
+    섹션이 기존 배너를 대체"로 확정, 구 배너 섹션(그리드/디테일모달/전체보기
+    바텀시트) 전체를 걷어내고 교체.
+  - 상단 [홈/특가·핫딜/무료·공공] 서브탭(`HomeSubTabs`) 완전 삭제 — 탭이 유일한
+    진입 경로였던 `deals` 그리드/무료·공공 피드도 함께 제거(`DealCard`/
+    `DealDetailModal`/`EventTicketCard` 등 이제 미사용인 컴포넌트 파일 7개 삭제,
+    전부 다른 소비처 없음을 grep으로 확인 후 진행). `deals`/`event_tickets` 테이블과
+    `/api/deals`/`/api/home/free-feed` API는 명시적 삭제 요청이 없어 그대로 둠(프런트
+    연결만 제거).
+  - `best-pick-slider.tsx` 신설 — "✅ 현재 이용 가능"과 "📋 예약 가능" 사이에 배치,
+    가로 스크롤 컴팩트 카드(썸네일+타이틀+장소명), 할인율 뱃지 등 세일즈성 장식 없이
+    신뢰감 있는 큐레이션 톤("에디터가 직접 검증한 나들이 코스만 엄선했어요"). 카드
+    클릭 시 상세 모달 없이 곧바로 `booking_url`을 `target="_blank"`로 새 창 오픈.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(68파일 691건 — 서브탭 삭제/베스트 픽
+    마운트 렌더링·직접 링크 클릭·0건 숨김·섹션 위치 순서 신규 테스트)/`npm run build`
+    통과. 로컬 서버 SSR 응답으로 신규 섹션 타이틀 노출 및 구 탭 라벨 완전 제거 확인.
+    상세: `implementation/2026-08-30-home-curation-and-tab-removal.md`.

@@ -199,76 +199,23 @@ describe('HomeView', () => {
     });
   });
 
-  // [제휴 특가 Deals 시스템 및 수집 어댑터 MVP](2026-08-29 사용자 지시): deals 테이블/
-  // /api/deals가 마련되어 탭이 활성화됐다(이전에는 데이터가 전혀 없어 비활성 노출이었음).
-  describe('특가·핫딜 서브탭', () => {
-    function stubFetchDeals(deals: unknown[]) {
-      const fetchMock = vi.fn((url: string) => {
-        if (url.startsWith('/api/deals')) {
-          return Promise.resolve({ json: () => Promise.resolve({ deals }) } as Response);
-        }
-        return Promise.resolve({ json: () => Promise.resolve({ heroEvents: [] }) } as Response);
-      });
-      vi.stubGlobal('fetch', fetchMock);
-      return fetchMock;
-    }
+  // [홈 화면 큐레이션 섹션 추가 및 상단 탭 정리](2026-08-30 사용자 지시) 요구사항 1:
+  // 상단 [홈 / 특가 할인 / 무료 공공] 서브탭 바를 완전히 제거했다 — 더 이상 탭 자체가
+  // 존재하지 않으므로, 예전 탭 라벨이 화면에 남아있지 않은지 확인한다.
+  it('상단 서브탭 바가 더 이상 렌더링되지 않는다', () => {
+    render(<HomeView initialHeroEvents={[]} />);
 
-    function makeDeal(overrides: Record<string, unknown> = {}) {
-      return {
-        id: 'deal-1',
-        title: '한우 세트 특가',
-        description: '설 명절 한우 선물세트',
-        original_price: 100000,
-        discount_price: 70000,
-        discount_rate: 30,
-        image_url: null,
-        affiliate_url: 'https://link.coupang.com/a/beef',
-        is_active: true,
-        created_at: '2026-08-29T00:00:00+00:00',
-        ...overrides,
-      };
-    }
-
-    it('탭을 클릭하면 지연 페칭된 특가 카드를 보여준다', async () => {
-      stubFetchDeals([makeDeal()]);
-      render(<HomeView initialHeroEvents={[]} />);
-
-      fireEvent.click(screen.getByText('🏷️ 특가·핫딜'));
-
-      expect(await screen.findByText('한우 세트 특가')).toBeInTheDocument();
-      expect(screen.getByText('70,000원')).toBeInTheDocument();
-      expect(screen.getByText('30% 할인')).toBeInTheDocument();
-    });
-
-    it('특가가 없으면 빈 상태 안내를 보여준다', async () => {
-      stubFetchDeals([]);
-      render(<HomeView initialHeroEvents={[]} />);
-
-      fireEvent.click(screen.getByText('🏷️ 특가·핫딜'));
-
-      expect(await screen.findByText('검색 결과가 없습니다.')).toBeInTheDocument();
-    });
-
-    it('카드를 클릭하면 상세 모달이 뜨고 제휴 안내 문구와 구매 버튼을 보여준다', async () => {
-      stubFetchDeals([makeDeal()]);
-      render(<HomeView initialHeroEvents={[]} />);
-
-      fireEvent.click(screen.getByText('🏷️ 특가·핫딜'));
-      fireEvent.click(await screen.findByText('한우 세트 특가'));
-
-      expect(
-        await screen.findByText('이 포스팅은 제휴 링크를 포함하며, 이에 따른 일정액의 수수료를 제공받을 수 있습니다.')
-      ).toBeInTheDocument();
-      const buyLink = screen.getByText('🛍️ 특가로 구매하러 가기').closest('a');
-      expect(buyLink).toHaveAttribute('href', 'https://link.coupang.com/a/beef');
-      expect(buyLink).toHaveAttribute('target', '_blank');
-    });
+    expect(screen.queryByText('🏠 홈')).not.toBeInTheDocument();
+    expect(screen.queryByText('🏷️ 특가·핫딜')).not.toBeInTheDocument();
+    expect(screen.queryByText('🎁 무료·공공')).not.toBeInTheDocument();
   });
 
-  // [이벤트픽 & 티켓 할인 정보 MVP](2026-08-29 사용자 지시): "홈" 탭(기본 탭)에 상시
-  // 노출되는 축제/체험/입장권 할인 그리드 — 별도 탭 클릭 없이 마운트만으로 페칭된다.
-  describe('할인 티켓·이벤트 섹션', () => {
-    function stubFetchEventTickets(eventTickets: unknown[]) {
+  // [홈 화면 큐레이션 섹션 추가 및 상단 탭 정리](2026-08-30 사용자 지시) 요구사항 2/3/4/5:
+  // "이번 주말 실패 없는 베스트 나들이 픽" 가로 슬라이드 섹션 — 탭이 사라져 별도 클릭
+  // 없이 마운트만으로 event_tickets를 페칭하고, 카드는 상세 모달 없이 곧바로 booking_url을
+  // 새 창으로 연다.
+  describe('베스트 나들이 픽 섹션', () => {
+    function stubFetchBestPicks(eventTickets: unknown[]) {
       const fetchMock = vi.fn((url: string) => {
         if (url.startsWith('/api/event-tickets')) {
           return Promise.resolve({ json: () => Promise.resolve({ eventTickets }) } as Response);
@@ -298,92 +245,82 @@ describe('HomeView', () => {
       };
     }
 
-    it('홈 탭에 마운트되면 별도 클릭 없이 Hero 배너 카드로 할인 티켓을 보여준다', async () => {
-      stubFetchEventTickets([makeEventTicket()]);
+    it('마운트되면 별도 클릭 없이 타이틀/서브 텍스트와 카드를 보여준다', async () => {
+      stubFetchBestPicks([makeEventTicket()]);
       render(<HomeView initialHeroEvents={[]} />);
 
-      expect(await screen.findByText('🔥 이번 주말 놓치면 후회할 특가')).toBeInTheDocument();
+      expect(await screen.findByText('이번 주말 실패 없는 베스트 나들이 픽')).toBeInTheDocument();
+      expect(screen.getByText('에디터가 직접 검증한 나들이 코스만 엄선했어요.')).toBeInTheDocument();
       expect(await screen.findByText('가을 단풍 나들이 축제')).toBeInTheDocument();
-      expect(screen.getByText('📍 중앙공원 일대')).toBeInTheDocument();
-      expect(screen.getByText('40% 할인특가')).toBeInTheDocument();
-      expect(screen.getByText('예매하기 ›')).toBeInTheDocument();
+      expect(screen.getByText('중앙공원 일대')).toBeInTheDocument();
     });
 
-    it('할인 티켓이 5건 이상이어도 홈 섹션에는 최신 4건만 노출한다', async () => {
-      stubFetchEventTickets([
-        makeEventTicket({ id: 't1', title: '첫 번째 티켓' }),
-        makeEventTicket({ id: 't2', title: '두 번째 티켓' }),
-        makeEventTicket({ id: 't3', title: '세 번째 티켓' }),
-        makeEventTicket({ id: 't4', title: '네 번째 티켓' }),
-        makeEventTicket({ id: 't5', title: '다섯 번째 티켓' }),
-      ]);
+    it('카드를 클릭하면 상세 모달 없이 booking_url을 새 창(target=_blank)으로 곧바로 연다', async () => {
+      stubFetchBestPicks([makeEventTicket()]);
       render(<HomeView initialHeroEvents={[]} />);
 
-      expect(await screen.findByText('첫 번째 티켓')).toBeInTheDocument();
-      expect(screen.getByText('네 번째 티켓')).toBeInTheDocument();
-      expect(screen.queryByText('다섯 번째 티켓')).not.toBeInTheDocument();
+      const link = (await screen.findByText('가을 단풍 나들이 축제')).closest('a');
+      expect(link).toHaveAttribute('href', 'https://example.com/tickets/autumn-festival');
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
     });
 
-    it('할인 티켓이 0건이면 섹션 자체를 숨긴다', async () => {
-      stubFetchEventTickets([]);
+    it('베스트 픽이 0건이면 섹션 자체를 숨긴다', async () => {
+      stubFetchBestPicks([]);
       render(<HomeView initialHeroEvents={[]} />);
 
       await waitFor(() => {
-        expect(screen.queryByLabelText('이벤트·티켓 할인')).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('베스트 나들이 픽')).not.toBeInTheDocument();
       });
     });
 
-    it('카드를 클릭하면 상세 모달에 설명/가격/예매 버튼을 보여준다', async () => {
-      stubFetchEventTickets([makeEventTicket()]);
-      render(<HomeView initialHeroEvents={[]} />);
-
-      fireEvent.click(await screen.findByText('가을 단풍 나들이 축제'));
-
-      expect(await screen.findByText('🎟️ 할인 티켓 예매하기')).toBeInTheDocument();
-      const bookingLink = screen.getByText('🎟️ 할인 티켓 예매하기').closest('a');
-      expect(bookingLink).toHaveAttribute('href', 'https://example.com/tickets/autumn-festival');
-      expect(bookingLink).toHaveAttribute('target', '_blank');
-    });
-
-    it('"전체보기 ›"를 누르면 전체 목록 바텀시트가 뜨고, 거기서 카드를 누르면 시트가 닫히며 상세 모달이 열린다', async () => {
-      stubFetchEventTickets([makeEventTicket()]);
-      render(<HomeView initialHeroEvents={[]} />);
-
+    it('"현재 이용 가능"과 "예약 가능" 섹션 사이에 위치한다', async () => {
+      // "현재 이용 가능"/"예약 가능" 섹션은 0건이면 숨겨지므로(가변 노출), 이 테스트에서는
+      // 둘 다 실제로 렌더링되도록 /api/home/feed 응답에 최소 1건씩 채워 넣는다.
+      vi.stubGlobal(
+        'fetch',
+        vi.fn((url: string) => {
+          if (url.startsWith('/api/event-tickets')) {
+            return Promise.resolve({ json: () => Promise.resolve({ eventTickets: [makeEventTicket()] }) } as Response);
+          }
+          if (url.startsWith('/api/home/feed')) {
+            return Promise.resolve({
+              json: () =>
+                Promise.resolve({
+                  heroEvents: [],
+                  currentlyOngoingEvents: [makeEventItem({ id: 'ongoing-1' })],
+                  reservationOpenEvents: [makeEventItem({ id: 'reservation-1' })],
+                }),
+            } as Response);
+          }
+          return Promise.resolve({ json: () => Promise.resolve({}) } as Response);
+        })
+      );
+      const { container } = render(<HomeView initialHeroEvents={[]} />);
       await screen.findByText('가을 단풍 나들이 축제');
-      fireEvent.click(screen.getByText('전체보기 ›'));
 
-      expect(await screen.findByText('🔥 이번 주말 놓치면 후회할 특가 전체보기')).toBeInTheDocument();
-      // 바텀시트 안에서는 기존 그리드형 카드를 쓴다(행사 기간까지 보여줌).
-      expect(await screen.findByText('📅 2026-10-01 ~ 2026-10-10')).toBeInTheDocument();
+      const labels = Array.from(container.querySelectorAll('section[aria-label]')).map((el) =>
+        el.getAttribute('aria-label')
+      );
+      const ongoingIndex = labels.indexOf('현재 이용 가능');
+      const bestPickIndex = labels.indexOf('베스트 나들이 픽');
+      const reservationIndex = labels.indexOf('예약 가능');
 
-      fireEvent.click(screen.getAllByText('가을 단풍 나들이 축제')[1]);
-
-      expect(screen.queryByText('🔥 이번 주말 놓치면 후회할 특가 전체보기')).not.toBeInTheDocument();
-      expect(await screen.findByText('🎟️ 할인 티켓 예매하기')).toBeInTheDocument();
+      expect(ongoingIndex).toBeGreaterThanOrEqual(0);
+      expect(bestPickIndex).toBeGreaterThan(ongoingIndex);
+      expect(reservationIndex).toBeGreaterThan(bestPickIndex);
     });
   });
 
-  // Task 9-3-1: "무료·공공" 탭은 스크롤 여부와 무관하게 탭 선택 즉시 지연 페칭을 트리거한다.
-  it('무료·공공 서브탭 클릭 시 지연 페칭된 무료 피드만 보여준다', async () => {
-    stubFetchFreeFeed([makeSpaceItem()]);
+  // [홈 화면 큐레이션 섹션 추가 및 상단 탭 정리](2026-08-30 사용자 지시)로 "🎁 무료·공공"
+  // 탭이 제거되어, DetailModal이 열리는 동일한 메커니즘(onSelect={setSelectedItem})을
+  // 여전히 쓰는 Hero Carousel 카드 클릭으로 검증 대상을 바꿨다.
+  it('카드를 클릭하면 상세 모달이 열린다', async () => {
     render(<HomeView initialHeroEvents={[makeEventItem()]} />);
 
-    fireEvent.click(screen.getByText('🎁 무료·공공'));
+    fireEvent.click(screen.getByText('오늘의 추천 행사'));
 
-    // 홈 탭 전용 섹션(퀵그리드/테마별 행사)은 사라지고 피드 항목만 남는다
-    expect(screen.queryByText('키즈·액티비티')).not.toBeInTheDocument();
-    expect(await screen.findByText('무료 공공 공원')).toBeInTheDocument();
-  });
-
-  it('카드를 클릭하면 상세 모달이 열린다', async () => {
-    stubFetchFreeFeed([makeSpaceItem()]);
-    render(<HomeView initialHeroEvents={[]} />);
-
-    fireEvent.click(screen.getByText('🎁 무료·공공'));
-    await screen.findByText('무료 공공 공원');
-    fireEvent.click(screen.getAllByText('무료 공공 공원')[0]);
-
-    expect(screen.getAllByText('무료 공공 공원').length).toBeGreaterThan(1);
+    expect(screen.getAllByText('오늘의 추천 행사').length).toBeGreaterThan(1);
   });
 
   // Task 9-1-3: "[장소명] · [시/군/구]" 카드 표기 검증(거리 계산 제거)

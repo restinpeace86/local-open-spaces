@@ -4,9 +4,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { useUserLocation } from '@/hooks/use-user-location';
 import { HomeHeader } from '@/components/home/home-header';
-import { HomeSubTabs, HomeSubTab } from '@/components/home/home-sub-tabs';
 import { HeroCarousel } from '@/components/home/hero-carousel';
 import { ReservationOpenSlider, ReservationOpenSliderSkeleton } from '@/components/home/reservation-open-slider';
+import { BestPickSlider, BestPickSliderSkeleton, EventTicket } from '@/components/home/best-pick-slider';
 import { EventBrowseSheet, EventBrowseSheetMode } from '@/components/home/event-browse-sheet';
 import { MajorCategoryGrid } from '@/components/home/major-category-grid';
 import { FreeFeedSkeleton } from '@/components/home/free-feed-skeleton';
@@ -14,14 +14,7 @@ import { ThemeSpotKey } from '@/lib/theme-spots';
 import { themeOptionsFor } from '@/lib/home-categories';
 import { SpaceGridCard } from '@/components/region/space-grid-card';
 import { EventCard } from '@/components/cards/event-card';
-import { DealCard, Deal } from '@/components/cards/deal-card';
-import { EventTicket } from '@/components/cards/event-ticket-card';
-import { EventTicketBannerCard } from '@/components/cards/event-ticket-banner-card';
-import { EventTicketBrowseSheet } from '@/components/home/event-ticket-browse-sheet';
-import { EmptyState } from '@/components/map/empty-state';
 import { DetailModal } from '@/components/map/detail-modal';
-import { DealDetailModal } from '@/components/map/deal-detail-modal';
-import { EventTicketDetailModal } from '@/components/map/event-ticket-detail-modal';
 import { LocationOnboardingModal } from '@/components/map/location-onboarding-modal';
 
 // docs/spec.md 2.2: 메인 홈 레이아웃 스택 — Hero Carousel → 5대 카테고리 Quick 그리드 → 큐레이션 카드 피드
@@ -37,96 +30,30 @@ function FeedCard({ item, onSelect }: { item: NearbyItem; onSelect: (item: Nearb
 // "전체 보기" CTA 카드(/events/today 연동, Task 9-6-6)로 대체한다.
 const HERO_VISIBLE_COUNT = 10;
 
-// Task 9-3-1(2026-08-22)/9-6-18(2026-08-25, docs/spec.md 3.2 "화면 구성 및 UI 간소화"): 메인
-// 홈의 "가성비 행복" 필터 섹션은 완전히 제거됐다(해당 정보는 5대 카테고리 및 카드 뱃지로 통합
-// 노출). 이 훅은 이제 "🎁 무료·공공" 서브탭 전용으로만 쓰인다 — 탭이 선택될 때 /api/home/free-feed로
-// 지연 페칭한다. freeFeed === null은 "아직 로드 전"(Skeleton 노출), 배열이면 로드 완료(빈 배열도 포함)를 뜻한다.
-// region(sigunguName/lat/lng)이 바뀌면(위치 재설정) 이미 로드된 상태라도 새 지역으로 다시
-// 페칭하도록, 마지막으로 로드를 시작한 region 키를 기억해뒀다가 달라지면 재요청한다.
-// Task 9-6-4(2026-08-23): 최상위 대분류(🎪 행사·축제/🏞️ 상시 장소)에 따라 dataType이 바뀌므로
-// regionKey에 포함해, 카테고리를 전환하면 이미 로드된 상태라도 다시 페칭하도록 한다.
-function useFreeFeed(region: { sigunguName: string | null; lat?: number; lng?: number }, dataType: 'events' | 'open_spaces') {
-  const [freeFeed, setFreeFeed] = useState<NearbyItem[] | null>(null);
-  const regionKey = `${region.sigunguName ?? ''}|${region.lat ?? ''}|${region.lng ?? ''}|${dataType}`;
-  const loadedKeyRef = useRef<string | null>(null);
+// [홈 화면 큐레이션 섹션 추가 및 상단 탭 정리](2026-08-30 사용자 지시): "이번 주말 실패 없는
+// 베스트 나들이 픽" 전용 데이터 훅. 상단 탭이 전부 삭제되어 더 이상 "탭 선택 시 지연
+// 페칭" 트리거가 없으므로, deals/event_tickets 데이터가 위치와 무관한 수동 큐레이션
+// 콘텐츠라는 전제(기존 useDealsFeed/useEventTicketsFeed와 동일)를 살려 마운트 시 곧바로
+// 한 번 페칭한다("현재 이용 가능"/"예약 가능"과 동일한 마운트-이펙트 패턴).
+function useBestPicksFeed() {
+  const [bestPicks, setBestPicks] = useState<EventTicket[] | null>(null);
 
-  const ensureLoaded = useCallback(() => {
-    if (loadedKeyRef.current === regionKey) return;
-    loadedKeyRef.current = regionKey;
-
-    const params = new URLSearchParams({ dataType });
-    if (region.sigunguName) params.set('sigungu', region.sigunguName);
-    if (typeof region.lat === 'number') params.set('lat', String(region.lat));
-    if (typeof region.lng === 'number') params.set('lng', String(region.lng));
-
-    fetch(`/api/home/free-feed?${params.toString()}`)
-      .then((res) => res.json())
-      // 긴급 수리(2026-08-22): API가 500과 함께 { error: "..." }를 돌려줘도 이 then은 그대로
-      // 실행된다(fetch는 HTTP 상태와 무관하게 응답 바디만 있으면 resolve됨) — data.freeFeed가
-      // 배열이 아니면(undefined 포함) setFreeFeed에 넘기지 않아야 이후 filter() 호출이 깨지지
-      // 않는다(실측 재현: 서버가 에러를 던지면 freeFeed가 undefined가 돼 화면이 통째로 크래시했음).
-      .then((data: { freeFeed?: NearbyItem[] }) => {
-        if (Array.isArray(data.freeFeed)) setFreeFeed(data.freeFeed);
-        else loadedKeyRef.current = null;
-      })
-      .catch(() => {
-        // 실패 시 다음 시도(재스크롤/탭 재선택)에서 다시 요청할 수 있도록 로드 키를 되돌린다.
-        loadedKeyRef.current = null;
-      });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [regionKey]);
-
-  return { freeFeed, ensureLoaded };
-}
-
-// [제휴 특가 Deals 시스템 및 수집 어댑터 MVP](2026-08-29 사용자 지시): "특가·핫딜" 탭 전용 —
-// deals는 위치/지역 개념이 없는 커머스 상품이라(useFreeFeed와 달리 region이 바뀌어도 다시
-// 페칭할 이유가 없음) 탭이 처음 선택될 때 딱 한 번만 지연 페칭한다.
-function useDealsFeed() {
-  const [deals, setDeals] = useState<Deal[] | null>(null);
-  const loadedRef = useRef(false);
-
-  const ensureLoaded = useCallback(() => {
-    if (loadedRef.current) return;
-    loadedRef.current = true;
-
-    fetch('/api/deals')
-      .then((res) => res.json())
-      .then((data: { deals?: Deal[] }) => {
-        if (Array.isArray(data.deals)) setDeals(data.deals);
-        else loadedRef.current = false;
-      })
-      .catch(() => {
-        loadedRef.current = false;
-      });
-  }, []);
-
-  return { deals, ensureLoaded };
-}
-
-// [이벤트픽 & 티켓 할인 정보 MVP](2026-08-29 사용자 지시): "홈" 탭에 상시 노출되는 축제/
-// 체험/입장권 할인 카드 그리드 전용 — useDealsFeed와 동일하게 지역 개념이 없어(수동 큐레이션
-// 콘텐츠) 처음 'home' 탭이 보일 때 한 번만 페칭한다.
-function useEventTicketsFeed() {
-  const [eventTickets, setEventTickets] = useState<EventTicket[] | null>(null);
-  const loadedRef = useRef(false);
-
-  const ensureLoaded = useCallback(() => {
-    if (loadedRef.current) return;
-    loadedRef.current = true;
-
+  useEffect(() => {
+    let cancelled = false;
     fetch('/api/event-tickets')
       .then((res) => res.json())
       .then((data: { eventTickets?: EventTicket[] }) => {
-        if (Array.isArray(data.eventTickets)) setEventTickets(data.eventTickets);
-        else loadedRef.current = false;
+        if (!cancelled) setBestPicks(Array.isArray(data.eventTickets) ? data.eventTickets : []);
       })
       .catch(() => {
-        loadedRef.current = false;
+        if (!cancelled) setBestPicks((prev) => prev ?? []);
       });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  return { eventTickets, ensureLoaded };
+  return bestPicks;
 }
 
 // Task 9-5-1(2026-08-22): "🏞️ 목적별 추천 스팟" 칩 — 기본으로 선택된 테마가 없어(6개 중
@@ -245,16 +172,10 @@ export function HomeView({
 }) {
   const { center, addressName, sigunguName, isOnboardingOpen, confirmLocation, openOnboarding, closeOnboarding } =
     useUserLocation();
-  const [activeTab, setActiveTab] = useState<HomeSubTab>('home');
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
-  const [selectedDeal, setSelectedDeal] = useState<Deal | null>(null);
-  const [selectedEventTicket, setSelectedEventTicket] = useState<EventTicket | null>(null);
   // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시) 요구사항 3: "전체보기"가 페이지 이동 대신
   // 이 화면 위 바텀시트로 뜬다 — 어떤 종류의 전체보기를 열지만 상태로 들고 있으면 된다.
   const [browseSheetMode, setBrowseSheetMode] = useState<EventBrowseSheetMode | null>(null);
-  // [홈 화면 할인 티켓(event_tickets) 섹션 UI 개편](2026-08-29 사용자 지시) 요구사항 1:
-  // "전체보기 ›" 클릭 시 여는 전체 리스트 바텀시트 개폐 상태.
-  const [isEventTicketBrowseOpen, setIsEventTicketBrowseOpen] = useState(false);
   const [heroEvents, setHeroEvents] = useState<NearbyItem[]>(initialHeroEvents);
   // [홈 화면 성능 최적화](2026-08-29 사용자 지시): 이 두 섹션은 더 이상 Server Component가
   // 미리 계산해 넘겨주지 않는다(라운드로빈 믹스 연산 포함 3개 쿼리를 SSR에서 한 번에 처리하던
@@ -272,10 +193,7 @@ export function HomeView({
   const dataType = 'events' as const;
 
   const region = { sigunguName, lat: addressName ? center.lat : undefined, lng: addressName ? center.lng : undefined };
-  // Task 9-6-18: 홈 탭의 "가성비 행복" 섹션이 제거되어 이제 "🎁 무료·공공" 서브탭 전용이다.
-  const { freeFeed, ensureLoaded } = useFreeFeed(region, dataType);
-  const { deals, ensureLoaded: ensureDealsLoaded } = useDealsFeed();
-  const { eventTickets, ensureLoaded: ensureEventTicketsLoaded } = useEventTicketsFeed();
+  const bestPicks = useBestPicksFeed();
   const {
     selectedTheme,
     items: themeSpotItems,
@@ -350,24 +268,6 @@ export function HomeView({
     };
   }, [addressName, sigunguName, center.lat, center.lng]);
 
-  // "🎁 무료·공공" 탭이 선택되면 로드를 시작한다. region이 바뀐 뒤에도 이미 선택된 상태라면
-  // ensureLoaded가 새 region으로 다시 페칭한다.
-  useEffect(() => {
-    if (activeTab === 'free') ensureLoaded();
-  }, [activeTab, ensureLoaded]);
-
-  // "🏷️ 특가·핫딜" 탭이 선택되면 로드를 시작한다(위와 동일한 지연 페칭 패턴).
-  useEffect(() => {
-    if (activeTab === 'hotdeal') ensureDealsLoaded();
-  }, [activeTab, ensureDealsLoaded]);
-
-  // [이벤트픽 & 티켓 할인 정보 MVP](2026-08-29 사용자 지시): "홈" 탭에 상시 노출되는
-  // 섹션이라 'hotdeal'/'free'와 달리 'home' 탭에서 로드를 시작한다(기본 탭이라 사실상
-  // 마운트 직후 한 번 페칭됨).
-  useEffect(() => {
-    if (activeTab === 'home') ensureEventTicketsLoaded();
-  }, [activeTab, ensureEventTicketsLoaded]);
-
   const visibleHeroEvents = heroEvents.slice(0, HERO_VISIBLE_COUNT);
   // Task 9-1-9: 10개 초과 시 "전체 보기" CTA 카드를 마지막 슬라이드에 노출한다.
   // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시): 더 이상 페이지 이동 링크가 아니라
@@ -376,19 +276,25 @@ export function HomeView({
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
-      {/* 사용자 피드백(2026-08-22): 헤더에 상세 도로명주소가 그대로 나오면 검색바가 가려질
-          정도로 좁아진다 — 시/군/구 단위 짧은 이름(sigunguName)을 우선 보여준다. */}
+      {/* [홈 화면 큐레이션 섹션 추가 및 상단 탭 정리](2026-08-30 사용자 지시) 요구사항 1:
+          상단 [홈 / 특가 할인 / 무료 공공] 서브탭 바(HomeSubTabs)를 완전히 제거했다 — 이제
+          이 화면 하나가 유일한 메인 화면이라 탭 전환 자체가 무의미해졌다. 그 아래 있던
+          "🏷️ 특가·핫딜"/"🎁 무료·공공" 탭 전용 콘텐츠(deals 그리드, 무료·공공 피드)도
+          함께 제거했다 — 탭이 사라져 더 이상 도달할 경로가 없기 때문이다(deals
+          테이블/`/api/deals`/무료·공공 피드 API 자체는 그대로 남아 있다, 프런트엔드
+          연결만 제거). 사용자 피드백(2026-08-22)이 헤더에 상세 도로명주소가 그대로
+          나오면 검색바가 가려질 정도로 좁아진다고 해서, 시/군/구 단위 짧은 이름
+          (sigunguName)을 우선 보여주는 부분은 그대로 유지한다. */}
       <HomeHeader
         locationLabel={sigunguName ?? addressName}
         onLocationClick={openOnboarding}
         searchValue={searchKeyword}
         onSearchChange={handleSearchChange}
       />
-      <HomeSubTabs active={activeTab} onChange={setActiveTab} />
 
       <div className="flex-1 overflow-y-auto py-4 flex flex-col gap-5">
         {/* [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "GNB 헤더 & 검색"): 검색어가
-            있으면 서브탭 콘텐츠 대신 events 전용 검색 결과를 보여준다(라우팅 이동 없음). */}
+            있으면 나머지 콘텐츠 대신 events 전용 검색 결과를 보여준다(라우팅 이동 없음). */}
         {isSearchActive ? (
           <section aria-label="검색 결과" className="px-4">
             {isSearching || searchResults === null ? (
@@ -405,8 +311,6 @@ export function HomeView({
           </section>
         ) : (
           <>
-        {activeTab === 'home' && (
-          <>
             {/* Task 9-6-10(2026-08-23): 하단 탭 재편으로 이 화면("이벤트픽")은 항상 events만
                 보여준다 — 이전의 EVENTS/SPACES 대분류 토글 섹션은 제거했다(상시 공간은
                 "스팟픽"(/nearby) 탭이 전담).
@@ -421,43 +325,6 @@ export function HomeView({
                   hasMore={heroHasMore}
                   onMoreClick={() => setBrowseSheetMode('today')}
                 />
-              </section>
-            )}
-
-            {/* [홈 화면 할인 티켓(event_tickets) 섹션 UI 개편](2026-08-29 사용자 지시):
-                지역 축제/체험 프로그램/입장권 할인 정보 중 최신 4건만 Hero 스타일 배너
-                카드로 스포트라이트 노출한다(전체 목록은 "전체보기 ›" 바텀시트에서 확인).
-                다른 섹션과 동일한 가변 노출 원칙 — 로드 전(null)이면 스켈레톤, 로드 후
-                0건이면 섹션 자체를 숨긴다. */}
-            {(eventTickets === null || eventTickets.length > 0) && (
-              <section aria-label="이벤트·티켓 할인">
-                <div className="flex items-center justify-between mb-3 px-4">
-                  <h2 className="text-base font-bold text-gray-900">🔥 이번 주말 놓치면 후회할 특가</h2>
-                  {eventTickets !== null && (
-                    <button
-                      type="button"
-                      onClick={() => setIsEventTicketBrowseOpen(true)}
-                      className="text-xs font-semibold text-gray-500 hover:text-gray-800"
-                    >
-                      전체보기 ›
-                    </button>
-                  )}
-                </div>
-                {eventTickets === null ? (
-                  <div className="px-4">
-                    <FreeFeedSkeleton label="할인 티켓·이벤트 불러오는 중" />
-                  </div>
-                ) : (
-                  <div className="px-4 grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {eventTickets.slice(0, 4).map((eventTicket) => (
-                      <EventTicketBannerCard
-                        key={eventTicket.id}
-                        eventTicket={eventTicket}
-                        onSelect={setSelectedEventTicket}
-                      />
-                    ))}
-                  </div>
-                )}
               </section>
             )}
 
@@ -490,6 +357,27 @@ export function HomeView({
                   <ReservationOpenSliderSkeleton label="현재 이용 가능 불러오는 중" />
                 ) : (
                   <ReservationOpenSlider items={currentlyOngoingEvents} onSelect={setSelectedItem} />
+                )}
+              </section>
+            )}
+
+            {/* [홈 화면 큐레이션 섹션 추가 및 상단 탭 정리](2026-08-30 사용자 지시) 요구사항
+                2/3/4: "현재 이용 가능" 바로 아래, "예약 가능" 바로 위에 배치하는 에디터
+                추천 제휴 상품 큐레이션 — 세로 공간을 아끼기 위해 그리드가 아니라 가로
+                스크롤 슬라이드로 구현한다(BestPickSlider). 광고 느낌을 지우기 위해 할인율
+                뱃지 등은 넣지 않고 담백한 타이틀/서브 텍스트만 둔다. 다른 섹션과 동일한
+                가변 노출 원칙 — 로드 전(null)이면 스켈레톤, 로드 후 0건이면 섹션 자체를
+                숨긴다. */}
+            {(bestPicks === null || bestPicks.length > 0) && (
+              <section aria-label="베스트 나들이 픽">
+                <div className="px-4 mb-3">
+                  <h2 className="text-base font-bold text-gray-900">이번 주말 실패 없는 베스트 나들이 픽</h2>
+                  <p className="text-xs text-gray-400 mt-0.5">에디터가 직접 검증한 나들이 코스만 엄선했어요.</p>
+                </div>
+                {bestPicks === null ? (
+                  <BestPickSliderSkeleton />
+                ) : (
+                  <BestPickSlider items={bestPicks} />
                 )}
               </section>
             )}
@@ -588,40 +476,6 @@ export function HomeView({
             </section>
           </>
         )}
-
-        {activeTab === 'free' && (
-          <section aria-label="무료·공공" className="px-4">
-            {freeFeed === null ? (
-              <FreeFeedSkeleton />
-            ) : freeFeed.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {freeFeed.map((item) => (
-                  <FeedCard key={item.id} item={item} onSelect={setSelectedItem} />
-                ))}
-              </div>
-            ) : (
-              <EmptyState onReset={() => setActiveTab('home')} />
-            )}
-          </section>
-        )}
-
-        {activeTab === 'hotdeal' && (
-          <section aria-label="특가·핫딜" className="px-4">
-            {deals === null ? (
-              <FreeFeedSkeleton label="특가·핫딜 불러오는 중" />
-            ) : deals.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {deals.map((deal) => (
-                  <DealCard key={deal.id} deal={deal} onSelect={setSelectedDeal} />
-                ))}
-              </div>
-            ) : (
-              <EmptyState onReset={() => setActiveTab('home')} />
-            )}
-          </section>
-        )}
-          </>
-        )}
       </div>
 
       {browseSheetMode && (
@@ -635,19 +489,6 @@ export function HomeView({
         />
       )}
       {selectedItem && <DetailModal item={selectedItem} onClose={() => setSelectedItem(null)} />}
-      {selectedDeal && <DealDetailModal deal={selectedDeal} onClose={() => setSelectedDeal(null)} />}
-      {selectedEventTicket && (
-        <EventTicketDetailModal eventTicket={selectedEventTicket} onClose={() => setSelectedEventTicket(null)} />
-      )}
-      {isEventTicketBrowseOpen && (
-        <EventTicketBrowseSheet
-          onClose={() => setIsEventTicketBrowseOpen(false)}
-          onSelectEventTicket={(eventTicket) => {
-            setIsEventTicketBrowseOpen(false);
-            setSelectedEventTicket(eventTicket);
-          }}
-        />
-      )}
       {isOnboardingOpen && (
         <LocationOnboardingModal onConfirm={confirmLocation} onClose={closeOnboarding} />
       )}
