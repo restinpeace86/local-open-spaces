@@ -102,3 +102,42 @@ describe('EventCard 이미지:텍스트 4:6 포션', () => {
     expect(screen.getByText('도시농업 체험')).toHaveClass('line-clamp-2');
   });
 });
+
+// [카드 내 이미지/텍스트 영역 비율 불일치 수정](2026-08-30 사용자 지시): 오늘 마감/오늘
+// 한정 dateBanner가 이미지/텍스트 사이의 별도 flex 행으로 존재하면, 배너가 있는 카드는
+// "전체 높이 - 배너 높이"만 4:6으로 나누고 배너 없는 카드는 전체 높이를 4:6으로 나눠
+// 같은 크기 래퍼 안에서도 카드마다 이미지/텍스트 크기가 달라졌다 — 배너를 이미지 영역
+// 위 절대 위치 오버레이로 옮겨 배너 유무와 무관하게 항상 동일한 4:6 분할을 보장한다.
+describe('EventCard dateBanner가 있어도 이미지:텍스트 비율이 항상 동일하다 (2026-08-30)', () => {
+  it('오늘 마감/오늘 한정 배너는 별도 flex 행이 아니라 이미지 영역 위 오버레이로 렌더링된다', () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const { container } = render(
+      <EventCard item={makeEventItem({ start_date: today, end_date: today })} onSelect={() => {}} />
+    );
+
+    const button = container.querySelector('button')!;
+    // 버튼의 최상위 자식은 이미지 영역(flex-[4])/텍스트 영역(flex-[6]) 단 둘뿐이어야 한다 —
+    // 배너가 셋째 자식(별도 flex 행)으로 끼어들면 4:6 분할 기준이 배너 유무에 따라 달라진다.
+    expect(button.children.length).toBe(2);
+    expect(button.children[0]).toHaveClass('flex-[4]');
+    expect(button.children[1]).toHaveClass('flex-[6]');
+
+    const banner = screen.getByText('⚡ 오늘 한정');
+    expect(button.children[0]).toContainElement(banner);
+  });
+
+  it('배너가 있는 카드와 없는 카드 모두 이미지 영역이 동일하게 flex-[4]이다', () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const withoutBanner = render(<EventCard item={makeEventItem()} onSelect={() => {}} />);
+    const imageAreaWithout = withoutBanner.container.querySelector('button')!.children[0];
+
+    withoutBanner.unmount();
+
+    const withBanner = render(
+      <EventCard item={makeEventItem({ start_date: today, end_date: today })} onSelect={() => {}} />
+    );
+    const imageAreaWith = withBanner.container.querySelector('button')!.children[0];
+
+    expect(imageAreaWithout.className).toBe(imageAreaWith.className);
+  });
+});

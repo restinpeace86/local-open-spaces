@@ -27,6 +27,15 @@ import { formatDateRange, formatVenueLine } from '@/lib/spaces/format';
 // 위함이다 — 이게 없으면 뱃지+제목+장소+날짜가 많은 카드에서 텍스트 영역이 60%를 넘겨
 // 버튼 전체 높이가 h-64보다 커져 버릴 수 있다(사용자 확인: 이미지 위 뱃지/마감임박 배너는
 // 그대로 오버레이 유지, 텍스트 영역으로 옮기지 않음).
+// [카드 내 이미지/텍스트 영역 비율 불일치 수정](2026-08-30 사용자 지시): dateBanner(오늘
+// 한정/오늘 마감, 당일 종료 이벤트에만 뜸 — getDateBannerBadge 참고)가 flex-col의 별도
+// 행으로 버튼 최상단에 있었다 — 이 행이 실제 높이를 차지하면서, 배너가 있는 카드는
+// "버튼 전체 높이 - 배너 높이"만 4:6으로 나누고, 배너가 없는 카드는 전체 높이를 4:6으로
+// 나눠 같은 h-64 래퍼 안에서도 카드마다 이미지/텍스트 크기가 달라지는 원인이었다(실측
+// 확인). 배너를 별도 행이 아니라 이미지 영역(flex-[4]) 위에 절대 위치로 겹쳐 그려
+// 레이아웃 흐름에서 완전히 빼면, 배너 유무와 무관하게 4:6 분할이 항상 동일해진다.
+// 이미지 좌/우상단 뱃지(category_min/status)는 배너와 겹치지 않도록 배너가 있을 때만
+// top-8로 한 칸 내린다.
 export function EventCard({
   item,
   onSelect,
@@ -54,16 +63,16 @@ export function EventCard({
       onClick={() => onSelect(item)}
       className="h-full text-left rounded-2xl border border-gray-200 bg-white overflow-hidden hover:shadow-md transition-shadow flex flex-col"
     >
-      {dateBanner && (
-        <div
-          className={`px-2 py-1 text-[11px] font-bold text-white text-center ${
-            dateBanner.kind === 'today_only' ? 'bg-amber-500' : 'bg-rose-600'
-          }`}
-        >
-          {dateBanner.label}
-        </div>
-      )}
       <div className="relative flex-[4] bg-gray-100">
+        {dateBanner && (
+          <div
+            className={`absolute top-0 left-0 right-0 z-10 px-2 py-1 text-[11px] font-bold text-white text-center ${
+              dateBanner.kind === 'today_only' ? 'bg-amber-500' : 'bg-rose-600'
+            }`}
+          >
+            {dateBanner.label}
+          </div>
+        )}
         {item.thumbnail_url ? (
           // Task 9-3-1(2026-08-22): 이 카드는 항상 하단 피드(가성비 행복/무료·공공)에서만 쓰여
           // 뷰포트 아래에 있으므로 항상 지연 로드한다.
@@ -84,12 +93,14 @@ export function EventCard({
             색이 없어 상위 대분류 색으로 시각적 구분을 유지한다. category_min이 없으면(이론상
             이벤트픽 3대 조건상 발생하지 않지만 방어적으로) 기존 라벨로 폴백한다. */}
         <span
-          className="absolute top-2 left-2 text-[11px] font-semibold px-2 py-0.5 rounded-full text-white"
+          className={`absolute ${dateBanner ? 'top-8' : 'top-2'} left-2 text-[11px] font-semibold px-2 py-0.5 rounded-full text-white`}
           style={{ backgroundColor: meta.color }}
         >
           {item.category_min ?? meta.label}
         </span>
-        <span className="absolute top-2 right-2 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-black/60 text-white">
+        <span
+          className={`absolute ${dateBanner ? 'top-8' : 'top-2'} right-2 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-black/60 text-white`}
+        >
           {status.label}
         </span>
       </div>

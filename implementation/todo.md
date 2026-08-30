@@ -611,3 +611,19 @@
     5건 신규, `map-explorer.test.tsx` 검색 테스트를 전국구 아키텍처에 맞게 교체)/
     `npm run build` 통과(`/api/spots/search` 라우트 정상 등록 확인). 상세:
     `implementation/2026-08-30-nationwide-spot-search-and-curated-items-verification.md`.
+
+- [x] **[개발 요청] "현재 이용 가능"/"예약 가능" 카드 내부 이미지·텍스트 영역 비율
+  불일치 수정** (2026-08-30 완료)
+  - **원인**: 두 섹션이 공유하는 `EventCard`가 이미지:텍스트를 flex-[4]/flex-[6]로
+    정확히 40:60 분할하도록 되어 있었으나, `getDateBannerBadge`가 반환하는 "오늘
+    한정/오늘 마감" 배너(당일 종료 이벤트에만 뜸)가 `flex-col`의 **별도 행**으로
+    이미지 영역 위에 얹혀 있었다 — 배너가 있는 카드는 "전체 높이 - 배너 높이"만
+    4:6으로 나뉘어 배너 없는 카드보다 이미지/텍스트가 모두 작아졌다. 실측 확인:
+    `/api/home/feed` 기준 "현재 이용 가능" 20건 중 7건, "예약 가능" 20건 중 5건이
+    오늘 마감이라 실제로 매 새로고침마다 발생하던 문제였다.
+  - 배너를 이미지 영역(flex-[4]) 내부 절대 위치 오버레이로 옮겨 레이아웃 흐름에서
+    완전히 제외 — 배너 유무와 무관하게 4:6 분할이 항상 동일해진다. 기존 중분류/상태
+    뱃지는 배너와 겹치지 않도록 배너가 있을 때만 한 칸(top-8) 내렸다.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(71파일 722건 — `event-card.test.tsx`
+    2건 신규)/`npm run build` 통과. 상세:
+    `implementation/2026-08-30-event-card-image-text-ratio-fix.md`.
