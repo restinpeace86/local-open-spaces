@@ -1,6 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { haversineDistanceMeters } from '@/lib/geo/haversine';
+import { escapeIlikePattern, splitSearchTokens } from '@/lib/search/keyword-search';
 import { GYEONGGI_SIGUN_NAMES, resolveProvinceMembers, SEOUL_GU_NAMES } from '@/lib/geo/region-hierarchy';
 import {
   AMBIGUOUS_SPACE_SOURCE_TYPES,
@@ -733,21 +734,40 @@ export async function getReservationOpenEventsPage(
 // 이벤트픽 검색은 events 테이블 전용으로 수행한다(스팟픽의 open_spaces 검색과 분리) — 검색은
 // 사용자가 이름을 직접 아는 상태로 찾는 행위라 지역 제한을 걸지 않는다(다른 피드 함수들과
 // 달리 region 파라미터 자체가 없음, 추측으로 지역 스코프를 넣지 않는다).
+// [검색창/지도 검색 키워드 유연성 대폭 개선](2026-08-30 사용자 지시): 기존에는 title
+// 한 필드만, 검색어 전체를 하나의 ILIKE 패턴으로 매칭해 "용인 어린이상상"처럼 띄어
+// 쓰면 실제 데이터("용인어린이상상의숲")와 어긋나 누락되는 경우가 있었다 — 검색어를
+// 공백 기준 토큰으로 나눠, 각 토큰이 title/description/venue_name 중 어디에든 부분
+// 문자열로(대소문자 무시) 존재하기만 하면 매치되도록 넓혔다(요구사항 1/2/3). 141,980행
+// open_spaces에서 실측 확인한 것과 동일한 이유로 events.title/description/venue_name에도
+// pg_trgm GIN 인덱스를 추가해(2026-08-30-add-trigram-search-indexes.sql) ILIKE 성능
+// 저하로 인한 간헐적 타임아웃을 방지했다.
+//
+// is_active/target_audience/category_min/end_date 필터는 그대로 유지한다 — 이들은
+// "이벤트픽은 유아/어린이/가족 대상 콘텐츠 전용"(2026-08-27 사용자 지시, Decision)처럼
+// 검색이 아니라 텍스트 매칭과 무관한 별도의 명시적 콘텐츠 큐레이션 결정이라, 이번
+// 지시서(텍스트 매칭 유연성 개선)만으로 임의로 되돌리지 않는다(제3장 제5조 추측 금지) —
+// 다만 이 필터들 때문에 만료되었거나(is_active=false, end_date 지남) 미분류인 행사는
+// 검색해도 여전히 나오지 않을 수 있다는 점은 알아둘 필요가 있다(구현 기록 참고).
 export async function searchEvents(keyword: string, limit = 30): Promise<NearbyItem[]> {
   const supabase = await createClient();
   const today = new Date().toISOString().slice(0, 10);
 
-  const { data, error } = await supabase
+  let query = supabase
     .from('events')
     .select(EVENT_COLUMNS)
-    .ilike('title', `%${keyword}%`)
     .eq('is_active', true)
     .in('target_audience', EVENT_PICK_TARGET_AUDIENCES)
     .not('category_min', 'is', null)
     .not('category_min', 'in', EXCLUDED_CATEGORY_MIN_FILTER)
-    .gte('end_date', today)
-    .order('start_date', { ascending: false })
-    .limit(limit);
+    .gte('end_date', today);
+
+  for (const token of splitSearchTokens(keyword)) {
+    const escaped = escapeIlikePattern(token);
+    query = query.or(`title.ilike.%${escaped}%,description.ilike.%${escaped}%,venue_name.ilike.%${escaped}%`);
+  }
+
+  const { data, error } = await query.order('start_date', { ascending: false }).limit(limit);
 
   if (error) throw new Error(error.message);
 

@@ -1416,24 +1416,33 @@ describe('getReservationOpenEventsPage', () => {
 });
 
 // [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "GNB 헤더 & 검색")
+// [검색창/지도 검색 키워드 유연성 대폭 개선](2026-08-30 사용자 지시): title 단일 필드
+// ilike 한 번 대신, 공백 기준 토큰마다 title/description/venue_name을 아우르는 .or()를
+// 체이닝한다(각 .or() 호출은 이전 필터와 AND로 묶이므로 "모든 토큰이 어느 필드에서든
+// 등장해야 함" 조건이 된다).
 describe('searchEvents', () => {
   afterEach(() => {
     vi.doUnmock('@/lib/supabase/server');
     vi.resetModules();
   });
 
-  it('title에 ilike 검색 패턴("%keyword%")을 걸어 events만 조회한다', async () => {
-    const row = eventRow({ id: 'match-1', title: '분당 여름 물놀이 체험' });
-    const ilikeMock = vi.fn(() => builder);
+  function makeSearchBuilder(row: ReturnType<typeof eventRow>) {
+    const orMock = vi.fn(() => builder);
     const builder: Record<string, unknown> = {};
     builder.select = () => builder;
-    builder.ilike = ilikeMock;
+    builder.or = orMock;
     builder.eq = () => builder;
     builder.in = () => builder;
     builder.not = () => builder;
     builder.gte = () => builder;
     builder.order = () => builder;
     builder.limit = () => Promise.resolve({ data: [row], error: null });
+    return { builder, orMock };
+  }
+
+  it('단일 키워드는 title/description/venue_name을 아우르는 ilike .or() 하나로 조회한다', async () => {
+    const row = eventRow({ id: 'match-1', title: '분당 여름 물놀이 체험' });
+    const { builder, orMock } = makeSearchBuilder(row);
 
     vi.doMock('@/lib/supabase/server', () => ({
       createClient: () => Promise.resolve({ from: () => builder }),
@@ -1442,8 +1451,40 @@ describe('searchEvents', () => {
     const { searchEvents } = await import('./get-home-feed');
     const items = await searchEvents('물놀이');
 
-    expect(ilikeMock).toHaveBeenCalledWith('title', '%물놀이%');
+    expect(orMock).toHaveBeenCalledWith('title.ilike.%물놀이%,description.ilike.%물놀이%,venue_name.ilike.%물놀이%');
     expect(items[0].id).toBe('match-1');
     expect(items[0].name).toBe('분당 여름 물놀이 체험');
+  });
+
+  it('공백으로 구분된 여러 단어는 토큰마다 별도 .or()를 체이닝한다("용인 어린이상상" 같은 사례)', async () => {
+    const row = eventRow({ id: 'match-2', title: '용인어린이상상의숲 체험' });
+    const { builder, orMock } = makeSearchBuilder(row);
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => builder }),
+    }));
+
+    const { searchEvents } = await import('./get-home-feed');
+    await searchEvents('용인 어린이상상');
+
+    expect(orMock).toHaveBeenNthCalledWith(1, 'title.ilike.%용인%,description.ilike.%용인%,venue_name.ilike.%용인%');
+    expect(orMock).toHaveBeenNthCalledWith(
+      2,
+      'title.ilike.%어린이상상%,description.ilike.%어린이상상%,venue_name.ilike.%어린이상상%'
+    );
+  });
+
+  it('ILIKE 와일드카드 특수문자(%, _)가 포함된 검색어는 이스케이프해 리터럴로 취급한다', async () => {
+    const row = eventRow({ id: 'match-3', title: '50% 할인 행사' });
+    const { builder, orMock } = makeSearchBuilder(row);
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => builder }),
+    }));
+
+    const { searchEvents } = await import('./get-home-feed');
+    await searchEvents('50%');
+
+    expect(orMock).toHaveBeenCalledWith('title.ilike.%50\\%%,description.ilike.%50\\%%,venue_name.ilike.%50\\%%');
   });
 });

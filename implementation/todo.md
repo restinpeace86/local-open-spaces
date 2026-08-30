@@ -557,3 +557,32 @@
   - **검증**: `npx tsc --noEmit`/`npm run test`(70파일 703건 — `mini-map.test.tsx`
     4건 신규, loadKakaoMapSdk 모킹으로 로딩/성공/실패 상태 전이 검증)/`npm run build`
     통과. 상세: `implementation/2026-08-30-inapp-map-loading-fallback.md`.
+
+- [x] **[개발 요청] 검색창/지도 검색 키워드 유연성 대폭 개선 ('용인 어린이상상' 등
+  검색 누락 방지)** (2026-08-30 완료)
+  - **사전 조사에서 실측으로 정확한 원인 규명**: (1) 사용자 예시의 events 행은
+    is_active=false/end_date 만료로 정상적으로 제외되는 것(버그 아님), (2) **핵심**:
+    open_spaces(141,980행)에 인덱스 없는 `name ILIKE '%...%'`가 3.5초+ 걸리고
+    부하 시 statement timeout까지 재현됨 — "간헐적 누락" 증상과 정확히 일치.
+  - `pg_trgm` 확장 설치 + open_spaces(name,address)/events(title,description,
+    venue_name)/curated_items(title)에 GIN 트라이그램 인덱스 추가 — 동일 쿼리
+    3584ms → 82ms로 개선(타임아웃 위험 제거).
+  - `src/lib/search/keyword-search.ts` 신규(`splitSearchTokens`/`escapeIlikePattern`
+    공유 유틸) — 공백 기준 토큰마다 여러 필드에 걸쳐 ILIKE OR 매칭해 "용인
+    어린이상상"(띄어씀) ↔ "용인어린이상상의숲"(붙어있음) 같은 불일치를 해결.
+  - `searchEvents`(이벤트픽 GNB 검색): title 단일 → title/description/venue_name
+    확장 + 토큰 매칭. 기존 is_active/target_audience/category_min 큐레이션 필터는
+    별도의 명시적 Decision이라 유지(추측 금지).
+  - `/api/admin/data-grid`(open_spaces/events 검색, SEOUL_YEYAK 메모리 필터 경로
+    포함), `/api/admin/curated-items`(이스케이프 누락도 함께 수정), `/nearby` 지도
+    클라이언트 필터(name→name+address) 모두 동일한 토큰 매칭으로 확장.
+  - **실측 검증**: 사용자가 준 예시 그대로("용인 어린이상상") 어드민 검색에서
+    "용인어린이상상의숲"을 정확히 찾아냄. 실제 활성 이벤트("남사당바우덕이", 붙어
+    있음)를 "남사당 바우덕이"(띄어씀)로 검색해 2건 정상 반환 확인.
+  - **특이 사항(사용자 확인 필요)**: `/nearby` 지도 검색은 현재 지도 반경 내로 이미
+    좁혀진 목록을 클라이언트에서 텍스트로 재필터링하는 구조라, 찾으려는 장소가 현재
+    화면 밖에 있으면 텍스트 매칭을 아무리 고쳐도 원천적으로 검색되지 않는다 — 이번
+    지시서 범위(텍스트 매칭)를 넘어서는 구조적 이슈라 손대지 않고 남겨둠, 전국 단위
+    서버사이드 스팟 검색은 별도 지시 필요.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(71파일 715건)/`npm run build` 통과.
+    상세: `implementation/2026-08-30-search-keyword-flexibility.md`.

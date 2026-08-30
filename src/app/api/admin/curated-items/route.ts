@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { escapeIlikePattern, splitSearchTokens } from '@/lib/search/keyword-search';
 
 // [관리자 화면(/admin/data-grid) 기능 고도화 및 범용 제휴 상품 테이블 개편](2026-08-30
 // 사용자 지시): curated_items(범용 큐레이션/제휴 상품) 관리 전용 API. 이 앱은 아직
@@ -37,7 +38,13 @@ export async function GET(request: NextRequest) {
     const admin = createAdminClient();
     let query = admin.from('curated_items').select('*', { count: 'exact' }).order('created_at', { ascending: false });
 
-    if (q) query = query.ilike('title', `%${q}%`);
+    // [검색창/지도 검색 키워드 유연성 대폭 개선](2026-08-30 사용자 지시): 검색어 전체를
+    // 하나의 ILIKE 패턴으로 걸면 띄어쓰기 차이로 누락될 수 있어 공백 기준 토큰마다
+    // 매칭한다. 특수문자(%, _)도 이스케이프해 리터럴로 취급한다(기존에는 빠져있던
+    // 부분 — 유저가 "%"를 검색하면 의도치 않게 와일드카드로 해석되고 있었음).
+    for (const token of splitSearchTokens(q ?? '')) {
+      query = query.ilike('title', `%${escapeIlikePattern(token)}%`);
+    }
     if (category) query = query.eq('category', category);
     if (createdFrom) query = query.gte('created_at', `${createdFrom}T00:00:00`);
     if (createdTo) query = query.lte('created_at', `${createdTo}T23:59:59`);

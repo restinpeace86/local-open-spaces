@@ -2,7 +2,10 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MapExplorer } from './map-explorer';
 
-const rpcMock = vi.fn(() => Promise.resolve({ data: [], error: null }));
+// [검색창/지도 검색 키워드 유연성 대폭 개선](2026-08-30 사용자 지시)를 위해 mockResolvedValueOnce로
+// 실제 스팟 행을 주입하는 테스트를 추가하면서, 초기값의 빈 배열(`[]`)만 보고 추론된
+// `never[]` 타입 때문에 이후 오버라이드가 막히지 않도록 명시적으로 `unknown[]`로 넓힌다.
+const rpcMock = vi.fn(() => Promise.resolve({ data: [] as unknown[], error: null as string | null }));
 
 vi.mock('@/lib/supabase/client', () => ({
   createClient: () => ({ rpc: rpcMock }),
@@ -100,6 +103,83 @@ describe('MapExplorer 상시 공간 전용 단일화 (Task 9-6-10)', () => {
     render(<MapExplorer />);
     expect(screen.queryByText('상시 시설 보기')).not.toBeInTheDocument();
     expect(screen.queryByText('상시 시설 보임')).not.toBeInTheDocument();
+  });
+});
+
+// [검색창/지도 검색 키워드 유연성 대폭 개선](2026-08-30 사용자 지시): 이 화면의 키워드
+// 검색은 RPC가 이미 내려준 반경 내 items를 클라이언트에서 name/address로 다시 거르는
+// 방식이다 — 그 필터 로직 자체의 유연성(공백 토큰 분리, 다중 필드)을 검증한다.
+describe('MapExplorer 검색 키워드 유연성', () => {
+  function makeSpaceRow(overrides: Record<string, unknown> = {}) {
+    return {
+      id: 'space-1',
+      name: '용인어린이상상의숲',
+      category: 'KIDS_ACTIVITY',
+      distance_meters: 100,
+      item_type: 'SPACE',
+      lng: 127.1,
+      lat: 37.5,
+      address: '경기도 용인시 처인구 동백죽전대로 61',
+      thumbnail_url: null,
+      start_date: null,
+      end_date: null,
+      reservation_start_date: null,
+      reservation_end_date: null,
+      reservation_url: null,
+      is_reservation_required: null,
+      operating_hours: null,
+      is_free: null,
+      info_url: null,
+      is_kids_friendly: null,
+      has_parking: null,
+      stroller_accessible: null,
+      facility_type: null,
+      target_age_group: null,
+      booking_status: null,
+      ...overrides,
+    };
+  }
+
+  it('검색어에 띄어쓰기가 있어도 이름이 붙어있는 데이터를 찾아낸다("용인 어린이상상")', async () => {
+    rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow()], error: null });
+    render(<MapExplorer />);
+    await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
+    await screen.findAllByText('용인어린이상상의숲');
+
+    const searchInputs = screen.getAllByPlaceholderText('공간/행사 이름, 키워드 검색');
+    fireEvent.change(searchInputs[0], { target: { value: '용인 어린이상상' } });
+
+    await waitFor(
+      () => expect(screen.getAllByText('용인어린이상상의숲').length).toBeGreaterThan(0),
+      { timeout: 1000 }
+    );
+  });
+
+  it('이름에는 없어도 주소에만 있는 키워드로 검색된다', async () => {
+    rpcMock.mockResolvedValueOnce({
+      data: [makeSpaceRow({ name: '숲속 놀이터', address: '경기도 용인시 처인구' })],
+      error: null,
+    });
+    render(<MapExplorer />);
+    await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
+    await screen.findAllByText('숲속 놀이터');
+
+    const searchInputs = screen.getAllByPlaceholderText('공간/행사 이름, 키워드 검색');
+    fireEvent.change(searchInputs[0], { target: { value: '용인' } });
+
+    await waitFor(() => expect(screen.getAllByText('숲속 놀이터').length).toBeGreaterThan(0), { timeout: 1000 });
+  });
+
+  it('여러 단어 중 하나라도 매치되지 않으면 결과에서 제외된다', async () => {
+    rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow()], error: null });
+    render(<MapExplorer />);
+    await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
+    await screen.findAllByText('용인어린이상상의숲');
+
+    const searchInputs = screen.getAllByPlaceholderText('공간/행사 이름, 키워드 검색');
+    fireEvent.change(searchInputs[0], { target: { value: '용인 부산' } }); // "부산"은 이름/주소 어디에도 없음
+
+    await waitFor(() => expect(screen.queryAllByText('용인어린이상상의숲').length).toBe(0), { timeout: 1000 });
   });
 });
 

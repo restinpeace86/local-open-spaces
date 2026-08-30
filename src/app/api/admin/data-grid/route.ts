@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { splitSearchTokens } from '@/lib/search/keyword-search';
 
 // [개편] /admin/data-grid: open_spaces/events/raw_ingest_data 3개 탭을 지원하도록 확장.
 // 표 데이터 검증용 도구이므로 필터 옵션은 하드코딩하지 않고 DB의 실제 값을 조회해 구성한다.
@@ -170,13 +171,20 @@ async function queryOpenSpacesViaSourceSubset(
   if (error) return { error };
 
   type Row = NonNullable<typeof data>[number];
-  const q = params.q.toLowerCase();
+  // [검색창/지도 검색 키워드 유연성 대폭 개선](2026-08-30 사용자 지시): 이 경로(SEOUL_YEYAK
+  // 소스 전용, MINCLASSNM/SVCSTATNM 필터가 raw_data JSONB를 봐야 해 SQL 대신 메모리 필터로
+  // 처리됨)도 map-explorer.tsx의 클라이언트 필터와 동일한 이유로 공백 기준 토큰 매칭으로
+  // 넓혔다.
+  const searchTokens = splitSearchTokens(params.q.toLowerCase());
   const matchesCategoryMin = multiValueOrNullPredicate(params.categoryMinFilter);
   const createdFromIso = params.createdFrom ? `${params.createdFrom}T00:00:00.000Z` : null;
   const createdToIso = params.createdTo ? `${nextDateString(params.createdTo)}T00:00:00.000Z` : null;
 
   const filtered = (data ?? []).filter((row: Row) => {
-    if (q && !`${row.name} ${row.address}`.toLowerCase().includes(q)) return false;
+    if (searchTokens.length > 0) {
+      const haystack = `${row.name} ${row.address}`.toLowerCase();
+      if (!searchTokens.every((token) => haystack.includes(token))) return false;
+    }
     if (params.sourceTypes.length > 0 && !params.sourceTypes.includes(row.source_type)) return false;
     if (params.sources.length > 0 && (!row.source || !params.sources.includes(row.source))) return false;
     if (params.categories.length > 0 && !params.categories.includes(row.category)) return false;
@@ -245,8 +253,14 @@ async function queryOpenSpaces(supabase: Ctx, searchParams: URLSearchParams, pag
   // 건드리지 않는 일반 컬럼 필터는 이 테이블에서도 문제없이 빠르다.
   let query = supabase.from('open_spaces').select(OPEN_SPACES_COLUMNS, { count: 'estimated' });
 
-  if (q) {
-    const escaped = escapeIlikePattern(q);
+  // [검색창/지도 검색 키워드 유연성 대폭 개선](2026-08-30 사용자 지시): 검색어 전체를
+  // 하나의 ILIKE 패턴으로 걸면 "용인 어린이상상"처럼 띄어 쓴 검색어가 "용인어린이상상의숲"
+  // 같은 실제 데이터와 어긋나 누락된다 — 공백 기준 토큰으로 나눠 각 토큰이 name 또는
+  // address 어디에든 존재하기만 하면 매치되도록 넓혔다. 141,980행 open_spaces에서
+  // 인덱스 없는 ILIKE가 간헐적으로 statement timeout까지 났던 것을 실측 확인해(원인
+  // 규명 과정에서 재현), pg_trgm GIN 인덱스도 함께 추가했다(2026-08-30-add-trigram-search-indexes.sql).
+  for (const token of splitSearchTokens(q)) {
+    const escaped = escapeIlikePattern(token);
     query = query.or(`name.ilike.%${escaped}%,address.ilike.%${escaped}%`);
   }
   if (sourceTypes.length === 1) query = query.eq('source_type', sourceTypes[0]);
@@ -301,8 +315,11 @@ async function queryEvents(supabase: Ctx, searchParams: URLSearchParams, page: n
   // 실측상 문제없이 빠르다(별도 우회 경로 불필요).
   let query = supabase.from('events').select(EVENTS_COLUMNS, { count: 'exact' });
 
-  if (q) {
-    const escaped = escapeIlikePattern(q);
+  // [검색창/지도 검색 키워드 유연성 대폭 개선](2026-08-30 사용자 지시): open_spaces와
+  // 동일한 이유로 공백 기준 토큰 매칭으로 넓혔다 — events.title/venue_name에도
+  // pg_trgm GIN 인덱스를 함께 추가했다.
+  for (const token of splitSearchTokens(q)) {
+    const escaped = escapeIlikePattern(token);
     query = query.or(`title.ilike.%${escaped}%,venue_name.ilike.%${escaped}%`);
   }
   if (sources.length > 0) query = query.in('source', sources);

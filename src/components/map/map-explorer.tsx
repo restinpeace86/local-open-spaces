@@ -16,6 +16,7 @@ import { LocationOnboardingModal } from '@/components/map/location-onboarding-mo
 import { RecenterButton } from '@/components/map/recenter-button';
 import { MyLocationButton } from '@/components/map/my-location-button';
 import { getNearbySpacesAndEvents, NearbyItem } from '@/lib/spaces/get-nearby';
+import { splitSearchTokens } from '@/lib/search/keyword-search';
 import { useUserLocation } from '@/hooks/use-user-location';
 import { CORE_SPOT_CATEGORIES } from '@/lib/spaces/spot-category-groups';
 import { rankAiRecommendedSpots } from '@/lib/spaces/ai-recommend';
@@ -160,9 +161,19 @@ export function MapExplorer() {
       result = result.filter((item) => item.category_min && selectedCategoryMins.includes(item.category_min));
     }
 
-    const trimmedKeyword = keyword.trim().toLowerCase();
-    if (trimmedKeyword) {
-      result = result.filter((item) => item.name.toLowerCase().includes(trimmedKeyword));
+    // [검색창/지도 검색 키워드 유연성 대폭 개선](2026-08-30 사용자 지시): name 한 필드만,
+    // 검색어 전체를 하나의 문자열로 매칭해 "용인 어린이상상"처럼 띄어 쓰면 실제 데이터
+    // ("용인어린이상상의숲")와 어긋나 누락되는 경우가 있었다 — 공백 기준 토큰으로 나눠
+    // 각 토큰이 name 또는 address 어디에든 부분 문자열로(대소문자 무시) 존재하기만
+    // 하면 매치되도록 넓혔다(요구사항 1/2/3). 이 목록(items) 자체는 현재 지도 화면에
+    // 보이는 반경 내 결과로 이미 좁혀져 있다는 점은 여전하다 — 이 필터는 그 안에서
+    // 텍스트로 더 좁히는 역할만 한다.
+    const searchTokens = splitSearchTokens(keyword);
+    if (searchTokens.length > 0) {
+      result = result.filter((item) => {
+        const haystack = `${item.name} ${item.address ?? ''}`.toLowerCase();
+        return searchTokens.every((token) => haystack.includes(token.toLowerCase()));
+      });
     }
 
     return result;
