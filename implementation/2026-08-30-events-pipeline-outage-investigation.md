@@ -114,9 +114,10 @@ GG_DATA_API_KEY" 메시지로 즉시 중단됨을 실측 확인했다(검증 후
 
 ### 코드 검증
 - `npx tsc --noEmit` 통과.
-- `npm run test`(68파일 695건 — 신규: `env-precheck.test.mjs` 4건, `fetch-with-cause.test.mjs`
-  4건) 통과.
+- `npm run test`(68파일 694건 — 신규: `env-precheck.test.mjs` 4건, `fetch-with-cause.test.mjs`
+  7건) 통과.
 - `npm run build` 통과.
+- `npx js-yaml` CLI로 `ingest-daily.yml` YAML 구문 유효성 확인(진단 스텝 추가분).
 
 ### 실측 검증
 - `npm view @supabase/supabase-js@2.112.2 engines` → `{ node: '>=22.0.0' }` 직접 확인.
@@ -157,15 +158,36 @@ IP 제한 설정 여부를 사용자가 직접 확인해야 함).
 3곳을 교체해 다음 실패부터는 `err.cause`가 메시지에 포함되도록 했다. retry.mjs의
 재시도 판별은 부분 문자열 매칭이라 동작에 영향 없음(단위 테스트로 확인).
 
+## 6. 후속 실측 2차(2026-08-30, `fetchWithCause` 배포 후 재발) — cause 자체가 비어 있음 확인
+
+`fetchWithCause` 배포 후 실제 재실행에서 `GG_CULTURE_EVENTS`가 재시도 3회 전부
+소진하고도 여전히 순수 `fetch failed`만 남겼다(사용자가 로그 공유, `err.cause`
+부가 정보가 전혀 붙지 않음). 이는 오히려 유의미한 신호다 — **이 환경(GitHub Actions
+러너)의 undici가 이 특정 실패에는 애초에 `err.cause`를 붙이지 않는다**는 뜻이고,
+JS 에러 객체 조사만으로는 더 캘 정보가 없다는 것을 실측으로 확정했다. 로컬에서
+100% 재현 안 되는 점과 합쳐, 네트워크/방화벽/IP 차단 계열 가설에 더 무게가 실린다.
+
+**조치 2건**:
+1. `fetch-with-cause.mjs`의 `describeError()`를 강화 — cause뿐 아니라 err 자체의
+   `code`/`errno`, `AggregateError`의 하위 에러 목록까지 방어적으로 긁어모아 앞으로
+   혹시라도 정보가 담겨 있으면 놓치지 않게 했다(단위 테스트 3건 추가로 새 경로 검증).
+2. **JS 레벨 진단의 한계를 인정하고, `ingest-daily.yml`에 `curl -v` 진단 스텝을
+   추가**했다 — `openapi.gg.go.kr`/`apis.data.go.kr`(실패 중인 두 소스)와
+   `openapi.seoul.go.kr`(정상 동작 대조군)에 직접 연결을 시도해 DNS/TCP/TLS/HTTP
+   중 정확히 어느 단계에서 막히는지를 워크플로 로그에 직접 남긴다. 배치 실행과는
+   독립적인 진단 전용 스텝이라 실패해도(`|| true`) 이후 스텝에 영향을 주지 않는다.
+   다음 실행 로그의 이 스텝 출력을 보면 원인이 확정될 것이다.
+
 ## 특이 사항 — 사용자 확인 필요
 
 1. **`GG_CULTURE_EVENTS`/`TOUR_API_FESTIVAL`의 "fetch failed"는 아직 미해결이다.**
-   다음 실행부터는 `err.cause`가 메시지에 포함되니, 그 내용을 보고 원인을 좁힐 수
-   있다 — 만약 DNS/타임아웃 계열이면 일시적 네트워크 문제일 가능성이, "connection
-   reset"/타 명확한 거부 계열이면 IP 제한 가설에 무게가 실린다. `apis.data.go.kr`
-   (공공데이터포털)과 `openapi.gg.go.kr`(경기데이터드림) 각각의 API 키 관리
-   화면에서 "활용신청 시 등록한 IP" 또는 "서비스 URL/IP 제한" 설정이 있는지 확인해
-   보시길 권장한다 — 이 화면들은 구현 AI가 접근할 수 없다.
+   `err.cause` 기반 관측성 개선만으로는 부족함을 실측으로 확인해(6절), 다음 실행부터는
+   `ingest-daily.yml`의 "Network diagnostics" 스텝이 `curl -v` 결과를 직접 로그에
+   남긴다 — 그 출력(특히 openapi.seoul.go.kr 대조군과 비교했을 때 DNS/TCP/TLS 중
+   어디서 갈리는지)을 공유해 주시면 원인을 확정할 수 있다. 그와 별개로,
+   `apis.data.go.kr`(공공데이터포털)과 `openapi.gg.go.kr`(경기데이터드림) 각각의
+   API 키 관리 화면에서 "활용신청 시 등록한 IP" 또는 "서비스 URL/IP 제한" 설정이
+   있는지도 확인해 보시길 권장한다 — 이 화면들은 구현 AI가 접근할 수 없다.
 2. (A) 2026-08-29 01:59 UTC 실패의 정확한 원인은 완전히 규명하지 못했다 — GitHub
    저장소 Actions Secrets(`Settings → Secrets and variables → Actions`)에 아래 값이
    모두 있는지 한 번 확인해두면 좋다: `NEXT_PUBLIC_SUPABASE_URL`,

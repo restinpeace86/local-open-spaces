@@ -463,3 +463,21 @@
   - **검증**: `npx js-yaml` CLI로 두 워크플로 YAML 구문 유효성 확인(앱 코드 변경이
     아니라 tsc/test/build 대상 범위 밖). 상세:
     `implementation/2026-08-30-workflow-push-race-fix.md`.
+
+- [x] **[핵심 events 파이프라인 후속 — GG_CULTURE_EVENTS/TOUR_API_FESTIVAL "fetch
+  failed" 재발 대응]** (2026-08-30 완료)
+  - 사용자가 공유한 실제 실행 로그에서 `fetchWithCause` 배포 후에도 GG_CULTURE_EVENTS가
+    재시도 3회 전부 소진 후 순수 `fetch failed`만 남긴 것을 확인 — `err.cause`
+    부가 정보가 전혀 붙지 않아, 이 환경(GitHub Actions 러너)의 undici가 이 실패에는
+    애초에 cause를 붙이지 않는다는 것을 실측으로 확정(JS 에러 조사만으로는 더 캘
+    정보가 없음, 네트워크/IP 차단 계열 가설에 무게 실림).
+  - `fetch-with-cause.mjs`의 `describeError()` 강화 — err 자체의 code/errno,
+    AggregateError 하위 에러까지 방어적으로 추출(단위 테스트 3건 추가, 총 7건).
+  - JS 레벨 진단의 한계를 인정하고 `ingest-daily.yml`에 "Network diagnostics" 스텝
+    신설 — `curl -v`로 실패 중인 openapi.gg.go.kr/apis.data.go.kr과 정상 동작 중인
+    openapi.seoul.go.kr(대조군)에 직접 연결해 DNS/TCP/TLS/HTTP 중 정확히 어느
+    단계에서 막히는지 다음 실행 로그에 직접 남기도록 함(진단 전용, 배치 실행에
+    영향 없음).
+  - **검증**: `npx tsc --noEmit`/`npm run test`(68파일 694건)/`npm run build` 통과,
+    `npx js-yaml`로 워크플로 YAML 유효성 확인. 상세:
+    `implementation/2026-08-30-events-pipeline-outage-investigation.md` 6절.

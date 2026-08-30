@@ -51,4 +51,46 @@ describe('fetchWithCause', () => {
 
     await expect(fetchWithCause('https://example.com')).rejects.toThrow('HTTP 403');
   });
+
+  // [후속 실측](2026-08-30): 실제 GitHub Actions 재발 시 cause가 전혀 없는 순수
+  // "fetch failed"만 나온 것을 확인 — 이 경우 원본을 그대로 던지되(정보 손실 없음),
+  // err 자체에 code/errno가 붙어 있으면 그거라도 건진다.
+  it('cause는 없지만 에러 자체에 code가 있으면 그 정보를 포함한다', async () => {
+    const fetchError = Object.assign(new TypeError('fetch failed'), { code: 'ECONNREFUSED' });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(fetchError))
+    );
+
+    await expect(fetchWithCause('https://example.com')).rejects.toThrow(
+      'fetch failed (원인: ECONNREFUSED: fetch failed)'
+    );
+  });
+
+  it('cause도 code도 전혀 없으면 원본 메시지를 그대로 던진다(정보 없음을 인위적으로 만들어내지 않음)', async () => {
+    const fetchError = new TypeError('fetch failed');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(fetchError))
+    );
+
+    const err = await fetchWithCause('https://example.com').catch((e) => e);
+    expect(err.message).toBe('fetch failed');
+  });
+
+  it('cause가 AggregateError면 하위 에러 메시지를 전부 펼쳐 포함한다', async () => {
+    const cause = new AggregateError(
+      [new Error('connect ECONNREFUSED 1.1.1.1:443'), new Error('connect ECONNREFUSED 2.2.2.2:443')],
+      'all failed'
+    );
+    const fetchError = new TypeError('fetch failed', { cause });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.reject(fetchError))
+    );
+
+    await expect(fetchWithCause('https://example.com')).rejects.toThrow(
+      'fetch failed (원인: connect ECONNREFUSED 1.1.1.1:443 | connect ECONNREFUSED 2.2.2.2:443)'
+    );
+  });
 });
