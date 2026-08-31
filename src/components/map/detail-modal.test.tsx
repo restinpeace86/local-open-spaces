@@ -275,3 +275,140 @@ describe('DetailModal 설명(description) 표시', () => {
     expect(screen.queryByText('이건 공간 설명')).not.toBeInTheDocument();
   });
 });
+
+// [스마트 폴백 아키텍처](2026-09-01 사용자 지시) 섹션 1: View Fallback(spot_curations
+// 조회 결과에 따라 풍성한 뷰 vs 기존 공공데이터 뷰) + Reservation Fallback(네이버 예약
+// 링크 우선순위)을 검증한다.
+describe('DetailModal 스마트 폴백(View/Reservation Fallback, 2026-09-01)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function mockCurationResponse(item: unknown) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ item }) } as Response))
+    );
+  }
+
+  it('큐레이션이 없으면(item: null) 기존처럼 공공데이터 운영시간을 그대로 보여준다', async () => {
+    mockCurationResponse(null);
+    render(<DetailModal item={makeSpaceItem({ operating_hours: '평일 09:00-18:00' })} onClose={() => {}} />);
+
+    expect(await screen.findByText('평일 09:00-18:00')).toBeInTheDocument();
+    expect(screen.queryByText(/메뉴/)).not.toBeInTheDocument();
+  });
+
+  it('큐레이션이 있으면 구조화된 영업시간(오픈~마감/브레이크타임/라스트오더)을 우선 보여준다', async () => {
+    mockCurationResponse({
+      id: 'curation-1',
+      spot_id: 'space-1',
+      image_url: null,
+      operating_hours_raw: '아무 원문',
+      open_time: '10:00',
+      close_time: '22:00',
+      break_start: '15:00',
+      break_end: '17:00',
+      last_order: '21:30',
+      menu_items: [],
+      naver_booking_url: null,
+      curation_note: null,
+    });
+    render(<DetailModal item={makeSpaceItem({ operating_hours: '평일 09:00-18:00' })} onClose={() => {}} />);
+
+    expect(await screen.findByText('10:00~22:00 (브레이크타임 15:00~17:00, 라스트오더 21:30)')).toBeInTheDocument();
+    expect(screen.queryByText('평일 09:00-18:00')).not.toBeInTheDocument();
+  });
+
+  it('큐레이션에 메뉴가 있으면 메뉴 목록을 보여준다', async () => {
+    mockCurationResponse({
+      id: 'curation-1',
+      spot_id: 'space-1',
+      image_url: null,
+      operating_hours_raw: null,
+      open_time: null,
+      close_time: null,
+      break_start: null,
+      break_end: null,
+      last_order: null,
+      menu_items: [{ name: '짜장면', price: 7000 }],
+      naver_booking_url: null,
+      curation_note: null,
+    });
+    render(<DetailModal item={makeSpaceItem()} onClose={() => {}} />);
+
+    expect(await screen.findByText('짜장면 · 7,000원')).toBeInTheDocument();
+  });
+
+  it('큐레이션의 대표 이미지가 있으면 헤더에 보여준다', async () => {
+    mockCurationResponse({
+      id: 'curation-1',
+      spot_id: 'space-1',
+      image_url: 'https://example.com/curated.jpg',
+      operating_hours_raw: null,
+      open_time: null,
+      close_time: null,
+      break_start: null,
+      break_end: null,
+      last_order: null,
+      menu_items: [],
+      naver_booking_url: null,
+      curation_note: null,
+    });
+    const { container } = render(<DetailModal item={makeSpaceItem()} onClose={() => {}} />);
+
+    const img = await screen.findByAltText('율동공원');
+    expect(img).toHaveAttribute('src', 'https://example.com/curated.jpg');
+    expect(container.querySelectorAll('img')).toHaveLength(1);
+  });
+
+  it('공식 홈페이지(info_url)가 있으면 네이버 예약 링크가 있어도 공식 링크를 우선한다', async () => {
+    mockCurationResponse({
+      id: 'curation-1',
+      spot_id: 'space-1',
+      image_url: null,
+      operating_hours_raw: null,
+      open_time: null,
+      close_time: null,
+      break_start: null,
+      break_end: null,
+      last_order: null,
+      menu_items: [],
+      naver_booking_url: 'https://booking.naver.com/xyz',
+      curation_note: null,
+    });
+    render(<DetailModal item={makeSpaceItem({ info_url: 'https://official.example.com' })} onClose={() => {}} />);
+
+    await screen.findByText('🌐 공식 홈페이지 바로가기');
+    expect(screen.queryByText('🟢 네이버로 예약하기')).not.toBeInTheDocument();
+  });
+
+  it('공식 홈페이지는 없지만 확인된 네이버 예약 링크가 있으면 그 링크로 안내한다', async () => {
+    mockCurationResponse({
+      id: 'curation-1',
+      spot_id: 'space-1',
+      image_url: null,
+      operating_hours_raw: null,
+      open_time: null,
+      close_time: null,
+      break_start: null,
+      break_end: null,
+      last_order: null,
+      menu_items: [],
+      naver_booking_url: 'https://booking.naver.com/xyz',
+      curation_note: null,
+    });
+    render(<DetailModal item={makeSpaceItem({ info_url: null })} onClose={() => {}} />);
+
+    const link = await screen.findByText('🟢 네이버로 예약하기');
+    expect(link.closest('a')).toHaveAttribute('href', 'https://booking.naver.com/xyz');
+    expect(link.closest('a')).toHaveAttribute('target', '_blank');
+  });
+
+  it('공식 링크도 네이버 예약 링크도 없으면 자체 간편 예약/신청 폼으로 폴백한다(2026-08-29 결정 유지)', async () => {
+    mockCurationResponse(null);
+    render(<DetailModal item={makeSpaceItem({ info_url: null })} onClose={() => {}} />);
+
+    expect(await screen.findByText('📝 간편 예약/신청하기')).toBeInTheDocument();
+  });
+});

@@ -693,9 +693,9 @@
     공존 방식, `naver_booking_url` 컬럼 추가 여부와 기존 자체 예약 시스템과의
     관계를 확정해 달라고 요청 후 재지시받아 진행한다.
 
-- [ ] **[개발 종합 요청] 스팟픽(SpotPick) MVP 스마트 폴백, 관리자 큐레이션 및 배치
-  안정화 고도화** (2026-08-30, 진행 중 — 사용자가 위 스킵된 요청을 재작성해 외부
-  링크 문제를 스스로 제거하고 다시 지시함, 상충 없음 확인 후 진행)
+- [x] **[개발 종합 요청] 스팟픽(SpotPick) MVP 스마트 폴백, 관리자 큐레이션 및 배치
+  안정화 고도화** (2026-08-30~2026-09-01 완료 — 사용자가 위 스킵된 요청을 재작성해
+  외부 링크 문제를 스스로 제거하고 다시 지시함, 상충 없음 확인 후 진행)
   - **재확인**: View Fallback이 "네이버 새 창"에서 "자체 UI 내 인앱 렌더링"으로
     바뀌어 오늘 결정(외부 지도 앱 연동 제거)과 더 이상 충돌하지 않는다. Reservation
     Fallback도 공공예약/원본 링크를 자체 폼보다 우선시키는 방향으로 재배치되어
@@ -739,9 +739,21 @@
     조회→목록 검색→토글→중복 409까지 전체 CRUD 흐름 확인, 실제 PNG 업로드 후
     공개 URL 200 OK 확인, Playwright로 탭/모달/파서 버튼 렌더링 확인. 상세:
     `implementation/2026-09-01-spotpick-admin-spot-curations-section-2.md`.
-  - [ ] **섹션 1(프론트엔드 폴백)**: DetailModal View Fallback(스팟에
-    spot_curations 존재+is_active면 풍성한 뷰, 없으면 기존 공공데이터 뷰 그대로,
-    외부 링크 없음) + Reservation Fallback 4단계(자체 연동→공공/원본 URL→네이버
-    예약 URL→전화/안내) 로직 연동.
+  - [x] **섹션 1(프론트엔드 폴백)** (2026-09-01 완료): 신규 공개
+    `GET /api/spot-curations?spot_id=`(is_active=true만 반환, `/api/admin/
+    spot-curations`와 분리) + `naver_booking_url` 컬럼 추가(관리자 폼에도 입력란
+    추가). `DetailModal.tsx`: 스팟일 때 마운트 시 큐레이션 조회 — 없으면 기존
+    공공데이터 뷰 그대로(코드 변경 없음, 이미 충족), 있으면 대표 이미지/구조화된
+    영업시간(오픈~마감·브레이크타임·라스트오더)/메뉴 목록을 우선 표시(모두
+    인앱, 외부 링크 없음). 예약 CTA는 기존 "info_url → 자체 간편 예약 폼" 2단
+    구조 사이에 `naver_booking_url` 한 단계만 끼워 넣어 info_url → naver_booking_url
+    → 자체 폼(2026-08-29 결정 유지) 순으로 재배치. **검증**: `npx tsc --noEmit`/
+    `npm run test`(72파일 742건 — `detail-modal.test.tsx` 7건 신규)/`npm run build`
+    통과 + 실제 스팟으로 등록→즉시 공개 반영→비활성화→즉시 미반영까지 실측 확인.
+    **특이 사항**: `open_spaces`에 전화번호 컬럼이 없어(실측 확인) 4순위 "tel: 직통
+    전화" 요구사항은 문자 그대로 구현하지 못했다 — 기존 자체 간편 예약 폼(연락처
+    남기면 관리자가 연락)을 실질적 안내 역할로 유지했다(추측으로 가짜 전화번호를
+    만들지 않음). 상세:
+    `implementation/2026-09-01-spotpick-fallback-frontend-section-1.md`.
   - 각 섹션 완료 시 `npx tsc --noEmit`/`npm run test`/`npm run build` 통과 확인 후
-    커밋. 전체 완료 후 종합 구현 기록 작성.
+    커밋. **4개 섹션 전체 완료.**

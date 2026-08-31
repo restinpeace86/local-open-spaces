@@ -20,6 +20,7 @@ type SpotCurationItem = {
   break_end: string | null;
   last_order: string | null;
   menu_items: ParsedMenuItem[];
+  naver_booking_url: string | null;
   curation_note: string | null;
   created_at: string;
   updated_at: string;
@@ -81,6 +82,7 @@ function CurationFormModal({
   const [lastOrder, setLastOrder] = useState(initial?.last_order ?? '');
   const [menuRaw, setMenuRaw] = useState('');
   const [menuItems, setMenuItems] = useState<ParsedMenuItem[]>(initial?.menu_items ?? []);
+  const [naverBookingUrl, setNaverBookingUrl] = useState(initial?.naver_booking_url ?? '');
   const [curationNote, setCurationNote] = useState(initial?.curation_note ?? '');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -179,6 +181,7 @@ function CurationFormModal({
         break_end: breakEnd || null,
         last_order: lastOrder || null,
         menu_items: menuItems,
+        naver_booking_url: naverBookingUrl.trim() || null,
         curation_note: curationNote || null,
       };
       const res = isEdit
@@ -393,6 +396,20 @@ function CurationFormModal({
               </ul>
             )}
           </div>
+
+          {/* [예약 및 링크 폴백 체인](2026-09-01 사용자 지시) 3순위: 공공예약/원본 링크가
+              없는 민간 스팟인데 실제로 네이버 예약이 연동돼 있음을 관리자가 직접 확인한
+              경우에만 입력한다 — 확인 없이 임의로 채우지 않는다. */}
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-gray-700">네이버 예약 링크(선택 — 실제 연동 확인된 경우만)</span>
+            <input
+              type="text"
+              value={naverBookingUrl}
+              onChange={(e) => setNaverBookingUrl(e.target.value)}
+              placeholder="https://booking.naver.com/..."
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </label>
 
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-gray-700">큐레이션 메모(선택)</span>

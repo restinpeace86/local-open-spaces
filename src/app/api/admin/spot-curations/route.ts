@@ -21,6 +21,7 @@ type SpotCurationRow = {
   break_end: string | null;
   last_order: string | null;
   menu_items: unknown;
+  naver_booking_url: string | null;
   curation_note: string | null;
   created_at: string;
   updated_at: string;
@@ -109,6 +110,7 @@ export async function POST(request: NextRequest) {
         break_end: body.break_end || null,
         last_order: body.last_order || null,
         menu_items: isValidMenuItems(body.menu_items) ? body.menu_items : [],
+        naver_booking_url: typeof body.naver_booking_url === 'string' && body.naver_booking_url.trim() ? body.naver_booking_url.trim() : null,
         curation_note: typeof body.curation_note === 'string' ? body.curation_note : null,
       })
       .select('*, open_spaces(name, address, category)')
@@ -151,6 +153,7 @@ export async function PATCH(request: NextRequest) {
       break_end: string | null;
       last_order: string | null;
       menu_items: Array<{ name: string; price: number }>;
+      naver_booking_url: string | null;
       curation_note: string | null;
     }> = { updated_at: new Date().toISOString() };
     if (typeof body.is_active === 'boolean') updates.is_active = body.is_active;
@@ -162,6 +165,9 @@ export async function PATCH(request: NextRequest) {
     if ('break_end' in body) updates.break_end = body.break_end || null;
     if ('last_order' in body) updates.last_order = body.last_order || null;
     if ('menu_items' in body) updates.menu_items = isValidMenuItems(body.menu_items) ? body.menu_items : [];
+    if ('naver_booking_url' in body) {
+      updates.naver_booking_url = typeof body.naver_booking_url === 'string' && body.naver_booking_url.trim() ? body.naver_booking_url.trim() : null;
+    }
     if ('curation_note' in body) updates.curation_note = typeof body.curation_note === 'string' ? body.curation_note : null;
 
     if (Object.keys(updates).length === 1) {

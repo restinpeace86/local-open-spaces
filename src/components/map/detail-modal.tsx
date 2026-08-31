@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
 import { getTargetAudienceLabel } from '@/lib/spaces/target-audience-meta';
@@ -12,6 +12,39 @@ import { MapPreviewModal } from '@/components/map/map-preview-modal';
 import { ReservationRequestModal } from '@/components/map/reservation-request-modal';
 
 const NO_INFO_TEXT = '정보 준비 중 (공공 기관 문의)';
+
+// [개발 종합 요청] 스팟픽 MVP 스마트 폴백 아키텍처(2026-09-01 사용자 지시) 섹션 1
+// "View Fallback": 우리 DB(spot_curations)에 관리자가 보강한 상세 정보가 있으면 그
+// "풍성한" 정보를 쓰고, 없으면 지금까지처럼 공공데이터 기본 뼈대(주소/운영시간/
+// info_url 등)를 그대로 인앱으로 보여준다 — 어느 쪽이든 외부로 나가지 않는다.
+type SpotCuration = {
+  id: string;
+  spot_id: string;
+  image_url: string | null;
+  operating_hours_raw: string | null;
+  open_time: string | null;
+  close_time: string | null;
+  break_start: string | null;
+  break_end: string | null;
+  last_order: string | null;
+  menu_items: Array<{ name: string; price: number }>;
+  naver_booking_url: string | null;
+  curation_note: string | null;
+};
+
+// 구조화된 필드가 있으면 사람이 읽기 좋은 한 줄로 합친다(예: "10:00~22:00 (브레이크타임
+// 15:00~17:00, 라스트오더 21:30)") — 관리자가 개별 필드를 일부만 채웠어도 있는 것만
+// 이어붙인다(추측으로 빈 칸을 채우지 않음).
+function formatCuratedHours(curation: SpotCuration): string | null {
+  if (!curation.open_time && !curation.close_time) return null;
+  const main = [curation.open_time, curation.close_time].filter(Boolean).join('~');
+  const extras: string[] = [];
+  if (curation.break_start || curation.break_end) {
+    extras.push(`브레이크타임 ${[curation.break_start, curation.break_end].filter(Boolean).join('~')}`);
+  }
+  if (curation.last_order) extras.push(`라스트오더 ${curation.last_order}`);
+  return extras.length > 0 ? `${main} (${extras.join(', ')})` : main;
+}
 
 // spec/space/space-detail.md, spec/event/event-detail.md: 공간/행사 상세 정보 모달
 // 데스크톱은 중앙 모달, 모바일은 하단 바텀시트로 표시한다.
@@ -26,6 +59,9 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
   const [isMapPreviewOpen, setIsMapPreviewOpen] = useState(false);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
+  // undefined = 아직 조회 전(로딩), null = 큐레이션 없음(정상), 객체 = 큐레이션 있음.
+  // spot_curations는 open_spaces에만 FK가 있어(이벤트는 대상 아님) 이벤트는 조회하지 않는다.
+  const [curation, setCuration] = useState<SpotCuration | null | undefined>(undefined);
   // [실측 디버깅 발견 — 뒤로가기 인터셉트 제거](2026-08-29): 이 모달을 React onClick 경로
   // (리스트/카드 클릭 등)로 열면 useModalBackClose 내부의 history.pushState 호출이 Next.js
   // App Router의 자체 라우팅 감지와 충돌해 모달이 아예 커밋되지 않거나(상태가 조용히
@@ -39,6 +75,30 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
   // 제거하고 핵심 기능(모달 열기/닫기)은 안전하게 복구한다.
   const meta = getCategoryMeta(item.category);
   const isEvent = item.item_type === 'EVENT';
+
+  // [View/Reservation Fallback](2026-09-01 사용자 지시): 스팟(공간)에 한해 관리자가
+  // 보강한 큐레이션 데이터를 조회한다. is_active=true인 것만 내려주는 공개 엔드포인트를
+  // 쓴다(비활성화한 큐레이션은 즉시 공공데이터 기본 뷰로 돌아가야 함).
+  useEffect(() => {
+    if (isEvent) {
+      setCuration(null);
+      return;
+    }
+    let cancelled = false;
+    setCuration(undefined);
+    fetch(`/api/spot-curations?spot_id=${encodeURIComponent(item.id)}`)
+      .then((res) => res.json())
+      .then((data: { item?: SpotCuration | null }) => {
+        if (!cancelled) setCuration(data.item ?? null);
+      })
+      .catch(() => {
+        // 조회 실패 시 큐레이션 없는 것으로 간주 — 기존 공공데이터 뷰로 안전하게 폴백한다.
+        if (!cancelled) setCuration(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [item.id, isEvent]);
   // Task 9-6-2(2026-08-23, Decision 009): location_precision이 없으면(SPACE, 기존 EXACT 전용
   // 경로) EXACT로 간주한다. CITY_APPROX/UNKNOWN은 정확한 행사장 위치가 아니므로 지도/길찾기를
   // 보여주면 사용자를 오도한다 — 근사·미상 좌표를 정확한 핀처럼 그리지 않는다.
@@ -83,10 +143,19 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
   // 없는 스팟은 우리 플랫폼 자체 신청 폼으로 흡수한다 — 유저를 외부로 보내지 않고
   // 서비스 안에서 신청 접수까지 끝낸다. reservations 테이블의 FK가 open_spaces만
   // 참조하므로(스팟 전용) 위 3분류 CTA와 마찬가지로 isEvent가 아닐 때만 노출한다.
+  //
+  // [예약 및 링크 폴백 체인](2026-09-01 사용자 지시): 위 2026-08-29 순서(공식 링크 →
+  // 자체 신청 폼)는 그대로 유지하고, 그 사이에 "공공예약/원본 링크도 없지만 관리자가
+  // 실제 네이버 예약 연동을 확인해 등록한 민간 스팟" 한 단계만 끼워 넣는다 — 이미
+  // 구축된 자체 신청 폼(2026-08-29 결정)을 대체하는 게 아니라, 더 나은 실제 채널이
+  // 있을 때만 그쪽을 우선한다: info_url(공식/공공) → naver_booking_url(관리자 확인
+  // 네이버 예약) → 자체 간편 예약/신청 폼(둘 다 없을 때의 최종 폴백).
   const secondaryAction = isEvent
     ? null
     : item.info_url
     ? { type: 'link' as const, label: '🌐 공식 홈페이지 바로가기', href: item.info_url }
+    : curation?.naver_booking_url
+    ? { type: 'link' as const, label: '🟢 네이버로 예약하기', href: curation.naver_booking_url }
     : { type: 'reservation' as const, label: '📝 간편 예약/신청하기' };
 
   async function handleCopyAddress() {
@@ -113,6 +182,17 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={item.thumbnail_url}
+            alt={item.name}
+            className="w-full h-40 object-cover rounded-t-2xl md:rounded-t-2xl"
+          />
+        )}
+        {/* [View Fallback](2026-09-01 사용자 지시): 스팟은 원래 헤더 이미지가 없었다
+            (공공데이터에 이미지 필드 자체가 없음) — 관리자가 spot_curations에 등록한
+            대표 이미지가 있으면(is_active) 그 "풍성한" 이미지를 보여준다. */}
+        {!isEvent && curation?.image_url && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={curation.image_url}
             alt={item.name}
             className="w-full h-40 object-cover rounded-t-2xl md:rounded-t-2xl"
           />
@@ -194,7 +274,33 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
             {!isEvent && (
               <div className="flex items-start justify-between gap-2">
                 <dt className="text-gray-500 shrink-0">운영시간</dt>
-                <dd className="text-right text-gray-900">{item.operating_hours || NO_INFO_TEXT}</dd>
+                {/* [View Fallback](2026-09-01 사용자 지시): 관리자가 구조화한 영업시간
+                    (오픈~마감/브레이크타임/라스트오더)이 있으면 그걸 우선 보여주고,
+                    없으면 원문(operating_hours_raw) → 공공데이터 기본값 순으로
+                    폴백한다 — 추측으로 빈 칸을 만들지 않는다. */}
+                <dd className="text-right text-gray-900">
+                  {(curation && formatCuratedHours(curation)) ||
+                    curation?.operating_hours_raw ||
+                    item.operating_hours ||
+                    NO_INFO_TEXT}
+                </dd>
+              </div>
+            )}
+
+            {/* [View Fallback](2026-09-01 사용자 지시) "풍성한 뷰": 관리자가 등록한 메뉴가
+                있으면 보여준다. 공공데이터에는 메뉴 개념 자체가 없어 큐레이션 전용 정보다. */}
+            {!isEvent && curation && curation.menu_items.length > 0 && (
+              <div className="flex items-start justify-between gap-2">
+                <dt className="text-gray-500 shrink-0">메뉴</dt>
+                <dd className="text-right text-gray-900">
+                  <ul className="flex flex-col gap-0.5">
+                    {curation.menu_items.map((menuItem, i) => (
+                      <li key={`${menuItem.name}-${i}`}>
+                        {menuItem.name} · {menuItem.price.toLocaleString()}원
+                      </li>
+                    ))}
+                  </ul>
+                </dd>
               </div>
             )}
 
