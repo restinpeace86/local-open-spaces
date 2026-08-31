@@ -651,3 +651,44 @@
     `spot-category-groups.test.ts` 1건 신규, 칩 개수 11→12 갱신)/`npm run build`
     통과 + Playwright로 실제 `/nearby` 페이지에 칩이 노출됨을 확인. 상세:
     `implementation/2026-08-30-nearby-kids-restaurant-category-chip.md`.
+
+- [ ] **[개발 요청] 키즈친화 스팟 서비스 스마트 폴백(Fallback) 아키텍처 구현**
+  — **사전 확인 결과 기존 Decision과 정면 상충하여 구현 보류(스킵)**, 사용자
+  재확인 필요 (2026-08-30)
+  - **요구사항 요약**: (1) 지도 마커 클릭/상세 모달 진입 시, 우리 DB에 상세정보가
+    없으면 `https://map.naver.com/v5/search/{이름+주소}`로 새 창(`target="_blank"`)
+    연동하는 "View Fallback". (2) [예약하기] 버튼을 자체 예약 시스템 → `naver_
+    booking_url` → 전화문의/준비중 팝업 3단 폴백으로 구성하는 "Reservation Fallback".
+  - **상충 1(치명적) — 오늘(2026-08-30) 이미 정반대 방향으로 확정한 결정과 충돌**:
+    `implementation/2026-08-30-inapp-map-remove-external-nav.md`("외부 지도 앱
+    연동 제거 및 인앱 위치 보기로 전환") — 사용자가 오늘 직접 "네이버 지도 등으로
+    나가던 길찾기/**위치 보기** 버튼의 외부 연동 동작 제거"를 명시적으로 지시해
+    Decision 011의 3번째 CTA를 외부 네이버 딥링크(`nmap://`)에서 인앱
+    `MapPreviewModal`로 이미 교체했다. 이번 요청의 "View Fallback"은 이 결정을
+    정확히 역행한다 — 게다가 curated_items(큐레이션 상품, 소수)에만 있는 "자체
+    등록된 대표 이미지/커스텀 텍스트"가 없으면 폴백한다는 조건이라, 절대다수인
+    일반 공공데이터 open_spaces 항목 전체가 사실상 항상 네이버 외부 링크로
+    빠지게 되어 오늘 결정보다 오히려 더 넓은 범위로 외부 이탈을 되살리는 셈이다.
+  - **상충 2(치명적) — 어제(2026-08-29) 같은 기능을 넣었다가 같은 날 되돌린 전례**:
+    `implementation/2026-08-29-spot-detail-naver-deep-link.md`로 `buildNaverPlace
+    SearchUrl` 네이버 검색 딥링크 폴백을 추가했다가, 바로 다음 작업
+    (`implementation/2026-08-29-spot-self-service-reservation-mvp.md`)에서
+    "직전 작업의 네이버 검색 딥링크 폴백을 완전히 제거"하고 대신 자체
+    `reservations` 테이블 + `ReservationRequestModal` + `POST /api/reservations`
+    (RLS로 anon 접근 완전 차단, service-role 전용) 자체 간편 예약/신청 MVP로
+    교체했다 — 이번 요청의 "Reservation Fallback" 2순위(`naver_booking_url`)/
+    3순위(전화문의)는 바로 이 자체 예약 시스템으로 이미 대체된 흐름을 다시
+    네이버/전화 경유로 되돌리는 것과 같다.
+  - **상충 3 — Spec에 없는 신규 데이터/로직(제3장 제2조·제5조, 제5장 제2조)**:
+    `naver_booking_url` 컬럼, 스팟별 "자체 예약/결제 테이블 연동 여부" 플래그
+    모두 `project/database_schema.md`/Decision 011 어디에도 정의돼 있지 않다.
+    Decision 011의 기존 3분류 CTA(공공 예약/할인 예매/그 외)와 이번 요청의 3단
+    폴백이 구조적으로 유사해 보이지만 3번째 분기 동작이 다르다(기존: 인앱 지도
+    보기 / 신규: 전화문의 팝업) — 어느 쪽이 맞는지는 Spec 개정 없이 임의로
+    판단하지 않는다.
+  - **처리**: 구현 진행하지 않고 스킵. 위 세 상충 내역을 사용자에게 그대로
+    전달하고, (a) 오늘/어제 결정을 실제로 뒤집을 의도인지, (b) 그렇다면
+    "View Fallback"의 발동 조건(전체 open_spaces 대상인지, 특정 소스/카테고리
+    한정인지)과 "네이버 지도 상세정보 보기"와 기존 인앱 `MapPreviewModal`의
+    공존 방식, `naver_booking_url` 컬럼 추가 여부와 기존 자체 예약 시스템과의
+    관계를 확정해 달라고 요청 후 재지시받아 진행한다.
