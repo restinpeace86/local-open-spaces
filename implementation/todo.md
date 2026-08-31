@@ -727,10 +727,18 @@
     계산이 KST 등에서 실제로 깨지는 잠재 결함을 실측으로 발견해 로컬 날짜
     헬퍼로 교체.
     상세: `implementation/2026-09-01-spotpick-fallback-curation-batch-hardening-sections-3-4.md`.
-  - [ ] **섹션 2(관리자 스팟 큐레이션 탭)**: 신규 `spot_curations` 테이블(open_spaces
-    1:1 FK, is_active, image_url, 영업시간 구조화 필드, menu_items jsonb) +
-    Supabase Storage 버킷/업로드 API + 클립보드 Ctrl+V 이미지 붙여넣기 업로드 +
-    영업시간/메뉴 텍스트 스마트 파서 + 신규 관리자 탭 UI.
+  - [x] **섹션 2(관리자 스팟 큐레이션 탭)** (2026-09-01 완료): 신규 `spot_curations`
+    테이블(open_spaces 1:1 FK, is_active, image_url, 영업시간 구조화 필드,
+    menu_items jsonb, RLS+정책없음) + `spot-curation-images` Storage 버킷(public,
+    5MB, 이미지 mime 제한) + `POST /api/admin/spot-curations/upload-image`(클립보드
+    Ctrl+V 이미지를 서버로 받아 업로드) + `GET/POST/PATCH /api/admin/spot-curations`
+    (스팟명 조인 검색, spot_id 단건 조회, 중복 등록 409 안내) + 영업시간/메뉴 스마트
+    파서(`spot-curation-parsers.ts`, 유닛 테스트 10건) + 5번째 관리자 탭
+    `SpotCurationsPanel`(스팟 검색은 기존 `/api/spots/search` 재사용, 섹션 3
+    Lazy Loading 게이트 동일 적용). **실측 검증**: 실제 스팟으로 POST→PATCH→단건
+    조회→목록 검색→토글→중복 409까지 전체 CRUD 흐름 확인, 실제 PNG 업로드 후
+    공개 URL 200 OK 확인, Playwright로 탭/모달/파서 버튼 렌더링 확인. 상세:
+    `implementation/2026-09-01-spotpick-admin-spot-curations-section-2.md`.
   - [ ] **섹션 1(프론트엔드 폴백)**: DetailModal View Fallback(스팟에
     spot_curations 존재+is_active면 풍성한 뷰, 없으면 기존 공공데이터 뷰 그대로,
     외부 링크 없음) + Reservation Fallback 4단계(자체 연동→공공/원본 URL→네이버

@@ -466,6 +466,65 @@ export type Database = {
         }
         Relationships: []
       }
+      spot_curations: {
+        Row: {
+          break_end: string | null
+          break_start: string | null
+          close_time: string | null
+          created_at: string
+          curation_note: string | null
+          id: string
+          image_url: string | null
+          is_active: boolean
+          last_order: string | null
+          menu_items: Json
+          open_time: string | null
+          operating_hours_raw: string | null
+          spot_id: string
+          updated_at: string
+        }
+        Insert: {
+          break_end?: string | null
+          break_start?: string | null
+          close_time?: string | null
+          created_at?: string
+          curation_note?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          last_order?: string | null
+          menu_items?: Json
+          open_time?: string | null
+          operating_hours_raw?: string | null
+          spot_id: string
+          updated_at?: string
+        }
+        Update: {
+          break_end?: string | null
+          break_start?: string | null
+          close_time?: string | null
+          created_at?: string
+          curation_note?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean
+          last_order?: string | null
+          menu_items?: Json
+          open_time?: string | null
+          operating_hours_raw?: string | null
+          spot_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "spot_curations_spot_id_fkey"
+            columns: ["spot_id"]
+            isOneToOne: true
+            referencedRelation: "open_spaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       geography_columns: {
@@ -903,6 +962,8 @@ export type Database = {
       }
       postgis_version: { Args: never; Returns: string }
       postgis_wagyu_version: { Args: never; Returns: string }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
       st_3dclosestpoint: {
         Args: { geom1: unknown; geom2: unknown }
         Returns: unknown

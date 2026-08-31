@@ -105,6 +105,9 @@ export default async function AdminDataGridPage() {
         // curated_items 탭은 자기완결적인 CuratedItemsPanel이 자체 API로 필터 옵션 없이
         // 동작해 이 필터 체계가 필요 없다 — 타입만 맞춰주는 빈 객체.
         curated_items: {},
+        // [스팟 큐레이션 탭](2026-09-01 사용자 지시): SpotCurationsPanel도 동일하게
+        // 자기완결적이라 빈 객체만 넘긴다.
+        spot_curations: {},
       }}
     />
   );
