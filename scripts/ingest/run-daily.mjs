@@ -51,7 +51,11 @@ const REQUIRED_ENV_VARS = [
 ];
 
 // { label, run } — run()은 BaseCollectorAdapter.run()과 동일한 반환 형태를 따른다.
-const STEPS = [
+// [배치 수집 안정성 고도화](2026-08-30 사용자 지시): 관리자가 특정 소스만 골라 수동
+// 재수집할 수 있어야 해서(요구사항 "관리자 수동 재수집 트리거") export한다 — CLI의
+// `--only=<label>`과 src/app/api/admin/ingest/rerun/route.ts가 이 배열을 그대로
+// 재사용해 동일한 실행 경로(중복 없음, 제5장 제4조)를 탄다.
+export const STEPS = [
   { label: 'GG_CULTURE_EVENTS', run: ({ dryRun }) => new GgCultureEventsAdapter().run({ dryRun }) },
   { label: 'SEOUL_CULTURE_EVENTS', run: ({ dryRun }) => runSeoulCultureEvents({ dryRun }) },
   { label: 'TOUR_API_FESTIVAL', run: ({ dryRun }) => runTourApiFestival({ dryRun }) },
@@ -417,9 +421,40 @@ export async function runDailyBatch({ dryRun = false } = {}) {
   return { results, failedCount };
 }
 
+// [배치 수집 안정성 고도화](2026-08-30 사용자 지시): "관리자 화면에서 실패한 특정 API
+// 소스만 지정해 개별 수동 재수집" — 전체 배치(후처리 단계 포함)를 다시 돌리지 않고
+// STEPS 중 해당 소스 하나만 즉시 재실행한다. CLI(`--only=`)와 관리자 API 라우트가
+// 이 함수를 공유한다.
+export async function runSingleDailySource(sourceKey, { dryRun = false } = {}) {
+  const step = STEPS.find((s) => s.label === sourceKey);
+  if (!step) {
+    throw new Error(`알 수 없는 Daily 배치 소스입니다: ${sourceKey} (가능한 값: ${STEPS.map((s) => s.label).join(', ')})`);
+  }
+  console.log(`▶▶▶ [Daily 개별 재수집] ${sourceKey} (dry-run: ${dryRun})`);
+  const result = await step.run({ dryRun });
+  if (!dryRun) {
+    recordBatchRun({ batchName: `${BATCH_NAME} (개별 재수집: ${sourceKey})`, results: [result] });
+  }
+  return result;
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const dryRun = process.argv.includes('--dry-run');
-  runDailyBatch({ dryRun }).then(({ failedCount }) => {
-    process.exitCode = failedCount > 0 ? 1 : 0;
-  });
+  const onlyArg = process.argv.find((arg) => arg.startsWith('--only='));
+
+  if (onlyArg) {
+    const sourceKey = onlyArg.slice('--only='.length);
+    runSingleDailySource(sourceKey, { dryRun })
+      .then((result) => {
+        process.exitCode = result.failed ? 1 : 0;
+      })
+      .catch((err) => {
+        console.error(`❌ 개별 재수집 실패: ${err.message}`);
+        process.exitCode = 1;
+      });
+  } else {
+    runDailyBatch({ dryRun }).then(({ failedCount }) => {
+      process.exitCode = failedCount > 0 ? 1 : 0;
+    });
+  }
 }

@@ -52,6 +52,11 @@ describe('AdminDataGridClient — curated_items 탭 통합', () => {
 
     expect(screen.getByText('open_spaces (공간·시설)')).toBeInTheDocument();
     expect(screen.getByText('🏷️ 큐레이션/제휴 상품')).toBeInTheDocument();
+
+    // [관리자 페이지 성능 최적화](2026-08-30 사용자 지시): 탭 진입 시 자동 조회하지
+    // 않으므로 먼저 빈 뼈대(불러오기 버튼)가 보이고, 클릭해야 데이터 조회가 나간다.
+    expect(screen.getByText('필터를 설정한 뒤 불러오기를 눌러주세요.')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('📥 불러오기'));
     expect(await screen.findByText('조건에 맞는 데이터가 없습니다.')).toBeInTheDocument();
   });
 

@@ -12,6 +12,7 @@ import { BaseCollectorAdapter } from '../base-collector-adapter.mjs';
 import { buildOpenSpaceRow } from './schema-mapper.mjs';
 import { createAdminClient } from '../../lib/supabase-admin.mjs';
 import { deriveIsFreeFromFeeText } from '../../lib/ai-tagging.mjs';
+import { fetchWithTimeout } from '../../lib/fetch-with-timeout.mjs';
 
 const PAGE_SIZE = 100;
 export const TOUR_API_V4_SOURCE_TYPE = 'KOR_TOUR_API_V4';
@@ -59,7 +60,7 @@ export class TourApiV4AreaBasedAdapter extends BaseCollectorAdapter {
     });
 
     const url = `${this.baseUrl}?serviceKey=${encodeURIComponent(this.apiKey)}&${params.toString()}`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url);
     const text = await res.text();
 
     if (!res.ok) {
@@ -101,13 +102,35 @@ export class TourApiV4AreaBasedAdapter extends BaseCollectorAdapter {
     return items;
   }
 
+  // [배치 수집 안정성 고도화](2026-08-30 사용자 지시): contentTypeId(12=관광지/14=문화시설/
+  // 28=레포츠 등)별로 서로 완전히 독립된 API 호출인데, 이전에는 하나의 for 루프 안에서
+  // 예외 없이 순차 await만 했다 — contentTypeId 12가 타임아웃으로 실패하면 그 순간
+  // fetch() 전체가 throw되어 14/28은 아예 시도조차 되지 않았다(그룹 루프 안 개별 API
+  // 격리 누락). 이제 각 contentTypeId를 개별 try-catch로 감싸 하나가 실패해도 나머지는
+  // 끝까지 수집을 시도하고, 실패한 것만 로그로 남긴다 — 어느 하나도 실패 없이 전부
+  // 성공해야만 여기서 예외를 던진다(전부 실패 시에만 상위 withRetry가 재시도 대상으로
+  // 판단할 수 있도록).
   async fetch() {
     const contentTypeIds = Object.keys(this.contentTypeToCategory).map(Number);
     const items = [];
+    const failures = [];
 
     for (const contentTypeId of contentTypeIds) {
-      const typeItems = await this.fetchContentType(contentTypeId);
-      items.push(...typeItems);
+      try {
+        // eslint-disable-next-line no-await-in-loop
+        const typeItems = await this.fetchContentType(contentTypeId);
+        items.push(...typeItems);
+      } catch (err) {
+        failures.push({ contentTypeId, message: err.message });
+        console.warn(`  ⚠️ [${this.sourceKey}] contentTypeId=${contentTypeId} 수집 실패(다른 contentType은 계속 진행): ${err.message}`);
+      }
+    }
+
+    if (failures.length > 0 && failures.length === contentTypeIds.length) {
+      throw new Error(`${this.serviceName}: 전체 contentType(${contentTypeIds.join(',')}) 수집 실패 — ${failures.map((f) => `${f.contentTypeId}:${f.message}`).join(' | ')}`);
+    }
+    if (failures.length > 0) {
+      console.warn(`  ⚠️ [${this.sourceKey}] 일부 contentType만 실패, 나머지 ${contentTypeIds.length - failures.length}/${contentTypeIds.length}건은 정상 수집됨: ${failures.map((f) => f.contentTypeId).join(', ')}`);
     }
 
     return items;
@@ -131,7 +154,7 @@ export class TourApiV4AreaBasedAdapter extends BaseCollectorAdapter {
     });
 
     const url = `${this.detailUrl}?serviceKey=${encodeURIComponent(this.apiKey)}&${params.toString()}`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url);
     const text = await res.text();
 
     if (!res.ok) {

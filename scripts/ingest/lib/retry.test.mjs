@@ -53,4 +53,35 @@ describe('withRetry', () => {
     await expect(withRetry(fn, { retries: 2, baseDelayMs: 1 })).rejects.toThrow('network error');
     expect(fn).toHaveBeenCalledTimes(3); // 최초 시도 1회 + 재시도 2회
   });
+
+  // [배치 수집 안정성 고도화](2026-08-30 사용자 지시): "1차 실패 후 5초 대기, 2차 실패 후
+  // 10초 대기" 예시를 그대로 반영한 기본 백오프(5000ms, ×2배)를 검증한다. 실제 대기하면
+  // 느려지므로 가짜 타이머로 setTimeout 호출 시각만 확인한다.
+  it('기본 백오프는 1차 실패 후 5000ms, 2차 실패 후 10000ms 대기한다', async () => {
+    vi.useFakeTimers();
+    try {
+      const fn = vi
+        .fn()
+        .mockRejectedValueOnce(new Error('fetch failed'))
+        .mockRejectedValueOnce(new Error('ETIMEDOUT'))
+        .mockResolvedValueOnce('ok');
+
+      const promise = withRetry(fn);
+      const delays = [];
+      const originalSetTimeout = global.setTimeout;
+      vi.spyOn(global, 'setTimeout').mockImplementation((cb, ms) => {
+        delays.push(ms);
+        return originalSetTimeout(cb, ms);
+      });
+
+      await vi.advanceTimersByTimeAsync(5000);
+      await vi.advanceTimersByTimeAsync(10000);
+      const result = await promise;
+
+      expect(result).toBe('ok');
+      expect(delays).toEqual([5000, 10000]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

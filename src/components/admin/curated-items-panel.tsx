@@ -73,8 +73,13 @@ export function CuratedItemsPanel() {
 
   const [rows, setRows] = useState<CuratedItemFormValue[]>([]);
   const [total, setTotal] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [관리자 페이지 성능 최적화](2026-08-30 사용자 지시) 요구사항 3: 이 탭도 마운트 시
+  // 자동 조회하지 않는다 — AdminDataGridClient의 3개 탭과 동일한 게이트를 이 자기완결적
+  // 패널에도 별도로 적용한다(CuratedItemsPanel은 그 컴포넌트의 fetch effect를 타지 않는
+  // 별도 컴포넌트라 게이트도 독립적으로 필요).
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [modalMode, setModalMode] = useState<'create' | CuratedItemFormValue | null>(null);
 
@@ -88,6 +93,8 @@ export function CuratedItemsPanel() {
   }, [debouncedQ, createdFrom, createdTo, operationFrom, operationTo]);
 
   useEffect(() => {
+    if (!hasLoaded) return;
+
     let cancelled = false;
     setIsLoading(true);
     setErrorMessage(null);
@@ -122,7 +129,7 @@ export function CuratedItemsPanel() {
     return () => {
       cancelled = true;
     };
-  }, [debouncedQ, createdFrom, createdTo, operationFrom, operationTo, page]);
+  }, [hasLoaded, debouncedQ, createdFrom, createdTo, operationFrom, operationTo, page]);
 
   async function handleToggle(row: CuratedItemFormValue) {
     setTogglingId(row.id);
@@ -247,13 +254,26 @@ export function CuratedItemsPanel() {
       </div>
 
       <div className="flex-1 overflow-auto p-4">
-        {isLoading && <p className="text-sm text-gray-400">불러오는 중...</p>}
-        {errorMessage && <p className="text-sm text-red-500">{errorMessage}</p>}
-        {!isLoading && !errorMessage && rows.length === 0 && (
+        {!hasLoaded && (
+          <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+            <p className="text-sm text-gray-500">필터를 설정한 뒤 불러오기를 눌러주세요.</p>
+            <button
+              type="button"
+              onClick={() => setHasLoaded(true)}
+              className="rounded-full bg-blue-600 text-white text-sm font-semibold px-5 py-2 hover:bg-blue-700"
+            >
+              📥 불러오기
+            </button>
+          </div>
+        )}
+
+        {hasLoaded && isLoading && <p className="text-sm text-gray-400">불러오는 중...</p>}
+        {hasLoaded && errorMessage && <p className="text-sm text-red-500">{errorMessage}</p>}
+        {hasLoaded && !isLoading && !errorMessage && rows.length === 0 && (
           <p className="text-sm text-gray-400">조건에 맞는 상품이 없습니다.</p>
         )}
 
-        {!isLoading && !errorMessage && rows.length > 0 && (
+        {hasLoaded && !isLoading && !errorMessage && rows.length > 0 && (
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="border-b-2 border-gray-200 text-left text-xs font-semibold text-gray-600">

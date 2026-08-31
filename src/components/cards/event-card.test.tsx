@@ -3,6 +3,24 @@ import { describe, expect, it } from 'vitest';
 import { EventCard } from './event-card';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 
+// [카드 내 이미지/텍스트 영역 비율 불일치 수정] 재확인(2026-09-01, 실측으로 발견한 결함):
+// getDateBannerBadge(event-status.ts)는 end_date 문자열을 UTC 자정으로 파싱한 뒤
+// setHours(0,0,0,0)로 "로컬" 자정으로 재정규화하고, 현재 시각(new Date())도 동일하게
+// 로컬 자정으로 정규화해 두 값을 비교한다 — 즉 "오늘"의 기준이 로컬 달력 날짜다.
+// `new Date().toISOString().slice(0,10)`는 UTC 달력 날짜라, KST(UTC+9)처럼 로컬이
+// UTC보다 앞선 시간대에서는 로컬 자정~로컬 오전 9시 사이(UTC로는 여전히 "어제")에
+// 이 두 날짜가 실제로 어긋난다(실측 재현: 로컬 2026-09-01 07:52인데 UTC는 아직
+// 2026-08-31이라 이 값으로 만든 end_date가 "오늘"로 인식되지 않아 배너가 안 뜸).
+// 로컬 달력 날짜를 그대로 쓰는 헬퍼로 교체해 시간대/실행 시각과 무관하게 안정적으로
+// 통과하게 한다.
+function localTodayStr(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function makeEventItem(overrides: Partial<NearbyItem> = {}): NearbyItem {
   return {
     id: 'event-1',
@@ -126,7 +144,7 @@ describe('EventCard 이미지:텍스트 4:6 포션', () => {
 // 위 절대 위치 오버레이로 옮겨 배너 유무와 무관하게 항상 동일한 4:6 분할을 보장한다.
 describe('EventCard dateBanner가 있어도 이미지:텍스트 비율이 항상 동일하다 (2026-08-30)', () => {
   it('오늘 마감/오늘 한정 배너는 별도 flex 행이 아니라 이미지 영역 위 오버레이로 렌더링된다', () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localTodayStr();
     const { container } = render(
       <EventCard item={makeEventItem({ start_date: today, end_date: today })} onSelect={() => {}} />
     );
@@ -143,7 +161,7 @@ describe('EventCard dateBanner가 있어도 이미지:텍스트 비율이 항상
   });
 
   it('배너가 있는 카드와 없는 카드 모두 이미지 영역이 동일하게 flex-[4]이다', () => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localTodayStr();
     const withoutBanner = render(<EventCard item={makeEventItem()} onSelect={() => {}} />);
     const imageAreaWithout = withoutBanner.container.querySelector('button')!.children[0];
 

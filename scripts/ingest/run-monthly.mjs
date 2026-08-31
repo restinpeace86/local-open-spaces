@@ -71,7 +71,8 @@ const REQUIRED_ENV_VARS = [
   'NONGSARO_API_KEY',
 ];
 
-const STEPS = [
+// [배치 수집 안정성 고도화](2026-08-30 사용자 지시): run-daily.mjs와 동일한 이유로 export한다.
+export const STEPS = [
   { label: 'CITY_PARK', run: ({ dryRun }) => new CityParkAdapter().run({ dryRun }) },
   { label: 'CULTURE_FACILITY', run: ({ dryRun }) => runCulturalSpaces({ dryRun }) },
   { label: 'CULTURAL_FACILITY_SUMMARY', run: ({ dryRun }) => new CulturalFacilitySummaryAdapter().run({ dryRun }) },
@@ -397,9 +398,38 @@ export async function runMonthlyBatch({ dryRun = false } = {}) {
   return { results, failedCount };
 }
 
+// [배치 수집 안정성 고도화](2026-08-30 사용자 지시): run-daily.mjs의 runSingleDailySource와
+// 동일한 목적 — 특정 소스 하나만 즉시 재실행한다.
+export async function runSingleMonthlySource(sourceKey, { dryRun = false } = {}) {
+  const step = STEPS.find((s) => s.label === sourceKey);
+  if (!step) {
+    throw new Error(`알 수 없는 Monthly 배치 소스입니다: ${sourceKey} (가능한 값: ${STEPS.map((s) => s.label).join(', ')})`);
+  }
+  console.log(`▶▶▶ [Monthly 개별 재수집] ${sourceKey} (dry-run: ${dryRun})`);
+  const result = await step.run({ dryRun });
+  if (!dryRun) {
+    recordBatchRun({ batchName: `${BATCH_NAME} (개별 재수집: ${sourceKey})`, results: [result] });
+  }
+  return result;
+}
+
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const dryRun = process.argv.includes('--dry-run');
-  runMonthlyBatch({ dryRun }).then(({ failedCount }) => {
-    process.exitCode = failedCount > 0 ? 1 : 0;
-  });
+  const onlyArg = process.argv.find((arg) => arg.startsWith('--only='));
+
+  if (onlyArg) {
+    const sourceKey = onlyArg.slice('--only='.length);
+    runSingleMonthlySource(sourceKey, { dryRun })
+      .then((result) => {
+        process.exitCode = result.failed ? 1 : 0;
+      })
+      .catch((err) => {
+        console.error(`❌ 개별 재수집 실패: ${err.message}`);
+        process.exitCode = 1;
+      });
+  } else {
+    runMonthlyBatch({ dryRun }).then(({ failedCount }) => {
+      process.exitCode = failedCount > 0 ? 1 : 0;
+    });
+  }
 }

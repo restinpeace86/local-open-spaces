@@ -568,9 +568,20 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
 
   const [rows, setRows] = useState<AdminRow[]>([]);
   const [total, setTotal] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedRow, setSelectedRow] = useState<AdminRow | null>(null);
+  // [관리자 페이지 성능 최적화](2026-08-30 사용자 지시) 요구사항 3: "탭 전환 시 자동 데이터
+  // 로딩 금지" — 초기 진입/탭 전환 순간에는 빈 뼈대(필터 UI)만 보여주고, 관리자가 [조회하기]를
+  // 눌러야만 그 탭의 첫 조회가 나간다. 탭별로 독립된 플래그라 한 번 조회한 탭을 벗어났다
+  // 돌아오면 다시 눌러야 한다(요구사항 문구 "탭을 누르는 순간 자동으로 조회하지 않음"을
+  // 그대로 지키기 위해 이전 결과를 캐시해두지 않음).
+  const [hasLoaded, setHasLoaded] = useState<Record<AdminTable, boolean>>({
+    open_spaces: false,
+    events: false,
+    raw_ingest_data: false,
+    curated_items: false,
+  });
 
   const resetFilters = () => {
     setQ('');
@@ -591,6 +602,9 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     setTab(next);
     resetFilters();
     setPage(1);
+    setRows([]);
+    setTotal(0);
+    setHasLoaded((prev) => ({ ...prev, [next]: false }));
   };
 
   useEffect(() => {
@@ -611,6 +625,8 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
   };
 
   useEffect(() => {
+    if (!hasLoaded[tab]) return;
+
     let cancelled = false;
     setIsLoading(true);
     setErrorMessage(null);
@@ -652,7 +668,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, debouncedQ, sourceTypes, sources, categories, minClassName, appliedCategoryMin, appliedTargetAudience, isActive, createdFrom, createdTo, page, pageSize]);
+  }, [tab, hasLoaded, debouncedQ, sourceTypes, sources, categories, minClassName, appliedCategoryMin, appliedTargetAudience, isActive, createdFrom, createdTo, page, pageSize]);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
   const currentOptions = filterOptions[tab];
@@ -881,11 +897,34 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
 
       {/* 4. 테이블 그리드 */}
       <div className="flex-1 overflow-auto p-4">
-        {isLoading && <p className="text-sm text-gray-400">불러오는 중...</p>}
-        {errorMessage && <p className="text-sm text-red-500">{errorMessage}</p>}
-        {!isLoading && !errorMessage && rows.length === 0 && <p className="text-sm text-gray-400">조건에 맞는 데이터가 없습니다.</p>}
+        {/* [관리자 페이지 성능 최적화](2026-08-30 사용자 지시) 요구사항 3: 탭 진입/전환
+            직후에는 조회를 자동 실행하지 않고 빈 뼈대(필터 UI)만 보여준다 — 이 버튼을
+            눌러야 그 탭의 첫 조회가 실행된다. raw_ingest_data는 대용량 로데이터라 특히
+            명시적 트리거가 필요하다는 요구사항을 이 공통 게이트가 그대로 충족한다. */}
+        {!hasLoaded[tab] && (
+          <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+            <p className="text-sm text-gray-500">
+              {tab === 'raw_ingest_data'
+                ? '대용량 로데이터입니다. 필요할 때만 불러와 주세요.'
+                : '필터를 설정한 뒤 불러오기를 눌러주세요.'}
+            </p>
+            <button
+              type="button"
+              onClick={() => setHasLoaded((prev) => ({ ...prev, [tab]: true }))}
+              className="rounded-full bg-blue-600 text-white text-sm font-semibold px-5 py-2 hover:bg-blue-700"
+            >
+              📥 불러오기
+            </button>
+          </div>
+        )}
 
-        {!isLoading && !errorMessage && rows.length > 0 && (
+        {hasLoaded[tab] && isLoading && <p className="text-sm text-gray-400">불러오는 중...</p>}
+        {hasLoaded[tab] && errorMessage && <p className="text-sm text-red-500">{errorMessage}</p>}
+        {hasLoaded[tab] && !isLoading && !errorMessage && rows.length === 0 && (
+          <p className="text-sm text-gray-400">조건에 맞는 데이터가 없습니다.</p>
+        )}
+
+        {hasLoaded[tab] && !isLoading && !errorMessage && rows.length > 0 && (
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="sticky top-0 z-10 bg-white border-b-2 border-gray-200 text-left text-xs font-semibold text-gray-600 shadow-[0_1px_0_0_rgba(0,0,0,0.04)]">

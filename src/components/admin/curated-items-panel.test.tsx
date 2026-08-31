@@ -36,6 +36,9 @@ describe('CuratedItemsPanel', () => {
     );
 
     render(<CuratedItemsPanel />);
+    // [관리자 페이지 성능 최적화](2026-08-30 사용자 지시): 마운트 시 자동 조회하지 않으므로
+    // 이제 명시적으로 조회하기를 눌러야 fetch가 나간다.
+    fireEvent.click(screen.getByText('📥 불러오기'));
 
     expect(await screen.findByText('가을 단풍 나들이 축제 입장권')).toBeInTheDocument();
     expect(screen.getByText('ticket (티켓/체험)')).toBeInTheDocument();
@@ -49,6 +52,9 @@ describe('CuratedItemsPanel', () => {
     );
 
     render(<CuratedItemsPanel />);
+    // [관리자 페이지 성능 최적화](2026-08-30 사용자 지시): 마운트 시 자동 조회하지 않으므로
+    // 이제 명시적으로 조회하기를 눌러야 fetch가 나간다.
+    fireEvent.click(screen.getByText('📥 불러오기'));
 
     expect(await screen.findByText('조건에 맞는 상품이 없습니다.')).toBeInTheDocument();
   });
@@ -66,6 +72,9 @@ describe('CuratedItemsPanel', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     render(<CuratedItemsPanel />);
+    // [관리자 페이지 성능 최적화](2026-08-30 사용자 지시): 마운트 시 자동 조회하지 않으므로
+    // 이제 명시적으로 조회하기를 눌러야 fetch가 나간다.
+    fireEvent.click(screen.getByText('📥 불러오기'));
     await screen.findByText('가을 단풍 나들이 축제 입장권');
 
     const toggle = screen.getByRole('switch');
@@ -105,6 +114,9 @@ describe('CuratedItemsPanel', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     render(<CuratedItemsPanel />);
+    // [관리자 페이지 성능 최적화](2026-08-30 사용자 지시): 마운트 시 자동 조회하지 않으므로
+    // 이제 명시적으로 조회하기를 눌러야 fetch가 나간다.
+    fireEvent.click(screen.getByText('📥 불러오기'));
     await screen.findByText('조건에 맞는 상품이 없습니다.');
 
     fireEvent.click(screen.getByText('+ 신규 상품 등록'));
@@ -132,6 +144,9 @@ describe('CuratedItemsPanel', () => {
     );
 
     render(<CuratedItemsPanel />);
+    // [관리자 페이지 성능 최적화](2026-08-30 사용자 지시): 마운트 시 자동 조회하지 않으므로
+    // 이제 명시적으로 조회하기를 눌러야 fetch가 나간다.
+    fireEvent.click(screen.getByText('📥 불러오기'));
     await screen.findByText('가을 단풍 나들이 축제 입장권');
 
     fireEvent.click(screen.getByText('수정'));

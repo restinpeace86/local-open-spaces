@@ -692,3 +692,48 @@
     한정인지)과 "네이버 지도 상세정보 보기"와 기존 인앱 `MapPreviewModal`의
     공존 방식, `naver_booking_url` 컬럼 추가 여부와 기존 자체 예약 시스템과의
     관계를 확정해 달라고 요청 후 재지시받아 진행한다.
+
+- [ ] **[개발 종합 요청] 스팟픽(SpotPick) MVP 스마트 폴백, 관리자 큐레이션 및 배치
+  안정화 고도화** (2026-08-30, 진행 중 — 사용자가 위 스킵된 요청을 재작성해 외부
+  링크 문제를 스스로 제거하고 다시 지시함, 상충 없음 확인 후 진행)
+  - **재확인**: View Fallback이 "네이버 새 창"에서 "자체 UI 내 인앱 렌더링"으로
+    바뀌어 오늘 결정(외부 지도 앱 연동 제거)과 더 이상 충돌하지 않는다. Reservation
+    Fallback도 공공예약/원본 링크를 자체 폼보다 우선시키는 방향으로 재배치되어
+    자체 간편예약 MVP를 완전히 대체하지 않는다(자체 예약 "연동"이 없는 스팟은
+    여전히 공공/원본 링크 우선, 그다음 네이버, 마지막 전화). 규모가 매우 커
+    아래 4개 섹션으로 나눠 순차 구현하고 섹션별로 커밋한다.
+  - [x] **섹션 4(배치 안정성)** (2026-09-01 완료): `TourApiV4AreaBasedAdapter.fetch()`
+    (KorTour/KorWithTour/KorPetTour 공유)의 contentTypeId별 그룹 루프를 개별
+    try-catch로 격리 — 하나의 API가 실패해도 나머지는 계속 진행. 신규
+    `fetch-with-timeout.mjs`(30초 AbortController)를 이 어댑터에 적용,
+    `withRetry` 백오프를 5s/10s(×2배, 예시 그대로)로 조정. `run-daily.mjs`/
+    `run-monthly.mjs`의 STEPS를 export하고 `runSingleDailySource`/
+    `runSingleMonthlySource` 신규 — CLI `--only=` 플래그와 신규
+    `POST /api/admin/ingest/rerun`이 동일 경로를 재사용. Stale-data 보존
+    (`upsertRowsSafeMerge`, 삭제 경로 없음)/cron 정각 회피(이미 03:07·03:13
+    KST)는 실측 확인 후 코드 변경 없이 문서화만. **실측 검증**: 라이브 서버로
+    잘못된 batch/sourceKey 누락/존재하지 않는 sourceKey 3가지 에러 케이스 확인,
+    Next.js 런타임에서 `scripts/` 밖 `.mjs` 동적 import가 실제로 동작함을 확인.
+    **미완료**: 타임아웃 유틸은 이 어댑터 1곳에만 적용(나머지 20여 개는 후속
+    작업), 재수집 버튼은 API만 완성(관리자 UI는 섹션 2와 함께 진행).
+  - [x] **섹션 3(관리자 Lazy Loading)** (2026-09-01 완료): `data-grid-client.tsx`
+    (open_spaces/events/raw_ingest_data 공유) + `curated-items-panel.tsx`
+    (자기완결 패널, 별도 게이트 필요) 둘 다 `hasLoaded` 플래그를 추가해 탭
+    진입/전환 시 자동 fetch를 막고 "📥 불러오기" 버튼 클릭 시에만 조회하도록
+    변경(기존 "🔍 조회하기"는 중분류/타겟연령 필터 반영용이라 이름을 다르게 붙여
+    혼동 방지). 탭 전환 시 플래그를 다시 false로 리셋. raw_ingest_data도 이
+    공통 게이트로 명시적 트리거가 통일됨. **검증**: 기존 테스트를 "불러오기
+    클릭 후 검증"으로 갱신, 부수적으로 `event-card.test.tsx`의 UTC 기준 날짜
+    계산이 KST 등에서 실제로 깨지는 잠재 결함을 실측으로 발견해 로컬 날짜
+    헬퍼로 교체.
+    상세: `implementation/2026-09-01-spotpick-fallback-curation-batch-hardening-sections-3-4.md`.
+  - [ ] **섹션 2(관리자 스팟 큐레이션 탭)**: 신규 `spot_curations` 테이블(open_spaces
+    1:1 FK, is_active, image_url, 영업시간 구조화 필드, menu_items jsonb) +
+    Supabase Storage 버킷/업로드 API + 클립보드 Ctrl+V 이미지 붙여넣기 업로드 +
+    영업시간/메뉴 텍스트 스마트 파서 + 신규 관리자 탭 UI.
+  - [ ] **섹션 1(프론트엔드 폴백)**: DetailModal View Fallback(스팟에
+    spot_curations 존재+is_active면 풍성한 뷰, 없으면 기존 공공데이터 뷰 그대로,
+    외부 링크 없음) + Reservation Fallback 4단계(자체 연동→공공/원본 URL→네이버
+    예약 URL→전화/안내) 로직 연동.
+  - 각 섹션 완료 시 `npx tsc --noEmit`/`npm run test`/`npm run build` 통과 확인 후
+    커밋. 전체 완료 후 종합 구현 기록 작성.
