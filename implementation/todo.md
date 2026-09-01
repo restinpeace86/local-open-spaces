@@ -951,3 +951,21 @@
   - **검증**: `npx tsc --noEmit`/`npm run test`(88파일 884건 — 신규 2파일 5건 +
     기존 3파일 6건 추가)/`npm run build` 통과. 상세:
     `implementation/2026-09-01-spotpick-production-risk-audit.md`.
+
+- [x] **[UI/UX 개선 및 기능 수정 요청] 이벤트픽 챗봇 추가, 대/중분류 바텀 시트 개편,
+  스팟픽 레이아웃 통일 및 시설 제한 상향** (2026-09-01 완료)
+  - **①이벤트픽 FAB 정정**: 실측 확인(`bottom-tabs.tsx`) 결과 "이벤트픽"은
+    `/`(홈)이고 `/calendar`가 아니었다 — 직전 챗봇 작업에서 `/calendar`에 잘못
+    마운트했던 것을 발견해 `/`(HomeView)로 옮기고 `/calendar`에서는 제거(정정).
+  - **②테마별 행사 숨김**: `<section>`에 `hidden` 적용(state/로직은 보존, 삭제 아님).
+  - **③대/중분류 바텀시트**: `MajorCategoryGrid`의 인라인 중분류 칩을
+    `AiRecommendSheet`/`EventBrowseSheet`와 동일한 오버레이+바텀시트 패턴으로 개편.
+  - **④스팟픽 헤더 레이아웃 통일**: `/nearby` 모바일 헤더(위치+검색)를 이벤트픽
+    `HomeHeader`와 동일한 `flex items-center` 가로 배치로 변경(데스크톱 사이드바는
+    성격이 달라 제외).
+  - **⑤마커 상한 200→1,000**: `MARKER_LIMIT` + `get_nearby_spaces_and_events` RPC
+    LIMIT(1001) + `spec/map/spatial-search.md` 문서 값 함께 상향, 서울시청 실측으로
+    1,000건 정상 반환·응답시간 여유 확인.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(88파일 889건)/`npm run build` 통과.
+    Playwright로 5개 항목 전부 실제 화면(스크린샷 포함)에서 확인. 상세:
+    `implementation/2026-09-01-eventpick-chatbot-category-sheet-layout-marker-limit.md`.

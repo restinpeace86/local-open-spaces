@@ -22,8 +22,12 @@ import { useUserLocation } from '@/hooks/use-user-location';
 import { CORE_SPOT_CATEGORIES } from '@/lib/spaces/spot-category-groups';
 import { rankAiRecommendedSpots } from '@/lib/spaces/ai-recommend';
 
-// spec/map/spatial-search.md 3.1: 반경 내 최대 200개 마커만 우선 렌더링
-const MARKER_LIMIT = 200;
+// spec/map/spatial-search.md 3.1: 반경 내 최대 1,000개 마커만 우선 렌더링
+// [UI/UX 개선 및 기능 수정](2026-09-01 사용자 지시) 항목 5: 기존 200 → 1,000으로 상향.
+// get_nearby_spaces_and_events RPC의 LIMIT도 함께 1,001로 올려야 한다(마커 상한보다
+// 하나 더 받아 "더 많은 결과가 있다" 초과 안내를 판단하는 기존 관례 — 2026-09-01
+// 마이그레이션으로 함께 반영).
+const MARKER_LIMIT = 1000;
 
 // [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 3): "지도 상단 Floating 1km/5km/10km
 // 반경 선택 버튼 전면 삭제"에 따라 사용자가 더 이상 반경을 고를 수 없다 — 이전 RadiusSelector의
@@ -341,9 +345,18 @@ export function MapExplorer() {
         </div>
 
         {/* 모바일 플로팅 헤더 (spec/common/search.md 2.1) */}
+        {/* [UI/UX 개선 및 기능 수정](2026-09-01 사용자 지시) 항목 4: 위치 설정/검색 입력란을
+            이벤트픽(HomeHeader, docs/spec.md 2.1 "고정 헤더: [위치 선택기] + [🔍 통합
+            검색바]")과 동일하게 가로(flex-row, items-center)로 나란히 배치한다 — 아래
+            중분류 필터/재검색 버튼 행은 계속 별도 줄로 쌓는다(HomeHeader에는 없는
+            스팟픽 전용 UI라 그대로 유지). */}
         <div className="md:hidden absolute top-3 left-3 right-3 flex flex-col gap-2 z-10">
-          <LocationHeader addressName={sigunguName ?? addressName} onClick={openOnboarding} />
-          <SearchBar value={keyword} onChange={setKeyword} />
+          <div className="flex items-center gap-2">
+            <LocationHeader addressName={sigunguName ?? addressName} onClick={openOnboarding} />
+            <div className="flex-1">
+              <SearchBar value={keyword} onChange={setKeyword} />
+            </div>
+          </div>
           <SpotCategoryFilter
             selectedCategoryId={selectedCategoryId}
             onSelectCategory={handleSelectCategory}

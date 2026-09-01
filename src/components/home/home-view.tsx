@@ -16,6 +16,7 @@ import { SpaceGridCard } from '@/components/region/space-grid-card';
 import { EventCard } from '@/components/cards/event-card';
 import { DetailModal } from '@/components/map/detail-modal';
 import { LocationOnboardingModal } from '@/components/map/location-onboarding-modal';
+import { AiChatFab } from '@/components/chat/ai-chat-fab';
 
 // docs/spec.md 2.2: 메인 홈 레이아웃 스택 — Hero Carousel → 5대 카테고리 Quick 그리드 → 큐레이션 카드 피드
 function FeedCard({ item, onSelect }: { item: NearbyItem; onSelect: (item: NearbyItem) => void }) {
@@ -444,7 +445,12 @@ export function HomeView({
             {/* Task 9-5-1(2026-08-22)/9-6-10(2026-08-23): 이벤트 목적별 5개 하위 테마 칩 — 기본
                 선택 테마가 없어(임의로 하나를 고를 근거가 없음) 칩을 직접 누를 때만 지연
                 페칭한다. */}
-            <section aria-label="테마별 추천" className="px-4">
+            {/* [UI/UX 개선 및 기능 수정](2026-09-01 사용자 지시) 항목 2: "테마별 행사 영역"
+                숨김 처리 — 지시서가 "제거 또는 주석 처리/hidden 적용" 중 hidden을 명시적
+                선택지로 제시했고, 이 편이 관련 state(selectedTheme/themeSpotItems)와
+                조회 로직을 그대로 둔 채 되돌리기 쉬워 hidden 속성으로 처리한다(삭제 아님).
+                섹션 진입 자체가 막히므로 내부 지연 페칭도 함께 걸리지 않는다. */}
+            <section aria-label="테마별 추천" className="px-4" hidden>
               <h2 className="text-base font-bold text-gray-900 mb-3">🎪 테마별 행사</h2>
               <div className="flex gap-1.5 overflow-x-auto pb-2">
                 {themeOptionsFor('EVENTS').map((theme) => {
@@ -497,6 +503,13 @@ export function HomeView({
       {isOnboardingOpen && (
         <LocationOnboardingModal onConfirm={confirmLocation} onClose={closeOnboarding} />
       )}
+
+      {/* [UI/UX 개선 및 기능 수정](2026-09-01 사용자 지시) 항목 1: 이 화면(`/`, 하단 탭
+          "이벤트픽")이 실제 "이벤트픽"이다 — 직전 챗봇 작업에서 "이벤트픽"을 `/calendar`
+          (하단 탭이 아니라 "도감/캘린더" 상단 서브탭으로 진입하는 별개 화면)로 잘못
+          판단해 그쪽에 FAB를 마운트했던 것을 여기로 정정한다(bottom-tabs.tsx 실측 확인:
+          `{ href: '/', label: '이벤트픽' }`). */}
+      <AiChatFab center={center} />
     </div>
   );
 }

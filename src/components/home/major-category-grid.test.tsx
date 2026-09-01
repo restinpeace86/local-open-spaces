@@ -4,6 +4,8 @@ import { MajorCategoryGrid } from './major-category-grid';
 
 // [대분류·중분류 드릴다운 개편](2026-08-27 사용자 지시): 7대 대분류(category_maj) 아이콘 →
 // 선택 시 중분류(category_min) 칩 목록 → 중분류 선택 시 실제 조회 콜백 호출.
+// [대분류/중분류 선택 UI 바텀시트 개편](2026-09-01 사용자 지시): 중분류 칩 목록이 그리드
+// 아래 인라인이 아니라 바텀시트로 뜨도록 바뀌어 아래 테스트도 그에 맞게 갱신한다.
 describe('MajorCategoryGrid', () => {
   it('7대 대분류 라벨을 렌더링한다', () => {
     render(
@@ -16,7 +18,7 @@ describe('MajorCategoryGrid', () => {
     }
   });
 
-  it('대분류를 선택하기 전에는 중분류 칩이 보이지 않는다', () => {
+  it('대분류를 선택하기 전에는 중분류 바텀시트가 보이지 않는다', () => {
     render(
       <MajorCategoryGrid selectedMaj={null} onSelectMaj={() => {}} selectedMin={null} onSelectMin={() => {}} />
     );
@@ -24,7 +26,17 @@ describe('MajorCategoryGrid', () => {
     expect(screen.queryByText('도시농업')).not.toBeInTheDocument();
   });
 
-  it('대분류 클릭 시 onSelectMaj가 호출되고, 대분류가 선택되면 그 중분류 칩이 나타난다', () => {
+  it('대분류를 이미 선택한 상태로 마운트돼도(클릭 이벤트 없이) 시트는 자동으로 열리지 않는다', () => {
+    // 바텀시트 오픈 여부는 프롭(selectedMaj)이 아니라 클릭이라는 사용자 행동에 연결된
+    // 로컬 상태다 — 다른 화면 상태 복원 등으로 selectedMaj만 채워진 채 마운트되는 경우
+    // 시트가 갑자기 열려버리면 안 된다.
+    render(
+      <MajorCategoryGrid selectedMaj="체험 / 농장" onSelectMaj={() => {}} selectedMin={null} onSelectMin={() => {}} />
+    );
+    expect(screen.queryByText('도시농업')).not.toBeInTheDocument();
+  });
+
+  it('대분류 클릭 시 onSelectMaj가 호출되고 바텀시트가 열려 그 중분류 칩이 나타난다', () => {
     const onSelectMaj = vi.fn();
     const { rerender } = render(
       <MajorCategoryGrid selectedMaj={null} onSelectMaj={onSelectMaj} selectedMin={null} onSelectMin={() => {}} />
@@ -45,24 +57,65 @@ describe('MajorCategoryGrid', () => {
     expect(screen.getByText('농장체험')).toBeInTheDocument();
     // 다른 대분류의 중분류는 나타나지 않는다.
     expect(screen.queryByText('캠핑장')).not.toBeInTheDocument();
+    // 기존 EventBrowseSheet/AiRecommendSheet와 동일한 바텀시트 패턴(제목 + ✕ 닫기)인지 확인.
+    expect(screen.getByLabelText('닫기')).toBeInTheDocument();
   });
 
-  it('중분류 클릭 시 onSelectMin(중분류값)이 호출된다', () => {
+  // 아래 시트 상호작용 테스트들은 selectedMaj를 처음부터 "체험 / 농장"으로 넘긴다 —
+  // MajorCategoryGrid는 selectedMaj를 부모(HomeView)가 소유하는 controlled prop으로만
+  // 받으므로, onSelectMaj를 no-op으로 두면 클릭해도 prop이 바뀌지 않아(실제 부모라면
+  // 리렌더로 반영됨) activeOption이 계속 null로 남는다 — 아이콘 클릭은 isSheetOpen만
+  // 토글하는 용도로만 쓴다.
+  it('중분류 클릭 시 onSelectMin(중분류값)이 호출되고 시트가 닫힌다', () => {
     const onSelectMin = vi.fn();
     render(
-      <MajorCategoryGrid
-        selectedMaj="체험 / 농장"
-        onSelectMaj={() => {}}
-        selectedMin={null}
-        onSelectMin={onSelectMin}
-      />
+      <MajorCategoryGrid selectedMaj="체험 / 농장" onSelectMaj={() => {}} selectedMin={null} onSelectMin={onSelectMin} />
     );
 
+    fireEvent.click(screen.getByText('체험 / 농장').closest('button')!);
     fireEvent.click(screen.getByText('도시농업'));
+
     expect(onSelectMin).toHaveBeenCalledWith('도시농업');
+    expect(screen.queryByText('도시농업')).not.toBeInTheDocument(); // 선택 후 시트가 닫혀 사라짐
   });
 
-  it('선택된 대분류/중분류는 aria-pressed=true로 표시된다', () => {
+  it('✕ 버튼을 누르면 시트가 닫힌다', () => {
+    render(
+      <MajorCategoryGrid selectedMaj="체험 / 농장" onSelectMaj={() => {}} selectedMin={null} onSelectMin={() => {}} />
+    );
+
+    fireEvent.click(screen.getByText('체험 / 농장').closest('button')!);
+    expect(screen.getByText('도시농업')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('닫기'));
+    expect(screen.queryByText('도시농업')).not.toBeInTheDocument();
+  });
+
+  it('배경을 클릭하면 시트가 닫힌다', () => {
+    const { container } = render(
+      <MajorCategoryGrid selectedMaj="체험 / 농장" onSelectMaj={() => {}} selectedMin={null} onSelectMin={() => {}} />
+    );
+
+    fireEvent.click(screen.getByText('체험 / 농장').closest('button')!);
+    expect(screen.getByText('도시농업')).toBeInTheDocument();
+
+    // 시트 콘텐츠 클릭은 stopPropagation되므로, 오버레이 배경(가장 바깥 fixed 컨테이너)을 직접 클릭한다.
+    const overlay = container.querySelector('.fixed.inset-0');
+    fireEvent.click(overlay!);
+    expect(screen.queryByText('도시농업')).not.toBeInTheDocument();
+  });
+
+  it('같은 대분류를 다시 클릭하면 시트가 다시 열린다', () => {
+    render(
+      <MajorCategoryGrid selectedMaj="체험 / 농장" onSelectMaj={() => {}} selectedMin={null} onSelectMin={() => {}} />
+    );
+
+    expect(screen.queryByText('도시농업')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText('체험 / 농장').closest('button')!);
+    expect(screen.getByText('도시농업')).toBeInTheDocument();
+  });
+
+  it('선택된 대분류 아이콘과 시트 안 선택된 중분류 칩은 aria-pressed=true로 표시된다', () => {
     render(
       <MajorCategoryGrid
         selectedMaj="체험 / 농장"
@@ -74,6 +127,8 @@ describe('MajorCategoryGrid', () => {
 
     expect(screen.getByText('체험 / 농장').closest('button')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('축제 / 이벤트').closest('button')).toHaveAttribute('aria-pressed', 'false');
+
+    fireEvent.click(screen.getByText('체험 / 농장').closest('button')!);
     expect(screen.getByText('도시농업').closest('button')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('농장체험').closest('button')).toHaveAttribute('aria-pressed', 'false');
   });

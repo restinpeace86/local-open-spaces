@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { CATEGORY_MAJ_OPTIONS } from '@/lib/spaces/category-maj-meta';
 
 // [대분류/중분류 드릴다운 개편](2026-08-27 사용자 지시): 기존 QuickCategoryGrid(event_type
@@ -12,9 +13,14 @@ import { CATEGORY_MAJ_OPTIONS } from '@/lib/spaces/category-maj-meta';
 //
 // [아이콘 그리드 방식으로 원복](2026-08-27 후속 지시): 각 대분류 자신의 행 안에서만 중분류가
 // 펼쳐지는 아코디언 방식을 한 차례 시도했으나, 대표가 처음(아이콘 그리드 + 선택된 대분류의
-// 중분류를 그리드 바로 아래 한 줄로 노출) 방식을 더 선호해 그대로 되돌렸다 — "영역 내 그룹"은
-// 아코디언으로만 가능하다는 점을 확인한 뒤 내린 선택이라, 이 아이콘 그리드 방식을 최종으로
-// 유지한다.
+// 중분류를 그리드 바로 아래 한 줄로 노출) 방식을 더 선호해 그대로 되돌렸다.
+//
+// [대분류/중분류 선택 UI 바텀시트 개편](2026-09-01 사용자 지시): 그리드 바로 아래 인라인으로
+// 펼쳐지던 중분류 칩 목록을, 대분류를 누르면 화면 아래에서 슬라이드업되는 바텀시트로
+// 바꾼다(기존 `EventBrowseSheet`/`AiRecommendSheet`와 동일한 오버레이+시트 패턴으로 통일 —
+// 배경 클릭/✕로 닫힘). 중분류를 고르면 onSelectMin 호출 후 시트를 자동으로 닫는다(선택이
+// 끝났으니 더 볼 것이 없음). 대분류 자체의 선택 상태(selectedMaj)는 계속 부모(HomeView)가
+// 소유하지만, "시트가 열려 있는지"는 이 컴포넌트만의 순수 UI 상태라 로컬로 둔다.
 export function MajorCategoryGrid({
   selectedMaj,
   onSelectMaj,
@@ -26,7 +32,18 @@ export function MajorCategoryGrid({
   selectedMin: string | null;
   onSelectMin: (min: string) => void;
 }) {
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
   const activeOption = CATEGORY_MAJ_OPTIONS.find((opt) => opt.maj === selectedMaj) ?? null;
+
+  function handleSelectMaj(maj: string) {
+    onSelectMaj(maj);
+    setIsSheetOpen(true);
+  }
+
+  function handleSelectMin(min: string) {
+    onSelectMin(min);
+    setIsSheetOpen(false);
+  }
 
   return (
     <div className="flex flex-col gap-2">
@@ -38,7 +55,7 @@ export function MajorCategoryGrid({
               key={opt.maj}
               type="button"
               aria-pressed={isActive}
-              onClick={() => onSelectMaj(opt.maj)}
+              onClick={() => handleSelectMaj(opt.maj)}
               className="flex flex-col items-center gap-1 text-center"
             >
               <span
@@ -61,26 +78,49 @@ export function MajorCategoryGrid({
         })}
       </div>
 
-      {activeOption && (
-        <div className="flex flex-wrap gap-1.5 px-4">
-          {activeOption.minorCategories.map((min) => {
-            const isActive = selectedMin === min;
-            return (
+      {isSheetOpen && activeOption && (
+        <div
+          className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center"
+          onClick={() => setIsSheetOpen(false)}
+        >
+          <div
+            className="w-full md:w-[480px] max-h-[70vh] md:max-h-[60vh] overflow-y-auto bg-white rounded-t-2xl md:rounded-2xl shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-gray-900">
+                {activeOption.emoji} {activeOption.maj}
+              </h2>
               <button
-                key={min}
                 type="button"
-                aria-pressed={isActive}
-                onClick={() => onSelectMin(min)}
-                className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  isActive
-                    ? 'bg-gray-900 text-white'
-                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                }`}
+                onClick={() => setIsSheetOpen(false)}
+                className="shrink-0 text-gray-400 hover:text-gray-600"
+                aria-label="닫기"
               >
-                {min}
+                ✕
               </button>
-            );
-          })}
+            </div>
+            <div className="flex flex-wrap gap-1.5 p-4">
+              {activeOption.minorCategories.map((min) => {
+                const isActive = selectedMin === min;
+                return (
+                  <button
+                    key={min}
+                    type="button"
+                    aria-pressed={isActive}
+                    onClick={() => handleSelectMin(min)}
+                    className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                      isActive
+                        ? 'bg-gray-900 text-white'
+                        : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {min}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -8,8 +8,6 @@ import { getCategoryMeta } from '@/lib/spaces/category-meta';
 import { getEventStatus } from '@/lib/spaces/event-status';
 import { DetailModal } from '@/components/map/detail-modal';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
-import { AiChatFab } from '@/components/chat/ai-chat-fab';
-import { useUserLocation } from '@/hooks/use-user-location';
 
 const WEEKDAY_LABELS = ['일', '월', '화', '수', '목', '금', '토'];
 const MAX_CHIPS_PER_DAY = 3;
@@ -51,11 +49,6 @@ function EventStatusListItem({ item, onSelect }: { item: NearbyItem; onSelect: (
 // spec 문서 미비 영역 — project/overview.md의 "월별 캘린더(Calendar View)" 요구 + 사용자 확정 규칙 기준 구현.
 // 30일 이상 상시 예약/운영 항목은 일별 타일에서 제외하고 별도 접이식 영역으로 분리해 과밀을 방지한다.
 export function CalendarView() {
-  // [스팟픽 AI 맞춤 추천 챗봇 엔진](2026-09-01 사용자 지시): 이 화면(이벤트픽)에는 기존에
-  // 위치 온보딩 흐름이 없었다 — 챗봇의 거리 계산에 필요한 좌표만 조용히 가져다 쓰고
-  // (미설정 시 훅 기본값인 서울시청으로 자동 폴백), 이 화면에 새로운 온보딩 모달을
-  // 추가하는 것 같은 무관한 UX 변경은 만들지 않는다(범위 최소화).
-  const { center } = useUserLocation();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1); // 1-12
@@ -246,8 +239,6 @@ export function CalendarView() {
       {selectedItem && (
         <DetailModal item={selectedItem} onClose={() => setSelectedItem(null)} />
       )}
-
-      <AiChatFab center={center} />
     </div>
   );
 }

@@ -551,6 +551,15 @@ describe('HomeView', () => {
   // Task 9-5-1(2026-08-22)/9-6-4(2026-08-23): 대분류별 테마 칩 검증. 기본 대분류는
   // "🎪 행사·축제"(EVENTS)이므로 기본으로 보이는 칩은 EVENT_THEME_OPTIONS(물놀이·수영 등)다.
   describe('테마별 추천 (Task 9-5-1/9-6-4)', () => {
+    // [UI/UX 개선 및 기능 수정](2026-09-01 사용자 지시) 항목 2: "테마별 행사 영역"을
+    // 화면에서 숨긴다 — 관련 state/조회 로직은 그대로 두고(되돌리기 쉽게) `hidden`
+    // 속성만 적용했으므로, DOM에는 여전히 존재하되 hidden이 true여야 한다.
+    it('테마별 행사 섹션은 hidden 속성으로 화면에서 숨겨진다', () => {
+      render(<HomeView initialHeroEvents={[]} />);
+      const section = screen.getByText('🎪 테마별 행사').closest('section');
+      expect(section).toHaveAttribute('hidden');
+    });
+
     it('기본 상태에서는 어떤 테마도 선택돼 있지 않아 안내 문구만 보여준다', () => {
       render(<HomeView initialHeroEvents={[]} />);
       expect(screen.getByText('🎪 테마별 행사')).toBeInTheDocument();
