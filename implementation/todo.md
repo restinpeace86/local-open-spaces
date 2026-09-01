@@ -831,3 +831,24 @@
     삭제로 원상 복구). 이번 지시서 범위는 스키마 생성까지 — 실제 수집 어댑터/API
     라우트는 미포함. 상세:
     `implementation/2026-09-01-spot-weather-caches-schema.md`.
+
+- [x] **[개발 요청] 기상청 단기예보 조회서비스 연동 어댑터 구현 (실제 API 스펙 반영)**
+  (2026-09-01 완료)
+  - 인증키는 새 환경변수 없이 기존 `PUBLIC_DATA_API_KEY` 재사용(사용자 제공 키를
+    URL-디코딩해 정확히 일치함을 확인).
+  - 신규 유틸 `kma-grid.mjs`(위경도→기상청 격자 LCC 변환, 서울/부산/제주 기준값과
+    정확히 일치 확인 — 최초 반올림 상수 버그를 이 비교로 발견해 수정) +
+    `kma-base-time.mjs`(getVilageFcst 8회/getUltraSrtNcst 매시 발표 스케줄에 맞춘
+    최신 base_date/base_time 계산, 타임존 독립적).
+  - 어댑터 `kma-weather-adapter.mjs`(BaseCollectorAdapter 비상속 — 카탈로그 수집이
+    아니라 "기존 스팟마다" 날씨를 채우는 다른 데이터 모델이라 함수 기반 모듈로 구현):
+    **격자 그룹핑 신규 최적화**(같은 5km 격자 스팟은 API 1회만 호출 — 141,980건
+    규모에서 반드시 필요), `settleGroupFetches`/`fetchWithTimeout`/`withRetry`(2회)
+    재사용한 개별 격자 에러 격리+30초 타임아웃+재시도, TMP/POP/SKY/REH 파싱(가장
+    이른 예보 시각 선택, SKY 코드 한글 번역), getUltraSrtNcst 선택적 실황 보강,
+    spot_weather_caches 전용 upsert(캐시 특성상 완전 덮어쓰기, 기존 open_spaces의
+    NULL-병합과 다름).
+  - **검증**: `npx tsc --noEmit`/`npm run test`(78파일 798건 — 신규 29건)/
+    `npm run build` 통과. 실측: 실제 기상청 API로 실제 스팟 5건 날씨 수집(합리적인
+    실제 값 확인) → 실제 DB upsert 확인 → 재실행 시 중복 없이 덮어써짐 확인 →
+    테스트 데이터 삭제. 상세: `implementation/2026-09-01-kma-weather-adapter.md`.
