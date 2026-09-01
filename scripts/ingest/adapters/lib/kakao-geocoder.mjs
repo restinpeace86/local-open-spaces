@@ -7,6 +7,8 @@
 // 엔드포인트를 호출하면 401 "KA Header is required"로 거부된다 — 반드시 별도 발급된
 // KAKAO_REST_API_KEY(REST API 키)가 필요하다(Task 9-6-3에서 이미 확인한 제약, 이번에 키가
 // 발급돼 해소됨).
+import { fetchWithTimeout } from '../../lib/fetch-with-timeout.mjs';
+
 const KEYWORD_SEARCH_URL = 'https://dapi.kakao.com/v2/local/search/keyword.json';
 
 export function hasKakaoApiKey() {
@@ -18,7 +20,7 @@ export function hasKakaoApiKey() {
 export async function geocodeKeyword(query) {
   const apiKey = process.env.KAKAO_REST_API_KEY;
   const url = `${KEYWORD_SEARCH_URL}?${new URLSearchParams({ query }).toString()}`;
-  const res = await fetch(url, { headers: { Authorization: `KakaoAK ${apiKey}` } });
+  const res = await fetchWithTimeout(url, { headers: { Authorization: `KakaoAK ${apiKey}` } });
 
   if (!res.ok) {
     const text = await res.text();

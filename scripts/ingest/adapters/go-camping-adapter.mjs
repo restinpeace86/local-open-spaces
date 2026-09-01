@@ -4,6 +4,7 @@
 // 카멜케이스, areaBasedList2가 아닌 basedList) 별도 어댑터로 구현한다.
 // 캠핑장은 정의상 전부 야외 시설이므로 contentTypeId 분기 없이 전 항목을 OUTDOOR_NATURE로 매핑.
 import { BaseCollectorAdapter } from './base-collector-adapter.mjs';
+import { fetchWithTimeout } from '../lib/fetch-with-timeout.mjs';
 import { buildOpenSpaceRow, UI_CATEGORY } from './lib/schema-mapper.mjs';
 
 const BASE_URL = 'https://apis.data.go.kr/B551011/GoCamping/basedList';
@@ -37,7 +38,7 @@ export class GoCampingAdapter extends BaseCollectorAdapter {
     });
 
     const url = `${BASE_URL}?serviceKey=${encodeURIComponent(this.apiKey)}&${params.toString()}`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url);
     const text = await res.text();
 
     if (!res.ok) {

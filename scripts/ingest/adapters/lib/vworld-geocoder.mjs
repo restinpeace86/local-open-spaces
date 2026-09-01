@@ -1,6 +1,8 @@
 // Vworld 주소 지오코딩 헬퍼 (api.vworld.kr/req/address).
 // 원본 데이터에 좌표가 없고 주소 텍스트만 있는 소스(전국문화기반시설총람 등)를 위해 사용한다.
 // process.env.VWORLD_API_KEY가 필요하다 — 국토교통부 Vworld 오픈API(www.vworld.kr) 신청 후 발급받는 인증키.
+import { fetchWithTimeout } from '../../lib/fetch-with-timeout.mjs';
+
 const ADDRESS_API_URL = 'https://api.vworld.kr/req/address';
 
 export function hasVworldApiKey() {
@@ -11,6 +13,12 @@ export function hasVworldApiKey() {
 // 502/연결 끊김을 반환한다(같은 정상 좌표를 재요청하면 성공 — 진짜 NOT_FOUND가 아니라
 // 일시적 서버 불안정). 이런 일시 오류를 그대로 "결과 없음"으로 처리하면 실제로는 찾을 수
 // 있는 주소를 누락시키므로, 짧은 대기 후 재시도하는 안정화 로직을 추가한다.
+//
+// [외부 공공 API 배치 수집 안정성 고도화](2026-09-01 사용자 지시): 이 함수는 배치 하나당
+// 수천 개 주소에 대해 반복 호출되는 세밀한 단위 재시도라, retry.mjs의 5초/10초 지수
+// 백오프(어댑터 전체 fetch() 단위 재시도용)를 그대로 적용하면 대량 지오코딩이 지나치게
+// 느려진다 — 기존의 짧은 고정 1초 재시도 간격은 그대로 유지하고, 30초 타임아웃만
+// fetchWithTimeout으로 추가한다(타임아웃과 재시도 간격은 서로 다른 관심사).
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
 
@@ -22,7 +30,7 @@ async function fetchVworld(params) {
   let lastErr;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
     try {
-      const res = await fetch(`${ADDRESS_API_URL}?${params.toString()}`);
+      const res = await fetchWithTimeout(`${ADDRESS_API_URL}?${params.toString()}`);
       if (!res.ok) {
         throw new Error(`Vworld API 호출 실패 (HTTP ${res.status}): ${(await res.text()).slice(0, 200)}`);
       }

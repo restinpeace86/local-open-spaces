@@ -42,6 +42,7 @@
 // 추가 호출을 감행하는 것은 근거 없는 과잉 구현으로 판단해(CLAUDE.md 제1장 제4조 MVP 우선)
 // 이번 어댑터에는 포함하지 않는다.
 import { BaseCollectorAdapter } from './base-collector-adapter.mjs';
+import { fetchWithTimeout } from '../lib/fetch-with-timeout.mjs';
 import { buildOpenSpaceRow } from './lib/schema-mapper.mjs';
 import { deriveIsFreeFallback } from '../lib/ai-tagging.mjs';
 import { INSTALL_PLACE_CODE_TO_CATEGORY_MIN } from '../lib/localdata-playground-install-place-mapping.mjs';
@@ -95,7 +96,7 @@ export class PlaygroundAdapter extends BaseCollectorAdapter {
     });
 
     const url = `${BASE_URL}?${params.toString()}`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url);
     const text = await res.text();
 
     if (!res.ok) {

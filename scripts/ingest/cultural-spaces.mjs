@@ -3,6 +3,7 @@
 // (X_COORD ≈ 37.x = 위도, Y_COORD ≈ 127.x = 경도). 필드명을 그대로 믿지 않고 값 범위로 검증함.
 import { pathToFileURL } from 'url';
 import { loadEnv } from '../lib/load-env.mjs';
+import { fetchWithTimeout } from './lib/fetch-with-timeout.mjs';
 import { createAdminClient, upsertRawIngestData, upsertRowsSafeMerge } from './lib/supabase-admin.mjs';
 import { toPointWKT } from './lib/geometry.mjs';
 import { deriveParentalTags } from './lib/ai-tagging.mjs';
@@ -22,7 +23,7 @@ const TARGET_TABLE = 'open_spaces';
 
 async function fetchPage(startIdx, endIdx) {
   const url = `${BASE}/${env.SEOUL_OPEN_DATA_KEY}/json/${SERVICE_NAME}/${startIdx}/${endIdx}/`;
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url);
   const text = await res.text();
 
   let json;

@@ -29,6 +29,7 @@
 // city-park-adapter.mjs와 동일한 관례) — 소스 전체를 임의로 true 고정하지 않는다.
 import crypto from 'crypto';
 import { BaseCollectorAdapter } from './base-collector-adapter.mjs';
+import { fetchWithTimeout } from '../lib/fetch-with-timeout.mjs';
 import { buildOpenSpaceRow, UI_CATEGORY } from './lib/schema-mapper.mjs';
 import { geocode, hasVworldApiKey } from './lib/vworld-geocoder.mjs';
 import { deriveParentalTags } from '../lib/ai-tagging.mjs';
@@ -77,7 +78,7 @@ export class RuralExperienceVillageAdapter extends BaseCollectorAdapter {
     });
 
     const url = `${BASE_URL}?${params.toString()}`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url);
     const text = await res.text();
 
     if (!res.ok) {

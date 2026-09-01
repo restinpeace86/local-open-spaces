@@ -41,6 +41,7 @@ import { cleanText } from '../lib/ai-tagging.mjs';
 import { geocode } from './lib/vworld-geocoder.mjs';
 import { geocodeKeyword, hasKakaoApiKey } from './lib/kakao-geocoder.mjs';
 import { GYEONGGI_BOUNDS, isWithinGyeonggiBounds } from './gg-culture-events-adapter.mjs';
+import { fetchWithTimeout } from '../lib/fetch-with-timeout.mjs';
 
 export const API1_EXTERNAL_ID_PREFIX = 'GG_CULTURE_EVENT_';
 const USER_AGENT =
@@ -77,7 +78,7 @@ export function extractVenueFromHtml(html) {
 }
 
 export async function scrapeVenueName(url) {
-  const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
+  const res = await fetchWithTimeout(url, { headers: { 'User-Agent': USER_AGENT } });
   if (!res.ok) throw new Error(`상세 페이지 조회 실패 (HTTP ${res.status}): ${url}`);
   const html = await res.text();
   return extractVenueFromHtml(html);

@@ -16,6 +16,26 @@ import { NextRequest, NextResponse } from 'next/server';
 const KNOWN_BATCHES = ['daily', 'monthly'] as const;
 type BatchName = (typeof KNOWN_BATCHES)[number];
 
+// [외부 공공 API 배치 수집 안정성 및 독립 실행 구조 고도화](2026-09-01 사용자 지시)
+// 항목 4 "버튼 UI": 관리자 화면의 재수집 소스 목록을 하드코딩하지 않고, run-daily.mjs/
+// run-monthly.mjs의 실제 STEPS 배열에서 그대로 읽어온다 — 목록이 어긋날 위험(새 소스
+// 추가 시 관리자 화면 갱신을 깜빡하는 것) 자체를 없앤다(제5장 제6조 하드코딩 최소화).
+export async function GET() {
+  try {
+    const [daily, monthly] = await Promise.all([
+      import('../../../../../../scripts/ingest/run-daily.mjs'),
+      import('../../../../../../scripts/ingest/run-monthly.mjs'),
+    ]);
+    return NextResponse.json({
+      daily: daily.STEPS.map((s: { label: string }) => s.label),
+      monthly: monthly.STEPS.map((s: { label: string }) => s.label),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : '소스 목록 조회 실패';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();

@@ -10,6 +10,8 @@ import { BaseCollectorAdapter } from './base-collector-adapter.mjs';
 import { buildOpenSpaceRow, UI_CATEGORY } from './lib/schema-mapper.mjs';
 import { geocode, hasVworldApiKey } from './lib/vworld-geocoder.mjs';
 import { deriveParentalTags } from '../lib/ai-tagging.mjs';
+import { fetchWithTimeout } from '../lib/fetch-with-timeout.mjs';
+import { settleGroupFetches } from '../lib/settle-group-fetches.mjs';
 
 const BASE_URL = 'https://apis.data.go.kr/B553457/rgnCltrFcltExmnv1';
 const PAGE_SIZE = 100;
@@ -49,7 +51,7 @@ export class CulturalFacilitySummaryAdapter extends BaseCollectorAdapter {
     });
 
     const url = `${BASE_URL}/${endpointPath}?${params.toString()}`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url);
     const text = await res.text();
 
     if (!res.ok) {
@@ -106,9 +108,17 @@ export class CulturalFacilitySummaryAdapter extends BaseCollectorAdapter {
     return items.map((item) => ({ endpoint, item }));
   }
 
+  // [외부 공공 API 배치 수집 안정성 및 독립 실행 구조 고도화](2026-09-01 사용자 지시)
+  // 항목 1: 8개 시설유형이 각자 완전히 독립된 API 엔드포인트인데 Promise.all로 묶여
+  // 있어, 하나(예: 문예회관)가 타임아웃 등으로 실패하면 이미 성공한 나머지 7개까지
+  // 전부 버려지고 있었다(실측 확인) — 이 어댑터가 사용자가 예시로 든 "그룹 루프"에
+  // 가장 정확히 들어맞는 사례다. settleGroupFetches로 개별 격리한다.
   async fetch() {
-    const perEndpoint = await Promise.all(ENDPOINTS.map((endpoint) => this.fetchEndpoint(endpoint)));
-    return perEndpoint.flat();
+    const results = await settleGroupFetches(
+      this.sourceKey,
+      ENDPOINTS.map((endpoint) => ({ name: endpoint.path, run: () => this.fetchEndpoint(endpoint) }))
+    );
+    return ENDPOINTS.flatMap((endpoint) => results[endpoint.path] ?? []);
   }
 
   // [전체 파이프라인 일괄 가동] RAW 레이어 opt-in. fetch()가 { endpoint, item } 쌍 배열을

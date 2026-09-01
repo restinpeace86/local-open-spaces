@@ -43,6 +43,7 @@
 // gg-kidscafe-adapter.mjs와 동일한 논리로 개별 텍스트 근거 없이 true로 고정한다.
 import { XMLParser } from 'fast-xml-parser';
 import { BaseCollectorAdapter } from './base-collector-adapter.mjs';
+import { fetchWithTimeout } from '../lib/fetch-with-timeout.mjs';
 import { buildOpenSpaceRow, UI_CATEGORY } from './lib/schema-mapper.mjs';
 import { geocode, hasVworldApiKey } from './lib/vworld-geocoder.mjs';
 
@@ -87,7 +88,7 @@ export class RuralEducationFarmAdapter extends BaseCollectorAdapter {
   async fetchPage(pageNo) {
     const params = new URLSearchParams({ apiKey: this.apiKey, pageNo: String(pageNo) });
     const url = `${BASE_URL}/fmlgEdcFarmmList?${params.toString()}`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url);
     const text = await res.text();
 
     if (!res.ok) {

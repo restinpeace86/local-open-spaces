@@ -3,6 +3,7 @@
 // - 표준 카테고리 자동 태깅 (2.2): 규칙 기반 매핑표(category-map.mjs)에 없는 애매한 값만 Gemini로 보조 분류
 //
 // Decision 005 / ai-rule.md 4.1 준수: AI가 불확실하면 임의 생성하지 않고 기본값(ETC)으로 떨어뜨리고 경고 로그를 남긴다.
+import { fetchWithTimeout } from './fetch-with-timeout.mjs';
 
 const GEMINI_MODEL = 'gemini-flash-lite-latest';
 
@@ -146,7 +147,7 @@ export async function classifyEventTypeWithAI({ title, rawLabel, apiKey }) {
 제목: ${title || '(없음)'}`;
 
   try {
-    const res = await fetch(
+    const res = await fetchWithTimeout(
       `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${apiKey}`,
       {
         method: 'POST',

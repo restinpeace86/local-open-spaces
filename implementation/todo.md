@@ -787,3 +787,29 @@
     채워지는지, category_min 필터가 실제로 좁혀지는지(65건 전부 놀이방식당) 확인,
     Playwright로 관리자 화면 실제 자동완성(10건, "가능동" 축약 주소) 확인. 상세:
     `implementation/2026-09-01-spotpick-ux-4-fixes.md`.
+
+- [x] **[개발 요청] 외부 공공 API 배치 수집 안정성 및 독립 실행(Isolation) 구조
+  고도화** (2026-09-01 완료 — 2026-08-30 작업의 "20여 개 어댑터는 후속 작업" 후속)
+  - **항목 1(격리, 신규 발견)**: 전수 조사 결과 `Promise.all`로 서로 독립된 외부 API
+    2개 이상을 묶어 하나만 실패해도 전체가 reject되던 어댑터 5개 발견(
+    `cultural-facility-summary-adapter.mjs`(8개 시설유형 — 가장 정확한 "그룹 루프"
+    사례)/`gg-culture-events-adapter.mjs`/`gg-events-adapter.mjs`/
+    `gg-kidscafe-adapter.mjs`/`swimming-pool-adapter.mjs`). 신규 공유 유틸
+    `settle-group-fetches.mjs`(Promise.allSettled 기반)로 5곳 모두 격리 — 일부만
+    실패해도 나머지는 정상 수집, 전부 실패했을 때만 예외.
+  - **항목 2(30초 타임아웃)**: `fetch-with-timeout.mjs`가 기존 `fetch-with-cause.mjs`
+    (2026-08-30 원인진단)를 내부적으로 거치도록 통합. 전수 조사로 남아있던 raw
+    `fetch()` 17곳(어댑터 15개 + 지오코딩/AI 유틸 3개)을 전부 교체 — 이제 파이프라인
+    전체에 예외 없이 30초 타임아웃 적용. vworld-geocoder의 대량 지오코딩용 세밀한
+    재시도(1초×3회)는 유지하고 타임아웃만 추가(서로 다른 관심사로 판단).
+  - **항목 3(Stale Data 방어)**: 이미 충족 확인(코드 변경 없음).
+  - **항목 4(관리자 UI)**: `GET /api/admin/ingest/rerun` 신규(STEPS에서 소스 목록
+    동적 조회, 하드코딩 금지) + `/admin/data-grid` 상단 `IngestRerunPanel`(배치/소스
+    선택 + 재수집 버튼 + 결과 표시).
+  - **항목 5(cron 분산)**: daily 03:07→**02:47 KST**, monthly 03:13→**03:52 KST**로
+    재조정 — 요구사항이 명시한 "2~4시 사이 애매한 시간"에 맞춰 두 배치를 멀리
+    떨어뜨림.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(75파일 769건 — 신규 8건 + 5개
+    어댑터 격리 테스트 갱신)/`npm run build` 통과. 실측: `GET /api/admin/ingest/rerun`
+    실제 STEPS 목록(daily 4/monthly 16) 확인, Playwright로 관리자 화면 재수집 패널
+    렌더링 확인. 상세: `implementation/2026-09-01-ingest-pipeline-isolation-hardening.md`.

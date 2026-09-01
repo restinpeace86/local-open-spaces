@@ -3,6 +3,7 @@
 import crypto from 'crypto';
 import { pathToFileURL } from 'url';
 import { loadEnv } from '../lib/load-env.mjs';
+import { fetchWithTimeout } from './lib/fetch-with-timeout.mjs';
 import { createAdminClient, upsertRawIngestData, upsertRowsSafeMerge } from './lib/supabase-admin.mjs';
 import { toPointWKT } from './lib/geometry.mjs';
 import { classifySeoulCultureEvent } from './lib/category-map.mjs';
@@ -88,7 +89,7 @@ async function fetchAllCultureEvents() {
   while (startIdx <= totalCount) {
     const endIdx = startIdx + PAGE_SIZE - 1;
     const url = `http://openapi.seoul.go.kr:8088/${env.SEOUL_OPEN_DATA_KEY}/json/culturalEventInfo/${startIdx}/${endIdx}/`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url);
     const text = await res.text();
 
     if (!res.ok) {

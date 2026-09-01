@@ -48,7 +48,8 @@ import { BaseCollectorAdapter } from './base-collector-adapter.mjs';
 import { buildEventRow, extractSigunguName } from './lib/schema-mapper.mjs';
 import { cleanText, classifyEventTypeWithAI, deriveBookingStatus, deriveParentalTags } from '../lib/ai-tagging.mjs';
 import { geocode, hasVworldApiKey } from './lib/vworld-geocoder.mjs';
-import { fetchWithCause } from '../lib/fetch-with-cause.mjs';
+import { fetchWithTimeout } from '../lib/fetch-with-timeout.mjs';
+import { settleGroupFetches } from '../lib/settle-group-fetches.mjs';
 
 const CULTURE_EVENT_BASE_URL = 'https://openapi.gg.go.kr/GGCULTUREVENTSTUS';
 const FOUNDATION_EVENT_BASE_URL = 'https://openapi.gg.go.kr/GGCULFOUEVENSTM';
@@ -161,7 +162,7 @@ export class GgCultureEventsAdapter extends BaseCollectorAdapter {
     });
 
     const url = `${baseUrl}?${params.toString()}`;
-    const res = await fetchWithCause(url, { headers: { 'User-Agent': USER_AGENT } });
+    const res = await fetchWithTimeout(url, { headers: { 'User-Agent': USER_AGENT } });
     const text = await res.text();
 
     if (!res.ok) {
@@ -207,12 +208,20 @@ export class GgCultureEventsAdapter extends BaseCollectorAdapter {
     return items;
   }
 
+  // [외부 공공 API 배치 수집 안정성 및 독립 실행 구조 고도화](2026-09-01 사용자 지시)
+  // 항목 1: 이 두 API(문화행사 API1/문화재단 행사 API2)는 완전히 독립된 서로 다른
+  // 엔드포인트인데 Promise.all로 묶여 있어, 하나가 타임아웃 등으로 실패하면 이미
+  // 성공했을 다른 하나까지 통째로 버려지고 있었다(실측 확인). settleGroupFetches로
+  // 개별 격리 — 하나가 실패해도 다른 하나는 정상적으로 수집된다.
   async fetch() {
-    const [cultureEventItems, foundationEventItems] = await Promise.all([
-      this.fetchAll(CULTURE_EVENT_BASE_URL, 'GGCULTUREVENTSTUS'),
-      this.fetchAll(FOUNDATION_EVENT_BASE_URL, 'GGCULFOUEVENSTM'),
+    const results = await settleGroupFetches(this.sourceKey, [
+      { name: 'GGCULTUREVENTSTUS(문화행사)', run: () => this.fetchAll(CULTURE_EVENT_BASE_URL, 'GGCULTUREVENTSTUS') },
+      { name: 'GGCULFOUEVENSTM(문화재단행사)', run: () => this.fetchAll(FOUNDATION_EVENT_BASE_URL, 'GGCULFOUEVENSTM') },
     ]);
-    return { cultureEventItems, foundationEventItems };
+    return {
+      cultureEventItems: results['GGCULTUREVENTSTUS(문화행사)'] ?? [],
+      foundationEventItems: results['GGCULFOUEVENSTM(문화재단행사)'] ?? [],
+    };
   }
 
   // eslint-disable-next-line class-methods-use-this

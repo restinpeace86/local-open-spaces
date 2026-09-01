@@ -59,6 +59,8 @@ import { BaseCollectorAdapter } from './base-collector-adapter.mjs';
 import { buildOpenSpaceRow, UI_CATEGORY } from './lib/schema-mapper.mjs';
 import { deriveIsFreeFallback, matchesKidsKeyword } from '../lib/ai-tagging.mjs';
 import { convertEpsg5174ToWgs84 } from './lib/epsg5174.mjs';
+import { fetchWithTimeout } from '../lib/fetch-with-timeout.mjs';
+import { settleGroupFetches } from '../lib/settle-group-fetches.mjs';
 
 // 하위 호환: 이전에는 이 파일에 matchesKidsKeyword가 직접 정의돼 있었으나, gg-events-adapter.mjs
 // (Task 8-2)도 동일 키워드 목록이 필요해져 lib/ai-tagging.mjs로 옮겨 공용화했다(2026-08-21).
@@ -100,7 +102,7 @@ export class SwimmingPoolAdapter extends BaseCollectorAdapter {
     });
 
     const url = `${API1_BASE_URL}?serviceKey=${encodeURIComponent(this.apiKey)}&${params.toString()}`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url);
     const text = await res.text();
 
     if (!res.ok) {
@@ -149,7 +151,7 @@ export class SwimmingPoolAdapter extends BaseCollectorAdapter {
     });
 
     const url = `${API2_BASE_URL}?serviceKey=${encodeURIComponent(this.apiKey)}&${params.toString()}`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url);
     const text = await res.text();
 
     if (!res.ok) {
@@ -190,9 +192,15 @@ export class SwimmingPoolAdapter extends BaseCollectorAdapter {
     return items;
   }
 
+  // [외부 공공 API 배치 수집 안정성 및 독립 실행 구조 고도화](2026-09-01 사용자 지시)
+  // 항목 1: API1/API2가 완전히 독립인데 Promise.all로 묶여 있어 하나가 실패하면
+  // 다른 하나까지 버려지고 있었다 — settleGroupFetches로 개별 격리.
   async fetch() {
-    const [api1Items, api2Items] = await Promise.all([this.fetchApi1(), this.fetchApi2()]);
-    return { api1Items, api2Items };
+    const results = await settleGroupFetches(this.sourceKey, [
+      { name: 'API1', run: () => this.fetchApi1() },
+      { name: 'API2', run: () => this.fetchApi2() },
+    ]);
+    return { api1Items: results.API1 ?? [], api2Items: results.API2 ?? [] };
   }
 
   // [전체 파이프라인 일괄 가동] RAW 레이어 opt-in. API1은 faci_cd, API2는 이름+주소 해시를

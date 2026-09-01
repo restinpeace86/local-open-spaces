@@ -16,6 +16,7 @@
 // 결정적 해시를 external_id로 사용한다.
 import crypto from 'crypto';
 import { BaseCollectorAdapter } from './base-collector-adapter.mjs';
+import { fetchWithTimeout } from '../lib/fetch-with-timeout.mjs';
 import { buildOpenSpaceRow, UI_CATEGORY } from './lib/schema-mapper.mjs';
 import { deriveParentalTags, deriveIsFreeFromFeeText } from '../lib/ai-tagging.mjs';
 
@@ -72,7 +73,7 @@ export class PublicFacilityOpenAdapter extends BaseCollectorAdapter {
     });
 
     const url = `${BASE_URL}?${params.toString()}`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url);
     const text = await res.text();
 
     if (!res.ok) {

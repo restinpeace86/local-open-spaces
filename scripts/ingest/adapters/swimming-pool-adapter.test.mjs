@@ -100,30 +100,50 @@ describe('SwimmingPoolAdapter', () => {
       expect(api2Items).toHaveLength(1);
     });
 
-    it('API1 resultCode가 00이 아니면 에러를 던진다', async () => {
+    // [외부 공공 API 배치 수집 안정성 및 독립 실행 구조 고도화](2026-09-01 사용자 지시):
+    // API1/API2가 완전히 독립이므로 하나가 에러 응답을 반환해도 fetch() 전체가 실패해서는
+    // 안 되고, 실패한 쪽만 빈 배열로 격리되고 성공한 쪽 데이터는 그대로 반환돼야 한다.
+    it('API1만 resultCode 에러여도 fetch() 전체가 실패하지 않고 API1만 격리된다', async () => {
       vi.stubGlobal('fetch', vi.fn((url) => {
         const u = new URL(url);
         if (u.pathname.includes('SFMS_FACI')) {
           return Promise.resolve(jsonResponse(api1Body({ resultCode: '30', items: [] })));
         }
-        return Promise.resolve(jsonResponse(api2Body({ items: [] })));
+        return Promise.resolve(jsonResponse(api2Body({ items: [API2_ITEM] })));
       }));
 
       const adapter = new SwimmingPoolAdapter();
-      await expect(adapter.fetch()).rejects.toThrow('SwimmingPool API1 에러 응답');
+      const { api1Items, api2Items } = await adapter.fetch();
+
+      expect(api1Items).toEqual([]);
+      expect(api2Items).toHaveLength(1);
     });
 
-    it('API2 resultCode가 0이 아니면 에러를 던진다', async () => {
+    it('API2만 resultCode 에러여도 fetch() 전체가 실패하지 않고 API2만 격리된다', async () => {
       vi.stubGlobal('fetch', vi.fn((url) => {
         const u = new URL(url);
         if (u.pathname.includes('swimming_pools')) {
           return Promise.resolve(jsonResponse(api2Body({ resultCode: '30', items: [] })));
         }
-        return Promise.resolve(jsonResponse(api1Body({ items: [] })));
+        return Promise.resolve(jsonResponse(api1Body({ items: [API1_ITEM] })));
       }));
 
       const adapter = new SwimmingPoolAdapter();
-      await expect(adapter.fetch()).rejects.toThrow('SwimmingPool API2 에러 응답');
+      const { api1Items, api2Items } = await adapter.fetch();
+
+      expect(api1Items).toHaveLength(1);
+      expect(api2Items).toEqual([]);
+    });
+
+    it('API1/API2가 모두 에러 응답이면 fetch()가 예외를 던진다', async () => {
+      vi.stubGlobal('fetch', vi.fn((url) => {
+        const u = new URL(url);
+        if (u.pathname.includes('SFMS_FACI')) return Promise.resolve(jsonResponse(api1Body({ resultCode: '30', items: [] })));
+        return Promise.resolve(jsonResponse(api2Body({ resultCode: '30', items: [] })));
+      }));
+
+      const adapter = new SwimmingPoolAdapter();
+      await expect(adapter.fetch()).rejects.toThrow(/API1.*API2/s);
     });
   });
 

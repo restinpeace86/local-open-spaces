@@ -114,14 +114,30 @@ describe('GgCultureEventsAdapter', () => {
       expect(cultureEventItems).toHaveLength(2);
     });
 
-    it('RESULT.CODE가 INFO-000이 아니면 에러를 던진다', async () => {
+    // [외부 공공 API 배치 수집 안정성 및 독립 실행 구조 고도화](2026-09-01 사용자 지시):
+    // 두 API가 완전히 독립이므로 하나가 에러 응답을 반환해도 fetch() 전체가 실패해서는
+    // 안 되고, 실패한 쪽만 빈 배열로 격리되고 성공한 쪽 데이터는 그대로 반환돼야 한다.
+    it('한쪽 API만 RESULT.CODE 에러여도 fetch() 전체가 실패하지 않고 실패한 쪽만 격리된다', async () => {
       vi.stubGlobal('fetch', vi.fn((url) => {
         if (url.includes('GGCULTUREVENTSTUS')) return Promise.resolve(jsonResponse(cultureEventBody({ code: 'ERROR-310', message: '해당하는 서비스를 찾을 수 없습니다.' })));
-        return Promise.resolve(jsonResponse(foundationEventBody({ rows: [] })));
+        return Promise.resolve(jsonResponse(foundationEventBody({ rows: [FOUNDATION_EVENT_ITEM] })));
       }));
 
       const adapter = new GgCultureEventsAdapter();
-      await expect(adapter.fetch()).rejects.toThrow('GgCultureEvents(GGCULTUREVENTSTUS) 에러 응답');
+      const { cultureEventItems, foundationEventItems } = await adapter.fetch();
+
+      expect(cultureEventItems).toEqual([]);
+      expect(foundationEventItems).toHaveLength(1);
+    });
+
+    it('두 API가 모두 에러 응답이면 fetch()가 예외를 던진다', async () => {
+      vi.stubGlobal('fetch', vi.fn((url) => {
+        if (url.includes('GGCULTUREVENTSTUS')) return Promise.resolve(jsonResponse(cultureEventBody({ code: 'ERROR-310', message: '해당하는 서비스를 찾을 수 없습니다.' })));
+        return Promise.resolve(jsonResponse(foundationEventBody({ code: 'ERROR-500', message: '서버 오류' })));
+      }));
+
+      const adapter = new GgCultureEventsAdapter();
+      await expect(adapter.fetch()).rejects.toThrow(/GGCULTUREVENTSTUS.*GGCULFOUEVENSTM/s);
     });
   });
 

@@ -12,6 +12,7 @@
 // 도시공원은 지자체가 관리하는 공공 공원으로 전량 무료 이용 시설이라 레거시와 동일하게
 // is_free=true를 고정값으로 사용한다(원본에 별도 요금 필드가 없음).
 import { BaseCollectorAdapter } from './base-collector-adapter.mjs';
+import { fetchWithTimeout } from '../lib/fetch-with-timeout.mjs';
 import { buildOpenSpaceRow, UI_CATEGORY } from './lib/schema-mapper.mjs';
 import { deriveParentalTags } from '../lib/ai-tagging.mjs';
 
@@ -45,7 +46,7 @@ export class CityParkAdapter extends BaseCollectorAdapter {
     });
 
     const url = `${BASE_URL}?${params.toString()}`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url);
     const text = await res.text();
 
     if (!res.ok) {

@@ -33,6 +33,7 @@
 // external_id로 사용한다.
 import crypto from 'crypto';
 import { BaseCollectorAdapter } from './base-collector-adapter.mjs';
+import { fetchWithTimeout } from '../lib/fetch-with-timeout.mjs';
 import { buildOpenSpaceRow } from './lib/schema-mapper.mjs';
 import { convertEpsg5174ToWgs84 } from './lib/epsg5174.mjs';
 import { deriveParentalTags } from '../lib/ai-tagging.mjs';
@@ -78,7 +79,7 @@ export class AmusementParkAdapter extends BaseCollectorAdapter {
     });
 
     const url = `${BASE_URL}?${params.toString()}`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url);
     const text = await res.text();
 
     if (!res.ok) {

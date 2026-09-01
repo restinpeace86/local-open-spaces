@@ -207,6 +207,94 @@ function TodayBatchSummary() {
   );
 }
 
+// [외부 공공 API 배치 수집 안정성 및 독립 실행 구조 고도화](2026-09-01 사용자 지시)
+// 항목 4 "관리자 수동 재수집 트리거": 이미 구축된 POST /api/admin/ingest/rerun을
+// 호출하는 버튼 UI. 소스 목록은 하드코딩하지 않고 GET(같은 라우트)이 run-daily.mjs/
+// run-monthly.mjs의 실제 STEPS에서 읽어온 값을 그대로 쓴다.
+type IngestBatch = 'daily' | 'monthly';
+
+function IngestRerunPanel() {
+  const [sources, setSources] = useState<Record<IngestBatch, string[]> | null>(null);
+  const [batch, setBatch] = useState<IngestBatch>('daily');
+  const [sourceKey, setSourceKey] = useState('');
+  const [isRunning, setIsRunning] = useState(false);
+  const [resultMessage, setResultMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/admin/ingest/rerun')
+      .then((res) => res.json())
+      .then((data: { daily?: string[]; monthly?: string[] }) => {
+        setSources({ daily: data.daily ?? [], monthly: data.monthly ?? [] });
+      })
+      .catch(() => setErrorMessage('재수집 가능한 소스 목록을 불러오지 못했습니다.'));
+  }, []);
+
+  const options = sources?.[batch] ?? [];
+
+  async function handleRerun() {
+    if (!sourceKey || isRunning) return;
+    setIsRunning(true);
+    setResultMessage(null);
+    setErrorMessage(null);
+    try {
+      const res = await fetch('/api/admin/ingest/rerun', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batch, sourceKey }),
+      });
+      const data: { result?: { count?: number; rawCount?: number; failed?: boolean; note?: string }; error?: string } =
+        await res.json();
+      if (!res.ok) throw new Error(data.error ?? '재수집 실패');
+      const r = data.result;
+      setResultMessage(
+        r?.failed
+          ? `⚠️ ${sourceKey} 재수집 실패: ${r.note ?? '알 수 없는 오류'}`
+          : `✅ ${sourceKey} 재수집 완료 — 수신 ${r?.rawCount ?? '?'}건 / 반영 ${r?.count ?? '?'}건`
+      );
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : '재수집 실패');
+    } finally {
+      setIsRunning(false);
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 flex flex-wrap items-center gap-2">
+      <span className="text-xs font-semibold text-gray-700">🔁 개별 소스 수동 재수집</span>
+      <select
+        value={batch}
+        onChange={(e) => {
+          setBatch(e.target.value as IngestBatch);
+          setSourceKey('');
+        }}
+        className="rounded border border-gray-300 px-2 py-1 text-xs"
+      >
+        <option value="daily">Daily</option>
+        <option value="monthly">Monthly</option>
+      </select>
+      <select value={sourceKey} onChange={(e) => setSourceKey(e.target.value)} className="rounded border border-gray-300 px-2 py-1 text-xs">
+        <option value="">소스 선택...</option>
+        {options.map((s) => (
+          <option key={s} value={s}>
+            {s}
+          </option>
+        ))}
+      </select>
+      <button
+        type="button"
+        onClick={handleRerun}
+        disabled={!sourceKey || isRunning}
+        className="rounded-full bg-gray-900 text-white text-xs font-semibold px-3 py-1 disabled:opacity-50"
+      >
+        {isRunning ? '재수집 중...' : '재수집 실행'}
+      </button>
+      {resultMessage && <span className="text-xs text-emerald-700">{resultMessage}</span>}
+      {errorMessage && <span className="text-xs text-red-600">{errorMessage}</span>}
+    </div>
+  );
+}
+
 function extractLngLat(location: unknown): { lng: number; lat: number } | null {
   const geometry = location as { coordinates?: [number, number] } | null;
   if (!geometry?.coordinates) return null;
@@ -692,6 +780,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="shrink-0 p-4 border-b border-gray-100 flex flex-col gap-3">
         <TodayBatchSummary />
+        <IngestRerunPanel />
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-sm font-bold text-gray-900">Admin Data Grid</h1>
           <div className="flex items-center gap-3">

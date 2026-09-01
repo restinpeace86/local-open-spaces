@@ -9,6 +9,7 @@
 // 값은 VWorld가 못 찾을 수 있으나, 기존과 동일하게 그 항목만 건너뛴다 — 추측 좌표 생성 없음).
 import crypto from 'crypto';
 import { BaseCollectorAdapter } from './base-collector-adapter.mjs';
+import { fetchWithTimeout } from '../lib/fetch-with-timeout.mjs';
 import { buildOpenSpaceRow, UI_CATEGORY } from './lib/schema-mapper.mjs';
 import { geocode, hasVworldApiKey } from './lib/vworld-geocoder.mjs';
 import { deriveIsFreeFallback } from '../lib/ai-tagging.mjs';
@@ -39,7 +40,7 @@ export class NationalParkEcotourAdapter extends BaseCollectorAdapter {
 
   async fetchPage(page) {
     const url = `${BASE_URL}?page=${page}&perPage=${PAGE_SIZE}&serviceKey=${encodeURIComponent(this.apiKey)}`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url);
     const json = await res.json();
 
     if (!res.ok) {

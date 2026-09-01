@@ -7,7 +7,7 @@ import { toPointWKT } from './lib/geometry.mjs';
 import { classifyTourApiFestival } from './lib/category-map.mjs';
 import { deriveParentalTags, deriveBookingStatus } from './lib/ai-tagging.mjs';
 import { extractSigunguName } from './adapters/lib/schema-mapper.mjs';
-import { fetchWithCause } from './lib/fetch-with-cause.mjs';
+import { fetchWithTimeout } from './lib/fetch-with-timeout.mjs';
 
 const env = loadEnv();
 
@@ -44,7 +44,7 @@ async function fetchFestivalsPage(pageNo) {
   });
 
   const url = `${BASE_URL}?serviceKey=${encodeURIComponent(env.PUBLIC_DATA_API_KEY)}&${params.toString()}`;
-  const res = await fetchWithCause(url);
+  const res = await fetchWithTimeout(url);
   const text = await res.text();
 
   if (!res.ok) {
@@ -116,7 +116,7 @@ async function fetchOverview(contentId) {
   const url = `${DETAIL_URL}?serviceKey=${encodeURIComponent(env.PUBLIC_DATA_API_KEY)}&${params.toString()}`;
 
   try {
-    const res = await fetchWithCause(url);
+    const res = await fetchWithTimeout(url);
     const text = await res.text();
     if (!res.ok) {
       console.warn(`⚠️ detailCommon2 호출 실패 [${contentId}] (HTTP ${res.status})`);

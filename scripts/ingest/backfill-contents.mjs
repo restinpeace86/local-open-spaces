@@ -12,6 +12,7 @@
 //   (실측 확인) 상세 조회(detailCommon2)를 실제로 재호출해야 한다(진짜 재수집).
 import { pathToFileURL } from 'url';
 import { loadEnv } from '../lib/load-env.mjs';
+import { fetchWithTimeout } from './lib/fetch-with-timeout.mjs';
 import { createAdminClient } from './lib/supabase-admin.mjs';
 
 const env = loadEnv();
@@ -112,7 +113,7 @@ async function fetchOverview(contentId) {
   const url = `${DETAIL_URL}?serviceKey=${encodeURIComponent(env.PUBLIC_DATA_API_KEY)}&${params.toString()}`;
 
   try {
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url);
     const text = await res.text();
     if (!res.ok) return null;
     const json = JSON.parse(text);

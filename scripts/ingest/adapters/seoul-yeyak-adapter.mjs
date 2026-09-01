@@ -16,6 +16,7 @@
 // 적용한다. 단, Decision 017 9항에 따라 open_spaces(체육시설/공간시설)의 키즈 뱃지만큼은 더
 // 좁은 신호(USETGTINFO/MINCLASSNM)로만 판별하는 deriveSpaceKidsFriendly를 쓴다(오매핑 정화).
 import { BaseCollectorAdapter } from './base-collector-adapter.mjs';
+import { fetchWithTimeout } from '../lib/fetch-with-timeout.mjs';
 import { buildEventRow, buildOpenSpaceRow, UI_CATEGORY } from './lib/schema-mapper.mjs';
 import { deriveParentalTags, deriveSpaceKidsFriendly } from '../lib/ai-tagging.mjs';
 import { extractYeyakDescription } from '../lib/seoul-yeyak-description.mjs';
@@ -89,7 +90,7 @@ export class SeoulYeyakAdapter extends BaseCollectorAdapter {
 
   async fetchPage(startIdx, endIdx) {
     const url = `${BASE_URL}/${this.apiKey}/json/${SERVICE_NAME}/${startIdx}/${endIdx}/`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url);
     const text = await res.text();
 
     let json;

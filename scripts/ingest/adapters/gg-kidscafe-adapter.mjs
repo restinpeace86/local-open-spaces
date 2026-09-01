@@ -42,6 +42,8 @@ import crypto from 'crypto';
 import { BaseCollectorAdapter } from './base-collector-adapter.mjs';
 import { buildOpenSpaceRow, UI_CATEGORY } from './lib/schema-mapper.mjs';
 import { geocode, hasVworldApiKey } from './lib/vworld-geocoder.mjs';
+import { fetchWithTimeout } from '../lib/fetch-with-timeout.mjs';
+import { settleGroupFetches } from '../lib/settle-group-fetches.mjs';
 
 const KIDSCAFE_BASE_URL = 'https://openapi.gg.go.kr/Kidscafe';
 const RESRESTRT_BASE_URL = 'https://openapi.gg.go.kr/Resrestrtkidscafe';
@@ -107,7 +109,7 @@ export class GgKidscafeAdapter extends BaseCollectorAdapter {
     });
 
     const url = `${baseUrl}?${params.toString()}`;
-    const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT } });
+    const res = await fetchWithTimeout(url, { headers: { 'User-Agent': USER_AGENT } });
     const text = await res.text();
 
     if (!res.ok) {
@@ -153,12 +155,19 @@ export class GgKidscafeAdapter extends BaseCollectorAdapter {
     return items;
   }
 
+  // [외부 공공 API 배치 수집 안정성 및 독립 실행 구조 고도화](2026-09-01 사용자 지시)
+  // 항목 1: 키즈카페/휴게음식점(놀이방식당, "키즈친화 식당" 데이터 소스) 두 API가
+  // 완전히 독립인데 Promise.all로 묶여 있어 하나가 실패하면 다른 하나까지 버려지고
+  // 있었다 — settleGroupFetches로 개별 격리.
   async fetch() {
-    const [kidscafeItems, resrestrtItems] = await Promise.all([
-      this.fetchAll(KIDSCAFE_BASE_URL, 'Kidscafe'),
-      this.fetchAll(RESRESTRT_BASE_URL, 'Resrestrtkidscafe'),
+    const results = await settleGroupFetches(this.sourceKey, [
+      { name: 'Kidscafe(키즈카페)', run: () => this.fetchAll(KIDSCAFE_BASE_URL, 'Kidscafe') },
+      { name: 'Resrestrtkidscafe(놀이방식당)', run: () => this.fetchAll(RESRESTRT_BASE_URL, 'Resrestrtkidscafe') },
     ]);
-    return { kidscafeItems, resrestrtItems };
+    return {
+      kidscafeItems: results['Kidscafe(키즈카페)'] ?? [],
+      resrestrtItems: results['Resrestrtkidscafe(놀이방식당)'] ?? [],
+    };
   }
 
   // eslint-disable-next-line class-methods-use-this
