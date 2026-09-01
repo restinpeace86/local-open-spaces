@@ -875,3 +875,24 @@
     누락 없이 수집 확인, 필수 환경변수 누락 시 env-precheck 정상 동작 확인,
     테스트 데이터 삭제로 원상 복구. 상세:
     `implementation/2026-09-01-kma-weather-cron-pipeline.md`.
+
+- [x] **[개발 요청] 에어코리아(한국환경공단) 시도별 실시간 대기질 API 연동 어댑터 구현
+  (실제 API 스펙 반영)** (2026-09-01 완료)
+  - 인증키는 새 환경변수 없이 기존 `PUBLIC_DATA_API_KEY` 재사용(KMA와 동일 포털
+    인증키임을 확인).
+  - 신규 `address-sido-lookup.mjs`: `open_spaces.address` 첫 토큰(시/도)을 AirKorea
+    `sidoName` 17개 약칭으로 변환. 실제 DB 142,024건 전수 스캔(325개 고유 첫 토큰)
+    기반으로 표를 구성(추측 금지) — `"전남광주통합특별시"`(2,584건, 17개 표준
+    시/도 어디에도 대응 안 됨)와 `"광주시"`(경기도 광주시/광주광역시 판별 불가,
+    `korea-region-lookup.mjs`의 기존 판단과 동일)는 의도적으로 매핑하지 않고 제외.
+  - 어댑터 `airkorea-adapter.mjs`: 17개 시/도 순회 수집 + `settleGroupFetches`
+    재사용한 개별 시/도 에러 격리(실측 중 부산/경남 504 타임아웃 후 재시도로 정상
+    복구 확인), pm10Value/pm25Value/pm10Grade/pm25Grade 파싱 및 방어('-'/빈 문자열/
+    범위 밖 등급 → null), 시/도 단위 측정소 평균 집계(API가 위경도 없이 시/도
+    단위로만 데이터를 줘 발생한 정밀도 한계 — 구현 판단으로 명시), `kma-weather-
+    adapter.mjs`의 `upsertWeatherCaches` 재사용(중복 구현 없음).
+  - **검증**: `npx tsc --noEmit`/`npm run test`(80파일 818건 — 신규 17건)/
+    `npm run build` 통과. 실측: 실제 에어코리아 API로 10건 수집(8/10 매핑 성공,
+    2건은 `"전남광주통합특별시"`라 의도대로 미매칭 확인) → 실제 DB upsert 확인 →
+    같은 스팟에 KMA 어댑터 재실행 시 pm10/pm25가 손상되지 않고 공존함을 확인 →
+    테스트 데이터 삭제. 상세: `implementation/2026-09-01-airkorea-adapter.md`.
