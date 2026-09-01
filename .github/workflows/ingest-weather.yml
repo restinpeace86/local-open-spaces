@@ -1,0 +1,63 @@
+name: Weather Ingestion (KMA 3-Hourly Batch)
+
+# [기상청 날씨 데이터 수집 3시간 주기 배치(Cron) 파이프라인 연동](2026-09-01 사용자 지시):
+# 직전에 구축한 기상청 단기예보 어댑터(scripts/ingest/adapters/kma-weather-adapter.mjs)를
+# 3시간마다 실행해 전국 스팟의 spot_weather_caches를 갱신한다. daily/monthly 배치와 달리
+# 소스가 KMA_WEATHER 하나뿐이라(run-daily.mjs/run-monthly.mjs 같은 다중 소스 오케스트레이터가
+# 필요 없음) 어댑터의 CLI 진입점을 그대로 실행 대상으로 삼는다(제5장 제4조 기존 구조 우선 —
+# 불필요한 오케스트레이터 계층을 새로 만들지 않음).
+#
+# [Cron 스케줄 — 정확히 요구사항대로]: 요구사항이 "각 발표 시각 뒤 47분, 02/05/08/11/14/
+# 17/20/23시(KST) 총 하루 8회"를 명시했다. GitHub Actions의 schedule cron은 UTC 기준으로
+# 해석되므로 보통은 KST→UTC로 시(hour)를 옮겨야 하지만(daily/monthly 배치가 각각 그렇게
+# 했다), 이번 발표 시각 집합은 예외다 — 계산으로 직접 확인한 결과, KST 오프셋(+9시간)이
+# 발표 주기(3시간)의 정확한 배수라서 [2,5,8,11,14,17,20,23]을 KST로 읽든 UTC로 읽든 완전히
+# 동일한 시(hour) 집합이 나온다(각 값이 3으로 나눈 나머지가 모두 2이고, 9도 3의 배수라
+# -9시간 이동이 이 나머지를 보존함 — 실제 계산으로 재확인: 두 집합이 정확히 일치). 따라서
+# 이 cron 표현식은 KST/UTC 조정 없이 요구사항이 제시한 값을 그대로 쓴다. "정각 트리거 회피
+# + 스탬피드 방지"용 47분 오프셋도 요구사항이 명시적으로 지정한 값이다.
+#
+# [docs/pipeline-log.md에 기록하지 않는 이유]: 기존 recordBatchRun()/splitTableCounts()는
+# "외부 카탈로그를 훑어 events/open_spaces에 신규 행을 upsert"하는 배치를 위해 설계된
+# 표 포맷(RAW 수신 vs events/open_spaces 적재 vs 드롭 검증)이라, 이 배치가 다루는
+# spot_weather_caches(격자 단위 날씨 캐시 갱신)의 의미와 근본적으로 다르다 — 억지로 끼워
+# 맞추면 "open_spaces 적재 건수" 칸에 날씨 캐시 건수가 찍혀 오히려 오해를 부른다. 요구사항
+# 5가 "콘솔 또는 시스템 로거"를 명시적으로 허용하므로, 어댑터 run()이 이미 남기는 구조화된
+# 콘솔 로그(배치 시작/종료, 총 격자 수, 성공·실패 격자 수, 소요 시간)를 GitHub Actions 자체
+# 실행 로그(Actions 탭에서 매 실행 확인 가능)로 남기는 것으로 충분하다고 판단했다 — 8회/일
+# 주기로 매번 리포지토리에 로그 커밋을 남기면(daily/monthly 대비 8배 빈도) 불필요한 git
+# 노이즈만 커진다.
+#
+# [재시도 없이 단발 실행]: daily/monthly는 "하루/한달에 한 번"이라 실패 시 15분 대기 후
+# 1회 재시도하는 안전장치를 뒀지만, 이 배치는 3시간마다 자동으로 다시 돈다 — 한 번 실패해도
+# 최대 3시간 뒤 다음 주기가 스스로 복구하므로 워크플로 레벨 재시도는 불필요한 복잡도다.
+permissions:
+  contents: read
+
+on:
+  schedule:
+    - cron: '47 2,5,8,11,14,17,20,23 * * *'
+  workflow_dispatch:
+
+jobs:
+  weather-batch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # [핵심 events 수집 파이프라인 장애 점검](2026-08-30 사용자 지시) 실측 발견과 동일한
+      # 사유(@supabase/supabase-js 2.112.3의 engines가 node >=22.0.0을 요구) — 상세 배경은
+      # ingest-daily.yml 상단 주석 참고.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: KMA Weather Batch (전국 EXACT 스팟 → spot_weather_caches)
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          PUBLIC_DATA_API_KEY: ${{ secrets.PUBLIC_DATA_API_KEY }}
+        run: node scripts/ingest/adapters/kma-weather-adapter.mjs

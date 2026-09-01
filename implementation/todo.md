@@ -852,3 +852,26 @@
     `npm run build` 통과. 실측: 실제 기상청 API로 실제 스팟 5건 날씨 수집(합리적인
     실제 값 확인) → 실제 DB upsert 확인 → 재실행 시 중복 없이 덮어써짐 확인 →
     테스트 데이터 삭제. 상세: `implementation/2026-09-01-kma-weather-adapter.md`.
+
+- [x] **[개발 요청] 기상청 날씨 데이터 수집 3시간 주기 배치(Cron) 파이프라인 연동**
+  (2026-09-01 완료)
+  - `kma-weather-adapter.mjs`에 `fetchAllExactSpots(client)`(신규,
+    `dedupe-open-spaces.mjs`와 동일한 커서 페이지네이션) 추가 → `run()`이 `limit`
+    미지정 시 전국 EXACT 스팟 전체(실측 142,024건)를 기본 대상으로 처리하도록 변경
+    (기존 `DEFAULT_SPOT_LIMIT=2000` 안전장치 제거).
+  - `collectWeatherForSpots()` 반환 형태를 `{ rows, totalGroups, succeededGroups,
+    failedGroups }`로 확장(요구사항 5 "총 처리된 격자 수, 성공/실패 건수" 로깅용).
+  - `run-daily.mjs`/`run-monthly.mjs`와 동일한 env-precheck(필수 환경변수 누락
+    시작 시점 검사) 추가, 배치 시작/격자 처리 결과/소요 시간 콘솔 로깅 강화.
+  - 신규 `.github/workflows/ingest-weather.yml`: 소스가 KMA 하나뿐이라 별도
+    오케스트레이터 없이 어댑터 CLI를 직접 실행. Cron `47 2,5,8,11,14,17,20,23 * * *`
+    — KST 오프셋(9시간)이 발표 주기(3시간)의 배수라 KST/UTC 조정 없이 요구사항
+    값 그대로 사용 가능함을 계산으로 확인. `docs/pipeline-log.md` 기록과 워크플로
+    재시도는 의도적으로 넣지 않음(사유는 구현 기록 참고 — 데이터 모델 불일치 및
+    3시간 자동 재주기로 불필요).
+  - **검증**: `npx tsc --noEmit`/`npm run test`(78파일 801건 — 신규 3건, 기존 2건
+    반환 형태 수정)/`npm run build` 통과. 실측: `--dry-run --limit=5`/`--limit=5`
+    (실제 upsert) 정상 확인, `fetchAllExactSpots`로 실제 DB 전국 EXACT 142,024건
+    누락 없이 수집 확인, 필수 환경변수 누락 시 env-precheck 정상 동작 확인,
+    테스트 데이터 삭제로 원상 복구. 상세:
+    `implementation/2026-09-01-kma-weather-cron-pipeline.md`.

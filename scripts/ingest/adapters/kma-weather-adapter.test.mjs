@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   collectWeatherForSpots,
+  fetchAllExactSpots,
   fetchUltraSrtNcst,
   fetchVilageFcst,
   groupSpotsByGrid,
@@ -95,6 +96,65 @@ describe('groupSpotsByGrid', () => {
   });
 });
 
+// [3시간 주기 배치 파이프라인 연동](2026-09-01 사용자 지시) 요구사항 1: open_spaces
+// 141,980행 규모 전체를 PostgREST 기본 응답 상한 없이 다 가져와야 하므로, dedupe-open-
+// spaces.mjs와 동일한 `.gt('id', lastId)` 커서 페이지네이션을 쓴다. PAGE_SIZE(1000)
+// 정확히 채워진 페이지 다음에 마지막(부분) 페이지까지 이어붙이는지 확인한다.
+describe('fetchAllExactSpots', () => {
+  it('PAGE_SIZE 단위로 커서 페이지네이션하며 전체 스팟을 모은다', async () => {
+    const page1 = Array.from({ length: 1000 }, (_, i) => ({ id: `id-${String(i).padStart(4, '0')}`, location: { coordinates: [127, 37] } }));
+    const page2 = [{ id: 'id-1000', location: { coordinates: [127.1, 37.1] } }];
+    let callCount = 0;
+    const seenLastIds = [];
+
+    const client = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: () => {
+                const query = {
+                  gt: (_col, val) => {
+                    seenLastIds.push(val);
+                    return query;
+                  },
+                  then: (resolve) => {
+                    callCount += 1;
+                    resolve(callCount === 1 ? { data: page1, error: null } : { data: page2, error: null });
+                  },
+                };
+                return query;
+              },
+            }),
+          }),
+        }),
+      }),
+    };
+
+    const spots = await fetchAllExactSpots(client);
+
+    expect(callCount).toBe(2); // 1000건 꽉 찬 첫 페이지 다음, 미만인 두 번째 페이지에서 종료
+    expect(spots).toHaveLength(1001);
+    expect(seenLastIds).toEqual(['id-0999']); // 두 번째 호출부터만 커서(gt)를 건다
+  });
+
+  it('빈 테이블이면 즉시 빈 배열을 반환한다', async () => {
+    const client = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: () => ({ gt: () => {}, then: (resolve) => resolve({ data: [], error: null }) }),
+            }),
+          }),
+        }),
+      }),
+    };
+
+    expect(await fetchAllExactSpots(client)).toEqual([]);
+  });
+});
+
 describe('KMA API 호출(fetchVilageFcst/fetchUltraSrtNcst)', () => {
   const ORIGINAL_KEY = process.env.PUBLIC_DATA_API_KEY;
 
@@ -177,11 +237,14 @@ describe('collectWeatherForSpots — 격자 단위 격리', () => {
       { id: 'busan-spot', lat: 35.1796, lng: 129.0756 }, // nx=98 (실패)
     ];
 
-    const rows = await collectWeatherForSpots(spots);
+    const { rows, totalGroups, succeededGroups, failedGroups } = await collectWeatherForSpots(spots);
 
     expect(rows).toHaveLength(1);
     expect(rows[0].spot_id).toBe('seoul-spot');
     expect(rows[0].temperature).toBe(20);
+    expect(totalGroups).toBe(2);
+    expect(succeededGroups).toBe(1);
+    expect(failedGroups).toBe(1);
   });
 
   it('같은 격자를 공유하는 스팟은 API를 한 번만 호출하고 결과를 모두에게 복사한다', async () => {
@@ -202,11 +265,19 @@ describe('collectWeatherForSpots — 격자 단위 격리', () => {
       { id: 'c', lat: 37.5665, lng: 126.978 },
     ];
 
-    const rows = await collectWeatherForSpots(spots);
+    const { rows, totalGroups, succeededGroups, failedGroups } = await collectWeatherForSpots(spots);
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(rows).toHaveLength(3);
     expect(rows.every((r) => r.temperature === 20)).toBe(true);
+    expect(totalGroups).toBe(1);
+    expect(succeededGroups).toBe(1);
+    expect(failedGroups).toBe(0);
+  });
+
+  it('스팟이 없으면 빈 결과와 0건 집계를 반환한다', async () => {
+    const result = await collectWeatherForSpots([]);
+    expect(result).toEqual({ rows: [], totalGroups: 0, succeededGroups: 0, failedGroups: 0 });
   });
 });
 

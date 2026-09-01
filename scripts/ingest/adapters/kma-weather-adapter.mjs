@@ -26,6 +26,7 @@ import { withRetry } from '../lib/retry.mjs';
 import { settleGroupFetches } from '../lib/settle-group-fetches.mjs';
 import { createAdminClient } from '../lib/supabase-admin.mjs';
 import { loadEnv } from '../../lib/load-env.mjs';
+import { getMissingEnvVars, formatMissingEnvVarsMessage } from '../lib/env-precheck.mjs';
 
 const BASE_URL = 'https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0';
 const SOURCE_KEY = 'KMA_WEATHER';
@@ -176,9 +177,13 @@ async function fetchGridWeather({ nx, ny }, { useUltraSrtNcst = false } = {}) {
 // spots: [{ id, lat, lng }]. 격자별로 API를 정확히 1회씩만 호출하고, 격자 하나가
 // 실패해도(요구사항 "개별 try-catch 에러 격리") 나머지 격자는 계속 진행한다
 // (settleGroupFetches 재사용 — 2026-09-01에 이미 구축한 동일한 격리 패턴).
+//
+// [3시간 주기 배치 파이프라인 연동](2026-09-01 사용자 지시) 요구사항 5 "실행 로깅: 총
+// 처리된 격자 수, 성공/실패 건수"를 상위(run())가 그대로 콘솔에 남길 수 있도록, 반환값을
+// 단순 배열에서 격자 단위 성공/실패 집계를 포함한 객체로 바꾼다.
 export async function collectWeatherForSpots(spots, { useUltraSrtNcst = false } = {}) {
   const groups = groupSpotsByGrid(spots);
-  if (groups.length === 0) return [];
+  if (groups.length === 0) return { rows: [], totalGroups: 0, succeededGroups: 0, failedGroups: 0 };
 
   const results = await settleGroupFetches(
     SOURCE_KEY,
@@ -190,14 +195,20 @@ export async function collectWeatherForSpots(spots, { useUltraSrtNcst = false } 
 
   const updatedAt = new Date().toISOString();
   const rows = [];
+  let succeededGroups = 0;
+  let failedGroups = 0;
   for (const group of groups) {
     const weather = results[`${group.nx},${group.ny}`];
-    if (!weather) continue; // 이 격자만 실패 — settleGroupFetches가 이미 경고 로그를 남겼다.
+    if (!weather) {
+      failedGroups += 1; // 이 격자만 실패 — settleGroupFetches가 이미 경고 로그를 남겼다.
+      continue;
+    }
+    succeededGroups += 1;
     for (const spotId of group.spotIds) {
       rows.push({ spot_id: spotId, ...weather, updated_at: updatedAt });
     }
   }
-  return rows;
+  return { rows, totalGroups: groups.length, succeededGroups, failedGroups };
 }
 
 const UPSERT_BATCH_SIZE = 500;
@@ -224,51 +235,112 @@ export async function upsertWeatherCaches(client, rows) {
   return { count };
 }
 
-// 안전장치: open_spaces 141,980건 전체를 한 회차에 처리하지 않는다(격자 그룹핑으로
-// API 호출 수는 크게 줄어들지만, DB 조회/쓰기 및 배치 실행 시간까지 무제한으로 늘리지
-// 않기 위한 보수적 기본값 — 실제 운영 규모는 사용자 확인 후 조정 가능).
-const DEFAULT_SPOT_LIMIT = 2000;
-
 function extractCoords(location) {
   const coords = location?.coordinates;
   return coords ? { lng: coords[0], lat: coords[1] } : null;
 }
 
-// open_spaces에서 좌표가 정확한(EXACT) 스팟을 대상으로 날씨를 수집해 upsert한다.
-// [배치 수집 안정성 고도화](2026-08-30~09-01) 관례를 그대로 따른다: dryRun이면 DB를
-// 건드리지 않고 결과 미리보기만 출력한다.
-export async function run({ dryRun = false, limit = DEFAULT_SPOT_LIMIT, useUltraSrtNcst = false } = {}) {
-  const client = createAdminClient();
+function toSpot(row) {
+  const coords = extractCoords(row.location);
+  return coords ? { id: row.id, ...coords } : null;
+}
 
+const PAGE_SIZE = 1000;
+
+// [3시간 주기 배치 파이프라인 연동](2026-09-01 사용자 지시) 요구사항 1 "open_spaces
+// 테이블에서 활성화된 모든 스팟을 가져옴" — open_spaces에는 소프트 삭제/활성화 컬럼이
+// 없어(dedupe-open-spaces.mjs 조사 시 이미 확인한 사실) "활성화된 스팟"은 이 프로젝트의
+// 기존 관례상 "좌표가 확정된(location_precision='EXACT') 스팟"으로 해석한다(직전 어댑터
+// 구현 작업과 동일한 해석). 141,980행 규모 전체를 PostgREST 기본 응답 상한 없이 안전하게
+// 다 가져와야 하므로, dedupe-open-spaces.mjs의 fetchAllOpenSpaces()와 동일한 `.gt('id',
+// lastId)` 커서 페이지네이션 패턴을 그대로 재사용한다(제5장 제4조 기존 구조 우선).
+export async function fetchAllExactSpots(client) {
+  const spots = [];
+  let lastId = null;
+  for (;;) {
+    let query = client
+      .from('open_spaces')
+      .select('id, location')
+      .eq('location_precision', 'EXACT')
+      .order('id', { ascending: true })
+      .limit(PAGE_SIZE);
+    if (lastId) query = query.gt('id', lastId);
+    // eslint-disable-next-line no-await-in-loop
+    const { data, error } = await query;
+    if (error) throw new Error(`open_spaces 조회 실패: ${error.message}`);
+    for (const row of data ?? []) {
+      const spot = toSpot(row);
+      if (spot) spots.push(spot);
+    }
+    if (!data || data.length < PAGE_SIZE) break;
+    lastId = data[data.length - 1].id;
+  }
+  return spots;
+}
+
+// CLI/수동 테스트용 — `limit`을 명시적으로 넘겼을 때만 쓰는 소규모 단건 조회다(3건짜리
+// 실측 검증처럼 141,980건 전체를 다 훑을 필요가 없을 때).
+async function fetchLimitedExactSpots(client, limit) {
   const { data, error } = await client
     .from('open_spaces')
     .select('id, location')
     .eq('location_precision', 'EXACT')
     .limit(limit);
   if (error) throw new Error(`open_spaces 조회 실패: ${error.message}`);
+  return (data ?? []).map(toSpot).filter(Boolean);
+}
 
-  const spots = (data ?? [])
-    .map((row) => {
-      const coords = extractCoords(row.location);
-      return coords ? { id: row.id, ...coords } : null;
-    })
-    .filter(Boolean);
+// open_spaces에서 좌표가 정확한(EXACT) 스팟 전체를 대상으로 날씨를 수집해 upsert한다.
+// [배치 수집 안정성 고도화](2026-08-30~09-01) 관례를 그대로 따른다: dryRun이면 DB를
+// 건드리지 않고 결과 미리보기만 출력한다.
+//
+// [3시간 주기 배치 파이프라인 연동](2026-09-01 사용자 지시): `limit`을 넘기지 않으면
+// 전국 EXACT 스팟 전체(fetchAllExactSpots)를 대상으로 한다 — 격자 그룹핑이 이미 API
+// 호출 수를 5km 격자 단위로 크게 줄여주므로(요구사항 2), 141,980행 규모라도 실제 외부
+// API 호출 횟수는 고유 격자 셀 수만큼만 발생한다. `limit`을 명시하면(CLI `--limit=N`,
+// 실측 검증용) 기존처럼 소규모로 제한한다.
+// [핵심 events 수집 파이프라인 장애 점검](2026-08-30 사용자 지시)이 실제로 겪은 카스케이드
+// 실패(GitHub Actions에 필수 환경변수가 비어 있었는데 원인이 뒤늦게 드러남)를 이 배치도
+// 똑같이 겪을 수 있어(run-daily.mjs/run-monthly.mjs와 동일한 관례를 그대로 적용), 시작
+// 시점에 한 번에 검사한다.
+const REQUIRED_ENV_VARS = ['NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'PUBLIC_DATA_API_KEY'];
+
+export async function run({ dryRun = false, limit, useUltraSrtNcst = false } = {}) {
+  const startedAt = Date.now();
+
+  const missingEnvVars = getMissingEnvVars(REQUIRED_ENV_VARS);
+  if (missingEnvVars.length > 0) {
+    const message = formatMissingEnvVarsMessage(missingEnvVars);
+    console.error(`❌ [${SOURCE_KEY}] 배치 시작 불가: ${message}`);
+    return { sourceKey: SOURCE_KEY, failed: true, count: 0, upserted: false, totalGroups: 0, succeededGroups: 0, failedGroups: 1, note: message };
+  }
+
+  const client = createAdminClient();
+
+  console.log(`▶▶▶ [${SOURCE_KEY}] 배치 시작 (dry-run: ${dryRun}, 범위: ${limit ? `상위 ${limit}건` : '전국 EXACT 스팟 전체'})`);
+
+  const spots = typeof limit === 'number' ? await fetchLimitedExactSpots(client, limit) : await fetchAllExactSpots(client);
 
   console.log(`▶ [${SOURCE_KEY}] 대상 스팟 ${spots.length}건`);
-  const groups = groupSpotsByGrid(spots);
-  console.log(`  고유 격자 셀 ${groups.length}개로 그룹핑(중복 API 호출 회피)`);
-
-  const rows = await collectWeatherForSpots(spots, { useUltraSrtNcst });
-  console.log(`  날씨 데이터 확보: ${rows.length}/${spots.length}건`);
+  const { rows, totalGroups, succeededGroups, failedGroups } = await collectWeatherForSpots(spots, { useUltraSrtNcst });
+  console.log(
+    `  격자 처리 결과: 총 ${totalGroups}개(성공 ${succeededGroups} / 실패 ${failedGroups}) → 날씨 데이터 확보 ${rows.length}/${spots.length}스팟`
+  );
 
   if (dryRun) {
     console.log(JSON.stringify(rows.slice(0, 3), null, 2));
-    return { sourceKey: SOURCE_KEY, count: rows.length, upserted: false };
+    const durationMs = Date.now() - startedAt;
+    console.log(`▶▶▶ [${SOURCE_KEY}] 배치 종료(dry-run) — 소요 시간 ${(durationMs / 1000).toFixed(1)}초`);
+    return { sourceKey: SOURCE_KEY, count: rows.length, upserted: false, totalGroups, succeededGroups, failedGroups, durationMs };
   }
 
   const { count } = await upsertWeatherCaches(client, rows);
+  const durationMs = Date.now() - startedAt;
   console.log(`✅ [${SOURCE_KEY}] spot_weather_caches upsert 완료: ${count}건`);
-  return { sourceKey: SOURCE_KEY, count, upserted: true };
+  console.log(
+    `▶▶▶ [${SOURCE_KEY}] 배치 종료 — 격자 ${totalGroups}개(성공 ${succeededGroups}/실패 ${failedGroups}), 소요 시간 ${(durationMs / 1000).toFixed(1)}초`
+  );
+  return { sourceKey: SOURCE_KEY, count, upserted: true, totalGroups, succeededGroups, failedGroups, durationMs };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
@@ -279,8 +351,9 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const limit = limitArg ? Number(limitArg.slice('--limit='.length)) : undefined;
 
   run({ dryRun, useUltraSrtNcst, ...(limit ? { limit } : {}) })
-    .then(({ count }) => {
+    .then(({ count, failedGroups }) => {
       console.log(`▶▶▶ [${SOURCE_KEY}] 종료: ${count}건 처리`);
+      process.exitCode = failedGroups > 0 ? 1 : 0;
     })
     .catch((err) => {
       console.error(`❌ [${SOURCE_KEY}] 실행 실패: ${err.message}`);
