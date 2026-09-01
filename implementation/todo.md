@@ -757,3 +757,33 @@
     `implementation/2026-09-01-spotpick-fallback-frontend-section-1.md`.
   - 각 섹션 완료 시 `npx tsc --noEmit`/`npm run test`/`npm run build` 통과 확인 후
     커밋. **4개 섹션 전체 완료.**
+
+- [x] **[개발 요청] 스팟픽(SpotPick) UI/UX 개선 및 버그 패치 (4가지 항목)**
+  (2026-09-01 완료)
+  - **항목 1(마커 클릭 2단계 UX)**: `map-explorer.tsx`에 `previewItem` 상태 신설 —
+    마커 클릭은 전용 핸들러로 분리해 전체 상세 대신 신규 `MarkerPreviewCard`(썸네일
+    자리/장소명/간단 주소 말풍선 카드)만 먼저 띄우고, 그 카드를 터치해야 전체
+    `DetailModal`로 승격된다. 리스트/AI추천/겹친마커그룹 클릭은 요구사항이 "마커
+    클릭"으로 한정했으므로 기존처럼 즉시 전체 상세로 진입(단, previewItem은 함께
+    정리). 위로 스와이프 제스처는 이번 범위에서 구현하지 않음(탭으로 동일 결과 도달).
+  - **항목 2(예약 버튼 노출 조건 엄격화)**: `DetailModal`의 보조 액션에 4번째 분기
+    추가 — info_url → naver_booking_url → **spot_curations 존재(관리자 확인 신호로
+    재해석, 새 컬럼 만들지 않음)** → 안내 텍스트(무료: "예약 필요 없음 · 상시 무료
+    입장", 그 외: "예약 관련 정보가 없습니다"). 큐레이션 없는 절대다수 스팟은 이제
+    버튼 대신 텍스트만 노출.
+  - **항목 3(관리자 자동완성)**: `searchSpacesNationwide`에 `categoryMin` 파라미터
+    추가 + `/api/spots/search`에 `category_min` 쿼리 파라미터 연결. **실측 중 발견한
+    기존 버그**: SPACE_COLUMNS/SpaceRow/toSpaceItem에 category_min이 빠져 있어 이
+    검색 API 결과의 category_min이 항상 undefined였던 잠재 결함(검색 모드 중분류
+    필터가 한 번도 매치 안 됐음)을 함께 수정. 관리자 스팟 큐레이션 탭 검색을
+    "키즈친화 식당"(놀이방식당)으로 좁히고 2글자 미만 조회 금지, "[장소명 +
+    주소(동/읍/면)]" 축약 표시 추가.
+  - **항목 4(중복 지도 뷰 제거)**: `DetailModal`에 `hideMapSection` prop 추가,
+    map-explorer.tsx만 true로 전달 — 정확한 좌표라 실제 지도를 보여줄 수 있었던
+    경우만 미니맵/지도 CTA 생략(좌표 부정확 안내 문구는 중복 정보가 아니므로 그대로
+    유지). 이벤트는 이 prop과 무관하게 항상 기존 구조 유지.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(73파일 757건 — 신규/갱신 13건)/
+    `npm run build` 통과. 실측: `/api/spots/search`에 category_min 필드가 정상
+    채워지는지, category_min 필터가 실제로 좁혀지는지(65건 전부 놀이방식당) 확인,
+    Playwright로 관리자 화면 실제 자동완성(10건, "가능동" 축약 주소) 확인. 상세:
+    `implementation/2026-09-01-spotpick-ux-4-fixes.md`.

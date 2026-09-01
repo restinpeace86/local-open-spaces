@@ -54,7 +54,22 @@ function formatCuratedHours(curation: SpotCuration): string | null {
 // 마우스 호버 툴팁 대신, 모바일/데스크톱 모두에서 동일하게 동작하는 펼치기 토글을 택했다.
 const DESCRIPTION_PREVIEW_THRESHOLD = 60;
 
-export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () => void }) {
+export function DetailModal({
+  item,
+  onClose,
+  hideMapSection = false,
+}: {
+  item: NearbyItem;
+  onClose: () => void;
+  // [스팟픽 UI/UX 개선 4종](2026-09-01 사용자 지시) 항목 4: /nearby(스팟픽)는 배경 화면
+  // 자체가 이미 지도라 상세 모달 안에 또 지도(MiniMap)를 띄우고 "지도에서 보기" 버튼까지
+  // 중복 노출하는 게 불필요하다. map-explorer.tsx만 이 값을 true로 넘긴다 — 다른 화면
+  // (홈/캘린더/지역별 그리드, 그리고 이벤트픽 전반)은 배경이 지도가 아니라서 인앱
+  // 미니맵이 여전히 유일한 위치 확인 수단이므로 기본값 false로 기존 동작을 그대로
+  // 유지한다. 이벤트는 이 값과 무관하게 항상 기존 구조를 유지한다(요구사항 "이벤트픽은
+  // 기존 리스트형 상세 구조 유지").
+  hideMapSection?: boolean;
+}) {
   const [copied, setCopied] = useState(false);
   const [isMapPreviewOpen, setIsMapPreviewOpen] = useState(false);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
@@ -103,6 +118,12 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
   // 경로) EXACT로 간주한다. CITY_APPROX/UNKNOWN은 정확한 행사장 위치가 아니므로 지도/길찾기를
   // 보여주면 사용자를 오도한다 — 근사·미상 좌표를 정확한 핀처럼 그리지 않는다.
   const hasExactLocation = (item.location_precision ?? 'EXACT') === 'EXACT';
+  // [중복 지도 뷰 제거](2026-09-01 사용자 지시): 스팟픽 지도 화면(hideMapSection)에서
+  // "정확한 좌표라 실제로 지도를 보여줄 수 있는" 스팟만 미니맵/지도 CTA를 생략한다 —
+  // 좌표가 부정확해 애초에 지도 대신 안내 문구만 뜨던 경우는 hideMapSection과 무관하게
+  // 그대로 보여준다(그 문구는 배경 지도와 중복되는 정보가 아니라 "왜 위치가 부정확한지"
+  // 설명하는 유용한 정보라 제거 대상이 아니다).
+  const shouldHideMapForSpotScreen = hideMapSection && !isEvent && hasExactLocation;
 
   const dDay = isEvent ? formatDDay(item.reservation_end_date ?? item.end_date) : null;
   const period = isEvent ? formatDateRange(item.start_date, item.end_date) : null;
@@ -134,7 +155,7 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
     ? { type: 'link' as const, label: '🏛️ 공공 예약하기', href: publicReservationUrl }
     : item.is_free === false && item.affiliate_url
     ? { type: 'link' as const, label: '🎟️ 할인 예매하기', href: item.affiliate_url }
-    : hasExactLocation
+    : hasExactLocation && !shouldHideMapForSpotScreen
     ? { type: 'map' as const, label: '🗺️ 지도에서 보기' }
     : null;
 
@@ -150,13 +171,27 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
   // 구축된 자체 신청 폼(2026-08-29 결정)을 대체하는 게 아니라, 더 나은 실제 채널이
   // 있을 때만 그쪽을 우선한다: info_url(공식/공공) → naver_booking_url(관리자 확인
   // 네이버 예약) → 자체 간편 예약/신청 폼(둘 다 없을 때의 최종 폴백).
+  //
+  // [예약 버튼 노출 조건 엄격화](2026-09-01 사용자 지시): 자체 간편 예약 폼을 "예약
+  // 데이터가 전혀 없어도 무조건 뜨는" 만능 폴백으로 두지 않는다 — spot_curations에
+  // is_active 큐레이션이 있다는 것 자체를 "관리자가 이 스팟을 확인하고 문의를 받을
+  // 준비가 됐다"는 실제 신호로 삼는다(스키마에 별도 "예약 가능 여부" 플래그가 없어
+  // 새로 만들지 않고 기존 신호를 재해석 — 제3장 제5조 추측 금지에 따라 근거 없는 새
+  // 컬럼을 만들지 않았다). 셋 다 없는(비큐레이션) 절대다수의 공공데이터 스팟은 이제
+  // 예약 버튼 대신 안내 텍스트만 보여준다 — 무료 시설은 "예약 필요 없음", 그 외는
+  // 정보 없음 안내로 오해를 방지한다.
   const secondaryAction = isEvent
     ? null
     : item.info_url
     ? { type: 'link' as const, label: '🌐 공식 홈페이지 바로가기', href: item.info_url }
     : curation?.naver_booking_url
     ? { type: 'link' as const, label: '🟢 네이버로 예약하기', href: curation.naver_booking_url }
-    : { type: 'reservation' as const, label: '📝 간편 예약/신청하기' };
+    : curation
+    ? { type: 'reservation' as const, label: '📝 간편 예약/신청하기' }
+    : {
+        type: 'info' as const,
+        label: item.is_free === true ? '예약 필요 없음 · 상시 무료 입장' : '예약 관련 정보가 없습니다',
+      };
 
   async function handleCopyAddress() {
     if (!item.address) return;
@@ -343,7 +378,7 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
               "🔍 크게보기"로 풀스크린 지도 모달을 띄운다.
               Task 9-6-2: 근사/미상 좌표(CITY_APPROX/UNKNOWN)는 정확한 위치가 아니므로 지도 대신
               안내 문구만 보여준다(정확한 핀처럼 오인시키지 않기 위함). */}
-          {hasExactLocation ? (
+          {shouldHideMapForSpotScreen ? null : hasExactLocation ? (
             <div className="mt-4 relative rounded-xl overflow-hidden border border-gray-200">
               <MiniMap lat={item.lat} lng={item.lng} name={item.name} address={item.address} className="w-full h-40" />
               <button
@@ -400,6 +435,13 @@ export function DetailModal({ item, onClose }: { item: NearbyItem; onClose: () =
               >
                 {secondaryAction.label}
               </button>
+            )}
+            {/* [예약 버튼 노출 조건 엄격화](2026-09-01 사용자 지시): 실제 예약 채널이
+                하나도 없으면 버튼 대신 안내 텍스트만 보여준다(무료 시설은 "예약 필요
+                없음", 그 외는 정보 없음). cta가 없는 스팟픽 화면(지도 CTA 생략)에서는
+                이 텍스트가 액션 행의 유일한 내용이 된다. */}
+            {secondaryAction?.type === 'info' && (
+              <p className="flex-1 text-center text-sm text-gray-400 py-2.5">{secondaryAction.label}</p>
             )}
           </div>
         </div>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { parseMenuText, parseOperatingHoursText, ParsedMenuItem } from '@/lib/admin/spot-curation-parsers';
+import { CORE_SPOT_CATEGORIES } from '@/lib/spaces/spot-category-groups';
 
 // [개발 종합 요청] 스팟픽 MVP 스마트 폴백, 관리자 큐레이션 및 배치 안정화 고도화(2026-09-01)
 // 섹션 2: 관리자 전용 "스팟 큐레이션" 탭. curated_items(제휴 상품, booking_url 외부 링크
@@ -30,6 +31,24 @@ type SpotCurationItem = {
 type SpotSearchResult = { id: string; name: string; address: string | null };
 
 const PAGE_SIZE = 20;
+
+// [관리자 '스팟 큐레이션' 탭 장소 검색 자동완성](2026-09-01 사용자 지시): 스팟 큐레이션은
+// 애초에 "키즈친화 식당"(gg-kidscafe-adapter.mjs가 적재하는 category_min='놀이방식당')을
+// 위해 설계된 기능이라, 검색 대상을 이 중분류로 좁힌다. 하드코딩된 문자열을 새로 만들지
+// 않고 CORE_SPOT_CATEGORIES(/nearby 필터 칩과 동일한 단일 출처)에서 찾아 쓴다.
+const KIDS_RESTAURANT_CATEGORY_MIN = CORE_SPOT_CATEGORIES.find((c) => c.id === 'kids-restaurant')?.minors[0];
+const SPOT_SEARCH_MIN_LENGTH = 2;
+
+// 요구사항 "[장소명 + 주소(동/읍/면)]": 도로명 주소 끝에 "...(가능동)"처럼 법정동/읍/면이
+// 괄호로 붙어 있으면 그 부분만 짧게 뽑아 보여준다(실측 확인: 이 표기가 실제 데이터의
+// 표준 형태). 괄호 표기가 없는 주소는 완벽히 파싱할 근거가 없어(추측 금지) 시/군/구까지만
+// 간략히 보여주는 것으로 안전하게 폴백한다.
+function formatShortAddress(address: string | null): string {
+  if (!address) return '';
+  const dongMatch = address.match(/\(([^)]*[동읍면])\)/);
+  if (dongMatch) return dongMatch[1];
+  return address.split(' ').filter(Boolean).slice(0, 3).join(' ');
+}
 
 function ToggleSwitch({ checked, onToggle, disabled }: { checked: boolean; onToggle: () => void; disabled?: boolean }) {
   return (
@@ -87,19 +106,24 @@ function CurationFormModal({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // 스팟 검색(신규 등록 시에만) — 이미 구축된 전국구 서버사이드 검색(/api/spots/search)을
-  // 그대로 재사용한다(제5장 제4조 기존 구조 우선 — 새 검색 엔드포인트를 또 만들지 않음).
+  // [관리자 '스팟 큐레이션' 탭 장소 검색 자동완성](2026-09-01 사용자 지시): 이미 구축된
+  // 전국구 서버사이드 검색(/api/spots/search)을 그대로 재사용하되(제5장 제4조 기존
+  // 구조 우선 — 새 검색 엔드포인트를 또 만들지 않음), 이 탭은 "키즈친화 식당"
+  // (category_min='놀이방식당') 전용이라 그 범위로 좁히고, 2글자 미만은 조회하지
+  // 않는다(1,700여 건 중 1글자로는 결과가 너무 많아 자동완성 의미가 없음).
   useEffect(() => {
     if (isEdit) return;
     const trimmed = spotQuery.trim();
-    if (!trimmed) {
+    if (trimmed.length < SPOT_SEARCH_MIN_LENGTH) {
       setSpotResults([]);
       return;
     }
     let cancelled = false;
     const timer = setTimeout(() => {
       setIsSearchingSpot(true);
-      fetch(`/api/spots/search?q=${encodeURIComponent(trimmed)}`)
+      const params = new URLSearchParams({ q: trimmed });
+      if (KIDS_RESTAURANT_CATEGORY_MIN) params.set('category_min', KIDS_RESTAURANT_CATEGORY_MIN);
+      fetch(`/api/spots/search?${params.toString()}`)
         .then((res) => res.json())
         .then((data: { items?: Array<{ id: string; name: string; address: string | null }> }) => {
           if (cancelled) return;
@@ -228,12 +252,12 @@ function CurationFormModal({
             </div>
           ) : (
             <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-gray-700">스팟 검색(이름/주소)</span>
+              <span className="font-medium text-gray-700">스팟 검색(키즈친화 식당 · 2글자 이상)</span>
               {selectedSpot ? (
                 <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
                   <div>
                     <p className="text-sm font-medium text-gray-900">{selectedSpot.name}</p>
-                    <p className="text-xs text-gray-500">{selectedSpot.address}</p>
+                    <p className="text-xs text-gray-500">{formatShortAddress(selectedSpot.address)}</p>
                   </div>
                   <button
                     type="button"
@@ -249,7 +273,7 @@ function CurationFormModal({
                     type="text"
                     value={spotQuery}
                     onChange={(e) => setSpotQuery(e.target.value)}
-                    placeholder="예: 운중어린이공원"
+                    placeholder="장소명 2글자 이상 입력(예: 키즈)"
                     className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
                   {isSearchingSpot && <p className="text-xs text-gray-400">검색 중...</p>}
@@ -266,7 +290,7 @@ function CurationFormModal({
                             className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
                           >
                             <p className="font-medium text-gray-900">{spot.name}</p>
-                            <p className="text-xs text-gray-500">{spot.address}</p>
+                            <p className="text-xs text-gray-500">{formatShortAddress(spot.address)}</p>
                           </button>
                         </li>
                       ))}

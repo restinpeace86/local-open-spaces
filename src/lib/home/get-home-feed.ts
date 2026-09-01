@@ -802,12 +802,21 @@ export async function searchEvents(keyword: string, limit = 30): Promise<NearbyI
 // 쿼리가 200~300ms로 떨어짐을 실측 확인했다 — 검색 결과는 어차피 "관련도"라는 뚜렷한
 // 정렬 기준이 없어(뷰포트 RPC의 distance_meters 같은 개념이 없음) 이름순 정렬을
 // 포기해도 손해가 없다.
-export async function searchSpacesNationwide(keyword: string, limit = 201): Promise<NearbyItem[]> {
+// [관리자 스팟 큐레이션 탭 자동완성](2026-09-01 사용자 지시): 관리자가 특정 중분류
+// (예: '놀이방식당' = "키즈친화 식당") 안에서만 스팟을 찾을 수 있어야 해서 선택적
+// categoryMin 필터를 추가한다. /nearby의 일반 검색(전국구, 카테고리 무관)은 이 값을
+// 넘기지 않아 기존 동작 그대로 유지된다.
+export async function searchSpacesNationwide(
+  keyword: string,
+  limit = 201,
+  categoryMin?: string
+): Promise<NearbyItem[]> {
   const tokens = splitSearchTokens(keyword);
   if (tokens.length === 0) return [];
 
   const supabase = await createClient();
   let query = supabase.from('open_spaces').select(SPACE_COLUMNS).eq('location_precision', 'EXACT');
+  if (categoryMin) query = query.eq('category_min', categoryMin);
 
   for (const token of tokens) {
     const escaped = escapeIlikePattern(token);
@@ -823,13 +832,19 @@ export async function searchSpacesNationwide(keyword: string, limit = 201): Prom
 
 // Task 9-5-1(2026-08-22): source_type을 추가했다 — 목적별 테마 스팟 분류(src/lib/theme-spots.ts)에
 // 쓰인다(events 테이블에는 이 컬럼 자체가 없어 EVENT_COLUMNS에는 추가하지 않음, 실측 확인).
+// [스팟픽 UI/UX 개선 4종](2026-09-01 사용자 지시) 실측 중 발견: category_min이 이 SELECT/
+// 매핑에 아예 빠져 있었다 — searchSpacesNationwide 결과는 항상 category_min이 undefined였고,
+// map-explorer.tsx의 검색 모드 중분류 필터(item.category_min && ...)가 검색 결과에 대해서는
+// 한 번도 매치될 수 없는 잠재 버그였다(이번 작업의 관리자 큐레이션 검색이 category_min 필터를
+// 요구하면서 발견함). 추가해도 기존 소비처(getFreeFeed 등)는 순수 추가 필드라 영향 없다.
 const SPACE_COLUMNS =
-  'id, name, category, address, location, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, sigungu_name, source_type';
+  'id, name, category, category_min, address, location, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, sigungu_name, source_type';
 
 type SpaceRow = {
   id: string;
   name: string;
   category: string;
+  category_min: string | null;
   address: string | null;
   location: unknown;
   is_free: boolean | null;
@@ -850,6 +865,7 @@ function toSpaceItem(row: SpaceRow): NearbyItem {
     id: row.id,
     name: row.name,
     category: row.category,
+    category_min: row.category_min,
     distance_meters: -1,
     item_type: 'SPACE' as const,
     lng,

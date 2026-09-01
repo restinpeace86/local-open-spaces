@@ -8,6 +8,7 @@ import { SpotCategoryFilter } from '@/components/map/spot-category-filter';
 import { ItemListPanel } from '@/components/map/item-list-panel';
 import { EmptyState } from '@/components/map/empty-state';
 import { DetailModal } from '@/components/map/detail-modal';
+import { MarkerPreviewCard } from '@/components/map/marker-preview-card';
 import { MarkerGroupModal } from '@/components/map/marker-group-modal';
 import { AiRecommendSheet } from '@/components/map/ai-recommend-sheet';
 import { Toast } from '@/components/map/toast';
@@ -57,6 +58,13 @@ export function MapExplorer() {
   const [items, setItems] = useState<NearbyItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<NearbyItem[] | null>(null);
+  // [스팟픽 UI/UX 개선 4종](2026-09-01 사용자 지시) 항목 1: 마커를 클릭하면 곧바로 무거운
+  // 전체 상세 모달을 열지 않고, 먼저 이 "미리보기" 상태만 세팅해 가벼운 미니 카드를
+  // 띄운다. 그 카드를 한 번 더 터치해야만 selectedItem으로 승격되어 전체 DetailModal이
+  // 열린다(표준 지도 앱의 2단계 UX). 리스트 패널/AI 추천/겹친 마커 그룹 클릭은 이미
+  // 목록에서 한 번 골라 들어오는 별도의 명시적 선택 행위라 이 2단계를 거치지 않고 기존처럼
+  // 바로 전체 상세로 진입한다(요구사항이 명시한 "마커 클릭"에 한정된 변경).
+  const [previewItem, setPreviewItem] = useState<NearbyItem | null>(null);
   // [스팟픽 AI 추천](2026-08-29 사용자 지시): "AI 추천" 칩 클릭 시 페이지 이동 없이 지도
   // 화면 위 바텀시트로 나들이 장소를 바로 추천한다. 다른 카테고리 필터와 무관하게 항상
   // 반경 내 전체 items(원본, 필터링 전)를 대상으로 추천한다.
@@ -226,8 +234,27 @@ export function MapExplorer() {
     (isSearchMode ? searchResults !== null && visibleItems.length === 0 : items.length > 0 && visibleItems.length === 0);
 
   // spec/space/space-card.md 3, spec/event/event-card.md 3: 카드/마커 클릭 시 지도 panTo + 상세 모달 활성화
+  // 리스트 패널 등에서 바로 전체 상세로 들어가는 경로라 열려 있던 마커 미리보기 카드가
+  // 있었다면 함께 정리한다(둘이 동시에 남아있지 않도록).
   const handleSelectItem = useCallback((item: NearbyItem) => {
+    setPreviewItem(null);
     setSelectedItem(item);
+  }, []);
+
+  // [스팟픽 UI/UX 개선 4종](2026-09-01 사용자 지시) 항목 1: 마커 클릭은 리스트/그룹
+  // 클릭과 달리 전체 상세로 바로 가지 않고 미리보기 카드부터 연다. 다른 미리보기가
+  // 열려 있었다면 새 마커 클릭으로 교체한다.
+  const handleMarkerSelectItem = useCallback((item: NearbyItem) => {
+    setPreviewItem(item);
+  }, []);
+
+  const handleOpenDetailFromPreview = useCallback(() => {
+    setSelectedItem(previewItem);
+    setPreviewItem(null);
+  }, [previewItem]);
+
+  const handleClosePreview = useCallback(() => {
+    setPreviewItem(null);
   }, []);
 
   // [겹친 마커 처리](2026-08-29 사용자 지시): 같은 좌표에 여러 건이 겹쳐 있는 마커를
@@ -238,10 +265,19 @@ export function MapExplorer() {
 
   const handleSelectFromGroup = useCallback((item: NearbyItem) => {
     setSelectedGroup(null);
+    setPreviewItem(null);
     setSelectedItem(item);
   }, []);
 
-  const focusPosition = selectedItem ? { lat: selectedItem.lat, lng: selectedItem.lng } : null;
+  // [스팟픽 UI/UX 개선 4종](2026-09-01 사용자 지시) 항목 1: 마커를 1단계로 클릭해
+  // 미리보기 카드만 뜬 상태에서도 "마커 클릭 시 지도가 해당 위치로 이동" 요구사항을
+  // 만족해야 하므로 previewItem도 focusPosition의 대상으로 삼는다(selectedItem이
+  // 우선 — 2단계로 전체 상세가 열리면 그쪽 좌표로 유지).
+  const focusPosition = selectedItem
+    ? { lat: selectedItem.lat, lng: selectedItem.lng }
+    : previewItem
+    ? { lat: previewItem.lat, lng: previewItem.lng }
+    : null;
 
   return (
     <div className="relative flex-1 flex flex-col md:flex-row overflow-hidden">
@@ -277,10 +313,18 @@ export function MapExplorer() {
           radius={radius}
           items={visibleItems}
           focusPosition={focusPosition}
-          onSelectItem={handleSelectItem}
+          onSelectItem={handleMarkerSelectItem}
           onSelectGroup={handleSelectGroup}
           onDragEnd={handleMapDragEnd}
         />
+
+        {/* [스팟픽 UI/UX 개선 4종](2026-09-01 사용자 지시) 항목 1: 마커 클릭 1단계 —
+            전체 상세 대신 이 가벼운 미니 카드를 먼저 보여준다. 전체 상세(selectedItem)가
+            열려 있을 때는 이미 handleOpenDetailFromPreview/handleSelectItem 등에서
+            previewItem을 함께 정리하므로 중복 노출되지 않는다. */}
+        {previewItem && (
+          <MarkerPreviewCard item={previewItem} onOpenDetail={handleOpenDetailFromPreview} onClose={handleClosePreview} />
+        )}
 
         {/* 데스크톱: 지도 상단 중앙에 재검색 Floating 버튼 노출 (지도 위 별도 오버레이 없어 최상단 사용 가능) */}
         {pendingRecenter && (
@@ -358,8 +402,12 @@ export function MapExplorer() {
         />
       )}
 
+      {/* [스팟픽 UI/UX 개선 4종](2026-09-01 사용자 지시) 항목 4: 배경 화면이 이미 지도라
+          상세 모달 안의 미니맵/지도 CTA가 중복이다 — 이 화면(map-explorer)에서 여는
+          DetailModal에만 hideMapSection을 넘긴다(다른 화면은 배경이 지도가 아니라
+          그대로 유지). */}
       {selectedItem && (
-        <DetailModal item={selectedItem} onClose={() => setSelectedItem(null)} />
+        <DetailModal item={selectedItem} onClose={() => setSelectedItem(null)} hideMapSection />
       )}
 
       {selectedGroup && (

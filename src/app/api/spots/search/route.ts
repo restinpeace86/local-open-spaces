@@ -11,7 +11,11 @@ export async function GET(request: NextRequest) {
     const q = (searchParams.get('q') ?? '').trim();
     if (!q) return NextResponse.json({ items: [] });
 
-    const items = await searchSpacesNationwide(q);
+    // [관리자 스팟 큐레이션 탭 자동완성](2026-09-01 사용자 지시): 관리자 화면이 특정
+    // 중분류(예: '놀이방식당')로만 좁힌 검색을 요청할 때 쓴다. 넘기지 않으면(일반
+    // /nearby 검색) 기존처럼 전국구 무제한 검색이다.
+    const categoryMin = searchParams.get('category_min')?.trim() || undefined;
+    const items = await searchSpacesNationwide(q, 201, categoryMin);
     return NextResponse.json({ items });
   } catch (err) {
     const message = err instanceof Error ? err.message : '스팟 검색 실패';

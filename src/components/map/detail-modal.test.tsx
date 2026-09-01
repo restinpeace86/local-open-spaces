@@ -160,12 +160,23 @@ describe('DetailModal 조건부 CTA 3분류 (Task 9-6-11, Decision 011)', () => 
 // [스팟 자체 간편 예약/신청 시스템 MVP](2026-08-29 사용자 지시): 이전에 있던 네이버 검색
 // 딥링크 폴백을 완전히 제거하고, info_url 유무에 따라 [공식 홈페이지 바로가기] 또는
 // [간편 예약/신청하기]로 분기한다.
-describe('DetailModal 보조 액션(공식 홈페이지 / 간편 예약·신청)', () => {
+// [예약 버튼 노출 조건 엄격화](2026-09-01 사용자 지시): info_url도 없고 큐레이션(관리자
+// 확인 신호)도 없는 "완전 미확인" 스팟에는 더 이상 자체 신청 폼을 무조건 띄우지 않는다 —
+// 안내 텍스트로 대체한다. 큐레이션이 있는 스팟에서만 자체 신청 폼이 최종 폴백으로 뜬다.
+describe('DetailModal 보조 액션(공식 홈페이지 / 간편 예약·신청 / 안내 텍스트)', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('info_url이 있으면 [🌐 공식 홈페이지 바로가기]가 그 URL로 새 창 연결된다(간편 예약 버튼은 없음)', () => {
+  function mockCurationResponse(item: unknown) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ item }) } as Response))
+    );
+  }
+
+  it('info_url이 있으면 [🌐 공식 홈페이지 바로가기]가 그 URL로 새 창 연결된다(간편 예약 버튼은 없음)', async () => {
+    mockCurationResponse(null);
     render(<DetailModal item={makeSpaceItem({ info_url: 'https://버섯구지마을.kr' })} onClose={() => {}} />);
 
     const link = screen.getByText('🌐 공식 홈페이지 바로가기').closest('a');
@@ -176,22 +187,53 @@ describe('DetailModal 보조 액션(공식 홈페이지 / 간편 예약·신청)
     expect(screen.queryByText('📝 간편 예약/신청하기')).not.toBeInTheDocument();
   });
 
-  it('info_url이 없으면 [📝 간편 예약/신청하기] 버튼이 뜨고, 누르면 신청 폼 모달이 열린다', () => {
+  it('info_url도 큐레이션도 없는 유료 시설은 버튼 대신 "예약 관련 정보가 없습니다" 안내 텍스트를 보여준다', async () => {
+    mockCurationResponse(null);
+    render(<DetailModal item={makeSpaceItem({ name: '버섯구지마을', info_url: null, is_free: false })} onClose={() => {}} />);
+
+    expect(await screen.findByText('예약 관련 정보가 없습니다')).toBeInTheDocument();
+    expect(screen.queryByText('🌐 공식 홈페이지 바로가기')).not.toBeInTheDocument();
+    expect(screen.queryByText('📝 간편 예약/신청하기')).not.toBeInTheDocument();
+  });
+
+  it('info_url도 큐레이션도 없는 무료 시설은 "예약 필요 없음 · 상시 무료 입장"을 보여준다', async () => {
+    mockCurationResponse(null);
+    render(<DetailModal item={makeSpaceItem({ info_url: null, is_free: true })} onClose={() => {}} />);
+
+    expect(await screen.findByText('예약 필요 없음 · 상시 무료 입장')).toBeInTheDocument();
+  });
+
+  it('info_url은 없지만 관리자가 큐레이션한 스팟이면 [📝 간편 예약/신청하기] 버튼이 뜨고, 누르면 신청 폼 모달이 열린다', async () => {
+    mockCurationResponse({
+      id: 'curation-1',
+      spot_id: 'space-1',
+      image_url: null,
+      operating_hours_raw: null,
+      open_time: null,
+      close_time: null,
+      break_start: null,
+      break_end: null,
+      last_order: null,
+      menu_items: [],
+      naver_booking_url: null,
+      curation_note: null,
+    });
     render(<DetailModal item={makeSpaceItem({ name: '버섯구지마을', info_url: null })} onClose={() => {}} />);
 
     expect(screen.queryByText('🌐 공식 홈페이지 바로가기')).not.toBeInTheDocument();
-    fireEvent.click(screen.getByText('📝 간편 예약/신청하기'));
+    fireEvent.click(await screen.findByText('📝 간편 예약/신청하기'));
 
     expect(screen.getByText('📝 간편 예약/신청')).toBeInTheDocument();
     // "버섯구지마을"은 DetailModal 제목과 신청 폼 모달 부제 두 곳에 함께 표시된다.
     expect(screen.getAllByText('버섯구지마을')).toHaveLength(2);
   });
 
-  it('이벤트(EVENT)에는 두 버튼 다 노출하지 않는다(요구사항이 "스팟" 한정)', () => {
+  it('이벤트(EVENT)에는 어떤 보조 액션도 노출하지 않는다(요구사항이 "스팟" 한정)', () => {
     render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT', info_url: null })} onClose={() => {}} />);
 
     expect(screen.queryByText('🌐 공식 홈페이지 바로가기')).not.toBeInTheDocument();
     expect(screen.queryByText('📝 간편 예약/신청하기')).not.toBeInTheDocument();
+    expect(screen.queryByText('예약 관련 정보가 없습니다')).not.toBeInTheDocument();
   });
 });
 
@@ -405,10 +447,55 @@ describe('DetailModal 스마트 폴백(View/Reservation Fallback, 2026-09-01)', 
     expect(link.closest('a')).toHaveAttribute('target', '_blank');
   });
 
-  it('공식 링크도 네이버 예약 링크도 없으면 자체 간편 예약/신청 폼으로 폴백한다(2026-08-29 결정 유지)', async () => {
+  // [예약 버튼 노출 조건 엄격화](2026-09-01 사용자 지시): 자체 간편 예약 폼은 더 이상
+  // "아무 데이터도 없을 때의 무조건 폴백"이 아니다 — 큐레이션(관리자 확인 신호)이
+  // 있을 때만 최종 폴백으로 뜬다(바로 위 "보조 액션" describe 블록의 큐레이션-있음
+  // 테스트가 그 경우를 검증한다). 큐레이션도 없으면 안내 텍스트로 대체된다.
+  it('공식 링크도 네이버 예약 링크도 큐레이션도 없으면 자체 신청 폼 대신 안내 텍스트를 보여준다', async () => {
     mockCurationResponse(null);
-    render(<DetailModal item={makeSpaceItem({ info_url: null })} onClose={() => {}} />);
+    render(<DetailModal item={makeSpaceItem({ info_url: null, is_free: false })} onClose={() => {}} />);
 
-    expect(await screen.findByText('📝 간편 예약/신청하기')).toBeInTheDocument();
+    expect(await screen.findByText('예약 관련 정보가 없습니다')).toBeInTheDocument();
+    expect(screen.queryByText('📝 간편 예약/신청하기')).not.toBeInTheDocument();
+  });
+});
+
+// [스팟픽 UI/UX 개선 4종](2026-09-01 사용자 지시) 항목 4: 스팟픽(/nearby) 지도 화면은
+// 배경이 이미 지도라 상세 모달 안의 인앱 미니맵/지도 CTA가 중복이다. hideMapSection
+// prop으로 map-explorer.tsx에서만 이 영역을 생략한다.
+describe('DetailModal hideMapSection (중복 지도 뷰 제거, 2026-09-01)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('hideMapSection이 없으면(기존 화면들) 미니맵과 "지도에서 보기" CTA가 그대로 보인다', () => {
+    render(<DetailModal item={makeSpaceItem()} onClose={() => {}} />);
+
+    expect(screen.getByText('🗺️ 지도에서 보기')).toBeInTheDocument();
+  });
+
+  it('hideMapSection이 true이고 정확한 좌표인 스팟은 미니맵도 "지도에서 보기" CTA도 렌더링하지 않는다', () => {
+    render(<DetailModal item={makeSpaceItem()} onClose={() => {}} hideMapSection />);
+
+    expect(screen.queryByText('🗺️ 지도에서 보기')).not.toBeInTheDocument();
+    expect(screen.queryByText('🔍 크게보기')).not.toBeInTheDocument();
+  });
+
+  it('hideMapSection이 true여도 좌표가 부정확하면 "정확한 위치 정보 없음" 안내는 그대로 보여준다(중복 제거 대상이 아님)', () => {
+    render(
+      <DetailModal
+        item={makeSpaceItem({ location_precision: 'CITY_APPROX', sigungu_name: '성남시 분당구' })}
+        onClose={() => {}}
+        hideMapSection
+      />
+    );
+
+    expect(screen.getByText(/성남시 분당구 일대/)).toBeInTheDocument();
+  });
+
+  it('hideMapSection이 true여도 이벤트(EVENT)는 기존처럼 미니맵을 그대로 보여준다("이벤트픽은 기존 구조 유지")', () => {
+    render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT' })} onClose={() => {}} hideMapSection />);
+
+    expect(screen.getByText('🗺️ 지도에서 보기')).toBeInTheDocument();
   });
 });

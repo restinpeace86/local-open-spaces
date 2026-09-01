@@ -28,11 +28,19 @@ vi.mock('next/navigation', () => ({
 
 // [스팟픽 전국구 서버사이드 검색](2026-08-30 사용자 지시) 테스트를 위해 focusPosition도
 // 노출한다 — 검색 결과 클릭 시 실제 panTo 좌표가 selectedItem의 좌표와 일치하는지 확인한다.
+// [스팟픽 UI/UX 개선 4종](2026-09-01 사용자 지시) 항목 1: 마커 클릭 2단계 UX를 검증하기
+// 위해 items/onSelectItem도 노출한다 — 각 item마다 "마커 클릭 시뮬레이션" 버튼을 만들어
+// onSelectItem(item)을 직접 호출할 수 있게 한다(실제 Kakao 마커 렌더링/좌표 변환은
+// 이 프로젝트의 다른 단위 테스트 대상이 아님, 기존 관례 그대로).
 vi.mock('@/components/map/kakao-map-view', () => ({
   KakaoMapView: ({
+    items,
+    onSelectItem,
     onDragEnd,
     focusPosition,
   }: {
+    items: Array<{ id: string; name: string }>;
+    onSelectItem?: (item: { id: string; name: string }) => void;
     onDragEnd?: (center: { lat: number; lng: number }) => void;
     focusPosition?: { lat: number; lng: number } | null;
   }) => (
@@ -40,6 +48,11 @@ vi.mock('@/components/map/kakao-map-view', () => ({
       <button type="button" onClick={() => onDragEnd?.({ lat: 37.5, lng: 127.1 })}>
         simulate-dragend
       </button>
+      {items.map((item) => (
+        <button key={item.id} type="button" onClick={() => onSelectItem?.(item)}>
+          {`simulate-marker-click-${item.name}`}
+        </button>
+      ))}
       {focusPosition && <div data-testid="focus-position">{`${focusPosition.lat},${focusPosition.lng}`}</div>}
     </div>
   ),
@@ -267,5 +280,67 @@ describe('MapExplorer 나들이 전용 핵심 중분류 1단 필터 (2026-08-29)
     render(<MapExplorer />);
     fireEvent.click(screen.getAllByText(/AI 추천/)[0]);
     expect(screen.getByText(/AI가 추천하는 나들이 장소/)).toBeInTheDocument();
+  });
+});
+
+// [스팟픽 UI/UX 개선 4종](2026-09-01 사용자 지시) 항목 1: 마커 클릭 2단계 UX(표준 지도
+// 앱 방식) — 1단계는 가벼운 미리보기 카드만, 2단계(카드 터치)에서만 전체 상세 모달.
+describe('MapExplorer 마커 클릭 2단계 UX (2026-09-01)', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ item: null }) } as Response)));
+  });
+
+  // 이 화면은 위치 미설정 시 LocationOnboardingModal이 기본으로 열려 있어 그쪽에도
+  // aria-label="닫기" 버튼이 있다 — DetailModal이 실제로 열렸는지는 그 안에만 있는
+  // "주소" dt 텍스트로 판별한다(스팟 상세는 항상 이 필드를 렌더링함).
+
+  it('마커를 클릭하면 전체 상세 모달 대신 미리보기 카드가 먼저 뜬다', async () => {
+    rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow()], error: null });
+    render(<MapExplorer />);
+    await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByText('simulate-marker-click-용인어린이상상의숲'));
+
+    expect(screen.getAllByText('용인어린이상상의숲').length).toBeGreaterThan(0);
+    expect(screen.queryByText('주소')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('미리보기 닫기')).toBeInTheDocument();
+  });
+
+  it('미리보기 카드를 한 번 더 터치하면 전체 상세 모달이 열린다', async () => {
+    rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow()], error: null });
+    render(<MapExplorer />);
+    await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByText('simulate-marker-click-용인어린이상상의숲'));
+    fireEvent.click(screen.getByLabelText('용인어린이상상의숲 상세보기'));
+
+    expect(await screen.findByText('주소')).toBeInTheDocument();
+    expect(screen.queryByLabelText('미리보기 닫기')).not.toBeInTheDocument();
+  });
+
+  it('미리보기 카드의 닫기(✕) 버튼을 누르면 아무것도 열리지 않고 카드만 사라진다', async () => {
+    rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow()], error: null });
+    render(<MapExplorer />);
+    await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByText('simulate-marker-click-용인어린이상상의숲'));
+    fireEvent.click(screen.getByLabelText('미리보기 닫기'));
+
+    expect(screen.queryByLabelText('미리보기 닫기')).not.toBeInTheDocument();
+    expect(screen.queryByText('주소')).not.toBeInTheDocument();
+  });
+
+  it('리스트 패널에서 항목을 클릭하면(마커 클릭 아님) 기존처럼 바로 전체 상세 모달이 열린다', async () => {
+    rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow()], error: null });
+    render(<MapExplorer />);
+    await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
+
+    const listButtons = screen.getAllByText('용인어린이상상의숲').map((el) => el.closest('button')).filter(Boolean);
+    // simulate-marker-click 버튼이 아닌, 실제 ItemListPanel 항목 버튼을 찾아 클릭한다.
+    const listItemButton = listButtons.find((btn) => !btn?.textContent?.startsWith('simulate-marker-click'));
+    fireEvent.click(listItemButton!);
+
+    expect(await screen.findByText('주소')).toBeInTheDocument();
+    expect(screen.queryByLabelText('미리보기 닫기')).not.toBeInTheDocument();
   });
 });
