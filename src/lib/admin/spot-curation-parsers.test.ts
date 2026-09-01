@@ -69,6 +69,20 @@ describe('parseOperatingHoursText', () => {
       lastOrder: '21:30',
     });
   });
+
+  // [실사용 질문](2026-09-02) "오픈/close/브레이크타임/라스트오더가 순서대로 안 있어도
+  // 문제없나?": 각 줄을 키워드 존재 여부로만 판단하므로(위치/순서에 의존하지 않음)
+  // 줄 순서가 뒤섞여도 동일하게 정확히 파싱됨을 명시적으로 검증한다.
+  it('브레이크타임/라스트오더/메인 시간의 줄 순서가 뒤섞여 있어도 정확히 파싱한다', () => {
+    const result = parseOperatingHoursText('20:30 라스트오더\n15:00 - 17:00 브레이크타임\n매일\n11:00 - 21:00');
+    expect(result).toEqual({
+      openTime: '11:00',
+      closeTime: '21:00',
+      breakStart: '15:00',
+      breakEnd: '17:00',
+      lastOrder: '20:30',
+    });
+  });
 });
 
 describe('parseMenuText', () => {

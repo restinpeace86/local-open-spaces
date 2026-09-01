@@ -88,7 +88,11 @@ describe('SpotCurationsPanel 신규 등록 — 장소 검색 자동완성 (2026-
     expect(screen.getByText('경기도 용인시 기흥구')).toBeInTheDocument();
   });
 
-  it('검색 결과를 클릭하면 스팟이 선택되고 검색 목록이 사라진다', async () => {
+  // [실사용 버그 재제보](2026-09-02) "검색결과를 눌렀을 때 입력칸에 그 데이터가 들어가야
+  // 하는데 안 들어간다": 입력란은 그대로 유지하고 그 값 자체가 선택한 이름으로 채워져야
+  // 한다(이전에는 입력란이 통째로 다른 카드로 바뀌었음). 클릭 핸들러도 스크롤 가능한
+  // 목록에서 click 대신 mousedown으로 반응하도록 바뀌어 mousedown으로 재현한다.
+  it('검색 결과를 클릭하면 입력란의 값 자체가 선택한 이름으로 채워지고 검색 목록이 사라진다', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(() =>
@@ -103,12 +107,38 @@ describe('SpotCurationsPanel 신규 등록 — 장소 검색 자동완성 (2026-
     );
 
     openCreateModal();
-    fireEvent.change(screen.getByPlaceholderText('장소명 2글자 이상 입력(예: 키즈)'), { target: { value: '플레이버디' } });
+    const input = screen.getByPlaceholderText('장소명 2글자 이상 입력(예: 키즈)');
+    fireEvent.change(input, { target: { value: '플레이버디' } });
 
     const result = await screen.findByText('플레이버디 키즈카페');
-    fireEvent.click(result);
+    fireEvent.mouseDown(result);
 
     await waitFor(() => expect(screen.getByText('변경')).toBeInTheDocument());
-    expect(screen.queryByPlaceholderText('장소명 2글자 이상 입력(예: 키즈)')).not.toBeInTheDocument();
+    expect(input).toHaveValue('플레이버디 키즈카페');
+    expect(screen.queryByText('경기도 의정부시 가금로 29 (가능동)')).not.toBeInTheDocument(); // 목록이 사라짐
+  });
+
+  it('"변경"을 누르면 선택이 풀리고 다시 검색할 수 있는 빈 입력란으로 돌아간다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ items: [{ id: 'spot-1', name: '플레이버디 키즈카페', address: null }] }),
+        } as Response)
+      )
+    );
+
+    openCreateModal();
+    const input = screen.getByPlaceholderText('장소명 2글자 이상 입력(예: 키즈)');
+    fireEvent.change(input, { target: { value: '플레이버디' } });
+    const result = await screen.findByText('플레이버디 키즈카페');
+    fireEvent.mouseDown(result);
+    await waitFor(() => expect(screen.getByText('변경')).toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('변경'));
+
+    expect(input).toHaveValue('');
+    expect(screen.queryByText('변경')).not.toBeInTheDocument();
   });
 });
