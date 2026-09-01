@@ -49,6 +49,36 @@ GitHub Actions cron으로 직접 표현할 수 없다는 사실을 확인했다 
 
 | 실행 일시 | 수집 권역 | RAW 적재 건수 | Service 적재 건수 | 파싱 에러 | 상태 | 비고 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 2026-09-01 09:16 | RURAL_EDUCATION_FARM | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 09:15 | RURAL_EXPERIENCE_VILLAGE | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 09:14 | KOR_PET_TOUR | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 09:12 | KOR_WITH_TOUR | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 09:11 | KOR_SERVICE | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 09:10 | SWIMMING_POOL | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 09:09 | PUBLIC_FACILITY_OPEN | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 09:08 | LOCALDATA_PLAYGROUND | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 09:07 | NATIONAL_PARK_ECOTOUR | 109 | 0 | 110 | 🚨 [CRITICAL] | 유효 행 0건 |
+| 2026-09-01 08:50 | GO_CAMPING | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 08:49 | GG_KIDSCAFE | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 08:48 | GG_EVENTS | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 08:46 | LOCALDATA_AMUSEMENT | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 08:45 | CULTURAL_FACILITY_SUMMARY | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 08:43 | CITY_PARK | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 08:20 | RURAL_EDUCATION_FARM | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 08:19 | RURAL_EXPERIENCE_VILLAGE | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 08:18 | KOR_PET_TOUR | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 08:17 | KOR_WITH_TOUR | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 08:16 | KOR_SERVICE | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 08:15 | SWIMMING_POOL | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 08:13 | PUBLIC_FACILITY_OPEN | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 08:12 | LOCALDATA_PLAYGROUND | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 08:11 | NATIONAL_PARK_ECOTOUR | 109 | 0 | 110 | 🚨 [CRITICAL] | 유효 행 0건 |
+| 2026-09-01 07:54 | GO_CAMPING | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 07:53 | GG_KIDSCAFE | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 07:52 | GG_EVENTS | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 07:51 | LOCALDATA_AMUSEMENT | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 07:50 | CULTURAL_FACILITY_SUMMARY | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
+| 2026-09-01 07:48 | CITY_PARK | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
 | 2026-08-31 07:04 | SEOUL_YEYAK | 2787 | 2787 | 29 | ✅ [OK] |  |
 | 2026-08-31 06:46 | GG_CULTURE_EVENTS | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed (원인: UND_ERR_CONNECT_TIMEOUT: Connect Timeout Error (attempted address: openapi.gg.go.kr:443, timeout: 10000ms)) |
 | 2026-08-31 06:26 | SEOUL_YEYAK | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed |
@@ -566,3 +596,61 @@ Suggested solution: Ensure you are running Node.js 22+ or provide a WebSocket im
 | ANALYZE_OPEN_SPACES | 0 | 0 | 0 | 0 | 0 | open_spaces 플래너 통계 갱신 완료(신규 적재 아닌 유지보수 후처리) — statement timeout 재발 방지 |
 
 **검증**: 전체 RAW 수신 22310건(일부 소스 실패/미확인 — 완전한 대조 불가) vs DB 적재 21734건 (+에러 547건 +범위제외 29건)
+
+## [2026-09-01 08:27:50] [Monthly Spaces Batch] Ingestion Log
+
+| API 출처 식별자 (`source`) | RAW 수신 건수 | events 적재 건수 | open_spaces 적재 건수 | Safe Merge 건수 | 에러 건수 | 비고 |
+| :--- | ---: | ---: | ---: | ---: | ---: | :--- |
+| CITY_PARK | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| seoul_public_culture | 1081 | 0 | 1080 | 1077 | 1 |  |
+| CULTURAL_FACILITY_SUMMARY | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| LOCALDATA_AMUSEMENT | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| GG_EVENTS | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| GG_KIDSCAFE | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| GO_CAMPING | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| national_park_ecotour | 110 | 0 | 0 | 0 | 110 |  |
+| LOCALDATA_PLAYGROUND | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| PUBLIC_FACILITY_OPEN | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| SWIMMING_POOL | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| KOR_TOUR | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| KOR_WITH_TOUR | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| KOR_PET_TOUR | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| RURAL_EXPERIENCE_VILLAGE | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| RURAL_EDUCATION_FARM | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| CATEGORY_RULES_APPLICATION | 17445 | 0 | 1 | 0 | 0 | category_min 신규 룰 매칭 후처리(신규 적재 아님) — open_spaces 1/2093건, events 0/15352건 |
+| DETAILED_CATEGORY_FALLBACK | 2 | 0 | 2 | 0 | 0 | 세부 중분류 미분류 잔여를 '기타'로 안전 적재(8개 대상 source_type 한정) — 2/2건 |
+| LEGACY_SOURCE_CATEGORY_MAPPING | 0 | 0 | 0 | 0 | 0 | docs/null-category-analysis.md 적용 범위(어린이놀이시설/수영장/키즈카페/바닥분수·물놀이시설) 매핑 — 0건, 내역: {} |
+| PLAYGROUND_INSTALL_PLACE_MAPPING | 82376 | 0 | 0 | 0 | 0 | 행안부 놀이시설 설치장소코드(A003/A013/A022/A030/A032/A033/A092/A093) 매핑 — 0/82376건, 내역: {} |
+| DEDUPE_OPEN_SPACES | 0 | 0 | 0 | 0 | 0 | 교차 출처 중복 정제 완료 - 0개 그룹, survivor 병합 0건, 삭제 0건 |
+| ANALYZE_OPEN_SPACES | 0 | 0 | 0 | 0 | 0 | open_spaces 플래너 통계 갱신 완료(신규 적재 아닌 유지보수 후처리) — statement timeout 재발 방지 |
+
+**검증**: 전체 RAW 수신 1191건(일부 소스 실패/미확인 — 완전한 대조 불가) vs DB 적재 1080건 (+에러 111건 +범위제외 0건)
+
+## [2026-09-01 09:23:23] [Monthly Spaces Batch] Ingestion Log
+
+| API 출처 식별자 (`source`) | RAW 수신 건수 | events 적재 건수 | open_spaces 적재 건수 | Safe Merge 건수 | 에러 건수 | 비고 |
+| :--- | ---: | ---: | ---: | ---: | ---: | :--- |
+| CITY_PARK | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| seoul_public_culture | 1081 | 0 | 1080 | 1080 | 1 |  |
+| CULTURAL_FACILITY_SUMMARY | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| LOCALDATA_AMUSEMENT | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| GG_EVENTS | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| GG_KIDSCAFE | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| GO_CAMPING | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| national_park_ecotour | 110 | 0 | 0 | 0 | 110 |  |
+| LOCALDATA_PLAYGROUND | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| PUBLIC_FACILITY_OPEN | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| SWIMMING_POOL | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| KOR_TOUR | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| KOR_WITH_TOUR | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| KOR_PET_TOUR | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| RURAL_EXPERIENCE_VILLAGE | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| RURAL_EDUCATION_FARM | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed |
+| CATEGORY_RULES_APPLICATION | 17449 | 0 | 0 | 0 | 0 | category_min 신규 룰 매칭 후처리(신규 적재 아님) — open_spaces 0/2090건, events 0/15359건 |
+| DETAILED_CATEGORY_FALLBACK | 0 | 0 | 0 | 0 | 0 | 세부 중분류 미분류 잔여를 '기타'로 안전 적재(8개 대상 source_type 한정) — 0/0건 |
+| LEGACY_SOURCE_CATEGORY_MAPPING | 0 | 0 | 0 | 0 | 0 | docs/null-category-analysis.md 적용 범위(어린이놀이시설/수영장/키즈카페/바닥분수·물놀이시설) 매핑 — 0건, 내역: {} |
+| PLAYGROUND_INSTALL_PLACE_MAPPING | 82376 | 0 | 0 | 0 | 0 | 행안부 놀이시설 설치장소코드(A003/A013/A022/A030/A032/A033/A092/A093) 매핑 — 0/82376건, 내역: {} |
+| DEDUPE_OPEN_SPACES | 0 | 0 | 0 | 0 | 0 | 교차 출처 중복 정제 완료 - 0개 그룹, survivor 병합 0건, 삭제 0건 |
+| ANALYZE_OPEN_SPACES | 0 | 0 | 0 | 0 | 0 | open_spaces 플래너 통계 갱신 완료(신규 적재 아닌 유지보수 후처리) — statement timeout 재발 방지 |
+
+**검증**: 전체 RAW 수신 1191건(일부 소스 실패/미확인 — 완전한 대조 불가) vs DB 적재 1080건 (+에러 111건 +범위제외 0건)
