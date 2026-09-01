@@ -87,7 +87,9 @@ describe('upsertDeals', () => {
 
     expect(result).toEqual({ count: 1 });
     expect(capturedArgs.options).toEqual({ onConflict: 'affiliate_url' });
-    expect(capturedArgs.rows).toBe(rows);
+    // [코드 점검 및 성능 안정화](2026-09-01 사용자 지시) 항목 2: 이제 500건 청크로
+    // slice()해서 넘기므로(대량 유입 대비) 원본 배열과 참조가 아니라 내용만 같다.
+    expect(capturedArgs.rows).toEqual(rows);
   });
 
   it('행이 0건이면 upsert를 호출하지 않는다', async () => {
@@ -101,6 +103,27 @@ describe('upsertDeals', () => {
       from: () => ({ upsert: () => Promise.resolve({ error: { message: 'DB 오류' } }) }),
     };
     await expect(upsertDeals(fakeClient, [{ affiliate_url: 'x' }])).rejects.toThrow('deals upsert 실패: DB 오류');
+  });
+
+  // [코드 점검 및 성능 안정화](2026-09-01 사용자 지시) 항목 2: playground.mjs가 실제로
+  // 겪었던 "대량 행을 단일 upsert 호출에 몰아넣어 응답 없이 멈추는" 문제를 재현하지
+  // 않도록, 500건을 넘으면 여러 번의 upsert 호출로 쪼개지는지 확인한다.
+  it('500건을 넘으면 여러 번의 upsert 호출로 청크 처리한다', async () => {
+    const calls = [];
+    const fakeClient = {
+      from: () => ({
+        upsert: (batch) => {
+          calls.push(batch.length);
+          return Promise.resolve({ error: null });
+        },
+      }),
+    };
+
+    const rows = Array.from({ length: 1200 }, (_, i) => ({ affiliate_url: `https://x.com/${i}` }));
+    const result = await upsertDeals(fakeClient, rows);
+
+    expect(result).toEqual({ count: 1200 });
+    expect(calls).toEqual([500, 500, 200]);
   });
 });
 

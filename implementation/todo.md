@@ -927,3 +927,27 @@
     실제 DB로 확인 → Playwright로 `/nearby` 전체 8단계 실제 진행 + `/calendar` FAB
     노출 확인 → 테스트 데이터 삭제로 원상 복구. 상세:
     `implementation/2026-09-01-ai-chat-recommendation-engine.md`.
+
+- [x] **[코드 점검 및 성능 안정화 요청] 스팟픽(SpotPick) 백엔드/프론트엔드 프로덕션
+  리스크 진단 및 개선** (2026-09-01 완료)
+  - 6개 항목 각각 EXPLAIN ANALYZE/실측 호출/유닛 테스트로 먼저 검증 후 실제 문제만
+    수정(추측으로 일괄 수정하지 않음).
+  - **①DB 인덱싱**: `idx_open_spaces_location_geography`(2026-08-29 기존 장애
+    디버깅으로 이미 존재) 실측 확인 — Index Scan 사용, GIST가 바운딩박스 프루닝을
+    이미 자동 수행함을 확인해 코드 변경 없음(KNN 재작성은 지도 화면 공유 핵심 RPC라
+    범위 밖으로 분리 제안).
+  - **②배치 청크**: 대부분 이미 500건 청크(공용 `upsertRows`) — `deals-collector.mjs`
+    (아직 미연결 뼈대 코드)만 사각지대로 발견해 500건 청크+재시도 추가.
+  - **③Gemini 타임아웃**: 10초→3.5초로 단축(요구사항 3~4초). fake timer로 hang 상황
+    재현해 5초 내 템플릿 폴백 확인.
+  - **④맛집 캐싱**: 실제 아키텍처(스팟별이 아니라 사용자 위치별 세션 단일 조회)
+    확인 후 모듈 스코프 캐시(`nearby-restaurants-cache.ts`) 신설 — 시트 재오픈해도
+    같은 좌표면 재요청하지 않음을 Playwright로 확인.
+  - **⑤폴백 투명성**: 무한루프는 구조적으로 불가능(단일 if, 검증됨) — 서버 로그
+    추가 + 응답에 `originalRadiusMeters`/`finalRadiusMeters` 추가해 요약 문구가
+    구체적 반경 변화를 안내하도록 개선.
+  - **⑥RPC STABLE**: `pg_proc.provolatile` 직접 조회로 두 RPC 모두 STABLE 확인,
+    코드 변경 없음.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(88파일 884건 — 신규 2파일 5건 +
+    기존 3파일 6건 추가)/`npm run build` 통과. 상세:
+    `implementation/2026-09-01-spotpick-production-risk-audit.md`.

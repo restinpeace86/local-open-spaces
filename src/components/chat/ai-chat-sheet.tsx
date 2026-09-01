@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { formatDistance } from '@/lib/spaces/format';
 import { DetailModal } from '@/components/map/detail-modal';
+import { getCachedNearbyRestaurants } from '@/lib/ai-chat/nearby-restaurants-cache';
 import {
   resolveWhenChoice,
   WhenChoice,
@@ -240,12 +241,19 @@ export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: n
 
   async function loadNearbyRestaurants() {
     setRestaurantsOpen(true);
-    if (restaurants != null) return; // 이미 불러온 적 있으면 재요청하지 않는다(지연 로딩은 "최초 1회").
+    if (restaurants != null) return; // 이번 시트 인스턴스에서 이미 불러왔으면 재요청하지 않는다.
     setRestaurantsLoading(true);
     try {
-      const res = await fetch(`/api/ai-chat/nearby-restaurants?lat=${center.lat}&lng=${center.lng}`);
-      const data = await res.json();
-      setRestaurants(res.ok ? data.items : []);
+      // [코드 점검 및 성능 안정화](2026-09-01 사용자 지시) 항목 4: 시트를 닫았다 다시
+      // 열어도(컴포넌트 리마운트로 위 restaurants state는 초기화됨) 같은 좌표를 서버에
+      // 다시 요청하지 않도록 모듈 스코프 캐시를 거친다.
+      const data = await getCachedNearbyRestaurants(center.lat, center.lng, async () => {
+        const res = await fetch(`/api/ai-chat/nearby-restaurants?lat=${center.lat}&lng=${center.lng}`);
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error ?? '키즈친화 맛집 조회 실패');
+        return { items: json.items, radiusMeters: json.radiusMeters };
+      });
+      setRestaurants(data.items);
     } catch {
       setRestaurants([]);
     } finally {

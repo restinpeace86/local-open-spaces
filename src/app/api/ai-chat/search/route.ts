@@ -71,22 +71,35 @@ export async function POST(request: NextRequest) {
 
     const supabase = await createClient();
 
-    let radiusMeters = answers.transportRadiusMeters;
+    // [코드 점검 및 성능 안정화](2026-09-01 사용자 지시) 항목 5: 폴백이 "정확히 1회만"
+    // 동작함을 코드 구조로 보장한다 — 아래는 `if`문 하나뿐이라 조건을 완화해 재조회하는
+    // 경로는 물리적으로 한 번만 존재하고(반복문/재귀 없음), 두 번째 시도까지 0건이면
+    // 즉시 종료한다(무한 완화 불가능). 어떤 조건이 조정됐는지 서버 로그와 사용자 응답
+    // 양쪽에 원래/최종 반경을 그대로 남겨 투명하게 안내한다.
+    const originalRadiusMeters = answers.transportRadiusMeters;
+    let radiusMeters = originalRadiusMeters;
     let candidates = await fetchCandidatesAtRadius(supabase, lat, lng, radiusMeters);
     let pool = applyStrictFilters(candidates, answers, radiusMeters);
     let usedFallback = false;
 
+    console.log(`[AI_CHAT_SEARCH] 1차 조회(반경 ${radiusMeters}m): 후보 ${candidates.length}건 → 필터 통과 ${pool.length}건`);
+
     if (pool.length === 0) {
       const fallbackRadius = nextRadiusTier(radiusMeters);
       if (fallbackRadius != null) {
+        console.log(`[AI_CHAT_SEARCH] 1차 0건 — 반경을 ${radiusMeters}m → ${fallbackRadius}m로 1회 완화해 재조회`);
         radiusMeters = fallbackRadius;
         candidates = await fetchCandidatesAtRadius(supabase, lat, lng, radiusMeters);
         pool = applyStrictFilters(candidates, answers, radiusMeters);
         usedFallback = pool.length > 0;
+        console.log(`[AI_CHAT_SEARCH] 2차 조회(반경 ${radiusMeters}m): 후보 ${candidates.length}건 → 필터 통과 ${pool.length}건`);
+      } else {
+        console.log(`[AI_CHAT_SEARCH] 1차 0건이고 더 넓힐 반경 티어가 없어(이미 최대 반경) 완화를 시도하지 않음`);
       }
     }
 
     if (pool.length === 0) {
+      console.log('[AI_CHAT_SEARCH] 완화 1회까지 시도했지만 0건 — 검색 중단');
       return NextResponse.json({
         exhausted: true,
         message: '차선책까지 가격/거리를 조정하여 찾아보았으나 조건에 맞는 적합한 곳을 찾지 못했습니다.',
@@ -102,12 +115,21 @@ export async function POST(request: NextRequest) {
         vibeLabel: vibeLabel ?? '나들이',
         resultCount: results.length,
         usedFallback,
+        originalRadiusMeters,
+        finalRadiusMeters: radiusMeters,
         hasKids: answers.kidsCount > 0,
       },
       process.env.GEMINI_API_KEY
     );
 
-    return NextResponse.json({ exhausted: false, usedFallback, results, summaryText });
+    return NextResponse.json({
+      exhausted: false,
+      usedFallback,
+      originalRadiusMeters,
+      finalRadiusMeters: radiusMeters,
+      results,
+      summaryText,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'AI 추천 검색 실패';
     return NextResponse.json({ error: message }, { status: 500 });

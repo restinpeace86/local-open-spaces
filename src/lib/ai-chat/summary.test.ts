@@ -16,6 +16,14 @@ describe('buildTemplateSummary', () => {
   it('완화 검색을 썼으면 그 사실을 언급한다', () => {
     expect(buildTemplateSummary(ctx({ usedFallback: true }))).toContain('넓혀');
   });
+
+  // [코드 점검 및 성능 안정화](2026-09-01 사용자 지시) 항목 5: 반경 정보가 있으면
+  // 구체적으로("몇 km에서 몇 km로") 안내해야 한다 — 뭉뚱그린 안내보다 투명함.
+  it('원래/최종 반경이 있으면 구체적인 km 단위로 안내한다', () => {
+    const text = buildTemplateSummary(ctx({ usedFallback: true, originalRadiusMeters: 1000, finalRadiusMeters: 5000 }));
+    expect(text).toContain('1km');
+    expect(text).toContain('5km');
+  });
 });
 
 describe('buildFinalSummary', () => {
@@ -59,5 +67,29 @@ describe('buildFinalSummary', () => {
     );
     const text = await buildFinalSummary(ctx(), 'test-key');
     expect(text).toBe(buildTemplateSummary(ctx()));
+  });
+
+  // [코드 점검 및 성능 안정화](2026-09-01 사용자 지시) 항목 3: "엄격한 타임아웃(3~4초)"
+  // 요구사항 — Gemini가 응답 없이 멈춰도(hang) 5초 안에는 반드시 템플릿으로 폴백해야
+  // 챗봇 바텀시트가 무한정 로딩 상태로 남지 않는다. 실제 fetch가 영원히 응답하지 않는
+  // 상황을 fake timer로 재현해 검증한다.
+  it('LLM 응답이 멈춰도(hang) 5초 이내에 템플릿으로 폴백한다(엄격한 타임아웃)', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_url: string, options?: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            options?.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+          })
+      )
+    );
+
+    const promise = buildFinalSummary(ctx(), 'test-key');
+    await vi.advanceTimersByTimeAsync(5000);
+    const text = await promise;
+
+    expect(text).toBe(buildTemplateSummary(ctx()));
+    vi.useRealTimers();
   });
 });

@@ -16,6 +16,16 @@
 // 'open_spaces'|'events'|'multi'만 허용) 그대로 재사용하면 오히려 억지 끼워맞추기가 된다.
 
 import { createAdminClient } from '../lib/supabase-admin.mjs';
+import { withRetry } from '../lib/retry.mjs';
+
+// [코드 점검 및 성능 안정화](2026-09-01 사용자 지시) 항목 2: 이 upsert는 아직 실제 제휴
+// API가 붙지 않은 뼈대라 지금 당장은 대량 데이터가 들어올 일이 없지만, 실제 연동 후 응답
+// 건수가 커지면 `supabase-admin.mjs`의 upsertRows()가 82,373건짜리 playground.mjs에서
+// 실제로 겪었던 것과 동일한 "단일 upsert 호출 하나에 전량을 담아 응답 없이 멈추는" 문제를
+// 그대로 재현할 수 있다 — 같은 500건 청크 관례를 미리 적용해 둔다(제5장 제4조 기존 구조
+// 우선, deals는 onConflict 키가 달라 upsertRows()를 그대로 재사용할 수 없어 동일 패턴만
+// 복제).
+const UPSERT_BATCH_SIZE = 500;
 
 /**
  * @typedef {Object} RawDealItem
@@ -73,8 +83,19 @@ export function transformDealItem(item) {
 // 않으므로 scripts/ingest/lib/supabase-admin.mjs의 공용 upsertRows()를 재사용하지 않는다.
 export async function upsertDeals(client, rows) {
   if (rows.length === 0) return { count: 0 };
-  const { error } = await client.from('deals').upsert(rows, { onConflict: 'affiliate_url' });
-  if (error) throw new Error(`deals upsert 실패: ${error.message}`);
+
+  for (let i = 0; i < rows.length; i += UPSERT_BATCH_SIZE) {
+    const batch = rows.slice(i, i + UPSERT_BATCH_SIZE);
+    // eslint-disable-next-line no-await-in-loop
+    await withRetry(
+      async () => {
+        const { error } = await client.from('deals').upsert(batch, { onConflict: 'affiliate_url' });
+        if (error) throw new Error(`deals upsert 실패: ${error.message}`);
+      },
+      { label: 'deals upsert' }
+    );
+  }
+
   return { count: rows.length };
 }
 
