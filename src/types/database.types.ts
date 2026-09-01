@@ -934,6 +934,21 @@ export type Database = {
           thumbnail_url: string
         }[]
       }
+      get_nearest_spot_weather: {
+        Args: { max_radius_meters?: number; user_lat: number; user_lng: number }
+        Returns: {
+          distance_meters: number
+          humidity: number
+          pm10: number
+          pm10_grade: string
+          pm25: number
+          pm25_grade: string
+          precipitation_prob: number
+          sky_status: string
+          temperature: number
+          updated_at: string
+        }[]
+      }
       get_open_spaces_category_options: {
         Args: never
         Returns: {

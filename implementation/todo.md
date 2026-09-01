@@ -896,3 +896,34 @@
     2건은 `"전남광주통합특별시"`라 의도대로 미매칭 확인) → 실제 DB upsert 확인 →
     같은 스팟에 KMA 어댑터 재실행 시 pm10/pm25가 손상되지 않고 공존함을 확인 →
     테스트 데이터 삭제. 상세: `implementation/2026-09-01-airkorea-adapter.md`.
+
+- [x] **[개발 요청] 스팟픽(SpotPick) AI 맞춤 추천 챗봇 엔진 구현** (2026-09-01 완료)
+  - 사전 확인: 기존 "AI 추천" 칩(`AiRecommendSheet`, LLM 미사용 규칙기반)과 별개의
+    신규 기능으로 확정(사용자 원문 "기존에 구현 완료된 항목들을 제외하고") — 충돌
+    Decision 없음, 홀드 없음.
+  - LLM 토큰 최적화(요구사항 2-①): 1~8단계 인터뷰 전체는 LLM 0회(프론트 상태
+    머신 + 백엔드 템플릿 리터럴), 최종 요약 문구 생성 1회에만 Gemini 호출(실패/키
+    없음 시 템플릿 폴백).
+  - 5단계 날씨/대기질: 오늘=`spot_weather_caches` 캐시(신규 RPC
+    `get_nearest_spot_weather`, SECURITY DEFINER 필요성을 실측으로 발견해 수정),
+    내일 이후=KMA 라이브 예보(TS 미러 `kma-forecast.ts`/`kma-grid.ts` — 기존 .mjs
+    임포트 시 `process.argv` 부작용으로 크래시해 별도 구현). 미세먼지는 미래 날짜엔
+    예보 자체가 없어 정직하게 안내.
+  - 4단계 검색/랭킹(`search-engine.ts`, 순수 함수): 성향(Vibe)→category_min 매핑,
+    공공시설/민간사업자 판정, 예산 필터 데이터 한계 정직 처리, 1회성 완화 후 즉시
+    중단(요구사항 문구 그대로), 공공시설 1개+제휴 상품(curated_items) 1개 믹스 보장.
+  - **실측으로 발견해 재설계한 성능 함정**: 폴백 대비 최대 반경(40km)으로 미리
+    조회하면 141,980행 규모에서 PostgREST 8초 statement_timeout에 실제로 걸림 —
+    "선택 반경 먼저 조회 → 0건일 때만 다음 반경 재조회"하는 2단계 왕복으로 재설계.
+  - 키즈친화 맛집 지연 로딩(`/api/ai-chat/nearby-restaurants`): 1km→3km→5km 실제
+    순차 재조회, 첫 결과에서 즉시 중단.
+  - FAB + 바텀시트 UI(`ai-chat-fab.tsx`/`ai-chat-sheet.tsx`), `/nearby`·`/calendar`
+    양쪽 마운트(`/calendar`는 온보딩 모달 없이 좌표만 조용히 사용 — 무관한 UX 변경
+    방지).
+  - **검증**: `npx tsc --noEmit`/`npm run test`(87파일 876건 — 신규 7파일 58건)/
+    `npm run build` 통과. 실측: 실제 KMA/에어코리아로 캐시 시딩 → `/api/ai-chat/
+    weather`(오늘/내일 전환) → `/api/ai-chat/search`(정상 매칭/1회 완화/완전
+    소진 3가지 경로) → `/api/ai-chat/nearby-restaurants`(반경 확장/빈 결과) 전부
+    실제 DB로 확인 → Playwright로 `/nearby` 전체 8단계 실제 진행 + `/calendar` FAB
+    노출 확인 → 테스트 데이터 삭제로 원상 복구. 상세:
+    `implementation/2026-09-01-ai-chat-recommendation-engine.md`.

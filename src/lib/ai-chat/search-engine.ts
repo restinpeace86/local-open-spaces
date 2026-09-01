@@ -1,0 +1,169 @@
+// [스팟픽 AI 맞춤 추천 챗봇 엔진](2026-09-01 사용자 지시) 4단계(검색 결과 도출 및 예외
+// 처리): 8단계 인터뷰 답변을 근거로 `get_nearby_spaces_and_events` RPC가 이미 내려준
+// 후보(NearbyItem[], 거리순)를 필터/점수화해 최대 10개를 뽑는다. 순수 함수로만 구성해
+// DB 접근 없이 단위 테스트할 수 있게 한다 — 실제 Supabase 조회는 API 라우트가 맡는다.
+import { NearbyItem } from '@/lib/spaces/get-nearby';
+
+export type OutdoorPreference = 'OUTDOOR' | 'INDOOR' | 'EITHER';
+export type Budget = 'FREE' | 'UNDER_10K' | 'UNDER_30K' | 'ANY';
+export type KidsAgeGroup = '영유아' | '초등' | '전연령';
+export type Vibe = 'ACTIVE' | 'EDUCATION' | 'NATURE' | 'CULTURE';
+
+export type ChatAnswers = {
+  transportRadiusMeters: number;
+  outdoorPreference: OutdoorPreference;
+  budget: Budget;
+  kidsCount: number;
+  kidsAgeGroup: KidsAgeGroup | null;
+  vibe: Vibe;
+};
+
+// 8단계(Purpose/Vibe)의 부모 친화적 말투 선택지 → 실제 category_min 매핑. CORE_SPOT_
+// CATEGORIES(spot-category-groups.ts)의 나들이 전용 핵심 중분류 전체를 키즈친화 식당(별도
+// Meal 단계가 담당)을 제외하고 정확히 4개 성향으로 분류한다 — 임의로 지어낸 값이 아니라
+// 기존 필터 칩 taxonomy를 그대로 재사용한 것이다(제5장 제4조 기존 구조 우선).
+export const VIBE_CATEGORY_MINS: Record<Vibe, string[]> = {
+  ACTIVE: ['어린이놀이터', '어린이놀이시설(야외)', '어린이놀이시설(실내)', '키즈카페'],
+  EDUCATION: ['종합/기타박물관', '역사박물관', '미술관', '도서관', '유아교육진흥원', '육아종합지원센터'],
+  NATURE: ['공원', '자연휴양림'],
+  CULTURE: ['문화의집', '문화원'],
+};
+
+// "공공시설/공공장소" 판정: 이 카탈로그(open_spaces)는 대부분 정부/지자체 공공데이터
+// 출처지만, 키즈카페/키즈친화 식당(놀이방식당)만은 민간 사업자(카페·식당) 데이터다
+// (gg-kidscafe-adapter.mjs 등에서 이미 확인된 사실 — 추측 아님). 그 둘을 제외한 나머지는
+// 전부 공공시설로 취급한다.
+const PRIVATE_BUSINESS_CATEGORY_MINS = new Set(['키즈카페', '놀이방식당']);
+export function isPublicFacility(item: NearbyItem): boolean {
+  return !!item.category_min && !PRIVATE_BUSINESS_CATEGORY_MINS.has(item.category_min);
+}
+
+// 요구사항 4 "이동 거리 → 한 단계 살짝 넓혀서 차선책 재조사"의 "한 단계"가 뭘 의미하는지
+// 지정돼 있지 않아, 4단계(Transport & Distance) 선택지 자체의 단계(도보→차10분→30분→
+// 1시간 이상)를 그대로 다음 단계로 쓰는 것이 가장 자연스럽다고 판단했다(구현 판단,
+// 기록에 명시).
+export const RADIUS_FALLBACK_TIERS = [1000, 5000, 15000, 40000];
+export function nextRadiusTier(current: number): number | null {
+  const idx = RADIUS_FALLBACK_TIERS.findIndex((tier) => tier === current);
+  if (idx === -1 || idx === RADIUS_FALLBACK_TIERS.length - 1) return null;
+  return RADIUS_FALLBACK_TIERS[idx + 1];
+}
+
+function matchesOutdoorPreference(item: NearbyItem, pref: OutdoorPreference): boolean {
+  if (pref === 'EITHER') return true;
+  const facilityType = item.facility_type;
+  if (!facilityType) return true; // 정보 없으면 배제하지 않음(데이터 없다고 추천 기회를 뺏지 않음)
+  if (pref === 'OUTDOOR') return facilityType === '야외' || facilityType === '복합';
+  return facilityType === '실내' || facilityType === '복합';
+}
+
+// 예산: open_spaces에는 무료 여부(is_free)만 있고 실제 이용료 숫자 컬럼이 없다(project/
+// database_schema.md 확인 — 추측으로 숫자를 만들지 않음) — "완전 무료"만 정확히 필터링
+// 가능하고, 나머지 구간(1만원 이하/2~3만원 이하/상관없음)은 데이터가 없어 필터를 걸지
+// 않는다(구현 판단, 정직한 데이터 한계 — 기록에 명시).
+function matchesBudget(item: NearbyItem, budget: Budget): boolean {
+  if (budget === 'FREE') return item.is_free === true;
+  return true;
+}
+
+function matchesVibe(item: NearbyItem, vibe: Vibe): boolean {
+  return !!item.category_min && VIBE_CATEGORY_MINS[vibe].includes(item.category_min);
+}
+
+function withinRadius(item: NearbyItem, radiusMeters: number): boolean {
+  return item.distance_meters <= radiusMeters;
+}
+
+// export: API 라우트가 "반경별로 직접 재조회 후 이 반경에서만 필터링"하는 2단계 조회를
+// 구성할 때 재사용한다(아래 runSearch의 자체 폴백과 별개 — search-engine.ts 하단 주석 참고).
+export function applyStrictFilters(items: NearbyItem[], answers: ChatAnswers, radiusMeters: number): NearbyItem[] {
+  return items.filter(
+    (item) =>
+      withinRadius(item, radiusMeters) &&
+      matchesVibe(item, answers.vibe) &&
+      matchesOutdoorPreference(item, answers.outdoorPreference) &&
+      matchesBudget(item, answers.budget)
+  );
+}
+
+const PROXIMITY_NORMALIZE_METERS = 5000;
+
+function scoreItem(item: NearbyItem, answers: ChatAnswers): number {
+  let score = 0;
+  score += Math.max(0, 1 - item.distance_meters / PROXIMITY_NORMALIZE_METERS) * 40;
+  if (answers.kidsCount > 0 && item.is_kids_friendly) score += 20;
+  if (answers.kidsCount > 0 && item.stroller_accessible) score += 10;
+  if (answers.kidsCount > 0 && item.has_parking) score += 10;
+  if (answers.kidsAgeGroup && item.target_age_group === answers.kidsAgeGroup) score += 15;
+  if (item.is_free) score += 5;
+  return score;
+}
+
+export type SearchResultItem =
+  | { kind: 'SPOT'; item: NearbyItem }
+  | { kind: 'AFFILIATE'; item: { id: string; title: string; image_url: string | null; booking_url: string; category: string } };
+
+export type SearchOutcome = {
+  results: SearchResultItem[];
+  usedFallback: boolean;
+  exhausted: boolean; // true면 완화 1회까지 시도했지만 결과가 0건이었다는 뜻(요구사항 4 최종 안내 문구 대상)
+};
+
+const MAX_RESULTS = 10;
+
+export type CuratedAffiliateItem = { id: string; title: string; image_url: string | null; booking_url: string; category: string };
+
+// pool: 이미 반경/예산/성향/실내외 조건을 전부 통과한 후보(비어있지 않다고 가정 — 호출부가
+// 0건 여부를 먼저 판단). 점수화 → 상위 N개 선정 → 필수 믹스 룰(①공공시설 최소 1개,
+// ②제휴 상품 최소 1개) 적용까지 담당한다. DB 접근 없는 순수 함수라 API 라우트가
+// "반경별 재조회" 사이사이에도 재사용할 수 있다.
+export function assembleResults(pool: NearbyItem[], answers: ChatAnswers, curatedItem: CuratedAffiliateItem | null): SearchResultItem[] {
+  const scored = pool.map((item) => ({ item, score: scoreItem(item, answers) })).sort((a, b) => b.score - a.score);
+
+  const spotSlots = curatedItem ? MAX_RESULTS - 1 : MAX_RESULTS;
+  let top = scored.slice(0, spotSlots).map((s) => s.item);
+
+  // 필수 믹스 룰 ①: 공공시설이 하나도 없으면, 최하위 항목을 최선의 공공시설 후보로 교체한다.
+  if (top.length > 0 && !top.some(isPublicFacility)) {
+    const bestPublic = scored.find((s) => isPublicFacility(s.item) && !top.includes(s.item));
+    if (bestPublic) {
+      top = [...top.slice(0, -1), bestPublic.item];
+    }
+  }
+
+  const results: SearchResultItem[] = top.map((item) => ({ kind: 'SPOT' as const, item }));
+  // 필수 믹스 룰 ②: 제휴 상품 1개 이상 — 실제 활성 상품이 있을 때만 자연스럽게 섞는다
+  // (없는데 억지로 만들지 않음).
+  if (curatedItem) {
+    results.push({ kind: 'AFFILIATE', item: curatedItem });
+  }
+
+  return results;
+}
+
+// [단위 테스트/소규모 시나리오 전용] candidates 배열 하나에 폴백 반경까지의 후보가 이미
+// 전부 담겨 있다고 가정하고 필터→완화→조립을 한 번에 수행한다. 실제 API 라우트
+// (src/app/api/ai-chat/search/route.ts)는 이 함수를 쓰지 않는다 — 141,980행 규모에서
+// "일단 가장 넓은 반경(1시간 이상=40km)으로 미리 넉넉히 조회"하면 PostgREST 8초
+// statement_timeout에 실측으로 걸렸기 때문이다(같은 반경이라도 개발자 콘솔 관리자 연결은
+// 통과하지만 anon 키 PostgREST 경로는 실제로 타임아웃 — 라이브 서버로 직접 확인). 라우트는
+// 대신 "선택한 반경으로 먼저 조회 → 0건일 때만 다음 반경으로 재조회"하는 2단계 네트워크
+// 왕복으로 이 문제를 피한다(applyStrictFilters/assembleResults를 직접 조합).
+export function runSearch(candidates: NearbyItem[], answers: ChatAnswers, curatedItem: CuratedAffiliateItem | null): SearchOutcome {
+  let pool = applyStrictFilters(candidates, answers, answers.transportRadiusMeters);
+  let usedFallback = false;
+
+  if (pool.length === 0) {
+    const fallbackRadius = nextRadiusTier(answers.transportRadiusMeters);
+    if (fallbackRadius != null) {
+      pool = applyStrictFilters(candidates, answers, fallbackRadius);
+      usedFallback = pool.length > 0;
+    }
+  }
+
+  if (pool.length === 0) {
+    return { results: [], usedFallback: false, exhausted: true };
+  }
+
+  return { results: assembleResults(pool, answers, curatedItem), usedFallback, exhausted: false };
+}

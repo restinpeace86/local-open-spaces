@@ -1,0 +1,169 @@
+import { describe, expect, it } from 'vitest';
+import { applyStrictFilters, assembleResults, ChatAnswers, isPublicFacility, nextRadiusTier, runSearch } from './search-engine';
+import { NearbyItem } from '@/lib/spaces/get-nearby';
+
+function spot(overrides: Partial<NearbyItem> = {}): NearbyItem {
+  return {
+    id: `id-${Math.random()}`,
+    name: '테스트 공원',
+    category: 'PARK',
+    distance_meters: 500,
+    item_type: 'SPACE',
+    lng: 127,
+    lat: 37,
+    address: '서울특별시 강남구',
+    thumbnail_url: null,
+    start_date: null,
+    end_date: null,
+    reservation_start_date: null,
+    reservation_end_date: null,
+    reservation_url: null,
+    is_reservation_required: null,
+    operating_hours: null,
+    is_free: true,
+    info_url: null,
+    is_kids_friendly: true,
+    has_parking: true,
+    stroller_accessible: true,
+    facility_type: '야외',
+    target_age_group: '전연령',
+    booking_status: null,
+    category_min: '공원',
+    ...overrides,
+  };
+}
+
+function answers(overrides: Partial<ChatAnswers> = {}): ChatAnswers {
+  return {
+    transportRadiusMeters: 5000,
+    outdoorPreference: 'EITHER',
+    budget: 'ANY',
+    kidsCount: 1,
+    kidsAgeGroup: '전연령',
+    vibe: 'NATURE',
+    ...overrides,
+  };
+}
+
+describe('isPublicFacility', () => {
+  it('키즈카페/놀이방식당은 민간 사업자로 판정한다', () => {
+    expect(isPublicFacility(spot({ category_min: '키즈카페' }))).toBe(false);
+    expect(isPublicFacility(spot({ category_min: '놀이방식당' }))).toBe(false);
+  });
+
+  it('공원 등 나머지는 공공시설로 판정한다', () => {
+    expect(isPublicFacility(spot({ category_min: '공원' }))).toBe(true);
+    expect(isPublicFacility(spot({ category_min: '도서관' }))).toBe(true);
+  });
+});
+
+describe('runSearch', () => {
+  it('거리/무료/실외 조건을 만족하는 후보만 통과시켜 점수순으로 정렬한다', () => {
+    const near = spot({ id: 'near', distance_meters: 300, category_min: '공원' });
+    const far = spot({ id: 'far', distance_meters: 4000, category_min: '공원' });
+    const outcome = runSearch([far, near], answers(), null);
+
+    expect(outcome.exhausted).toBe(false);
+    expect(outcome.results[0]).toEqual({ kind: 'SPOT', item: near });
+  });
+
+  it('반경 밖 후보는 제외한다', () => {
+    const outOfRange = spot({ distance_meters: 6000, category_min: '공원' });
+    const outcome = runSearch([outOfRange], answers({ transportRadiusMeters: 1000 }), null);
+    // 1000m 다음 폴백 티어(5000m)에서도 6000m는 여전히 범위 밖이라 exhausted여야 한다.
+    expect(outcome.exhausted).toBe(true);
+  });
+
+  it('예산이 완전무료면 is_free=false 후보를 제외한다', () => {
+    const paid = spot({ is_free: false, category_min: '공원' });
+    const outcome = runSearch([paid], answers({ budget: 'FREE' }), null);
+    expect(outcome.exhausted).toBe(true);
+  });
+
+  it('vibe와 category_min이 매칭되는 후보만 통과한다', () => {
+    const wrongVibe = spot({ category_min: '박물관이 아닌 값' });
+    const outcome = runSearch([wrongVibe], answers({ vibe: 'NATURE' }), null);
+    expect(outcome.exhausted).toBe(true);
+  });
+
+  it('실내 선호면 facility_type이 야외 단독인 후보를 제외한다', () => {
+    const outdoorOnly = spot({ facility_type: '야외', category_min: '공원' });
+    const outcome = runSearch([outdoorOnly], answers({ outdoorPreference: 'INDOOR', vibe: 'NATURE' }), null);
+    expect(outcome.exhausted).toBe(true);
+  });
+
+  it('엄격 조건 0건이면 반경을 한 단계만 완화해 재시도한다(1회 한정)', () => {
+    const slightlyFar = spot({ distance_meters: 2000, category_min: '공원' }); // 1000m 밖, 5000m 안
+    const outcome = runSearch([slightlyFar], answers({ transportRadiusMeters: 1000 }), null);
+    expect(outcome.usedFallback).toBe(true);
+    expect(outcome.exhausted).toBe(false);
+    expect(outcome.results).toHaveLength(1);
+  });
+
+  it('완화 1회로도 0건이면 즉시 중단하고 exhausted를 반환한다(무한 완화 금지)', () => {
+    const veryFar = spot({ distance_meters: 20000, category_min: '공원' }); // 1000m, 5000m 폴백 둘 다 밖
+    const outcome = runSearch([veryFar], answers({ transportRadiusMeters: 1000 }), null);
+    expect(outcome.exhausted).toBe(true);
+    expect(outcome.usedFallback).toBe(false);
+  });
+
+  it('최대 10개까지만 반환한다', () => {
+    const many = Array.from({ length: 15 }, (_, i) => spot({ id: `p${i}`, distance_meters: i * 10, category_min: '공원' }));
+    const outcome = runSearch(many, answers(), null);
+    expect(outcome.results).toHaveLength(10);
+  });
+
+  it('필수 믹스 룰: 제휴 상품이 있으면 결과 마지막에 섞어 넣는다(전체 10개 유지)', () => {
+    const many = Array.from({ length: 15 }, (_, i) => spot({ id: `p${i}`, distance_meters: i * 10, category_min: '공원' }));
+    const curated = { id: 'c1', title: '제휴 상품', image_url: null, booking_url: 'https://example.com', category: 'ticket' };
+    const outcome = runSearch(many, answers(), curated);
+
+    expect(outcome.results).toHaveLength(10);
+    expect(outcome.results[9]).toEqual({ kind: 'AFFILIATE', item: curated });
+    expect(outcome.results.slice(0, 9).every((r) => r.kind === 'SPOT')).toBe(true);
+  });
+
+  it('필수 믹스 룰: 공공시설이 하나도 없으면 최하위 항목을 공공시설로 교체한다', () => {
+    // ACTIVE vibe는 키즈카페(민간)/놀이터(공공)를 모두 포함 — 키즈카페만 여럿, 놀이터 1개 섞어 검증.
+    const kidsCafes = Array.from({ length: 9 }, (_, i) =>
+      spot({ id: `cafe${i}`, distance_meters: i * 10, category_min: '키즈카페', is_kids_friendly: true })
+    );
+    const onePlayground = spot({ id: 'playground', distance_meters: 999, category_min: '어린이놀이터' });
+    const outcome = runSearch([...kidsCafes, onePlayground], answers({ vibe: 'ACTIVE' }), null);
+
+    const hasPublic = outcome.results.some((r) => r.kind === 'SPOT' && isPublicFacility(r.item));
+    expect(hasPublic).toBe(true);
+  });
+
+  it('제휴 상품이 없으면 억지로 만들지 않고 SPOT만으로 채운다', () => {
+    const one = spot({ category_min: '공원' });
+    const outcome = runSearch([one], answers(), null);
+    expect(outcome.results.every((r) => r.kind === 'SPOT')).toBe(true);
+  });
+});
+
+// [실측으로 발견한 성능 함정 대응] API 라우트가 "반경별 재조회" 2단계 왕복을 직접
+// 조합할 때 쓰는 저수준 함수들 — runSearch와 별개로 export되어 있는지, 동작이 올바른지
+// 확인한다.
+describe('nextRadiusTier', () => {
+  it('다음 반경 티어를 반환한다', () => {
+    expect(nextRadiusTier(1000)).toBe(5000);
+    expect(nextRadiusTier(15000)).toBe(40000);
+  });
+
+  it('마지막 티어거나 알 수 없는 값이면 null이다', () => {
+    expect(nextRadiusTier(40000)).toBeNull();
+    expect(nextRadiusTier(999)).toBeNull();
+  });
+});
+
+describe('applyStrictFilters + assembleResults (라우트 2단계 왕복 조합)', () => {
+  it('반경 내 조건 만족 후보만 필터링하고 조립까지 정상 동작한다', () => {
+    const near = spot({ id: 'near', distance_meters: 300, category_min: '공원' });
+    const far = spot({ id: 'far', distance_meters: 4000, category_min: '공원' });
+    const pool = applyStrictFilters([near, far], answers({ transportRadiusMeters: 1000 }), 1000);
+
+    expect(pool).toEqual([near]);
+    expect(assembleResults(pool, answers(), null)).toEqual([{ kind: 'SPOT', item: near }]);
+  });
+});
