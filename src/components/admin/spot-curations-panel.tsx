@@ -119,15 +119,25 @@ function CurationFormModal({
       return;
     }
     let cancelled = false;
+    // [실사용 버그 제보](2026-09-02) "검색 결과를 클릭해도 반영이 안 되네": 재현 결과
+    // 선택 자체는 정상 동작했지만, 검색 응답이 느릴 때(콜드 스타트 시 최대 수 초) 이전
+    // 검색의 응답이 이후 검색보다 늦게 도착해 화면에 잠깐 뒤섞여 보일 여지가 있었다 —
+    // `cancelled` 플래그는 상태 갱신만 막을 뿐 네트워크 요청 자체는 계속 진행됐다.
+    // AbortController로 새 검색이 시작되면 이전 요청 자체를 확실히 취소해 응답 뒤섞임
+    // 가능성을 원천 차단한다(방어적 강화 — 실제 원인으로 확정하지는 못했지만 재발 방지).
+    const controller = new AbortController();
     const timer = setTimeout(() => {
       setIsSearchingSpot(true);
       const params = new URLSearchParams({ q: trimmed });
       if (KIDS_RESTAURANT_CATEGORY_MIN) params.set('category_min', KIDS_RESTAURANT_CATEGORY_MIN);
-      fetch(`/api/spots/search?${params.toString()}`)
+      fetch(`/api/spots/search?${params.toString()}`, { signal: controller.signal })
         .then((res) => res.json())
         .then((data: { items?: Array<{ id: string; name: string; address: string | null }> }) => {
           if (cancelled) return;
           setSpotResults((data.items ?? []).slice(0, 10).map((i) => ({ id: i.id, name: i.name, address: i.address })));
+        })
+        .catch((err) => {
+          if (err instanceof DOMException && err.name === 'AbortError') return; // 새 검색으로 대체된 정상적인 취소
         })
         .finally(() => {
           if (!cancelled) setIsSearchingSpot(false);
@@ -135,6 +145,7 @@ function CurationFormModal({
     }, 300);
     return () => {
       cancelled = true;
+      controller.abort();
       clearTimeout(timer);
     };
   }, [spotQuery, isEdit]);
@@ -254,15 +265,21 @@ function CurationFormModal({
             <label className="flex flex-col gap-1 text-sm">
               <span className="font-medium text-gray-700">스팟 검색(키즈친화 식당 · 2글자 이상)</span>
               {selectedSpot ? (
-                <div className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-2">
-                  <div>
-                    <p className="text-sm font-medium text-gray-900">{selectedSpot.name}</p>
-                    <p className="text-xs text-gray-500">{formatShortAddress(selectedSpot.address)}</p>
+                // [실사용 버그 제보](2026-09-02) "검색 결과를 클릭해도 입력란에 반영이
+                // 안 되네": 재현 결과 선택 자체(state)는 정상이었지만, 검색창이 통째로
+                // 사라지고 회색 요약 카드로 바뀌어 "이름이 입력란에 채워졌다"는 느낌이
+                // 들지 않았다 — 검색 입력란과 동일한 테두리 스타일의 (읽기 전용) 필드
+                // 형태로 바꿔 "선택한 이름이 실제로 채워졌다"는 것을 시각적으로 분명히
+                // 한다.
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900 truncate">✅ {selectedSpot.name}</p>
+                    <p className="text-xs text-gray-500 truncate">{formatShortAddress(selectedSpot.address)}</p>
                   </div>
                   <button
                     type="button"
                     onClick={() => setSelectedSpot(null)}
-                    className="text-xs text-blue-600 hover:underline"
+                    className="shrink-0 text-xs text-blue-600 hover:underline"
                   >
                     변경
                   </button>
@@ -276,7 +293,11 @@ function CurationFormModal({
                     placeholder="장소명 2글자 이상 입력(예: 키즈)"
                     className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                   />
-                  {isSearchingSpot && <p className="text-xs text-gray-400">검색 중...</p>}
+                  {/* [실사용 버그 제보](2026-09-02): 검색이 콜드 스타트 시 수 초까지도
+                      걸릴 수 있는데(라이브 실측 확인), 회색 잔글씨 안내만으로는 "아직
+                      찾는 중"임이 잘 눈에 띄지 않아 결과가 없다고 오해하기 쉬웠다 —
+                      파란색 강조로 눈에 띄게 한다. */}
+                  {isSearchingSpot && <p className="text-xs font-medium text-blue-600">🔍 검색 중이에요, 잠시만 기다려주세요...</p>}
                   {spotResults.length > 0 && (
                     <ul className="max-h-40 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100">
                       {spotResults.map((spot) => (
@@ -333,14 +354,18 @@ function CurationFormModal({
           </label>
 
           {/* 요구사항 "스마트 텍스트 파서(영업시간)" */}
+          {/* [실사용 버그 제보](2026-09-02) "화면이 좀 작다해야하나? 잘붙여넣는지 확인어렵네":
+              2줄짜리 textarea에 여러 줄을 붙여넣으면 스크롤 없이는 전체를 확인할 수 없었다
+              — 기본 노출 줄 수를 늘리고(rows), 필요하면 직접 더 늘려볼 수 있게
+              resize-y를 허용한다. */}
           <div className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-gray-700">영업시간(텍스트 붙여넣기)</span>
             <textarea
               value={hoursRaw}
               onChange={(e) => setHoursRaw(e.target.value)}
-              placeholder="예: 매일 10:00~22:00 (브레이크타임 15:00~17:00, 라스트오더 21:30)"
-              rows={2}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder={'예: 매일\n11:00 - 21:00\n15:00 - 17:00 브레이크타임\n20:30 라스트오더'}
+              rows={5}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <button
               type="button"
@@ -389,14 +414,20 @@ function CurationFormModal({
           </div>
 
           {/* 요구사항 "스마트 텍스트 파서(메뉴)" */}
+          {/* [실사용 버그 제보](2026-09-02) "메뉴도 이런식으로 긁어와서 복붙하는데 제대로
+              파싱안되고": "이름" / (빈 줄) / "가격만 있는 줄" / (빈 줄) / "설명" 반복 형식
+              (배달앱/홈페이지 메뉴판을 그대로 긁어온 형태)을 파서가 지원하도록 고쳤다 —
+              라벨/플레이스홀더에도 두 형식 모두 안내한다. */}
           <div className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-gray-700">메뉴(한 줄에 하나씩 "이름 가격원")</span>
+            <span className="font-medium text-gray-700">
+              메뉴 — "이름 가격원" 한 줄씩, 또는 이름/가격/설명이 줄바꿈으로 나뉜 형식도 지원
+            </span>
             <textarea
               value={menuRaw}
               onChange={(e) => setMenuRaw(e.target.value)}
-              placeholder={'짜장면 7,000원\n짬뽕 9,000원'}
-              rows={3}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder={'짜장면 7,000원\n짬뽕 9,000원\n\n또는\n\n하노이 쌀국수\n\n12,000원\n\n(설명은 무시됩니다)'}
+              rows={8}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
             <button
               type="button"
