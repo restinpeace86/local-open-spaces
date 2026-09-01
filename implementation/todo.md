@@ -813,3 +813,21 @@
     어댑터 격리 테스트 갱신)/`npm run build` 통과. 실측: `GET /api/admin/ingest/rerun`
     실제 STEPS 목록(daily 4/monthly 16) 확인, Playwright로 관리자 화면 재수집 패널
     렌더링 확인. 상세: `implementation/2026-09-01-ingest-pipeline-isolation-hardening.md`.
+
+- [x] **[개발 요청] 스팟별 날씨 및 대기질(미세먼지) 캐시 테이블 스키마 생성**
+  (2026-09-01 완료)
+  - 신규 `spot_weather_caches` 테이블(id PK + spot_id UNIQUE FK →
+    `open_spaces`(id) on delete cascade — 지시서의 "spots"를 프로젝트 실제 테이블명
+    으로 정정, spot_curations과 동일한 1:1 모델링). 기상청 단기예보(temperature/
+    precipitation_prob/sky_status/humidity, 퍼센트 컬럼 0~100 CHECK) + 에어코리아
+    (pm10/pm25/pm10_grade/pm25_grade) + updated_at. updated_at 인덱스 추가(캐시
+    특유의 TTL 조회 대비). RLS는 curated_items/spot_curations와 동일하게 켜고
+    정책 없음(service_role 전용) — 지시서의 "인증된 유저 읽기 가능" 예시는 이 앱에
+    로그인 자체가 없어 실질적으로 존재하지 않는 역할이라 적용하지 않고 기존
+    프로젝트 패턴을 따랐다.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(75파일 769건, 순수 스키마 추가라
+    영향 없음)/`npm run build` 통과. 실측: UNIQUE/CHECK 제약 위반 확인, upsert 정상
+    동작 확인, anon SELECT/INSERT 모두 RLS로 차단됨을 실제 DB로 확인(테스트 데이터
+    삭제로 원상 복구). 이번 지시서 범위는 스키마 생성까지 — 실제 수집 어댑터/API
+    라우트는 미포함. 상세:
+    `implementation/2026-09-01-spot-weather-caches-schema.md`.

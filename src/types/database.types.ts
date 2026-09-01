@@ -528,6 +528,56 @@ export type Database = {
           },
         ]
       }
+      spot_weather_caches: {
+        Row: {
+          humidity: number | null
+          id: string
+          pm10: number | null
+          pm10_grade: string | null
+          pm25: number | null
+          pm25_grade: string | null
+          precipitation_prob: number | null
+          sky_status: string | null
+          spot_id: string
+          temperature: number | null
+          updated_at: string
+        }
+        Insert: {
+          humidity?: number | null
+          id?: string
+          pm10?: number | null
+          pm10_grade?: string | null
+          pm25?: number | null
+          pm25_grade?: string | null
+          precipitation_prob?: number | null
+          sky_status?: string | null
+          spot_id: string
+          temperature?: number | null
+          updated_at?: string
+        }
+        Update: {
+          humidity?: number | null
+          id?: string
+          pm10?: number | null
+          pm10_grade?: string | null
+          pm25?: number | null
+          pm25_grade?: string | null
+          precipitation_prob?: number | null
+          sky_status?: string | null
+          spot_id?: string
+          temperature?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "spot_weather_caches_spot_id_fkey"
+            columns: ["spot_id"]
+            isOneToOne: true
+            referencedRelation: "open_spaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       geography_columns: {
