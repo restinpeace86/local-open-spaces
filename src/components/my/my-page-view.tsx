@@ -8,7 +8,8 @@ import { GoogleLoginButton } from '@/components/auth/google-login-button';
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { BirthYearsEditor } from '@/components/auth/birth-years-editor';
 import { getMyProfile, Profile } from '@/lib/auth/profile';
-import { GRADE_LABEL } from '@/lib/community/grades';
+import { canReceivePushNotifications, GRADE_LABEL } from '@/lib/community/grades';
+import { PushNotificationToggle } from '@/components/push/push-notification-toggle';
 import Link from 'next/link';
 
 // [Decision 018](2026-09-02) / spec/common/auth-user-profile.md: 로그인 전에는 카카오/구글
@@ -82,6 +83,8 @@ export function MyPageView() {
               <span className="text-sm font-semibold text-indigo-600">{GRADE_LABEL[profile.grade]} ›</span>
             </Link>
           )}
+
+          {profile && canReceivePushNotifications(profile.grade) && <PushNotificationToggle />}
 
           {isProfileLoading ? (
             <p className="text-xs text-gray-400">프로필 불러오는 중...</p>

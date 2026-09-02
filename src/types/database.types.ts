@@ -501,6 +501,8 @@ export type Database = {
           created_at: string
           endpoint: string
           id: string
+          lat: number | null
+          lng: number | null
           p256dh: string
           user_id: string
         }
@@ -509,6 +511,8 @@ export type Database = {
           created_at?: string
           endpoint: string
           id?: string
+          lat?: number | null
+          lng?: number | null
           p256dh: string
           user_id: string
         }
@@ -517,6 +521,8 @@ export type Database = {
           created_at?: string
           endpoint?: string
           id?: string
+          lat?: number | null
+          lng?: number | null
           p256dh?: string
           user_id?: string
         }
@@ -930,6 +936,15 @@ export type Database = {
             Returns: string
           }
       analyze_open_spaces: { Args: never; Returns: undefined }
+      count_new_nearby_items: {
+        Args: {
+          radius_meters: number
+          since_timestamp: string
+          user_lat: number
+          user_lng: number
+        }
+        Returns: number
+      }
       disablelongtransactions: { Args: never; Returns: string }
       dropgeometrycolumn:
         | {
