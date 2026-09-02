@@ -1152,3 +1152,18 @@
     우수맘/파워맘 등급 사용자 0명(아직 실사용 데이터 없음) 확인 — 빈 상태 UI가
     정상적으로 나타날 상황임을 인지. 상세:
     `implementation/2026-09-02-mom-pick-main-dashboard.md`.
+
+- [x] **[개발요청] 새싹맘 등급 조건부 권한 제어 및 안내 팝업** (2026-09-02 완료)
+  - "맘스픽 클릭 시" 비로그인/새싹맘 미달성/새싹맘 이상 3분기 안내 모달
+    (`LoginPromptModal`/`SaessakMomGuideModal`) + 판별 훅(`useMomPickAccess`) 구현.
+  - **용어 대응(스키마 재도입 안 함)**: 요구사항이 `profiles.tier`/`'seed_mom'`을
+    전제했지만, 오늘 이미 Decision 019로 `profiles.grade`(sprout 등)와 자동 승급
+    트리거(`promote_to_sprout_on_first_post`)를 구현·배포해뒀다 — 같은 개념을 다른
+    이름으로 재도입하지 않고 기존 것을 그대로 사용했다(제3장 제2조). "자동 승급
+    처리"는 이미 완료된 상태라 이번엔 트리거 존재만 실측 재확인하고 새로 구현하지
+    않았다.
+  - [첫 글 쓰러 가기]는 별도 `/write` 페이지 대신 같은 화면에 이미 있는
+    `PostComposer`로 스크롤 이동(기존 구조 재사용).
+  - **검증**: `npx tsc --noEmit`/`npm run test`(96파일 957건)/`npm run build` 통과.
+    라이브 DB에 승급 트리거 재확인, dev 서버 curl로 `/mom-pick` 200 확인. 상세:
+    `implementation/2026-09-02-saessak-mom-access-guard.md`.
