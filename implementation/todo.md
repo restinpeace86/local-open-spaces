@@ -1214,3 +1214,12 @@
   - **검증**: `npx tsc --noEmit`/`npm run test`(96파일 964건)/`npm run build` 통과,
     dev 서버 curl로 GIF 200 서빙 및 텍스트 변경 확인. 상세:
     `implementation/2026-09-03-loading-gif-and-brand-name.md`.
+
+- [x] **[개발요청] 로딩 GIF 최대 경량화** (2026-09-03 완료)
+  - Pillow(Python)로 직접 압축 파이프라인 구성 — 해상도 480×270→112×63, 프레임
+    64→22(1/3만 남기고 duration 3배), 팔레트 256→32색. 매번 실제 표시 크기(96px
+    박스)로 축소한 미리보기를 직접 확인해 화질 저하가 안 보이는 선까지 압축.
+  - 결과: 3,157,115 bytes → 60,317 bytes (약 52배 축소).
+  - **검증**: 정적 자산 교체라 코드 변경 없음 — `npm run build` 재확인, dev 서버
+    curl로 60,317 bytes 정상 서빙 확인. 상세:
+    `implementation/2026-09-03-loading-gif-compression.md`.
