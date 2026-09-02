@@ -1190,3 +1190,16 @@
     라이브 DB EXPLAIN ANALYZE로 성능 개선 실측, dev 서버 curl로 이전엔 100% 실패하던
     15km/40km 검색이 정상 응답함을 확인. 상세:
     `implementation/2026-09-02-ai-chat-bugfixes.md`.
+
+- [x] **[버그 수정] AI 챗봇 예산 옵션 무료/유료/상관없음 3단계로 단순화** (2026-09-03 완료)
+  - 사용자 질문("원천데이터에 금액 있는지 파싱 못 해?")에 실측으로 답변: 이벤트는
+    USE_FEE 필드가 46%(8,820/19,040건) 있지만 챗봇은 애초에 이벤트를 검색 안 함
+    (`p_item_type: 'SPACE'`만 조회). 스팟은 CULTURE_FACILITY에만 ENTR_FEE가 있는데
+    전체의 0.76%(1,080/142,109건)뿐 — "1만원 이하" 등 세분화 옵션은 사실상 항상
+    무의미했다.
+  - 사용자에게 3가지 선택지(단순화만/가격 파싱 구축/단순화 후 나중에 파싱) 제시 →
+    "무료/유료/상관없음 3단계로 단순화" 선택받아 구현. `Budget` 타입 축소,
+    `matchesBudget`에 PAID(`is_free===false`) 케이스 추가.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(96파일 964건)/`npm run build` 통과,
+    dev 서버 curl로 PAID 필터 정상 동작 확인. 상세:
+    `implementation/2026-09-03-ai-chat-budget-simplification.md`.
