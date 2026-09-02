@@ -80,6 +80,22 @@ describe('runSearch', () => {
     expect(outcome.exhausted).toBe(true);
   });
 
+  // [챗봇 문제점 수정](2026-09-03 사용자 지시) 예산 옵션을 무료/유료/상관없음
+  // 3단계로 재설계 — 실제 이용료 숫자 데이터가 없어(원천 데이터 실측 확인) 세분화
+  // 옵션(1만원 이하 등)을 없애고 is_free 하나로 판단 가능한 3단계만 남긴다.
+  it('예산이 유료면 is_free=true 후보를 제외한다', () => {
+    const free = spot({ is_free: true, category_min: '공원' });
+    const outcome = runSearch([free], answers({ budget: 'PAID' }), null);
+    expect(outcome.exhausted).toBe(true);
+  });
+
+  it('예산이 상관없으면 무료/유료 둘 다 통과한다', () => {
+    const free = spot({ id: 'free', is_free: true, category_min: '공원' });
+    const paid = spot({ id: 'paid', is_free: false, category_min: '공원' });
+    const outcome = runSearch([free, paid], answers({ budget: 'ANY' }), null);
+    expect(outcome.results).toHaveLength(2);
+  });
+
   it('vibe와 category_min이 매칭되는 후보만 통과한다', () => {
     const wrongVibe = spot({ category_min: '박물관이 아닌 값' });
     const outcome = runSearch([wrongVibe], answers({ vibes: ['NATURE'] }), null);

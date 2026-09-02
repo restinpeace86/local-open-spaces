@@ -5,7 +5,14 @@
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 
 export type OutdoorPreference = 'OUTDOOR' | 'INDOOR' | 'EITHER';
-export type Budget = 'FREE' | 'UNDER_10K' | 'UNDER_30K' | 'ANY';
+// [챗봇 문제점 수정](2026-09-03 사용자 지시) 예산 옵션 재설계: "1만원 이하/2~3만원 이하"는
+// open_spaces에 실제 이용료 숫자 데이터가 사실상 없어(전체 142,109건 중 요금 텍스트
+// 필드가 존재하는 소스는 CULTURE_FACILITY 1,080건=0.76%뿐, 그마저도 파싱이 필요한
+// 자유서식 텍스트) 항상 필터링에 실질적 영향이 없던 "가짜 정밀도"였다. 사용자와 함께
+// 원천 데이터를 직접 조사해 확인한 뒤(구현 기록 참고), 거의 전체 데이터에 안정적으로
+// 채워져 있는 `is_free`만으로 판단 가능한 무료/유료/상관없음 3단계로 되돌린다 — 실제로
+// 걸러낼 수 없는 세분화 옵션을 화면에 보여주지 않는 것이 정직한 선택이다(제3장 제5조).
+export type Budget = 'FREE' | 'PAID' | 'ANY';
 export type KidsAgeGroup = '영유아' | '초등' | '전연령';
 export type Vibe = 'ACTIVE' | 'EDUCATION' | 'NATURE' | 'CULTURE';
 
@@ -61,12 +68,11 @@ function matchesOutdoorPreference(item: NearbyItem, pref: OutdoorPreference): bo
   return facilityType === '실내' || facilityType === '복합';
 }
 
-// 예산: open_spaces에는 무료 여부(is_free)만 있고 실제 이용료 숫자 컬럼이 없다(project/
-// database_schema.md 확인 — 추측으로 숫자를 만들지 않음) — "완전 무료"만 정확히 필터링
-// 가능하고, 나머지 구간(1만원 이하/2~3만원 이하/상관없음)은 데이터가 없어 필터를 걸지
-// 않는다(구현 판단, 정직한 데이터 한계 — 기록에 명시).
+// 예산: open_spaces에는 무료 여부(is_free)만 있고 실제 이용료 숫자 컬럼이 없다 —
+// FREE/PAID는 is_free로 정확히 필터링 가능하고, ANY(상관없음)만 걸지 않는다.
 function matchesBudget(item: NearbyItem, budget: Budget): boolean {
   if (budget === 'FREE') return item.is_free === true;
+  if (budget === 'PAID') return item.is_free === false;
   return true;
 }
 
