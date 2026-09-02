@@ -118,12 +118,17 @@
 
 ## 특이 사항 (수동 후속 조치 필요)
 - **환경변수 신규 등록 필요**(로컬 `.env.local`에만 반영, 자동 배포되지 않음):
-  - Vercel 프로덕션: ~~`NEXT_PUBLIC_ENABLE_USER_BOOKMARK=true`~~ (2026-09-02 사용자가
-    직접 등록 완료 확인), `NEXT_PUBLIC_VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`(값은
-    `.env.local` 참고) — **아직 등록 필요**.
-  - GitHub Actions 시크릿: `VAPID_PRIVATE_KEY`, `NEXT_PUBLIC_VAPID_PUBLIC_KEY`(등급/푸시
-    배치 워크플로가 참조 — 미등록 시 매일 실행이 실패한다), `MOM_PICK_POWER_MOM_QUOTA`
-    (선택, 기본 10명) — **아직 등록 필요**.
+  - Vercel 프로덕션: ~~`NEXT_PUBLIC_ENABLE_USER_BOOKMARK=true`~~,
+    ~~`NEXT_PUBLIC_VAPID_PUBLIC_KEY`~~, ~~`VAPID_PRIVATE_KEY`~~ — 2026-09-02 사용자가
+    3개 전부 직접 등록 완료 확인.
+  - **GitHub Actions 시크릿(아직 등록 필요)**: `NEXT_PUBLIC_VAPID_PUBLIC_KEY`,
+    `VAPID_PRIVATE_KEY` — `mom-pick-push-send-batch.yml`(매일 KST 07:30 발송 배치)이
+    이 두 값을 참조한다. Vercel에 등록한 것과는 별개의 저장소로, 미등록 상태면 배치가
+    "NEXT_PUBLIC_VAPID_PUBLIC_KEY 또는 VAPID_PRIVATE_KEY가 설정되지 않았습니다" 에러로
+    매일 조용히 실패한다(GitHub 저장소의 Settings → Secrets and variables → Actions에서
+    등록). `MOM_PICK_POWER_MOM_QUOTA`(선택, 미등록 시 기본 10명 그대로 동작)는 필수는
+    아니다. `mom-pick-grade-batch.yml`(등급 재계산)은 VAPID 키를 쓰지 않아 이 항목과
+    무관하다.
 - 브랜드 앱 아이콘 자산이 아직 없어 `public/sw.js`의 푸시 알림에 icon/badge를 지정하지
   않았다(브라우저 기본 아이콘 사용) — 아이콘 자산이 준비되면 추가 권장.
 - 실제 브라우저 알림 권한 요청 → 구독 → 실제 푸시 수신까지의 end-to-end는 HTTPS
