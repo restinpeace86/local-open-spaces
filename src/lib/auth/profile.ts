@@ -1,12 +1,17 @@
 import { createClient } from '@/lib/supabase/client';
+import { MomPickGrade } from '@/lib/community/grades';
 
 // [Decision 018](2026-09-02) / spec/common/auth-user-profile.md: "birth_years(자녀
 // 출생년도 배열) 필드 포함". 로그인 시 DB 트리거(2026-09-02-create-profiles-table.sql의
 // handle_new_user)가 이미 빈 배열로 프로필 행을 만들어두므로, 여기서는 조회/수정만
 // 담당한다(행 생성 자체를 클라이언트가 다시 시도하지 않음 — 중복 로직 방지).
+// [Decision 019](2026-09-02): grade/ai_chat_free_uses_used 컬럼 추가(맘스픽 등급/챗봇
+// 무료 체험 카운터).
 export type Profile = {
   id: string;
   birth_years: number[];
+  grade: MomPickGrade;
+  ai_chat_free_uses_used: number;
   created_at: string;
   updated_at: string;
 };
@@ -22,7 +27,7 @@ export async function getMyProfile(): Promise<Profile | null> {
 
   const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).single();
   if (error) throw new Error(`프로필 조회 실패: ${error.message}`);
-  return data;
+  return data as Profile;
 }
 
 // birthYears: 자녀 출생년도 배열 그대로(정렬/중복 제거는 호출부 UI 책임 — 이 함수는
@@ -41,5 +46,5 @@ export async function updateBirthYears(birthYears: number[]): Promise<Profile> {
     .select()
     .single();
   if (error) throw new Error(`프로필 저장 실패: ${error.message}`);
-  return data;
+  return data as Profile;
 }

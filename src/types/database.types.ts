@@ -305,6 +305,88 @@ export type Database = {
           },
         ]
       }
+      mom_pick_likes: {
+        Row: {
+          created_at: string
+          post_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          post_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          post_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mom_pick_likes_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "mom_pick_posts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      mom_pick_posts: {
+        Row: {
+          adopted_at: string | null
+          adopted_by: string | null
+          author_id: string
+          checklist_answers: Json | null
+          content: string | null
+          created_at: string
+          id: string
+          is_adopted: boolean
+          like_count: number
+          post_type: string
+          rating: number | null
+          spot_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          adopted_at?: string | null
+          adopted_by?: string | null
+          author_id: string
+          checklist_answers?: Json | null
+          content?: string | null
+          created_at?: string
+          id?: string
+          is_adopted?: boolean
+          like_count?: number
+          post_type: string
+          rating?: number | null
+          spot_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          adopted_at?: string | null
+          adopted_by?: string | null
+          author_id?: string
+          checklist_answers?: Json | null
+          content?: string | null
+          created_at?: string
+          id?: string
+          is_adopted?: boolean
+          like_count?: number
+          post_type?: string
+          rating?: number | null
+          spot_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mom_pick_posts_spot_id_fkey"
+            columns: ["spot_id"]
+            isOneToOne: false
+            referencedRelation: "open_spaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       open_spaces: {
         Row: {
           address: string
@@ -385,22 +467,58 @@ export type Database = {
       }
       profiles: {
         Row: {
+          ai_chat_free_uses_used: number
           birth_years: number[]
           created_at: string
+          grade: string
+          grade_updated_at: string | null
           id: string
           updated_at: string
         }
         Insert: {
+          ai_chat_free_uses_used?: number
           birth_years?: number[]
           created_at?: string
+          grade?: string
+          grade_updated_at?: string | null
           id: string
           updated_at?: string
         }
         Update: {
+          ai_chat_free_uses_used?: number
           birth_years?: number[]
           created_at?: string
+          grade?: string
+          grade_updated_at?: string | null
           id?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      push_subscriptions: {
+        Row: {
+          auth_key: string
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string
+          user_id: string
+        }
+        Insert: {
+          auth_key: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          p256dh: string
+          user_id: string
+        }
+        Update: {
+          auth_key?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          p256dh?: string
+          user_id?: string
         }
         Relationships: []
       }
@@ -594,6 +712,45 @@ export type Database = {
             foreignKeyName: "spot_weather_caches_spot_id_fkey"
             columns: ["spot_id"]
             isOneToOne: true
+            referencedRelation: "open_spaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_bookmarks: {
+        Row: {
+          created_at: string
+          event_id: string | null
+          id: string
+          spot_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_id?: string | null
+          id?: string
+          spot_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string | null
+          id?: string
+          spot_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_bookmarks_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_bookmarks_spot_id_fkey"
+            columns: ["spot_id"]
+            isOneToOne: false
             referencedRelation: "open_spaces"
             referencedColumns: ["id"]
           },
@@ -1671,12 +1828,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1700,11 +1857,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1725,11 +1882,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1750,11 +1907,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1767,11 +1924,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

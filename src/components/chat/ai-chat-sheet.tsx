@@ -5,6 +5,8 @@ import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { formatDistance } from '@/lib/spaces/format';
 import { DetailModal } from '@/components/map/detail-modal';
 import { getCachedNearbyRestaurants } from '@/lib/ai-chat/nearby-restaurants-cache';
+import { hasConsumedAnonymousFreeUse, markAnonymousFreeUseConsumed } from '@/lib/ai-chat/free-trial';
+import { useUser } from '@/hooks/use-user';
 import {
   resolveWhenChoice,
   WhenChoice,
@@ -53,6 +55,7 @@ type Phase =
   | 'SEARCH_LOADING'
   | 'RESULTS'
   | 'EXHAUSTED'
+  | 'LIMIT_REACHED'
   | 'ERROR';
 
 type ChatMessage = { id: string; from: 'AI' | 'USER'; text: string };
@@ -79,6 +82,7 @@ function nextMessageId(): string {
 }
 
 export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: number }; onClose: () => void }) {
+  const { user } = useUser();
   const [messages, setMessages] = useState<ChatMessage[]>([
     { id: nextMessageId(), from: 'AI', text: '안녕하세요! 오늘 아이와 함께할 나들이 장소를 찾아드릴게요 😊 언제 나들이 가실 예정인가요?' },
   ]);
@@ -88,6 +92,7 @@ export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: n
   const [kidsCountDraft, setKidsCountDraft] = useState<number | null>(null);
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [exhaustedMessage, setExhaustedMessage] = useState<string | null>(null);
+  const [limitReachedMessage, setLimitReachedMessage] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
   const [restaurantsOpen, setRestaurantsOpen] = useState(false);
   const [restaurantsLoading, setRestaurantsLoading] = useState(false);
@@ -199,6 +204,18 @@ export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: n
     pushUser(label);
     const finalAnswers = { ...answers, vibe, vibeLabel: label };
     setAnswers(finalAnswers);
+
+    // [Decision 019](2026-09-02): 비로그인 사용자는 서버가 식별할 수 없어 여기서 미리
+    // localStorage 소진 여부를 확인한다(로그인 사용자는 서버가 profiles.
+    // ai_chat_free_uses_used로 확정 판단하므로 아래 API 응답의 limitReached만 본다).
+    if (!user && hasConsumedAnonymousFreeUse()) {
+      const message = '무료 체험을 이미 사용하셨어요. 로그인 후 맘스픽에 첫 후기나 체크리스트를 남기면 챗봇을 무제한으로 이용할 수 있어요!';
+      setLimitReachedMessage(message);
+      pushAi(message);
+      setPhase('LIMIT_REACHED');
+      return;
+    }
+
     setPhase('SEARCH_LOADING');
 
     try {
@@ -223,13 +240,22 @@ export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: n
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'AI 추천 검색 실패');
 
+      if (data.limitReached) {
+        setLimitReachedMessage(data.message);
+        pushAi(data.message);
+        setPhase('LIMIT_REACHED');
+        return;
+      }
+
       if (data.exhausted) {
+        if (!user) markAnonymousFreeUseConsumed();
         setExhaustedMessage(data.message);
         pushAi(data.message);
         setPhase('EXHAUSTED');
         return;
       }
 
+      if (!user) markAnonymousFreeUseConsumed();
       pushAi(data.summaryText);
       setResults(data.results);
       setPhase('RESULTS');
@@ -363,7 +389,7 @@ export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: n
           )}
         </div>
 
-        {phase !== 'RESULTS' && phase !== 'EXHAUSTED' && phase !== 'ERROR' && (
+        {phase !== 'RESULTS' && phase !== 'EXHAUSTED' && phase !== 'ERROR' && phase !== 'LIMIT_REACHED' && (
           <div className="border-t border-gray-100 p-3">
             <ChipOptions
               phase={phase}
@@ -385,6 +411,17 @@ export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: n
 
         {(phase === 'EXHAUSTED' || phase === 'ERROR') && exhaustedMessage == null && (
           <div className="border-t border-gray-100 p-3 text-center text-xs text-gray-400">대화를 닫고 다시 시도해보세요.</div>
+        )}
+
+        {phase === 'LIMIT_REACHED' && limitReachedMessage != null && (
+          <div className="border-t border-gray-100 p-3 text-center">
+            <a
+              href="/my"
+              className="inline-block rounded-full bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+            >
+              {user ? '맘스픽에 첫 후기 남기러 가기' : '로그인하러 가기'}
+            </a>
+          </div>
         )}
       </div>
 
