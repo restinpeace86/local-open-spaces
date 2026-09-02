@@ -1076,6 +1076,14 @@ export type Database = {
           svc_stat_nms: string[]
         }[]
       }
+      get_monthly_mom_pick_activity: {
+        Args: never
+        Returns: {
+          adopted_count: number
+          author_id: string
+          post_count: number
+        }[]
+      }
       get_nearby_spaces_and_events: {
         Args: {
           p_item_type?: string

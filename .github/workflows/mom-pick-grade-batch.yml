@@ -1,0 +1,38 @@
+name: Mom's Pick Grade Batch (Daily)
+
+# [Decision 019](2026-09-02) / spec/community/mom-pick-grades.md 2.4·3-3·3-7: 맘스픽 등급
+# (열심맘/우수맘/파워맘)을 달력월 기준 당월 실적으로 매일 재계산한다. 이벤트/공간 카탈로그를
+# 다루는 daily/monthly 배치와는 완전히 다른 관심사(사용자 평판/게이미피케이션)라 별도
+# 워크플로로 분리한다(ingest-weather.yml과 동일한 근거 — 억지로 기존 오케스트레이터에
+# 끼워 넣지 않음). docs/pipeline-log.md에도 기록하지 않는다(같은 이유 — "카탈로그 적재
+# 건수" 표 포맷과 의미가 다르며, 콘솔 로그로 충분히 확인 가능).
+#
+# [스케줄] 기존 daily(02:47 KST)/monthly(03:52 KST 말일)/weather(3시간마다) 배치와 겹치지
+# 않도록 KST 04:23(UTC 19:23, 전일)로 분산했다 — 정각을 피한 비정규 분(cron 정각 트리거
+# 회피 원칙, ingest-daily.yml과 동일한 근거).
+permissions:
+  contents: read
+
+on:
+  schedule:
+    - cron: '23 19 * * *'
+  workflow_dispatch:
+
+jobs:
+  mom-pick-grade-batch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Recalculate Mom's Pick grades (달력월 기준 열심맘/우수맘/파워맘)
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/ingest/mom-pick-grade-batch.mjs
