@@ -383,6 +383,27 @@ export type Database = {
         }
         Relationships: []
       }
+      profiles: {
+        Row: {
+          birth_years: number[]
+          created_at: string
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          birth_years?: number[]
+          created_at?: string
+          id: string
+          updated_at?: string
+        }
+        Update: {
+          birth_years?: number[]
+          created_at?: string
+          id?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       raw_ingest_data: {
         Row: {
           fetched_at: string

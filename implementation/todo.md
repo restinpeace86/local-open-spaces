@@ -1012,9 +1012,10 @@
     상세: `implementation/2026-09-02-spot-curations-parser-and-search-ux-fix.md`
     (같은 파일에 정정 섹션으로 추가).
 
-- [ ] **[개발요청] Supabase Auth 기반 카카오/구글 소셜 로그인 버튼 및 콜백 처리 구현**
-  — **사전 확인 결과 기존 헌법/Decision과 정면 상충하여 구현 보류(스킵)**, 사용자
-  재확인 필요 (2026-09-02)
+- [x] **[개발요청] Supabase Auth 기반 카카오/구글 소셜 로그인 버튼 및 콜백 처리 구현**
+  — **사전 확인 결과 기존 헌법/Decision과 정면 상충하여 구현 보류(스킵)** (2026-09-02).
+  **이후 사용자가 Decision 018 + spec/common/auth-user-profile.md를 실제로 커밋해
+  상충이 해소됨을 `git pull`로 직접 확인 → 같은 날 구현 완료(아래 항목 참고).
   - **요구사항 요약**: `KakaoLoginButton`/`GoogleLoginButton` 컴포넌트,
     `supabase.auth.signInWithOAuth({ provider: 'kakao'|'google', options:
     { redirectTo } })` 호출, 에러 핸들링, `/auth/callback` 세션 처리 가이드.
@@ -1046,3 +1047,26 @@
     시"라고 명시해 현재 범위가 아님을 스스로 인정하고 있다.
   - **결론**: 사용자가 직접 Spec 수정(또는 새 Decision 기록)을 통해 "일반 사용자
     로그인 도입"을 명시적으로 승인하기 전까지 구현하지 않는다.
+
+- [x] **[개발요청] Supabase Auth 기반 카카오/구글 소셜 로그인 및 프로필(birth_years)
+  연동 구현** (2026-09-02 완료 — 위 스킵 항목의 상충 해소 후 재개)
+  - `git pull`로 Decision 018(무로그인 정책 수정 승인) +
+    `spec/common/auth-user-profile.md`가 실제로 원격에 존재함을 직접 확인한 뒤 진행.
+  - DB: `public.profiles`(`birth_years int[]`) + 본인 행만 CRUD 가능한 RLS 4개
+    정책(이 프로젝트에서 유일하게 auth.uid() 기반 정책이 실제로 붙은 테이블) +
+    `auth.users` 가입 시 자동 프로필 생성 트리거.
+  - `middleware.ts`(신규, @supabase/ssr 공식 세션 갱신 패턴), `KakaoLoginButton`/
+    `GoogleLoginButton`(요구사항 색상/문구 그대로), `/auth/callback` 콜백 라우트
+    (exchangeCodeForSession), `getMyProfile`/`updateBirthYears`/`useUser`, `/my`
+    페이지 신규 구현 + 하단 탭 "마이" 활성화(NEXT_PUBLIC_ENABLE_MY_PAGE=true —
+    Vercel 프로덕션에도 별도 설정 필요).
+  - **실측으로 발견해 함께 고친 버그**: `BirthYearsEditor`가 비동기로 늦게 도착하는
+    프로필 데이터를 반영하지 못해(useState 초기값만 사용, 리마운트 안 됨) 항상 빈
+    목록만 보이던 문제 — `key`로 프로필 로드 여부에 따라 확실히 리마운트되게 수정.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(92파일 916건 — 신규 5파일 27건)/
+    `npm run build` 통과. 실측: 카카오 버튼 클릭 → 실제 `accounts.kakao.com/login`
+    까지, 구글 버튼 클릭 → 실제 `accounts.google.com/v3/signin/identifier`까지
+    이동함을 확인(둘 다 Supabase 콜백 URI·실제 등록된 client_id 포함 — 대시보드
+    Provider 설정이 살아있음을 실증). anon 키로 `profiles` SELECT는 빈 배열, INSERT
+    시도는 401+RLS 위반으로 정확히 차단됨을 확인. 미들웨어 추가 후 기존 페이지 전부
+    정상 로드(회귀 없음). 상세: `implementation/2026-09-02-social-login-and-profile.md`.

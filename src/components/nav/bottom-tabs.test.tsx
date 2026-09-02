@@ -26,10 +26,16 @@ describe('BottomTabs', () => {
     expect(screen.getByText('마이')).toBeInTheDocument();
   });
 
-  it('찜/마이/추천픽 탭은 비활성화 상태로 노출되며 클릭해도 이동하지 않는다', () => {
+  // [Decision 018](2026-09-02): "마이"는 소셜 로그인 도입으로 .env.local에서
+  // NEXT_PUBLIC_ENABLE_MY_PAGE=true로 활성화했다 — 다만 FEATURE_FLAGS는 모듈 최상단에서
+  // process.env를 한 번만 읽어 굳어지는 상수라, 이 값 자체를 유닛 테스트로 흔드는 것은
+  // (vi.stubEnv로는 이미 평가된 상수를 되돌릴 수 없음) 취약하다 — 실제 활성화 여부는
+  // 개발 서버(Next.js가 .env.local을 정식으로 읽음)에서 실측 확인했다(구현 기록 참고).
+  // 이 테스트는 여전히 비활성 상태인 찜/추천픽만 검증한다.
+  it('찜/추천픽 탭은 비활성화 상태로 노출되며 클릭해도 이동하지 않는다', () => {
     render(<BottomTabs />);
     expect(screen.getByText('찜').closest('div')).toHaveAttribute('aria-disabled', 'true');
-    // Task 9-6-10: 추천픽은 아직 화면이 없어(ENABLE_RECOMMEND_TAB 기본값 false) 찜/마이와
+    // Task 9-6-10: 추천픽은 아직 화면이 없어(ENABLE_RECOMMEND_TAB 기본값 false) 찜와
     // 동일한 관례로 비활성화 상태로만 노출한다.
     expect(screen.getByText('추천픽').closest('div')).toHaveAttribute('aria-disabled', 'true');
   });
