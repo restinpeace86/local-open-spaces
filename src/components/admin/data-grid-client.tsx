@@ -13,6 +13,7 @@ import { CategoryRulesModal } from '@/components/admin/category-rules-modal';
 import { Pagination } from '@/components/admin/pagination';
 import { CuratedItemsPanel } from '@/components/admin/curated-items-panel';
 import { SpotCurationsPanel } from '@/components/admin/spot-curations-panel';
+import { MomPickPostsPanel } from '@/components/admin/mom-pick-posts-panel';
 
 // [관리자 화면(/admin/data-grid) 기능 고도화 및 범용 제휴 상품 테이블 개편](2026-08-30
 // 사용자 지시): 'curated_items'를 네 번째 탭으로 추가한다. 아래 나머지 탭 3개(open_spaces/
@@ -21,7 +22,7 @@ import { SpotCurationsPanel } from '@/components/admin/spot-curations-panel';
 // 위치 기반 시설/행사) 그 공유 로직에 억지로 끼워넣지 않고 별도의 자기완결적 패널
 // (CuratedItemsPanel)로 렌더링한다 — 기존 3개 탭의 필터/테이블 코드는 전혀 건드리지
 // 않는다(아래에서 tab === 'curated_items'일 때 이 컴포넌트로 조기 분기).
-export type AdminTable = 'open_spaces' | 'events' | 'raw_ingest_data' | 'curated_items' | 'spot_curations';
+export type AdminTable = 'open_spaces' | 'events' | 'raw_ingest_data' | 'curated_items' | 'spot_curations' | 'mom_pick_posts';
 
 export type AdminOpenSpaceRow = {
   id: string;
@@ -119,6 +120,7 @@ type FilterOptions = {
   // 형태만 둔다.
   curated_items: Record<string, never>;
   spot_curations: Record<string, never>;
+  mom_pick_posts: Record<string, never>;
 };
 
 type TriState = 'all' | 'true' | 'false';
@@ -145,6 +147,7 @@ const TAB_LABEL: Record<AdminTable, string> = {
   raw_ingest_data: 'raw_ingest_data (원천 보존)',
   curated_items: '🏷️ 큐레이션/제휴 상품',
   spot_curations: '📍 스팟 큐레이션',
+  mom_pick_posts: '👑 맘스픽 채택 관리',
 };
 
 // [매일 배치 신규 데이터 모니터링](2026-08-28): get-home-feed.ts와 동일한 관례로 날짜 문자열을
@@ -674,6 +677,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     raw_ingest_data: false,
     curated_items: false,
     spot_curations: false,
+    mom_pick_posts: false,
   });
 
   const resetFilters = () => {
@@ -823,6 +827,8 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
         <CuratedItemsPanel />
       ) : tab === 'spot_curations' ? (
         <SpotCurationsPanel />
+      ) : tab === 'mom_pick_posts' ? (
+        <MomPickPostsPanel />
       ) : (
       <>
       <div className="shrink-0 p-4 border-b border-gray-100 flex flex-col gap-3">
@@ -1181,7 +1187,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
       </>
       )}
 
-      {selectedRow && tab !== 'raw_ingest_data' && tab !== 'curated_items' && tab !== 'spot_curations' && (
+      {selectedRow && tab !== 'raw_ingest_data' && tab !== 'curated_items' && tab !== 'spot_curations' && tab !== 'mom_pick_posts' && (
         <RawDataModal
           table={tab}
           row={selectedRow}

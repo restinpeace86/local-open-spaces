@@ -31,6 +31,7 @@ const EMPTY_FILTER_OPTIONS = {
   raw_ingest_data: { sources: [] },
   curated_items: {},
   spot_curations: {},
+  mom_pick_posts: {},
 };
 
 describe('AdminDataGridClient — curated_items 탭 통합', () => {
