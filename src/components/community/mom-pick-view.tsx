@@ -1,58 +1,56 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useUser } from '@/hooks/use-user';
-import { getMyProfile, Profile } from '@/lib/auth/profile';
-import { KakaoLoginButton } from '@/components/auth/kakao-login-button';
-import { GoogleLoginButton } from '@/components/auth/google-login-button';
+import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { useMomPickAccess } from '@/hooks/use-mom-pick-access';
+import { getMyProfile } from '@/lib/auth/profile';
+import { LoginPromptModal } from './login-prompt-modal';
+import { SaessakMomGuideModal } from './saessak-mom-guide-modal';
 import { PostComposer } from './post-composer';
 import { PersonalizedBanner } from './personalized-banner';
 import { PreviewSection } from './preview-section';
-import { canAccessCommunityFeed, GRADE_LABEL } from '@/lib/community/grades';
+import { GRADE_LABEL } from '@/lib/community/grades';
 import { DashboardPost } from '@/lib/community/mom-pick-dashboard';
 
 // [Decision 019](2026-09-02) / spec/community/mom-pick-grades.md: 맘스픽 커뮤니티는 로그인
 // 사용자만 이용 가능하다. 로그인은 했지만 아직 새싹맘(첫 후기/체크리스트 1회) 조건을
-// 못 채운 사용자는 "글쓰기"만 가능하고 피드 열람은 막는다(1절 표 그대로) — 첫 글을 쓰는
-// 순간 DB 트리거(promote_to_sprout_on_first_post)가 즉시 승급시키므로, 등록 성공 후
-// 프로필을 다시 조회하면 바로 피드가 열린다.
+// 못 채운 사용자는 "글쓰기"만 가능하고 피드 열람은 막는다.
 //
-// [맘스픽 메인 화면 기획](2026-09-02 사용자 지시): "모든 글이 무작위로 섞이는 피드가
-// 아니라 철저히 검증된 3가지 핵심 영역(Preview + 전체보기 구조)" — 기존 단일
-// MomPickFeed(최신순 전체 나열)를 메인 화면에서 걷어내고, 파워맘/우수맘 추천·인기글·
-// 실시간 피드 3개 섹션의 미리보기(/api/mom-pick/dashboard, 각 섹션 DB 레벨 LIMIT 3~5)로
-// 대체한다. MomPickFeed 컴포넌트 자체는 삭제하지 않았다(추후 재사용 가능성 — 임의
-// 기능 제거 금지 원칙).
+// [새싹맘 등급 조건부 권한 제어 및 안내 팝업](2026-09-02 사용자 지시): "맘스픽 클릭 시"
+// 3가지 분기(비로그인/새싹맘 미달성/새싹맘 이상)를 모달로 안내한다. 이 앱에는 "맘스픽"
+// 전용 메뉴가 별도 라우트 진입 전 단계에 없고(하단 탭이 아니라 /my 페이지의 링크로
+// 진입) `/mom-pick`이 유일한 진입점이므로, 진입 전 별도 확인 대신 이 페이지 마운트
+// 직후 접근 상태를 판별해 모달을 띄운다 — 클릭 시점과 페이지 렌더 시점의 UX 결과는
+// 동일하다(제한 콘텐츠가 화면에 노출되지 않고 즉시 모달로 안내됨).
+//
+// [자동 승급] 첫 글 작성 시 grade가 signed_up→sprout로 승급하는 로직은 이미 DB 트리거
+// (promote_to_sprout_on_first_post)로 구현·배포돼 있어 별도 클라이언트 코드가 필요
+// 없다 — PostComposer가 글을 등록하면 다음 refreshProfile()에서 승급된 값을 그대로
+// 받아온다.
 type DashboardData = { expert: DashboardPost[]; trending: DashboardPost[]; live: DashboardPost[] };
 
 export function MomPickView() {
-  const { user, isLoading: isUserLoading } = useUser();
-  const [profile, setProfile] = useState<Profile | null>(null);
-  const [isProfileLoading, setIsProfileLoading] = useState(false);
+  const router = useRouter();
+  const { state, profile: initialProfile } = useMomPickAccess();
+  const [profile, setProfile] = useState(initialProfile);
+  const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [dashboardKey, setDashboardKey] = useState(0);
-
-  async function refreshProfile() {
-    setIsProfileLoading(true);
-    try {
-      setProfile(await getMyProfile());
-    } finally {
-      setIsProfileLoading(false);
-    }
-  }
+  const composerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!user) {
-      setProfile(null);
-      return;
-    }
-    refreshProfile();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+    setProfile(initialProfile);
+  }, [initialProfile]);
+
+  // 새싹맘 미달성 상태에 처음 진입할 때 안내 모달을 연다 — 글 등록 후 승급되면
+  // (state가 'allowed'로 바뀌면) 자동으로 닫힌 것처럼 더 이상 조건에 걸리지 않는다.
+  useEffect(() => {
+    setIsGuideModalOpen(state === 'not_sprout_yet');
+  }, [state]);
 
   useEffect(() => {
-    if (!user || !profile || !canAccessCommunityFeed(profile.grade)) return;
+    if (state !== 'allowed') return;
     let cancelled = false;
     fetch('/api/mom-pick/dashboard')
       .then((res) => res.json())
@@ -67,10 +65,14 @@ export function MomPickView() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, profile, dashboardKey]);
+  }, [state, dashboardKey]);
 
-  if (isUserLoading) {
+  async function refreshProfileAfterPost() {
+    setDashboardKey((k) => k + 1);
+    setProfile(await getMyProfile());
+  }
+
+  if (state === 'loading') {
     return (
       <div className="flex-1 flex items-center justify-center">
         <p className="text-sm text-gray-400">불러오는 중...</p>
@@ -78,19 +80,16 @@ export function MomPickView() {
     );
   }
 
-  if (!user) {
+  if (state === 'guest') {
     return (
-      <div className="flex-1 flex flex-col overflow-y-auto p-5">
-        <h1 className="mb-1 text-lg font-bold text-gray-900">👑 맘스픽</h1>
-        <p className="mb-4 text-sm text-gray-500">로그인하면 다른 엄마들의 생생한 후기와 체크리스트를 볼 수 있어요.</p>
-        <div className="flex flex-col gap-3">
-          <KakaoLoginButton />
-          <GoogleLoginButton />
-        </div>
+      <div className="flex-1 flex flex-col p-5">
+        <h1 className="text-lg font-bold text-gray-900">👑 맘스픽</h1>
+        <LoginPromptModal onClose={() => router.push('/')} />
       </div>
     );
   }
 
+  // state === 'not_sprout_yet' | 'allowed' — 둘 다 로그인은 된 상태.
   return (
     <div className="flex-1 flex flex-col gap-4 overflow-y-auto p-5">
       <div className="flex items-center justify-between">
@@ -98,55 +97,50 @@ export function MomPickView() {
         {profile && <span className="text-sm font-medium text-gray-600">{GRADE_LABEL[profile.grade]}</span>}
       </div>
 
-      {isProfileLoading || !profile ? (
-        <p className="text-sm text-gray-400">불러오는 중...</p>
-      ) : (
+      {state === 'allowed' && profile && <PersonalizedBanner birthYears={profile.birth_years} />}
+
+      <div ref={composerRef}>
+        <PostComposer onPosted={refreshProfileAfterPost} />
+      </div>
+
+      {state === 'allowed' && (
         <>
-          {canAccessCommunityFeed(profile.grade) && <PersonalizedBanner birthYears={profile.birth_years} />}
-
-          {!canAccessCommunityFeed(profile.grade) && (
-            <p className="rounded-lg bg-indigo-50 px-3 py-2 text-xs text-indigo-700">
-              첫 후기나 체크리스트를 남기면 다른 엄마들의 피드를 볼 수 있어요! 🌱
-            </p>
-          )}
-
-          <PostComposer
-            onPosted={() => {
-              setDashboardKey((k) => k + 1);
-              refreshProfile();
-            }}
-          />
-
-          {canAccessCommunityFeed(profile.grade) && (
-            <>
-              {dashboardError && <p className="text-xs text-red-600">{dashboardError}</p>}
-              {!dashboard && !dashboardError ? (
-                <p className="text-sm text-gray-400">피드를 불러오는 중...</p>
-              ) : dashboard ? (
-                <div className="flex flex-col gap-6">
-                  <PreviewSection
-                    title="✨ 파워맘 · 우수맘 추천"
-                    href="/mom-pick/expert"
-                    posts={dashboard.expert}
-                    emptyText="아직 파워맘/우수맘 추천 글이 없어요."
-                  />
-                  <PreviewSection
-                    title="🔥 인기 · 우수글"
-                    href="/mom-pick/trending"
-                    posts={dashboard.trending}
-                    emptyText="아직 인기글이 없어요."
-                  />
-                  <PreviewSection
-                    title="🕐 실시간 라이브"
-                    href="/mom-pick/live"
-                    posts={dashboard.live}
-                    emptyText="아직 등록된 글이 없어요."
-                  />
-                </div>
-              ) : null}
-            </>
-          )}
+          {dashboardError && <p className="text-xs text-red-600">{dashboardError}</p>}
+          {!dashboard && !dashboardError ? (
+            <p className="text-sm text-gray-400">피드를 불러오는 중...</p>
+          ) : dashboard ? (
+            <div className="flex flex-col gap-6">
+              <PreviewSection
+                title="✨ 파워맘 · 우수맘 추천"
+                href="/mom-pick/expert"
+                posts={dashboard.expert}
+                emptyText="아직 파워맘/우수맘 추천 글이 없어요."
+              />
+              <PreviewSection
+                title="🔥 인기 · 우수글"
+                href="/mom-pick/trending"
+                posts={dashboard.trending}
+                emptyText="아직 인기글이 없어요."
+              />
+              <PreviewSection
+                title="🕐 실시간 라이브"
+                href="/mom-pick/live"
+                posts={dashboard.live}
+                emptyText="아직 등록된 글이 없어요."
+              />
+            </div>
+          ) : null}
         </>
+      )}
+
+      {isGuideModalOpen && (
+        <SaessakMomGuideModal
+          onWriteClick={() => {
+            setIsGuideModalOpen(false);
+            composerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }}
+          onClose={() => router.push('/')}
+        />
       )}
     </div>
   );
