@@ -8,6 +8,8 @@ import { GoogleLoginButton } from '@/components/auth/google-login-button';
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { BirthYearsEditor } from '@/components/auth/birth-years-editor';
 import { getMyProfile, Profile } from '@/lib/auth/profile';
+import { GRADE_LABEL } from '@/lib/community/grades';
+import Link from 'next/link';
 
 // [Decision 018](2026-09-02) / spec/common/auth-user-profile.md: 로그인 전에는 카카오/구글
 // 로그인 버튼을, 로그인 후에는 프로필(자녀 출생년도) 편집 화면을 보여준다. "찜"/"방문
@@ -70,6 +72,17 @@ export function MyPageView() {
             <p className="text-sm text-gray-700 truncate">{user.email ?? user.id}</p>
             <SignOutButton />
           </div>
+
+          {profile && (
+            <Link
+              href="/mom-pick"
+              className="flex items-center justify-between rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3"
+            >
+              <span className="text-sm font-medium text-indigo-900">👑 맘스픽 커뮤니티</span>
+              <span className="text-sm font-semibold text-indigo-600">{GRADE_LABEL[profile.grade]} ›</span>
+            </Link>
+          )}
+
           {isProfileLoading ? (
             <p className="text-xs text-gray-400">프로필 불러오는 중...</p>
           ) : (

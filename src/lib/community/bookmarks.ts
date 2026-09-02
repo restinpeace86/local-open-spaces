@@ -3,7 +3,9 @@ import { createClient } from '@/lib/supabase/client';
 // [Decision 019](2026-09-02) / spec/community/mom-pick-grades.md 2.3: 찜(북마크) — 열심맘
 // 이상 부여 권한. Decision 003(찜 비노출)이 지정했던 ENABLE_USER_BOOKMARK 플래그를 이번에
 // 실제 데이터/화면과 함께 켠다.
-export type BookmarkTarget = { spotId: string; eventId?: never } | { spotId?: never; eventId: string };
+// kind 태그 기반 판별 유니온 — 'spotId' in target 같은 옵셔널 프로퍼티 판별은 값이
+// undefined일 때도 키 자체는 존재해 타입이 좁혀지지 않는 문제가 있어 명시적 태그를 쓴다.
+export type BookmarkTarget = { kind: 'spot'; spotId: string } | { kind: 'event'; eventId: string };
 
 export async function addBookmark(target: BookmarkTarget): Promise<void> {
   const supabase = createClient();
@@ -11,9 +13,9 @@ export async function addBookmark(target: BookmarkTarget): Promise<void> {
   if (!userData.user) throw new Error('로그인이 필요합니다.');
 
   const row: { user_id: string; spot_id: string | null; event_id: string | null } =
-    'spotId' in target && target.spotId
+    target.kind === 'spot'
       ? { user_id: userData.user.id, spot_id: target.spotId, event_id: null }
-      : { user_id: userData.user.id, spot_id: null, event_id: (target as { eventId: string }).eventId };
+      : { user_id: userData.user.id, spot_id: null, event_id: target.eventId };
 
   const { error } = await supabase.from('user_bookmarks').insert(row);
   if (error) throw new Error(`찜 추가 실패: ${error.message}`);
@@ -25,7 +27,7 @@ export async function removeBookmark(target: BookmarkTarget): Promise<void> {
   if (!userData.user) throw new Error('로그인이 필요합니다.');
 
   let query = supabase.from('user_bookmarks').delete().eq('user_id', userData.user.id);
-  query = 'spotId' in target && target.spotId ? query.eq('spot_id', target.spotId) : query.eq('event_id', (target as { eventId: string }).eventId);
+  query = target.kind === 'spot' ? query.eq('spot_id', target.spotId) : query.eq('event_id', target.eventId);
 
   const { error } = await query;
   if (error) throw new Error(`찜 삭제 실패: ${error.message}`);

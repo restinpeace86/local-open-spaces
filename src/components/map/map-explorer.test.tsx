@@ -7,8 +7,18 @@ import { MapExplorer } from './map-explorer';
 // `never[]` 타입 때문에 이후 오버라이드가 막히지 않도록 명시적으로 `unknown[]`로 넓힌다.
 const rpcMock = vi.fn(() => Promise.resolve({ data: [] as unknown[], error: null as string | null }));
 
+// [Decision 019](2026-09-02): MapExplorer가 마운트하는 AiChatFab/AiChatSheet가 useUser()
+// 훅(내부적으로 supabase.auth.getUser/onAuthStateChange 호출)을 쓰게 되면서, 이 목이
+// rpc만 흉내 내던 것으로는 부족해졌다 — auth도 함께 흉내 내 항상 "비로그인" 상태로
+// 렌더링되게 한다(이 파일의 테스트 목적과 무관한 로그인 상태라 비로그인 고정이 맞다).
 vi.mock('@/lib/supabase/client', () => ({
-  createClient: () => ({ rpc: rpcMock }),
+  createClient: () => ({
+    rpc: rpcMock,
+    auth: {
+      getUser: () => Promise.resolve({ data: { user: null } }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: vi.fn() } } }),
+    },
+  }),
 }));
 
 // Task 9-6-10(2026-08-23): rpcMock이 모듈 스코프 공용이라 초기화 없이는 호출 횟수가 테스트

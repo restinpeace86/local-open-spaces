@@ -19,8 +19,10 @@ import { BrandSplash } from '@/components/common/brand-splash';
 // spec/common/feature-flags.md 원칙대로 화면은 노출하되 비활성화 처리한다(숨기지 않음 —
 // 탭 구조 자체는 항상 5개로 고정돼야 하므로). 추천픽도 같은 원칙으로 비활성화 처리한다.
 // [Decision 018](2026-09-02): "마이" 비활성화 사유였던 "인증 시스템 부재"가 카카오/구글
-// 소셜 로그인 도입으로 해소돼 NEXT_PUBLIC_ENABLE_MY_PAGE=true로 활성화했다(찜은 이번
-// 결정과 무관해 Decision 003 그대로 유지).
+// 소셜 로그인 도입으로 해소돼 NEXT_PUBLIC_ENABLE_MY_PAGE=true로 활성화했다.
+// [Decision 019](2026-09-02): "찜"도 맘스픽 등급 체계(열심맘 이상)의 실제 데이터/화면과
+// 함께 NEXT_PUBLIC_ENABLE_USER_BOOKMARK=true로 활성화했다 — 등급이 부족한 사용자는 탭
+// 진입은 가능하되 화면 내부에서 안내 문구로 막는다(FavoritesView).
 const TABS = [
   { href: '/recommend', label: '추천픽', icon: '✨', flag: FEATURE_FLAGS.ENABLE_RECOMMEND_TAB },
   { href: '/nearby', label: '스팟픽', icon: '📍' },

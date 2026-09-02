@@ -3,6 +3,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DetailModal } from './detail-modal';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 
+// [Decision 019](2026-09-02): DetailModal 헤더에 추가된 BookmarkButton이 useUser() 훅을
+// 쓴다 — 비로그인으로 고정해 렌더링만 되고(찜 버튼은 조용히 숨김) 이 파일의 기존 CTA/뱃지
+// 테스트에는 영향이 없게 한다.
+vi.mock('@/lib/supabase/client', () => ({
+  createClient: () => ({
+    auth: {
+      getUser: () => Promise.resolve({ data: { user: null } }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: vi.fn() } } }),
+    },
+  }),
+}));
+
 // Task 9-5-1(2026-08-22): MiniMap은 Kakao Maps SDK를 비동기 로드하는데, jsdom 환경에서는
 // 스크립트 태그가 실제로 로드되지 않아 loadKakaoMapSdk()의 Promise가 해소되지 않는다(정상 —
 // 실제 지도 렌더링 자체는 kakao-map-view.tsx처럼 이 프로젝트에서 별도 단위 테스트 대상이

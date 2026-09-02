@@ -7,6 +7,18 @@ vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: () => {} }),
 }));
 
+// [Decision 019](2026-09-02): HomeView가 마운트하는 AiChatFab/AiChatSheet(이벤트픽 화면
+// 챗봇)이 useUser() 훅을 쓴다 — 비로그인으로 고정해 이 파일의 기존 홈 피드 테스트에는
+// 영향이 없게 한다.
+vi.mock('@/lib/supabase/client', () => ({
+  createClient: () => ({
+    auth: {
+      getUser: () => Promise.resolve({ data: { user: null } }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: vi.fn() } } }),
+    },
+  }),
+}));
+
 // Task 9-3-1(2026-08-22): jsdom에는 IntersectionObserver가 없어, HeroCarousel(뷰포트 이탈 시
 // Autoplay 정지 로직)이 렌더링될 때 크래시하지 않도록 가짜 구현을 전역에 등록해둔다.
 class FakeIntersectionObserver {

@@ -10,6 +10,7 @@ import { formatDistance, formatDateRange, formatDateTime } from '@/lib/spaces/fo
 import { MiniMap } from '@/components/map/mini-map';
 import { MapPreviewModal } from '@/components/map/map-preview-modal';
 import { ReservationRequestModal } from '@/components/map/reservation-request-modal';
+import { BookmarkButton } from '@/components/community/bookmark-button';
 
 const NO_INFO_TEXT = '정보 준비 중 (공공 기관 문의)';
 
@@ -262,7 +263,10 @@ export function DetailModal({
             </button>
           </div>
 
-          <h2 className="mt-2 text-lg font-bold text-gray-900">{item.name}</h2>
+          <div className="mt-2 flex items-start justify-between gap-2">
+            <h2 className="text-lg font-bold text-gray-900">{item.name}</h2>
+            <BookmarkButton target={isEvent ? { kind: 'event', eventId: item.id } : { kind: 'spot', spotId: item.id }} />
+          </div>
           {item.distance_meters >= 0 && (
             <p className="text-sm text-gray-400">현재 위치에서 {formatDistance(item.distance_meters)}</p>
           )}
