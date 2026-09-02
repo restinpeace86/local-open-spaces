@@ -1011,3 +1011,38 @@
     4가지 모두 실제 화면에서 확인, 테스트로 생성된 큐레이션 1건은 삭제로 원상 복구.
     상세: `implementation/2026-09-02-spot-curations-parser-and-search-ux-fix.md`
     (같은 파일에 정정 섹션으로 추가).
+
+- [ ] **[개발요청] Supabase Auth 기반 카카오/구글 소셜 로그인 버튼 및 콜백 처리 구현**
+  — **사전 확인 결과 기존 헌법/Decision과 정면 상충하여 구현 보류(스킵)**, 사용자
+  재확인 필요 (2026-09-02)
+  - **요구사항 요약**: `KakaoLoginButton`/`GoogleLoginButton` 컴포넌트,
+    `supabase.auth.signInWithOAuth({ provider: 'kakao'|'google', options:
+    { redirectTo } })` 호출, 에러 핸들링, `/auth/callback` 세션 처리 가이드.
+  - **상충 1(치명적) — 제2장 제5조(단순함과 신뢰성)**: "복잡한 가입 절차 *없이* 내
+    위치를 기반으로 즉시 동네 소식을 확인할 수 있는 단순하고 이해하기 쉬운 서비스를
+    지향한다"고 명시돼 있다. 카카오/구글 소셜 로그인 도입은 일반 사용자에게 로그인
+    (가입) 절차를 요구하는 것으로, 이 조항이 명시적으로 배제하는 방향과 정확히
+    반대다.
+  - **상충 2(치명적) — 제3장 제2조/제7장 제1조(Spec 우선/Spec 없는 기능 추가 금지)**:
+    `spec/` 전체를 뒤져도 로그인/인증/사용자 계정 관련 Spec 문서가 전혀 없다(실측
+    확인 — `find spec -iname "*auth*" -o -iname "*login*" -o -iname "*user*"`
+    결과 0건). 승인된 Spec 없이 임의로 구현할 수 없다.
+  - **상충 3(치명적) — 제7장 제4조(미래 기능 구현 금지)**: 제1장 제3조가 정의한
+    현재 MVP 범위는 "공공 데이터 API 연동 및 내 위치 반경 기반 검색"이며, 사용자
+    계정/로그인은 포함돼 있지 않다.
+  - **상충 4(결정적 증거) — 이번 세션 전체에 걸쳐 반복적으로 확정된 "무인증"
+    아키텍처**: `implementation/todo.md`에 이미 두 차례 명시적으로 기록됨 — "별도
+    로그인 인증 없음(기존 관례, 이번 범위 밖)"(296행), "로그인 자체가 없어 실질적으로
+    존재하지 않는 역할이라 적용하지 않고"(826행). `deals`/`event_tickets`/
+    `curated_items`/`reservations`/`spot_curations`/`spot_weather_caches` 테이블
+    모두 "이 앱은 아직 로그인/세션 인증이 없다(known gap)"는 전제로 RLS를
+    service_role 전용으로 설계돼 있다 — 지금 로그인을 추가하면 이 모든 기존 설계
+    전제가 깨진다.
+  - **참고**: `project/decision-log.md` Decision 007이 관리자 계정 RBAC(`user_
+    metadata.role` 기반)을 언급하지만, 이는 **어드민 계정 전용** 구상이고 실측 확인
+    결과 `is_admin()` 함수 자체가 아직 구현되지 않았다(`grep -rl is_admin scripts/
+    migrations src` 결과 0건) — 이번 요청은 그 관리자 RBAC이 아니라 **일반 사용자용**
+    카카오/구글 소셜 로그인이라 별개이며, Decision 007도 "향후 일반 사용자... 확장
+    시"라고 명시해 현재 범위가 아님을 스스로 인정하고 있다.
+  - **결론**: 사용자가 직접 Spec 수정(또는 새 Decision 기록)을 통해 "일반 사용자
+    로그인 도입"을 명시적으로 승인하기 전까지 구현하지 않는다.
