@@ -473,6 +473,7 @@ export type Database = {
           grade: string
           grade_updated_at: string | null
           id: string
+          nickname: string | null
           updated_at: string
         }
         Insert: {
@@ -482,6 +483,7 @@ export type Database = {
           grade?: string
           grade_updated_at?: string | null
           id: string
+          nickname?: string | null
           updated_at?: string
         }
         Update: {
@@ -491,6 +493,7 @@ export type Database = {
           grade?: string
           grade_updated_at?: string | null
           id?: string
+          nickname?: string | null
           updated_at?: string
         }
         Relationships: []

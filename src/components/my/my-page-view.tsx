@@ -7,6 +7,7 @@ import { KakaoLoginButton } from '@/components/auth/kakao-login-button';
 import { GoogleLoginButton } from '@/components/auth/google-login-button';
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { BirthYearsEditor } from '@/components/auth/birth-years-editor';
+import { NicknameEditor } from '@/components/auth/nickname-editor';
 import { getMyProfile, Profile } from '@/lib/auth/profile';
 import { canReceivePushNotifications, GRADE_LABEL } from '@/lib/community/grades';
 import { PushNotificationToggle } from '@/components/push/push-notification-toggle';
@@ -96,7 +97,10 @@ export function MyPageView() {
             // BirthYearsEditor가 리마운트되지 않아 실제 데이터가 와도 빈 배열에 영원히
             // 머문다. profile 존재 여부로 key를 줘서 profile이 채워지는 순간 확실히
             // 리마운트되게 한다.
-            <BirthYearsEditor key={profile ? 'loaded' : 'pending'} initialBirthYears={profile?.birth_years ?? []} />
+            <>
+              <NicknameEditor key={profile ? `nick-loaded` : 'nick-pending'} initialNickname={profile?.nickname ?? null} />
+              <BirthYearsEditor key={profile ? 'loaded' : 'pending'} initialBirthYears={profile?.birth_years ?? []} />
+            </>
           )}
         </div>
       )}
