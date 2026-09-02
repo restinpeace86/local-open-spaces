@@ -1102,3 +1102,29 @@
   - **수동 후속 조치 필요**: Vercel에 `NEXT_PUBLIC_ENABLE_USER_BOOKMARK`/
     `NEXT_PUBLIC_VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`, GitHub Actions 시크릿에
     VAPID 키 등록 필요(로컬 `.env.local`만으로는 배포에 반영 안 됨).
+  - **후속 확인(2026-09-02)**: 사용자가 위 3개 Vercel 환경변수 + GitHub Actions
+    VAPID 시크릿 2개를 모두 등록 완료. GitHub API로 시크릿 존재 여부를 직접 조회해
+    실측 확인함(값 자체는 API로도 조회 불가 — 존재 여부만 확인).
+
+- [x] **[개발요청] AI 챗봇 맞춤 추천 상세 구현 (초개인화 고도화 통합본)** (2026-09-02 완료)
+  - 기존 8단계 인터뷰(2026-09-01)를 날씨 선제 제안(Step 1) → 지역 선택(Step 1) → 로그인
+    프로필 자동 나이 연동(Step 2, KIDS 단계 스킵) → 찜/방문 이력 반영(Step 3) 순으로
+    재편. 지역 변경은 기존 `LocationOnboardingModal` 재사용, 세션 한정(앱 전역 위치는
+    안 바꿈). 나이는 "연 나이"로 계산(생일 데이터 없음, 추측 금지)하고 영유아보육법
+    실제 정의(0~6세)로 매핑. 방문 이력은 신규 테이블 없이 기존 `mom_pick_posts`
+    (Decision 019)를 재해석해 재사용(제5장 제4조 기존 구조 우선).
+  - **실측으로 발견해 함께 고친 심각한 성능 버그**: `/api/ai-chat/weather`가 서울
+    도심 좌표에서 매번 statement timeout으로 실패하던 것을 발견 — `get_nearest_spot_
+    weather` RPC가 `st_dwithin` 방식이라 밀집 지역에서 후보 수만 건을 모은 뒤 정렬해
+    3.86초 걸리던 것을, PostGIS KNN 연산자(`<->`)로 재작성해 기존 GiST 인덱스를 최근접
+    탐색에 실제로 쓰게 해 56ms로 개선(69배). 이 latent 버그는 2026-09-01에 이미
+    존재했으나 이번에 처음 발견됨.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(95파일 953건)/`npm run build` 통과.
+    라이브 DB `EXPLAIN ANALYZE`로 성능 개선 실측, dev 서버 curl로 `/api/ai-chat/
+    weather`·`/api/ai-chat/search`(신규 `isBookmarked`/`bookmarkedSpotName` 필드
+    포함) 정상 응답 확인. 상세:
+    `implementation/2026-09-02-ai-chat-personalization-upgrade.md`.
+  - **구현 판단(추측 대신 명시)**: "기계적 이동수단 질문 금지"는 기존 TRANSPORT_
+    OPTIONS가 이미 이동수단+거리 결합형이라 별도 조치 불필요로 판단. 식사 시간대
+    "스마트 조건부" 질문의 정확한 트리거 경계가 예시만으로 불명확해 기존 동작(모든
+    시간대 질문)을 그대로 유지.
