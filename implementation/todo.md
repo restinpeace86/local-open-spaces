@@ -1128,3 +1128,27 @@
     OPTIONS가 이미 이동수단+거리 결합형이라 별도 조치 불필요로 판단. 식사 시간대
     "스마트 조건부" 질문의 정확한 트리거 경계가 예시만으로 불명확해 기존 동작(모든
     시간대 질문)을 그대로 유지.
+
+- [x] **[개발요청] 맘스픽(Mom's Pick) 메인 화면 기획 구현** (2026-09-02 완료)
+  - `/mom-pick`의 기존 최신순 전체 나열 피드를 "파워맘·우수맘 추천/인기·우수글/실시간
+    라이브" 3대 섹션(Preview + 전체보기)으로 재구성. 상단 개인화 배너는 `profiles.
+    region` 컬럼이 없어 기존 `useUserLocation()`(위치)+`personalization.ts`(나이)를
+    재사용해 구현.
+  - **실측으로 발견한 아키텍처 문제**: 다른 사용자의 닉네임/등급 배지 표시가 필수인데
+    `profiles` RLS(Decision 018 "본인만 조회 가능")가 이를 원천 차단 — RLS를 완화하는
+    대신 curated_items 등과 동일한 관례로 service_role 서버 라우트에서만 안전한
+    필드(id/nickname/grade)만 골라 조회하고, 로그인/등급 검증은 라우트 레벨에서
+    별도 수행(`requireCommunityAccess`). `mom_pick_posts.author_id`↔`profiles.id`
+    형제 FK 문제(오늘 두 번째)도 동일한 2단계 조회 패턴으로 해결.
+  - `profiles.nickname` 컬럼 신규 추가(+ `/my`에 편집 UI) — 카드에 표시할 이름이
+    기존 스키마에 전혀 없었음.
+  - 신규 API 4개(`/api/mom-pick/dashboard`, `/expert`, `/trending`, `/live`), 신규
+    페이지 3개(`/mom-pick/expert`, `/trending`, `/live`).
+  - **구현 판단**: "찜(북마크)"은 게시글에 없는 개념이라(스팟/이벤트 전용) 인기글
+    순위는 like_count만 사용. 전체보기 카드는 읽기 전용(인터랙션 요구 없음). 기존
+    `MomPickFeed`는 메인에서 안 쓰지만 삭제하지 않고 보존(임의 기능 제거 금지).
+  - **검증**: `npx tsc --noEmit`/`npm run test`(95파일 953건)/`npm run build` 통과.
+    dev 서버 curl로 신규 페이지 4개 200, API 4개 미로그인 401 차단 확인. 라이브 DB에
+    우수맘/파워맘 등급 사용자 0명(아직 실사용 데이터 없음) 확인 — 빈 상태 UI가
+    정상적으로 나타날 상황임을 인지. 상세:
+    `implementation/2026-09-02-mom-pick-main-dashboard.md`.
