@@ -1070,3 +1070,35 @@
     Provider 설정이 살아있음을 실증). anon 키로 `profiles` SELECT는 빈 배열, INSERT
     시도는 401+RLS 위반으로 정확히 차단됨을 확인. 미들웨어 추가 후 기존 페이지 전부
     정상 로드(회귀 없음). 상세: `implementation/2026-09-02-social-login-and-profile.md`.
+
+- [x] **[개발요청] 맘스픽(Mom's Pick) 등급/게이미피케이션 & 커뮤니티 체계 구현**
+  (2026-09-02 완료)
+  - `spec/community/mom-pick-grades.md` Spec 초안 작성 → 채팅으로 6개 쟁점(채택 정의/
+    VAPID 발급 주체/등급 산정 주기/리뷰·체크리스트 입력 형태/파워맘 선발 방식/강등
+    정책) 확정 → `project/decision-log.md` **Decision 019** 승인 기록 → "바로
+    구현해줘" 지시로 구현.
+  - DB: `profiles.grade`/`ai_chat_free_uses_used` 추가 + 신규 테이블 4종(`mom_pick_
+    posts`/`mom_pick_likes`/`user_bookmarks`/`push_subscriptions`) + 트리거 3종(채택
+    필드 보호/좋아요 카운트 동기화/새싹맘 즉시 승급) + RPC 2종(월간 활동 집계/반경 내
+    신규 항목 카운트).
+  - 등급 로직(`calculateGrade`, TS+mjs 두 벌 — 배치 스크립트는 `@/` 별칭을 못 써 독립
+    구현), AI 챗봇 1회 제한(로그인 signed_up은 서버 카운터, 비로그인은 localStorage
+    소프트 제한), 커뮤니티 피드/후기·체크리스트 작성 화면(`/mom-pick`), 찜 화면
+    (`/favorites`, Decision 003 플래그 해제), 어드민 "채택" 관리 탭, 등급 산정 배치
+    (매일 KST 04:23) + 파워맘 정원제, Web Push 알림 인프라(VAPID/서비스워커/구독
+    저장/발송 배치 KST 07:30) — 5개 논리 단위로 나눠 각각 `tsc`/`test`/`build` 통과
+    후 커밋.
+  - **실측으로 발견해 함께 고친 문제**: (1) `push_subscriptions`↔`profiles`가 둘 다
+    `auth.users`를 가리키는 형제 FK라 PostgREST 임베디드 조회가 안 되는 것을 배치
+    스크립트 실제 실행으로 발견해 2단계 조회로 수정. (2) `useUser()` 훅을 새로 쓰게 된
+    `AiChatSheet`/`BookmarkButton` 때문에 `detail-modal.test.tsx`/`home-view.test.tsx`/
+    `map-explorer.test.tsx`가 supabase 클라이언트 미모킹으로 일제히 실패한 것을 발견해
+    세 파일에 목을 추가.
+  - **검증**: `npx tsc --noEmit`/`npm run test`(94파일 933건)/`npm run build` 통과.
+    라이브 Supabase에 마이그레이션 8개 순차 적용 + RLS/트리거 존재 확인, 등급/푸시
+    배치 스크립트 라이브 실행 확인, dev 서버로 `/mom-pick`/`/favorites`/`/my`/
+    `/admin/data-grid` 200 및 신규 탭 라벨 렌더링 확인. 상세:
+    `implementation/2026-09-02-mom-pick-grades-and-gamification.md`.
+  - **수동 후속 조치 필요**: Vercel에 `NEXT_PUBLIC_ENABLE_USER_BOOKMARK`/
+    `NEXT_PUBLIC_VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`, GitHub Actions 시크릿에
+    VAPID 키 등록 필요(로컬 `.env.local`만으로는 배포에 반영 안 됨).
