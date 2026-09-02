@@ -249,3 +249,9 @@ ETL 파이프라인 `docs/pipeline-log.md` 일간 로그 작성 및 이벤트픽
 - **DB 마이그레이션**: `events`/`open_spaces`에 `source` 컬럼 추가, `events`에 `raw_data` 컬럼 추가, `open_spaces.location`의 `NOT NULL` 해제 및 `location_precision` 컬럼 추가(Decision 009와 동일 패턴을 `open_spaces`에도 적용), `get_nearby_spaces_and_events` RPC의 `open_spaces` 분기에 `EXACT` 정밀도 필터 추가.
 - **코드 영향 범위**: `scripts/ingest/adapters/seoul-yeyak-adapter.mjs`(MAXCLASSNM 기준 재분류 및 테이블 분리 적재로 전면 재작성), `scripts/ingest/adapters/lib/schema-mapper.mjs`(`buildOpenSpaceRow`에 `locationPrecision`/`source` 지원 추가, `buildEventRow`에 `source`/`rawData` 지원 추가), `scripts/ingest/adapters/base-collector-adapter.mjs`(다중 테이블 분리 적재를 위한 `targetTable: 'multi'` 모드 및 `transformSplit()` 훅 추가), `scripts/ingest/lib/supabase-admin.mjs`(`upsertRowsSafeMerge`의 배치 내 중복도 NULL 병합하도록 개선), `scripts/ingest/lib/ai-tagging.mjs`(공간형 시설 전용 정밀 키즈 뱃지 판별 함수 추가), `docs/pipeline-log.md`(API별 상세 리포트 블록 추가).
 - 기존 24개 어댑터(단일 테이블 대상)는 이번 변경으로 동작이 바뀌지 않는다 — 신규 훅/모드는 전부 opt-in이다.
+
+
+### Decision 018: 일반 사용자 소셜 로그인(Kakao/Google) 및 프로필 연동 도입
+- **날짜:** 2026-09-02
+- **상태:** 승인 (Approved)
+- **맥락:** 자녀 출생년도(`birth_years`), 찜 목록, 방문 이력 등 초개인화 맞춤 큐레이션과 스마트 챗봇 기능을 위해 일반 사용자 인증 시스템(Supabase Auth) 도입이 필수적으로 요구됨. 따라서 기존의 '무로그인 MVP' 정책을 수정하여 소셜 로그인을 도입함.
