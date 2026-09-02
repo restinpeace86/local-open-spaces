@@ -9,13 +9,17 @@ export type Budget = 'FREE' | 'UNDER_10K' | 'UNDER_30K' | 'ANY';
 export type KidsAgeGroup = '영유아' | '초등' | '전연령';
 export type Vibe = 'ACTIVE' | 'EDUCATION' | 'NATURE' | 'CULTURE';
 
+// [챗봇 문제점 수정](2026-09-02 사용자 지시) 5: "분위기를 여러 개 고를 수 있게 하거나
+// 전체도 고를 수 있게 해달라" — 단일 값(vibe: Vibe)을 배열(vibes: Vibe[])로 바꾼다.
+// 빈 배열은 "전체"(분위기로 필터링하지 않음)를 뜻한다 — 별도 'ALL' 상수를 만드는 대신
+// "필터 조건 없음 = 전부 통과"라는 자연스러운 의미를 그대로 쓴다.
 export type ChatAnswers = {
   transportRadiusMeters: number;
   outdoorPreference: OutdoorPreference;
   budget: Budget;
   kidsCount: number;
   kidsAgeGroup: KidsAgeGroup | null;
-  vibe: Vibe;
+  vibes: Vibe[];
 };
 
 // 8단계(Purpose/Vibe)의 부모 친화적 말투 선택지 → 실제 category_min 매핑. CORE_SPOT_
@@ -66,8 +70,9 @@ function matchesBudget(item: NearbyItem, budget: Budget): boolean {
   return true;
 }
 
-function matchesVibe(item: NearbyItem, vibe: Vibe): boolean {
-  return !!item.category_min && VIBE_CATEGORY_MINS[vibe].includes(item.category_min);
+function matchesVibe(item: NearbyItem, vibes: Vibe[]): boolean {
+  if (vibes.length === 0) return true; // "전체" — 분위기로 걸러내지 않음
+  return !!item.category_min && vibes.some((v) => VIBE_CATEGORY_MINS[v].includes(item.category_min as string));
 }
 
 function withinRadius(item: NearbyItem, radiusMeters: number): boolean {
@@ -90,7 +95,7 @@ export function applyStrictFilters(
   return items.filter(
     (item) =>
       withinRadius(item, radiusMeters) &&
-      matchesVibe(item, answers.vibe) &&
+      matchesVibe(item, answers.vibes) &&
       matchesOutdoorPreference(item, answers.outdoorPreference) &&
       matchesBudget(item, answers.budget) &&
       !visitedSpotIds.has(item.id)

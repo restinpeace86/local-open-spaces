@@ -40,7 +40,7 @@ function answers(overrides: Partial<ChatAnswers> = {}): ChatAnswers {
     budget: 'ANY',
     kidsCount: 1,
     kidsAgeGroup: '전연령',
-    vibe: 'NATURE',
+    vibes: ['NATURE'],
     ...overrides,
   };
 }
@@ -82,13 +82,13 @@ describe('runSearch', () => {
 
   it('vibe와 category_min이 매칭되는 후보만 통과한다', () => {
     const wrongVibe = spot({ category_min: '박물관이 아닌 값' });
-    const outcome = runSearch([wrongVibe], answers({ vibe: 'NATURE' }), null);
+    const outcome = runSearch([wrongVibe], answers({ vibes: ['NATURE'] }), null);
     expect(outcome.exhausted).toBe(true);
   });
 
   it('실내 선호면 facility_type이 야외 단독인 후보를 제외한다', () => {
     const outdoorOnly = spot({ facility_type: '야외', category_min: '공원' });
-    const outcome = runSearch([outdoorOnly], answers({ outdoorPreference: 'INDOOR', vibe: 'NATURE' }), null);
+    const outcome = runSearch([outdoorOnly], answers({ outdoorPreference: 'INDOOR', vibes: ['NATURE'] }), null);
     expect(outcome.exhausted).toBe(true);
   });
 
@@ -129,7 +129,7 @@ describe('runSearch', () => {
       spot({ id: `cafe${i}`, distance_meters: i * 10, category_min: '키즈카페', is_kids_friendly: true })
     );
     const onePlayground = spot({ id: 'playground', distance_meters: 999, category_min: '어린이놀이터' });
-    const outcome = runSearch([...kidsCafes, onePlayground], answers({ vibe: 'ACTIVE' }), null);
+    const outcome = runSearch([...kidsCafes, onePlayground], answers({ vibes: ['ACTIVE'] }), null);
 
     const hasPublic = outcome.results.some((r) => r.kind === 'SPOT' && isPublicFacility(r.item));
     expect(hasPublic).toBe(true);
@@ -204,5 +204,25 @@ describe('방문 이력(mom_pick_posts) 기반 중복 배제 — Step 3-②', ()
     const pool = applyStrictFilters([a, b], answers(), 5000);
 
     expect(pool).toEqual([a, b]);
+  });
+});
+
+// [챗봇 문제점 수정](2026-09-02 사용자 지시) 5: 분위기 다중 선택 + "전체" 지원.
+describe('분위기(vibe) 다중 선택 및 전체 옵션', () => {
+  it('vibes가 여러 개면 그중 하나라도 일치하면 통과한다', () => {
+    const park = spot({ category_min: '공원' }); // NATURE
+    const museum = spot({ category_min: '역사박물관' }); // EDUCATION
+    const cafe = spot({ category_min: '문화의집' }); // CULTURE — 선택하지 않은 분위기
+    const pool = applyStrictFilters([park, museum, cafe], answers({ vibes: ['NATURE', 'EDUCATION'] }), 5000);
+
+    expect(pool).toEqual([park, museum]);
+  });
+
+  it('vibes가 빈 배열("전체")이면 분위기로 걸러내지 않는다', () => {
+    const park = spot({ category_min: '공원' });
+    const cafe = spot({ category_min: '문화의집' });
+    const pool = applyStrictFilters([park, cafe], answers({ vibes: [] }), 5000);
+
+    expect(pool).toEqual([park, cafe]);
   });
 });

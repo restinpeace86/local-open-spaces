@@ -131,6 +131,21 @@ export function LocationOnboardingModal({
           {isLocating ? '현재 위치 확인 중...' : '📍 현재 위치로 찾기'}
         </button>
 
+        {/* [챗봇 문제점 수정](2026-09-02 사용자 지시) 2: "다른 지역 변경 시 동네 이름을
+            정확히 쳐야 해서 너무 국소적으로만 바꿀 수 있다"(예: 경기도 거주자가 서울/
+            경기 전역을 폭넓게 찾고 싶어도 정확한 주소를 몰라 못 바꿈) — 기존에도
+            시/군/구 목록 선택 기능(getSigunguOptions)은 있었지만 GPS 실패 시에만
+            숨겨진 채로 열리는 2차 Fallback이었다. 검색창에 입력하지 않고도 바로 쓸 수
+            있도록 상시 노출 버튼으로 승격한다(제5장 제4조 기존 구조 우선 — 새 목록을
+            만들지 않고 이미 있던 것을 더 쉽게 찾게 함). */}
+        <button
+          type="button"
+          onClick={openManualPicker}
+          className="mt-2 w-full rounded-lg border border-gray-300 text-gray-700 text-sm font-medium py-2.5 hover:bg-gray-50"
+        >
+          🗺️ 지역 목록에서 선택
+        </button>
+
         <div className="mt-4">
           <input
             type="text"

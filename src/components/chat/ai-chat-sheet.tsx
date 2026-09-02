@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { formatDistance } from '@/lib/spaces/format';
 import { DetailModal } from '@/components/map/detail-modal';
@@ -30,6 +30,7 @@ import {
   buildTimeAck,
   buildTransportAck,
   buildVibeAck,
+  buildVibeLabel,
   KIDS_AGE_OPTIONS,
   KIDS_COUNT_OPTIONS,
   OUTDOOR_PREFERENCE_OPTIONS,
@@ -85,7 +86,7 @@ type Answers = {
   budget?: Budget;
   kidsCount?: number;
   kidsAgeGroup?: KidsAgeGroup;
-  vibe?: Vibe;
+  vibes?: Vibe[];
   vibeLabel?: string;
 };
 
@@ -112,6 +113,8 @@ export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: n
   const [answers, setAnswers] = useState<Answers>({});
   const [customDateInput, setCustomDateInput] = useState('');
   const [kidsCountDraft, setKidsCountDraft] = useState<number | null>(null);
+  // [챗봇 문제점 수정](2026-09-02 사용자 지시) 5: 분위기(Vibe) 다중 선택 토글 상태.
+  const [selectedVibes, setSelectedVibes] = useState<Vibe[]>([]);
   const [results, setResults] = useState<SearchResultItem[]>([]);
   const [exhaustedMessage, setExhaustedMessage] = useState<string | null>(null);
   const [limitReachedMessage, setLimitReachedMessage] = useState<string | null>(null);
@@ -136,6 +139,15 @@ export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: n
   const [profile, setProfile] = useState<Profile | null>(null);
   const [derivedKidsCount, setDerivedKidsCount] = useState<number | null>(null);
   const [derivedKidsAgeGroup, setDerivedKidsAgeGroup] = useState<KidsAgeGroup | null>(null);
+
+  // [챗봇 문제점 수정](2026-09-02 사용자 지시) 1: "글이 꽉차면 새로 올라온 글이 위로
+  // 안 올라가서 수동으로 올려야 함" — 새 메시지/로딩 표시/결과 카드가 추가될 때마다
+  // 스크롤 컨테이너를 맨 아래로 강제 이동시켜 항상 최신 내용이 보이게 한다.
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = scrollContainerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages, phase, results]);
 
   function pushUser(text: string) {
     setMessages((prev) => [...prev, { id: nextMessageId(), from: 'USER', text }]);
@@ -193,9 +205,10 @@ export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: n
       setLastWeatherMode(data.recommendedMode as OutdoorRecommendation);
       pushAi(data.reactionText);
       setPhase('WEATHER_INTRO_CHOICE');
-    } catch {
+    } catch (err) {
       setLastWeatherMode('EITHER');
-      pushAi(`${label} 날씨 정보를 불러오는 데 문제가 생겼어요. 야외/실내 중 편하신 쪽을 골라주세요!`);
+      const detail = process.env.NODE_ENV !== 'production' ? ` (개발자용 상세: ${err instanceof Error ? err.message : String(err)})` : '';
+      pushAi(`${label} 날씨 정보를 불러오는 데 문제가 생겼어요. 야외/실내 중 편하신 쪽을 골라주세요!${detail}`);
       setPhase('WEATHER_INTRO_CHOICE');
     }
   }
@@ -335,10 +348,25 @@ export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: n
     setPhase('VIBE');
   }
 
-  // ---- 9단계: Purpose/Vibe → 최종 검색 ----
-  async function handleVibeSelect(vibe: Vibe, label: string) {
+  // ---- 9단계: Purpose/Vibe(다중 선택 + "전체") ----
+  function toggleVibe(vibe: Vibe) {
+    setSelectedVibes((prev) => (prev.includes(vibe) ? prev.filter((v) => v !== vibe) : [...prev, vibe]));
+  }
+
+  function handleVibeConfirmClick() {
+    if (selectedVibes.length === 0) return; // "선택 완료"는 최소 1개 선택했을 때만 — 전체는 별도 버튼
+    handleVibeConfirm(selectedVibes, buildVibeLabel(selectedVibes));
+  }
+
+  function handleVibeAllClick() {
+    handleVibeConfirm([], '전체 다 보여주세요 ✨');
+  }
+
+  // [챗봇 문제점 수정](2026-09-02 사용자 지시) 5: 단일 선택(Vibe)에서 다중 선택
+  // (Vibe[])으로 바꾼다. vibes가 빈 배열이면 "전체"(분위기로 필터링하지 않음).
+  async function handleVibeConfirm(vibes: Vibe[], label: string) {
     pushUser(label);
-    const finalAnswers = { ...answers, vibe, vibeLabel: label };
+    const finalAnswers = { ...answers, vibes, vibeLabel: label };
     setAnswers(finalAnswers);
 
     // [Decision 019](2026-09-02): 비로그인 사용자는 서버가 식별할 수 없어 여기서 미리
@@ -367,7 +395,7 @@ export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: n
               budget: finalAnswers.budget ?? 'ANY',
               kidsCount: finalAnswers.kidsCount ?? 0,
               kidsAgeGroup: finalAnswers.kidsAgeGroup ?? null,
-              vibe: finalAnswers.vibe,
+              vibes: finalAnswers.vibes ?? [],
             },
             lat: searchCenter.lat,
             lng: searchCenter.lng,
@@ -404,8 +432,17 @@ export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: n
       }
       setResults(data.results);
       setPhase('RESULTS');
-    } catch {
-      pushAi('앗, 검색 중 문제가 생겼어요. 잠시 후 다시 시도해주세요.');
+    } catch (err) {
+      // [챗봇 문제점 수정](2026-09-02 사용자 지시) 6: "무슨 문제인지 나오게 해줘, 서비스
+      // 오픈 전엔 이렇게 말고" — 정식 오픈 전에는 실제 원인을 그대로 보여줘 재현/디버깅이
+      // 가능하게 한다. 프로덕션에서는 사용자에게 내부 에러 문구를 그대로 노출하지 않도록
+      // NODE_ENV로 분기한다(오픈 후 다시 일반 문구로 자동 전환됨 — 별도 원복 작업 불필요).
+      const detail = err instanceof Error ? err.message : String(err);
+      const message =
+        process.env.NODE_ENV === 'production'
+          ? '앗, 검색 중 문제가 생겼어요. 잠시 후 다시 시도해주세요.'
+          : `앗, 검색 중 문제가 생겼어요. (개발자용 상세: ${detail})`;
+      pushAi(message);
       setPhase('ERROR');
     }
   }
@@ -445,7 +482,7 @@ export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: n
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-4">
           <div className="flex flex-col gap-2">
             {messages.map((m) => (
               <div key={m.id} className={`flex ${m.from === 'USER' ? 'justify-end' : 'justify-start'}`}>
@@ -550,7 +587,10 @@ export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: n
               onBudgetSelect={handleBudgetSelect}
               onKidsCountSelect={handleKidsCountSelect}
               onKidsAgeSelect={handleKidsAgeSelect}
-              onVibeSelect={handleVibeSelect}
+              selectedVibes={selectedVibes}
+              onToggleVibe={toggleVibe}
+              onVibeConfirm={handleVibeConfirmClick}
+              onVibeAll={handleVibeAllClick}
               customDateInput={customDateInput}
               onCustomDateInputChange={setCustomDateInput}
               onCustomDateConfirm={handleCustomDateConfirm}
@@ -606,7 +646,10 @@ function ChipOptions({
   onBudgetSelect,
   onKidsCountSelect,
   onKidsAgeSelect,
-  onVibeSelect,
+  selectedVibes,
+  onToggleVibe,
+  onVibeConfirm,
+  onVibeAll,
   customDateInput,
   onCustomDateInputChange,
   onCustomDateConfirm,
@@ -622,7 +665,10 @@ function ChipOptions({
   onBudgetSelect: (budget: Budget, label: string) => void;
   onKidsCountSelect: (count: number) => void;
   onKidsAgeSelect: (age: KidsAgeGroup, label: string) => void;
-  onVibeSelect: (vibe: Vibe, label: string) => void;
+  selectedVibes: Vibe[];
+  onToggleVibe: (vibe: Vibe) => void;
+  onVibeConfirm: () => void;
+  onVibeAll: () => void;
   customDateInput: string;
   onCustomDateInputChange: (v: string) => void;
   onCustomDateConfirm: () => void;
@@ -738,13 +784,39 @@ function ChipOptions({
         </div>
       );
     case 'VIBE':
+      // [챗봇 문제점 수정](2026-09-02 사용자 지시) 5: 토글형 다중 선택 + "선택 완료"/
+      // "전체" 버튼. ChipButton은 클릭 즉시 확정되는 단일 선택용이라 여기서는 별도로
+      // 선택 여부를 시각적으로 표시하는 토글 버튼을 쓴다.
       return (
-        <div className="flex flex-wrap gap-2">
-          {VIBE_OPTIONS.map((o) => (
-            <ChipButton key={o.id} onClick={() => onVibeSelect(o.id, `${o.emoji} ${o.label}`)}>
-              {o.emoji} {o.label}
-            </ChipButton>
-          ))}
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap gap-2">
+            {VIBE_OPTIONS.map((o) => {
+              const isSelected = selectedVibes.includes(o.id);
+              return (
+                <button
+                  key={o.id}
+                  type="button"
+                  onClick={() => onToggleVibe(o.id)}
+                  className={`rounded-full border px-3 py-1.5 text-sm ${
+                    isSelected ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
+                  }`}
+                >
+                  {o.emoji} {o.label}
+                </button>
+              );
+            })}
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onVibeConfirm}
+              disabled={selectedVibes.length === 0}
+              className="flex-1 rounded-full bg-indigo-600 py-2 text-sm font-medium text-white disabled:opacity-40"
+            >
+              선택 완료 ({selectedVibes.length})
+            </button>
+            <ChipButton onClick={onVibeAll}>전체 다 보여주세요 ✨</ChipButton>
+          </div>
         </div>
       );
     default:
