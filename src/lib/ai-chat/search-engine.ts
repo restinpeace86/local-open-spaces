@@ -74,21 +74,35 @@ function withinRadius(item: NearbyItem, radiusMeters: number): boolean {
   return item.distance_meters <= radiusMeters;
 }
 
-// export: API 라우트가 "반경별로 직접 재조회 후 이 반경에서만 필터링"하는 2단계 조회를
-// 구성할 때 재사용한다(아래 runSearch의 자체 폴백과 별개 — search-engine.ts 하단 주석 참고).
-export function applyStrictFilters(items: NearbyItem[], answers: ChatAnswers, radiusMeters: number): NearbyItem[] {
+// [AI 챗봇 맞춤 추천 상세 구현(초개인화 고도화)](2026-09-02 사용자 지시) Step 3-②: "최근에
+// 이미 다녀온 장소는 결과에서 제외" — 이 앱에 별도 "방문 이력" 테이블은 없지만, 맘스픽
+// 후기/체크리스트(mom_pick_posts, Decision 019)는 본인이 실제로 그 스팟에 다녀왔다는
+// 사실을 이미 담고 있는 기존 데이터다(신규 개념을 지어낸 게 아니라 기존 데이터의 자연스러운
+// 재해석 — 제5장 제4조 기존 구조 우선). 완전 제외(후순위가 아니라 제외)한다 — "늘 새로운
+// 경험 제공"이라는 요구 취지에 더 맞고, 결과가 부족해지면 기존 반경 완화 폴백이 이미
+// 흡수한다.
+export function applyStrictFilters(
+  items: NearbyItem[],
+  answers: ChatAnswers,
+  radiusMeters: number,
+  visitedSpotIds: ReadonlySet<string> = new Set()
+): NearbyItem[] {
   return items.filter(
     (item) =>
       withinRadius(item, radiusMeters) &&
       matchesVibe(item, answers.vibe) &&
       matchesOutdoorPreference(item, answers.outdoorPreference) &&
-      matchesBudget(item, answers.budget)
+      matchesBudget(item, answers.budget) &&
+      !visitedSpotIds.has(item.id)
   );
 }
 
 const PROXIMITY_NORMALIZE_METERS = 5000;
+// [Step 3-①] 찜한 장소가 현재 조건에 부합하면 결과 상단에 우선 배치 — 거리 만점(40점)보다도
+// 확실히 앞서도록 큰 가중치를 준다(사용자가 이미 관심을 표시한 곳이므로).
+const BOOKMARK_SCORE_BONUS = 50;
 
-function scoreItem(item: NearbyItem, answers: ChatAnswers): number {
+function scoreItem(item: NearbyItem, answers: ChatAnswers, bookmarkedSpotIds: ReadonlySet<string>): number {
   let score = 0;
   score += Math.max(0, 1 - item.distance_meters / PROXIMITY_NORMALIZE_METERS) * 40;
   if (answers.kidsCount > 0 && item.is_kids_friendly) score += 20;
@@ -96,11 +110,12 @@ function scoreItem(item: NearbyItem, answers: ChatAnswers): number {
   if (answers.kidsCount > 0 && item.has_parking) score += 10;
   if (answers.kidsAgeGroup && item.target_age_group === answers.kidsAgeGroup) score += 15;
   if (item.is_free) score += 5;
+  if (bookmarkedSpotIds.has(item.id)) score += BOOKMARK_SCORE_BONUS;
   return score;
 }
 
 export type SearchResultItem =
-  | { kind: 'SPOT'; item: NearbyItem }
+  | { kind: 'SPOT'; item: NearbyItem; isBookmarked: boolean }
   | { kind: 'AFFILIATE'; item: { id: string; title: string; image_url: string | null; booking_url: string; category: string } };
 
 export type SearchOutcome = {
@@ -117,8 +132,13 @@ export type CuratedAffiliateItem = { id: string; title: string; image_url: strin
 // 0건 여부를 먼저 판단). 점수화 → 상위 N개 선정 → 필수 믹스 룰(①공공시설 최소 1개,
 // ②제휴 상품 최소 1개) 적용까지 담당한다. DB 접근 없는 순수 함수라 API 라우트가
 // "반경별 재조회" 사이사이에도 재사용할 수 있다.
-export function assembleResults(pool: NearbyItem[], answers: ChatAnswers, curatedItem: CuratedAffiliateItem | null): SearchResultItem[] {
-  const scored = pool.map((item) => ({ item, score: scoreItem(item, answers) })).sort((a, b) => b.score - a.score);
+export function assembleResults(
+  pool: NearbyItem[],
+  answers: ChatAnswers,
+  curatedItem: CuratedAffiliateItem | null,
+  bookmarkedSpotIds: ReadonlySet<string> = new Set()
+): SearchResultItem[] {
+  const scored = pool.map((item) => ({ item, score: scoreItem(item, answers, bookmarkedSpotIds) })).sort((a, b) => b.score - a.score);
 
   const spotSlots = curatedItem ? MAX_RESULTS - 1 : MAX_RESULTS;
   let top = scored.slice(0, spotSlots).map((s) => s.item);
@@ -131,7 +151,7 @@ export function assembleResults(pool: NearbyItem[], answers: ChatAnswers, curate
     }
   }
 
-  const results: SearchResultItem[] = top.map((item) => ({ kind: 'SPOT' as const, item }));
+  const results: SearchResultItem[] = top.map((item) => ({ kind: 'SPOT' as const, item, isBookmarked: bookmarkedSpotIds.has(item.id) }));
   // 필수 믹스 룰 ②: 제휴 상품 1개 이상 — 실제 활성 상품이 있을 때만 자연스럽게 섞는다
   // (없는데 억지로 만들지 않음).
   if (curatedItem) {

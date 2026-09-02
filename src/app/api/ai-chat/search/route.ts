@@ -96,6 +96,23 @@ export async function POST(request: NextRequest) {
         message: '무료 체험을 이미 사용하셨어요. 맘스픽에 첫 후기나 체크리스트를 남기면 챗봇을 무제한으로 이용할 수 있어요!',
       });
     }
+
+    // [AI 챗봇 맞춤 추천 상세 구현(초개인화 고도화)](2026-09-02 사용자 지시) Step 3: 로그인
+    // 사용자의 찜(user_bookmarks, Decision 019)/방문 이력(mom_pick_posts)을 함께 조회한다.
+    // 둘 다 auth.uid() 기반 RLS라 이 세션(supabase)으로 조회하면 자동으로 본인 것만 온다 —
+    // 비로그인이면 빈 Set을 써서 기존 동작(북마크/이력 없음)과 완전히 동일하게 동작한다.
+    let bookmarkedSpotIds = new Set<string>();
+    let visitedSpotIds = new Set<string>();
+    if (user) {
+      const [bookmarksResult, visitedResult] = await Promise.all([
+        supabase.from('user_bookmarks').select('spot_id').eq('user_id', user.id).not('spot_id', 'is', null),
+        supabase.from('mom_pick_posts').select('spot_id').eq('author_id', user.id).not('spot_id', 'is', null),
+      ]);
+      if (bookmarksResult.error) console.error(`[AI_CHAT_SEARCH] 찜 목록 조회 실패: ${bookmarksResult.error.message}`);
+      if (visitedResult.error) console.error(`[AI_CHAT_SEARCH] 방문 이력 조회 실패: ${visitedResult.error.message}`);
+      bookmarkedSpotIds = new Set((bookmarksResult.data ?? []).map((r) => r.spot_id as string));
+      visitedSpotIds = new Set((visitedResult.data ?? []).map((r) => r.spot_id as string));
+    }
     // 결과가 나오든(성공/0건) 무료 체험을 1회 소진한 것으로 기록한다 — 인터뷰 자체는
     // 정상 진행됐으므로 사용자 입장에서 "체험 1회"를 쓴 것이 맞다. try/catch로 잡히는
     // 서버 내부 오류(사용자 잘못이 아님)는 아래에서 별도로 처리해 소진하지 않는다.
@@ -116,7 +133,7 @@ export async function POST(request: NextRequest) {
     const originalRadiusMeters = answers.transportRadiusMeters;
     let radiusMeters = originalRadiusMeters;
     let candidates = await fetchCandidatesAtRadius(supabase, lat, lng, radiusMeters);
-    let pool = applyStrictFilters(candidates, answers, radiusMeters);
+    let pool = applyStrictFilters(candidates, answers, radiusMeters, visitedSpotIds);
     let usedFallback = false;
 
     console.log(`[AI_CHAT_SEARCH] 1차 조회(반경 ${radiusMeters}m): 후보 ${candidates.length}건 → 필터 통과 ${pool.length}건`);
@@ -127,7 +144,7 @@ export async function POST(request: NextRequest) {
         console.log(`[AI_CHAT_SEARCH] 1차 0건 — 반경을 ${radiusMeters}m → ${fallbackRadius}m로 1회 완화해 재조회`);
         radiusMeters = fallbackRadius;
         candidates = await fetchCandidatesAtRadius(supabase, lat, lng, radiusMeters);
-        pool = applyStrictFilters(candidates, answers, radiusMeters);
+        pool = applyStrictFilters(candidates, answers, radiusMeters, visitedSpotIds);
         usedFallback = pool.length > 0;
         console.log(`[AI_CHAT_SEARCH] 2차 조회(반경 ${radiusMeters}m): 후보 ${candidates.length}건 → 필터 통과 ${pool.length}건`);
       } else {
@@ -145,7 +162,13 @@ export async function POST(request: NextRequest) {
     }
 
     const curatedItem = await fetchActiveCuratedItem();
-    const results: SearchResultItem[] = assembleResults(pool, answers, curatedItem);
+    const results: SearchResultItem[] = assembleResults(pool, answers, curatedItem, bookmarkedSpotIds);
+
+    // [Step 3-①] 결과에 찜한 장소가 있으면 그중 최상위 1곳의 이름만 뽑아 채팅 말풍선용
+    // 하이라이트 멘트를 만든다 — LLM이 지어내는 게 아니라 실제로 이 요청에서 조회된
+    // 이름을 그대로 쓰므로 환각 위험이 없다.
+    const topBookmarkedResult = results.find((r) => r.kind === 'SPOT' && r.isBookmarked);
+    const bookmarkedSpotName = topBookmarkedResult && topBookmarkedResult.kind === 'SPOT' ? topBookmarkedResult.item.name : null;
 
     const summaryText = await buildFinalSummary(
       {
@@ -168,6 +191,7 @@ export async function POST(request: NextRequest) {
       finalRadiusMeters: radiusMeters,
       results,
       summaryText,
+      bookmarkedSpotName,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'AI 추천 검색 실패';

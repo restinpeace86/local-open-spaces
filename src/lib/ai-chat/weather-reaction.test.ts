@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildWeatherReactionText, recommendMode, resolveWeatherSnapshot, WeatherSnapshot } from './weather-reaction';
+import { buildProactiveWeatherSuggestion, buildWeatherReactionText, recommendMode, resolveWeatherSnapshot, WeatherSnapshot } from './weather-reaction';
 import * as kmaForecast from './kma-forecast';
 
 function snapshot(overrides: Partial<WeatherSnapshot> = {}): WeatherSnapshot {
@@ -67,6 +67,36 @@ describe('buildWeatherReactionText', () => {
       true
     );
     expect(text).toContain('아직 근처 예보 데이터를 확보하지 못했어요');
+  });
+});
+
+// [AI 챗봇 맞춤 추천 상세 구현(초개인화 고도화)](2026-09-02 사용자 지시) Step 1: 챗봇 실행
+// 시 먼저 던지는 선제적 제안 문구 — 요구사항 원문 예시 톤을 그대로 검증한다.
+describe('buildProactiveWeatherSuggestion', () => {
+  it('맑은 날씨(OUTDOOR)면 요구사항 예시 그대로 야외/공원을 제안한다', () => {
+    const text = buildProactiveWeatherSuggestion(snapshot(), '2026-09-01', true);
+    expect(text).toContain('오늘 날씨가 화창하고 참 좋네요');
+    expect(text).toContain('야외/공원 위주로 알아볼까요?');
+  });
+
+  it('비/흐림(INDOOR)이면 요구사항 예시 그대로 실내를 제안한다', () => {
+    const text = buildProactiveWeatherSuggestion(snapshot({ precipitationProb: 70 }), '2026-09-01', true);
+    expect(text).toContain('구름이 많거나 비가 오네요');
+    expect(text).toContain('실내 위주로 알아볼까요?');
+  });
+
+  it('오늘이 아닌 날짜면 "선택하신 날짜(...)"로 안내한다', () => {
+    const text = buildProactiveWeatherSuggestion(snapshot(), '2026-09-05', false);
+    expect(text).toContain('선택하신 날짜(2026-09-05)');
+  });
+
+  it('날씨 데이터가 없으면 정직하게 안내하고 선택을 유도한다', () => {
+    const text = buildProactiveWeatherSuggestion(
+      { available: false, temperature: null, precipitationProb: null, skyStatus: null, humidity: null, pm10Grade: null, pm25Grade: null, airQualityAvailable: false },
+      '2026-09-01',
+      true
+    );
+    expect(text).toContain('야외/실내 중 어디로 가고 싶으신지');
   });
 });
 

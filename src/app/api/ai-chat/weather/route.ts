@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { isToday } from '@/lib/ai-chat/date-resolver';
-import { buildWeatherReactionText, recommendMode, resolveWeatherSnapshot } from '@/lib/ai-chat/weather-reaction';
+import { buildProactiveWeatherSuggestion, recommendMode, resolveWeatherSnapshot } from '@/lib/ai-chat/weather-reaction';
 
-// [스팟픽 AI 맞춤 추천 챗봇 엔진](2026-09-01 사용자 지시) 5단계(Weather & Air): 인터뷰
-// 진행 중 딱 한 번 호출되는 날씨/대기질 조회 엔드포인트. LLM을 전혀 쓰지 않는다(요구사항
-// 2-①) — DB 조회 + 템플릿 조합만 한다.
+// [스팟픽 AI 맞춤 추천 챗봇 엔진](2026-09-01 사용자 지시) → [AI 챗봇 맞춤 추천 상세 구현
+// (초개인화 고도화)](2026-09-02 사용자 지시) Step 1: 인터뷰 시작 시(그리고 날짜를 "오늘"이
+// 아닌 다른 날로 바꿀 때 한 번 더) 호출되는 날씨/대기질 조회 엔드포인트. LLM을 전혀 쓰지
+// 않는다(요구사항 2-①) — DB 조회 + 템플릿 조합만 한다.
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -29,7 +30,7 @@ export async function POST(request: NextRequest) {
     }
 
     const snapshot = await resolveWeatherSnapshot(isoDate, hour, lat, lng, nearestWeatherRow);
-    const reactionText = buildWeatherReactionText(snapshot, isoDate, today);
+    const reactionText = buildProactiveWeatherSuggestion(snapshot, isoDate, today);
 
     return NextResponse.json({ snapshot, reactionText, recommendedMode: recommendMode(snapshot) });
   } catch (err) {

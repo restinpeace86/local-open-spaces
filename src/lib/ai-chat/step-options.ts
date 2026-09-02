@@ -35,6 +35,28 @@ export const OUTDOOR_PREFERENCE_OPTIONS: { id: OutdoorPreference; label: string 
   { id: 'EITHER', label: '둘 다 보여주세요' },
 ];
 
+// [AI 챗봇 맞춤 추천 상세 구현(초개인화 고도화)](2026-09-02 사용자 지시) Step 1: 챗봇 실행
+// 시 먼저 던지는 날씨 기반 선제적 제안에 대한 3지 선다 — 요구사항 원문 선택지 포맷 그대로.
+export type WeatherIntroChoice = 'ACCEPT' | 'CUSTOM' | 'MIX';
+export const WEATHER_INTRO_CHOICE_OPTIONS: { id: WeatherIntroChoice; label: string }[] = [
+  { id: 'ACCEPT', label: '네, 제안대로 볼래요 👍' },
+  { id: 'CUSTOM', label: '아니요, 다른 스타일로 고를래요 🏛️' },
+  { id: 'MIX', label: '상관없어요, 전체 다 믹스 ✨' },
+];
+
+// [Step 1 지역 선택 분기]: 매번 검색하게 하지 않고 프로필 기본 지역(우리 동네)을 원클릭으로
+// 쓸 수 있게 한다.
+export const REGION_OPTIONS: { id: 'DEFAULT' | 'OTHER'; label: string }[] = [
+  { id: 'DEFAULT', label: '네, 우리 동네 근처로 볼래요 📍' },
+  { id: 'OTHER', label: '다른 지역으로 바꿀래요 🗺️' },
+];
+
+export function buildRegionQuestion(sigunguName: string | null): string {
+  return sigunguName
+    ? `오늘 나들이 가실 지역은 평소 동네(${sigunguName}) 근처로 잡아드릴까요?`
+    : '오늘 나들이 가실 지역은 평소 보시던 곳 근처로 잡아드릴까요?';
+}
+
 export const BUDGET_OPTIONS: { id: Budget; label: string }[] = [
   { id: 'FREE', label: '완전 무료' },
   { id: 'UNDER_10K', label: '1만 원 이하' },
@@ -69,10 +91,9 @@ export function buildMealQuestion(timeSlotLabel: string): string {
 }
 
 // 각 단계 진입 직전, 이전 답변을 받아치는 짧은 리액션(단순 설문조사처럼 보이지 않게 하는
-// 요구사항 2-①의 취지) — 날씨(5단계) 리액션은 weather-reaction.ts가 별도로 더 풍부하게
-// 담당하므로 여기서는 그 앞 단계들만 다룬다.
-export function buildWhenAck(whenLabel: string): string {
-  return `${whenLabel} 나들이 계획이시군요! 언제쯤 출발하실 예정인가요?`;
+// 요구사항 2-①의 취지) — 날씨 리액션은 weather-reaction.ts가 별도로 더 풍부하게 담당한다.
+export function buildTimeAck(): string {
+  return '좋아요! 언제쯤 출발하실 예정인가요?';
 }
 
 export function buildTransportAck(): string {

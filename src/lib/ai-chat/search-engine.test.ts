@@ -64,7 +64,7 @@ describe('runSearch', () => {
     const outcome = runSearch([far, near], answers(), null);
 
     expect(outcome.exhausted).toBe(false);
-    expect(outcome.results[0]).toEqual({ kind: 'SPOT', item: near });
+    expect(outcome.results[0]).toEqual({ kind: 'SPOT', item: near, isBookmarked: false });
   });
 
   it('반경 밖 후보는 제외한다', () => {
@@ -164,6 +164,45 @@ describe('applyStrictFilters + assembleResults (라우트 2단계 왕복 조합)
     const pool = applyStrictFilters([near, far], answers({ transportRadiusMeters: 1000 }), 1000);
 
     expect(pool).toEqual([near]);
-    expect(assembleResults(pool, answers(), null)).toEqual([{ kind: 'SPOT', item: near }]);
+    expect(assembleResults(pool, answers(), null)).toEqual([{ kind: 'SPOT', item: near, isBookmarked: false }]);
+  });
+});
+
+// [AI 챗봇 맞춤 추천 상세 구현(초개인화 고도화)](2026-09-02 사용자 지시) Step 3.
+describe('찜(북마크) 스마트 연동 — Step 3-①', () => {
+  it('찜한 장소는 결과 상단에 우선 배치되고 isBookmarked=true로 표시된다', () => {
+    // 거리상으로는 far가 near보다 훨씬 불리하지만, far가 찜한 장소라면 그래도 앞에 온다.
+    const near = spot({ id: 'near', distance_meters: 100, category_min: '공원' });
+    const far = spot({ id: 'far', distance_meters: 4900, category_min: '공원' });
+    const results = assembleResults([near, far], answers(), null, new Set(['far']));
+
+    expect(results[0]).toEqual({ kind: 'SPOT', item: far, isBookmarked: true });
+    expect(results[1]).toEqual({ kind: 'SPOT', item: near, isBookmarked: false });
+  });
+
+  it('찜 정보가 없으면(비로그인 등) 기존처럼 거리/점수순 그대로 동작한다', () => {
+    const near = spot({ id: 'near', distance_meters: 100, category_min: '공원' });
+    const far = spot({ id: 'far', distance_meters: 4900, category_min: '공원' });
+    const results = assembleResults([near, far], answers(), null);
+
+    expect(results[0]).toEqual({ kind: 'SPOT', item: near, isBookmarked: false });
+  });
+});
+
+describe('방문 이력(mom_pick_posts) 기반 중복 배제 — Step 3-②', () => {
+  it('이미 방문 후기/체크리스트를 남긴 스팟은 결과에서 제외한다', () => {
+    const visited = spot({ id: 'visited', distance_meters: 200, category_min: '공원' });
+    const fresh = spot({ id: 'fresh', distance_meters: 800, category_min: '공원' });
+    const pool = applyStrictFilters([visited, fresh], answers(), 5000, new Set(['visited']));
+
+    expect(pool).toEqual([fresh]);
+  });
+
+  it('방문 이력이 없으면(비로그인 등) 기존처럼 전부 통과한다', () => {
+    const a = spot({ id: 'a', distance_meters: 200, category_min: '공원' });
+    const b = spot({ id: 'b', distance_meters: 800, category_min: '공원' });
+    const pool = applyStrictFilters([a, b], answers(), 5000);
+
+    expect(pool).toEqual([a, b]);
   });
 });

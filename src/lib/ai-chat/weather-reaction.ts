@@ -90,6 +90,28 @@ export function buildWeatherReactionText(snapshot: WeatherSnapshot, isoDate: str
   return parts.join(' ');
 }
 
+// [AI 챗봇 맞춤 추천 상세 구현(초개인화 고도화)](2026-09-02 사용자 지시) Step 1: 챗봇 실행
+// 시(또는 날짜를 바꿀 때) 날씨를 먼저 체크해 "구체적인 제안(Default Option)"을 던지는
+// 문구. 기존 buildWeatherReactionText()는 이동거리 질문 다음(옛 5단계)에 나오는 리액션
+// 톤이라 그대로 재사용하기 어려워 새 함수로 분리한다 — 톤은 요구사항 원문 예시("오늘
+// 날씨가 화창하고 참 좋네요! ☀️...")를 그대로 템플릿화했다.
+export function buildProactiveWeatherSuggestion(snapshot: WeatherSnapshot, isoDate: string, today: boolean): string {
+  const whenLabel = today ? '오늘' : `선택하신 날짜(${isoDate})`;
+
+  if (!snapshot.available) {
+    return `${whenLabel} 날씨 예보를 아직 확인하지 못했어요. 야외/실내 중 어디로 가고 싶으신지 편하게 골라주세요!`;
+  }
+
+  const mode = recommendMode(snapshot);
+  if (mode === 'OUTDOOR') {
+    return `${whenLabel} 날씨가 화창하고 참 좋네요! ☀️ 파란 하늘 아래 아이랑 뛰어놀기 좋은 야외 공원이 좋아보여요. 야외/공원 위주로 알아볼까요?`;
+  }
+  if (mode === 'INDOOR') {
+    return `${whenLabel} 날씨를 보니 구름이 많거나 비가 오네요. 🌧️ 아이와 함께 포근한 실내 위주가 좋아보여요. 실내 위주로 알아볼까요?`;
+  }
+  return `${whenLabel} 날씨는 야외도 실내도 무난할 것 같아요! 어떤 스타일로 알아봐드릴까요?`;
+}
+
 type NearestWeatherRow = {
   temperature: number | null;
   precipitation_prob: number | null;
