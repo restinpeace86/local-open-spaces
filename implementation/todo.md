@@ -1203,3 +1203,14 @@
   - **검증**: `npx tsc --noEmit`/`npm run test`(96파일 964건)/`npm run build` 통과,
     dev 서버 curl로 PAID 필터 정상 동작 확인. 상세:
     `implementation/2026-09-03-ai-chat-budget-simplification.md`.
+
+- [x] **[개발요청] 로딩 이미지 교체 및 브랜드 표기 영문 제거** (2026-09-03 완료)
+  - 사용자가 제공한 `reference/loading/loading_image.gif`를 `public/loading/`으로
+    복사해 `BrandSplash`(이 프로젝트 유일의 로딩 스피너, `app/loading.tsx`·
+    `bottom-tabs.tsx` 둘 다 공유)의 회전 스피너를 대체 — `next/image`가 GIF를
+    재인코딩해 애니메이션이 깨질 수 있어 순수 `<img>` 태그 사용.
+  - "나드리픽 (NadriPick)" → "나드리픽"(전체 코드베이스에서 이 표기가 등장하는 유일한
+    위치였음을 grep으로 확인).
+  - **검증**: `npx tsc --noEmit`/`npm run test`(96파일 964건)/`npm run build` 통과,
+    dev 서버 curl로 GIF 200 서빙 및 텍스트 변경 확인. 상세:
+    `implementation/2026-09-03-loading-gif-and-brand-name.md`.
