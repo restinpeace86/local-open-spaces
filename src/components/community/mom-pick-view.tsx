@@ -34,6 +34,10 @@ export function MomPickView() {
   const { state, profile: initialProfile } = useMomPickAccess();
   const [profile, setProfile] = useState(initialProfile);
   const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
+  // [todo.md 개선사항 10](2026-09-03): 비로그인 사용자가 "글쓰기"를 눌렀을 때만 여는
+  // Soft-wall 모달 — 페이지 진입 즉시(state==='guest') 여는 게 아니라, 실제로 쓰려고
+  // 시도하는 그 순간에만 연다는 점이 기존 LoginPromptModal 용례(진입 즉시 강제)와 다르다.
+  const [isGuestWritePromptOpen, setIsGuestWritePromptOpen] = useState(false);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [dashboardKey, setDashboardKey] = useState(0);
@@ -49,8 +53,13 @@ export function MomPickView() {
     setIsGuideModalOpen(state === 'not_sprout_yet');
   }, [state]);
 
+  // [todo.md 개선사항 10](2026-09-03): "맘스픽 메인 화면은 비로그인도 View-Only로 접근
+  // 허용" — 이전에는 state==='allowed'일 때만 피드를 불러왔지만, 이제 게스트도 열람은
+  // 가능해야 하므로 'guest'도 함께 허용한다('not_sprout_yet'은 이번 지시 범위 밖이라
+  // 기존처럼 그대로 제외 — 로그인은 했지만 첫 글을 아직 안 쓴 사용자에게는 여전히
+  // 글쓰기 유도 화면만 보여준다).
   useEffect(() => {
-    if (state !== 'allowed') return;
+    if (state !== 'allowed' && state !== 'guest') return;
     let cancelled = false;
     fetch('/api/mom-pick/dashboard')
       .then((res) => res.json())
@@ -80,16 +89,11 @@ export function MomPickView() {
     );
   }
 
-  if (state === 'guest') {
-    return (
-      <div className="flex-1 flex flex-col p-5">
-        <h1 className="text-lg font-bold text-gray-900">👑 맘스픽</h1>
-        <LoginPromptModal onClose={() => router.push('/')} />
-      </div>
-    );
-  }
-
-  // state === 'not_sprout_yet' | 'allowed' — 둘 다 로그인은 된 상태.
+  // [todo.md 개선사항 10](2026-09-03): 'guest' | 'not_sprout_yet' | 'allowed' 셋 다 같은
+  // 레이아웃(헤더 + 글쓰기 영역 + 피드)을 공유한다 — 다른 점은 글쓰기 영역이 실제
+  // PostComposer인지 로그인 유도 CTA인지, 그리고 피드가 노출되는지뿐이다. 이전에는
+  // 'guest'만 별도의 하드 블록 화면(피드 자체를 렌더링하지 않음)을 썼는데, 이제 그
+  // 분기를 없애 View-Only 열람이 자연스럽게 가능해진다.
   return (
     <div className="flex-1 flex flex-col gap-4 overflow-y-auto p-5">
       <div className="flex items-center justify-between">
@@ -100,10 +104,23 @@ export function MomPickView() {
       {state === 'allowed' && profile && <PersonalizedBanner birthYears={profile.birth_years} />}
 
       <div ref={composerRef}>
-        <PostComposer onPosted={refreshProfileAfterPost} />
+        {state === 'guest' ? (
+          // [todo.md 개선사항 10](2026-09-03) Soft-wall: 실제 작성 폼(SpotPicker/별점/
+          // 체크리스트)은 전혀 렌더링하지 않고, 클릭하는 즉시 로그인 유도만 띄운다 —
+          // 개선사항 8과 동일한 원칙("입력을 시작하기 전에 막는다").
+          <button
+            type="button"
+            onClick={() => setIsGuestWritePromptOpen(true)}
+            className="w-full rounded-xl border border-dashed border-gray-300 bg-white p-4 text-center text-sm font-medium text-gray-500 hover:bg-gray-50"
+          >
+            ✍️ 로그인하고 후기·체크리스트 남기기
+          </button>
+        ) : (
+          <PostComposer onPosted={refreshProfileAfterPost} />
+        )}
       </div>
 
-      {state === 'allowed' && (
+      {(state === 'allowed' || state === 'guest') && (
         <>
           {dashboardError && <p className="text-xs text-red-600">{dashboardError}</p>}
           {!dashboard && !dashboardError ? (
@@ -142,6 +159,8 @@ export function MomPickView() {
           onClose={() => router.push('/')}
         />
       )}
+
+      {isGuestWritePromptOpen && <LoginPromptModal onClose={() => setIsGuestWritePromptOpen(false)} />}
     </div>
   );
 }
