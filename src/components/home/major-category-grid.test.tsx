@@ -132,4 +132,49 @@ describe('MajorCategoryGrid', () => {
     expect(screen.getByText('도시농업').closest('button')).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('농장체험').closest('button')).toHaveAttribute('aria-pressed', 'false');
   });
+
+  // [todo.md 개선사항 3](2026-09-03) 실측으로 발견한 버그: 일부 중분류(예: "교양/어학")는
+  // is_active+가족·아동 대상+진행중 조건을 동시에 만족하는 행이 구조적으로 0건이라
+  // 눌러도 영원히 결과가 안 나와 고장처럼 보였다 — categoryCounts가 주어지면 0건인
+  // 중분류는 칩 목록에서 아예 숨긴다.
+  it('categoryCounts에서 0건인 중분류는 칩 목록에서 제외된다', () => {
+    render(
+      <MajorCategoryGrid
+        selectedMaj="체험 / 농장"
+        onSelectMaj={() => {}}
+        selectedMin={null}
+        onSelectMin={() => {}}
+        categoryCounts={{ 도시농업: 0, 농장체험: 5, '자연/과학': 3 }}
+      />
+    );
+
+    fireEvent.click(screen.getByText('체험 / 농장').closest('button')!);
+    expect(screen.queryByText('도시농업')).not.toBeInTheDocument();
+    expect(screen.getByText('농장체험')).toBeInTheDocument();
+  });
+
+  it('categoryCounts에 값이 없는(undefined) 중분류는 보수적으로 계속 노출한다', () => {
+    render(
+      <MajorCategoryGrid
+        selectedMaj="체험 / 농장"
+        onSelectMaj={() => {}}
+        selectedMin={null}
+        onSelectMin={() => {}}
+        categoryCounts={{ 농장체험: 5 }}
+      />
+    );
+
+    fireEvent.click(screen.getByText('체험 / 농장').closest('button')!);
+    expect(screen.getByText('도시농업')).toBeInTheDocument();
+  });
+
+  it('categoryCounts가 아직 로드되지 않았으면(undefined) 전부 노출한다', () => {
+    render(
+      <MajorCategoryGrid selectedMaj="체험 / 농장" onSelectMaj={() => {}} selectedMin={null} onSelectMin={() => {}} />
+    );
+
+    fireEvent.click(screen.getByText('체험 / 농장').closest('button')!);
+    expect(screen.getByText('도시농업')).toBeInTheDocument();
+    expect(screen.getByText('농장체험')).toBeInTheDocument();
+  });
 });

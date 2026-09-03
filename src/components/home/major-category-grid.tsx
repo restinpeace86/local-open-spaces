@@ -21,16 +21,23 @@ import { CATEGORY_MAJ_OPTIONS } from '@/lib/spaces/category-maj-meta';
 // 배경 클릭/✕로 닫힘). 중분류를 고르면 onSelectMin 호출 후 시트를 자동으로 닫는다(선택이
 // 끝났으니 더 볼 것이 없음). 대분류 자체의 선택 상태(selectedMaj)는 계속 부모(HomeView)가
 // 소유하지만, "시트가 열려 있는지"는 이 컴포넌트만의 순수 UI 상태라 로컬로 둔다.
+// [todo.md 개선사항 3](2026-09-03): 실측으로 발견한 문제 — 일부 중분류(예: "교양/어학")는
+// is_active+가족·아동 대상+진행중 조건을 동시에 만족하는 행이 DB에 구조적으로 0건이라,
+// 눌러도 영원히 "조건에 맞는 행사를 찾는 중입니다"에서 멈춰 고장처럼 보였다. categoryCounts
+// (전역 카운트, get-home-feed.ts의 getCategoryMinCounts)가 주어지면 0건 중분류는 칩 목록
+// 자체에서 제외한다 — 스팟픽 바텀시트에 이미 요구된 "0건 중분류 제외" 원칙과 동일.
 export function MajorCategoryGrid({
   selectedMaj,
   onSelectMaj,
   selectedMin,
   onSelectMin,
+  categoryCounts,
 }: {
   selectedMaj: string | null;
   onSelectMaj: (maj: string) => void;
   selectedMin: string | null;
   onSelectMin: (min: string) => void;
+  categoryCounts?: Record<string, number>;
 }) {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const activeOption = CATEGORY_MAJ_OPTIONS.find((opt) => opt.maj === selectedMaj) ?? null;
@@ -101,7 +108,9 @@ export function MajorCategoryGrid({
               </button>
             </div>
             <div className="flex flex-wrap gap-1.5 p-4">
-              {activeOption.minorCategories.map((min) => {
+              {activeOption.minorCategories
+                .filter((min) => categoryCounts == null || (categoryCounts[min] ?? 1) > 0)
+                .map((min) => {
                 const isActive = selectedMin === min;
                 return (
                   <button

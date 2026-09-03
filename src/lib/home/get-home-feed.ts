@@ -1061,6 +1061,40 @@ export async function getCategoryMinFeed(
   return selectRegionFirst(ordered, region, limit);
 }
 
+// [todo.md 개선사항 3](2026-09-03): 실측으로 발견한 원인 — 대분류/중분류 바텀시트 배선
+// 자체(선택 상태→쿼리→렌더링)는 정상이었지만, 일부 중분류(예: "교양/어학")는
+// is_active+target_audience(가족·아동)+진행중 3개 조건을 동시에 만족하는 행이
+// DB에 0건이라 클릭해도 "조건에 맞는 행사를 찾는 중입니다"에서 영원히 멈춰
+// 고장난 것처럼 보였다(실측: 25건 중 가족 대상 태깅 0건). 지역 필터 없이(region은
+// 결과를 줄이기만 하므로 "구조적으로 0건"인지 판단하는 데는 불필요) 전역 카운트를
+// 미리 계산해, 애초에 매칭될 수 없는 중분류는 바텀시트에서 숨긴다(스팟픽 바텀시트에
+// 사용자가 이미 요구한 "0건 중분류 제외" 원칙을 이벤트픽에도 동일하게 적용 —
+// 제5장 제4조 기존 구조 우선).
+export async function getCategoryMinCounts(categoryMins: readonly string[]): Promise<Record<string, number>> {
+  const supabase = await createClient();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const entries = await Promise.all(
+    categoryMins.map(async (categoryMin) => {
+      const { count, error } = await supabase
+        .from('events')
+        .select('id', { count: 'exact', head: true })
+        .eq('category_min', categoryMin)
+        .eq('is_active', true)
+        .in('target_audience', EVENT_PICK_TARGET_AUDIENCES)
+        .lte('start_date', today)
+        .gte('end_date', today);
+      if (error) {
+        console.error(`[getCategoryMinCounts] ${categoryMin} 카운트 조회 실패: ${error.message}`);
+        return [categoryMin, 1] as const; // 조회 실패 시엔 "있을 수도 있다"고 보수적으로 보여준다(숨기지 않음)
+      }
+      return [categoryMin, count ?? 0] as const;
+    })
+  );
+
+  return Object.fromEntries(entries);
+}
+
 export type HomeFeed = {
   heroEvents: NearbyItem[];
   freeFeed: NearbyItem[];

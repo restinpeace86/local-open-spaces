@@ -217,6 +217,20 @@ export function HomeView({
   // 트리거하지 않음, 그 아래 중분류 칩 목록을 펼치는 역할만 함) 별도 로컬 state로 둔다. 실제
   // 카드 조회는 여전히 useCategoryFeed의 selectCategory(중분류 값)가 담당한다.
   const [selectedMaj, setSelectedMaj] = useState<string | null>(null);
+  // [todo.md 개선사항 3](2026-09-03): 구조적으로 0건인 중분류를 바텀시트에서 미리
+  // 걸러내기 위한 전역 카운트 — 화면 진입 시 한 번만 가볍게 조회한다(지역 무관값이라
+  // 위치 변경으로 다시 조회할 필요 없음).
+  const [categoryCounts, setCategoryCounts] = useState<Record<string, number> | undefined>(undefined);
+  useEffect(() => {
+    fetch('/api/home/category-min-counts')
+      .then((res) => res.json())
+      .then((data: { counts?: Record<string, number> }) => {
+        if (data.counts) setCategoryCounts(data.counts);
+      })
+      .catch(() => {
+        // 조회 실패해도 카테고리 그리드는 필터링 없이(전부 노출) 정상 동작한다.
+      });
+  }, []);
   const handleSelectMaj = useCallback(
     (maj: string) => {
       setSelectedMaj((prev) => (prev === maj ? null : maj));
@@ -424,6 +438,7 @@ export function HomeView({
                 onSelectMaj={handleSelectMaj}
                 selectedMin={selectedCategory}
                 onSelectMin={selectCategory}
+                categoryCounts={categoryCounts}
               />
               {selectedCategory !== null && (
                 <div className="px-4 mt-3">
