@@ -1,59 +1,148 @@
-// [스팟픽 나들이 전용 핵심 중분류 1단 필터 개편](2026-08-29 사용자 지시): 기존 대분류→중분류
+// [스팟픽 나들이 전용 핵심 중분류 1단 필터 개편](2026-08-28~29 사용자 지시): 기존 대분류→중분류
 // 2단 구조를 철회하고, 진짜 나들이/가족 방문 목적에 맞는 핵심 중분류만 1단 가로 칩으로
-// 노출한다. 체육시설(테니스장/골프장 등)·행정/공공청사 대관류(강당/회의실/청년공간 등)처럼
-// 비나들이성 항목은 필터 목록에서 완전히 제외한다.
+// 노출했었다. 체육시설(테니스장/골프장 등)·행정/공공청사 대관류(강당/회의실/청년공간 등)처럼
+// 비나들이성 항목은 계속 필터 목록에서 완전히 제외한다.
 //
-// 하나의 칩이 실제 DB `category_min` 값 여러 개를 한 번에 아우르는 경우가 있다. 실제 DB
-// 분포(`select category_min, count(*) from open_spaces group by category_min`)를 직접
-// 확인해 존재하지 않는 값을 임의로 만들지 않았다 — "문화센터"라는 category_min은 실제로
-// 없어 가장 가까운 실제 값인 '문화의집'/'문화원'으로 매핑했다.
+// [todo.md 개선사항 6](2026-09-03 사용자 지시): "작년 8월 디자인(플랫 단일 탭) 대신, 4대
+// 대분류 탭 + 클릭 시 바텀시트로 하위 중분류 노출 구조로 가는 것이 맞다"는 명시적 확인에
+// 따라 1단 구조를 다시 2단(대분류→중분류 바텀시트)으로 전환한다. 다만 하위 호환을 위해
+// `CORE_SPOT_CATEGORIES` 자체는 계속 평평한 배열로 유지한다(spot-curations-panel.tsx/
+// map-explorer.tsx가 이미 `.find(c => c.id === ...)` 형태로 이 배열을 직접 참조하고
+// 있어 구조를 트리로 바꾸면 그 소비처들을 전부 고쳐야 한다 — 제5장 제4조 기존 구조
+// 우선). 대신 각 항목에 `major` 필드만 추가하고, 대분류별로 묶어보는 조회는
+// `getSpotCategoriesByMajor` 헬퍼로 파생한다.
 //
-// [행안부 놀이시설 설치장소코드 매핑 + 박물관/미술관 분리](2026-08-29 사용자 지시): 이전에는
-// "박물관(미술관 포함)"으로 하나의 칩에 묶여 있었으나, 사용자 지시에 따라 박물관과 미술관을
-// 별개 칩으로 분리한다. 또한 행안부 전국어린이놀이시설정보(pfc3, LOCALDATA_PLAYGROUND)의
-// instlPlaceCd 매핑으로 새로 채워지는 '자연휴양림'/'육아종합지원센터'/'유아교육진흥원'
-// category_min에 대응하는 칩을 추가한다(scripts/ingest/adapters/playground-adapter.mjs 참고).
-// '캠핑장'(instlPlaceCd A032 야영장 매핑 대상)은 이번 사용자 지시에 신규 칩으로 명시되지
-// 않아 필터 칩은 추가하지 않았다 — 데이터 자체는 계속 category_min='캠핑장'으로 적재된다.
-//
-// [키즈친화 식당 칩 누락 수정](2026-08-30 사용자 지시): "경기 키즈카페/놀이시설 휴게음식점
-// 수집 어댑터 구축"(gg-kidscafe-adapter.mjs, GG_KIDSCAFE Resrestrtkidscafe API)이
-// category_min='놀이방식당'(놀이시설을 갖춘 음식점 전체, 특정 업종으로 세분화하지 않고
-// 소스 전체를 하나로 묶은 값 — 어댑터 주석 참고, is_kids_friendly=true 고정)으로 실제
-// 1,788건을 이미 적재하고 있었는데, 이 필터 개편(2026-08-29) 당시 새 칩으로 추가되지
-// 않아 스팟픽 화면에서 이 데이터를 중분류로 찾아볼 방법이 없었다(실측 확인). 신규 칩을
-// 추가한다.
+// 대분류 구성 4종(요구사항 원문 순서 그대로: 키즈/놀이시설 → 농장/체험 → 자연/공원 →
+// 문화시설)에 맞춰, 기존 11개 핵심 중분류를 재배치하고, 실측 DB 분포(`select category_min,
+// count(*) from open_spaces where location_precision='EXACT' group by category_min`)에서
+// 확인된 미노출 항목 중 그 목적이 명확한 것들을 추가로 편입했다:
+//   - 농장/체험: 기존엔 이 대분류에 해당하는 칩이 하나도 없었다. get-home-feed.ts의
+//     SHARED_OPEN_SPACES_CATEGORY_MINS(캠핑장/체험휴양마을/교육농장/체험학습장)가 이미
+//     이벤트픽 "체험 / 농장" 대분류로 검증된 동일 개념이라 그대로 재사용한다.
+//   - 그 외 신규 편입(수목원/생태공원/전시실/공연장/과학관/역사유적지/물놀이시설)은
+//     전부 목적이 모호하지 않고(제3장 제5조 추측 금지 회피) 실제 카운트도 유의미하다
+//     (49~495건). 목적이 모호한 "관광명소"(256건, 자연/문화 어느 쪽에도 확정하기 애매함)는
+//     기존 2026-08-29 큐레이션 철학(확실한 핵심 중분류만)을 따라 이번에도 편입하지 않는다.
+export type SpotMajorCategoryId = 'kids-play' | 'farm-experience' | 'nature-park' | 'culture-facility';
+
+export const SPOT_MAJOR_CATEGORY_OPTIONS: { id: SpotMajorCategoryId; label: string; emoji: string }[] = [
+  { id: 'kids-play', label: '키즈/놀이시설', emoji: '🧸' },
+  { id: 'farm-experience', label: '농장/체험', emoji: '🌱' },
+  { id: 'nature-park', label: '자연/공원', emoji: '🌳' },
+  { id: 'culture-facility', label: '문화시설', emoji: '🏛️' },
+];
+
 export type CoreSpotCategory = {
   id: string;
   label: string;
   emoji: string;
   // AI 추천 칩은 실제 category_min으로 필터링하는 게 아니라 별도 추천 로직(바텀시트)을
-  // 여는 액션 버튼이라 minors가 빈 배열이다 — map-explorer.tsx가 이 값을 보고 일반 선택
-  // 칩과 다르게 처리한다(selectedCategoryId로 선택하지 않고 onSelectAiRecommend만 호출).
+  // 여는 액션 버튼이라 minors가 빈 배열이고 major도 없다(어느 대분류 탭에도 속하지 않는
+  // 별도 액션 버튼으로 노출된다) — map-explorer.tsx가 이 값을 보고 일반 선택 칩과
+  // 다르게 처리한다(selectedCategoryId로 선택하지 않고 onSelectAiRecommend만 호출).
   minors: string[];
+  major: SpotMajorCategoryId | null;
 };
 
 export const AI_RECOMMEND_CATEGORY_ID = 'ai-recommend';
 
 export const CORE_SPOT_CATEGORIES: CoreSpotCategory[] = [
-  { id: AI_RECOMMEND_CATEGORY_ID, label: 'AI 추천', emoji: '✨', minors: [] },
-  { id: 'park', label: '공원', emoji: '🌳', minors: ['공원'] },
-  { id: 'culture-center', label: '문화센터/문화의집', emoji: '🏛️', minors: ['문화의집', '문화원'] },
-  { id: 'museum', label: '박물관', emoji: '🏛️', minors: ['종합/기타박물관', '역사박물관'] },
-  { id: 'art-museum', label: '미술관', emoji: '🖼️', minors: ['미술관'] },
-  { id: 'library', label: '도서관', emoji: '📚', minors: ['도서관'] },
-  { id: 'kids-cafe', label: '키즈카페', emoji: '☕', minors: ['키즈카페'] },
-  { id: 'kids-restaurant', label: '키즈친화 식당', emoji: '🍽️', minors: ['놀이방식당'] },
+  { id: AI_RECOMMEND_CATEGORY_ID, label: 'AI 추천', emoji: '✨', minors: [], major: null },
+
+  // 🧸 키즈/놀이시설
   {
     id: 'playground',
     label: '놀이터',
     emoji: '🛝',
     minors: ['어린이놀이터', '어린이놀이시설(야외)', '어린이놀이시설(실내)'],
+    major: 'kids-play',
   },
-  { id: 'nature-recreation-forest', label: '자연휴양림', emoji: '🌲', minors: ['자연휴양림'] },
-  { id: 'childcare-support-center', label: '육아종합지원센터', emoji: '🍼', minors: ['육아종합지원센터'] },
-  { id: 'early-childhood-education-center', label: '유아교육진흥원', emoji: '🎓', minors: ['유아교육진흥원'] },
+  { id: 'kids-cafe', label: '키즈카페', emoji: '☕', minors: ['키즈카페'], major: 'kids-play' },
+  { id: 'kids-restaurant', label: '키즈친화 식당', emoji: '🍽️', minors: ['놀이방식당'], major: 'kids-play' },
+  { id: 'water-play', label: '물놀이시설', emoji: '💦', minors: ['바닥분수/물놀이시설'], major: 'kids-play' },
+  {
+    id: 'childcare-support-center',
+    label: '육아종합지원센터',
+    emoji: '🍼',
+    minors: ['육아종합지원센터'],
+    major: 'kids-play',
+  },
+  {
+    id: 'early-childhood-education-center',
+    label: '유아교육진흥원',
+    emoji: '🎓',
+    minors: ['유아교육진흥원'],
+    major: 'kids-play',
+  },
+
+  // 🌱 농장/체험 — get-home-feed.ts SHARED_OPEN_SPACES_CATEGORY_MINS와 동일한 4종.
+  { id: 'camping', label: '캠핑장', emoji: '🏕️', minors: ['캠핑장'], major: 'farm-experience' },
+  {
+    id: 'rural-experience-village',
+    label: '체험휴양마을',
+    emoji: '🏘️',
+    minors: ['체험휴양마을'],
+    major: 'farm-experience',
+  },
+  { id: 'education-farm', label: '교육농장', emoji: '🌾', minors: ['교육농장'], major: 'farm-experience' },
+  {
+    id: 'experience-learning-center',
+    label: '체험학습장',
+    emoji: '🔬',
+    minors: ['체험학습장'],
+    major: 'farm-experience',
+  },
+
+  // 🌳 자연/공원
+  { id: 'park', label: '공원', emoji: '🌳', minors: ['공원'], major: 'nature-park' },
+  {
+    id: 'nature-recreation-forest',
+    label: '자연휴양림',
+    emoji: '🌲',
+    minors: ['자연휴양림'],
+    major: 'nature-park',
+  },
+  { id: 'arboretum', label: '수목원', emoji: '🌴', minors: ['수목원'], major: 'nature-park' },
+  { id: 'eco-park', label: '생태공원', emoji: '🦆', minors: ['생태공원'], major: 'nature-park' },
+
+  // 🏛️ 문화시설
+  {
+    id: 'culture-center',
+    label: '문화센터/문화의집',
+    emoji: '🏛️',
+    minors: ['문화의집', '문화원'],
+    major: 'culture-facility',
+  },
+  {
+    id: 'museum',
+    label: '박물관',
+    emoji: '🏛️',
+    minors: ['종합/기타박물관', '역사박물관'],
+    major: 'culture-facility',
+  },
+  { id: 'art-museum', label: '미술관', emoji: '🖼️', minors: ['미술관'], major: 'culture-facility' },
+  { id: 'library', label: '도서관', emoji: '📚', minors: ['도서관'], major: 'culture-facility' },
+  { id: 'exhibition-hall', label: '전시실', emoji: '🖼️', minors: ['전시실'], major: 'culture-facility' },
+  { id: 'performance-hall', label: '공연장', emoji: '🎭', minors: ['공연장'], major: 'culture-facility' },
+  { id: 'science-museum', label: '과학관', emoji: '🔬', minors: ['과학관'], major: 'culture-facility' },
+  { id: 'historic-site', label: '역사/유적', emoji: '🏯', minors: ['역사유적지'], major: 'culture-facility' },
 ];
+
+// [todo.md 개선사항 6](2026-09-03): 대분류 탭 클릭 시 바텀시트에 노출할 하위 중분류
+// 목록을 파생한다 — CORE_SPOT_CATEGORIES 자체는 계속 평평하게 유지하므로(위 주석 참고)
+// 이 함수는 순수 필터일 뿐 새 데이터 구조를 만들지 않는다.
+export function getSpotCategoriesByMajor(major: SpotMajorCategoryId): CoreSpotCategory[] {
+  return CORE_SPOT_CATEGORIES.filter((c) => c.major === major);
+}
+
+// [todo.md 개선사항 6](2026-09-03) "바텀시트 내에서 나오는 중분류에 대하여 데이터가 0건인
+// 중분류는 중분류항목에서 제외할 것": 칩 하나가 여러 category_min을 아우를 수 있어
+// (예: "박물관" = 종합/기타박물관 + 역사박물관), 그중 하나라도 실제 데이터가 있으면 그
+// 칩은 유효하다(.some()) — counts가 없으면(아직 조회 전) 전부 노출해 안전하게 폴백한다.
+export function isSpotCategoryVisible(category: CoreSpotCategory, counts?: Record<string, number>): boolean {
+  if (!counts) return true;
+  return category.minors.some((min) => (counts[min] ?? 1) > 0);
+}
 
 export function isKnownSpotCategoryMin(value: string): boolean {
   return CORE_SPOT_CATEGORIES.some((c) => c.minors.includes(value));

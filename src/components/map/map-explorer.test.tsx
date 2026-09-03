@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { MapExplorer } from './map-explorer';
 
@@ -196,8 +196,19 @@ describe('MapExplorer 전국구 서버사이드 검색 (2026-08-30)', () => {
     const searchInputs = screen.getAllByPlaceholderText('공간/행사 이름, 키워드 검색');
     fireEvent.change(searchInputs[0], { target: { value: '용인 어린이상상' } });
 
-    await waitFor(() => expect(fetch).toHaveBeenCalled(), { timeout: 1000 });
-    const calledUrl = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
+    // [todo.md 개선사항 6](2026-09-03): MapExplorer가 마운트 시 카테고리 필터용 전역
+    // 카운트도 함께 fetch하게 되면서(/api/nearby/spot-category-counts) mock.calls[0]이
+    // 더 이상 항상 이 검색 호출이라는 보장이 없다 — URL로 정확히 찾는다.
+    await waitFor(
+      () =>
+        expect(
+          (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.some((c) => (c[0] as string).includes('/api/spots/search'))
+        ).toBe(true),
+      { timeout: 1000 }
+    );
+    const calledUrl = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find((c) =>
+      (c[0] as string).includes('/api/spots/search')
+    )![0] as string;
     expect(decodeURIComponent(calledUrl)).toBe('/api/spots/search?q=용인 어린이상상');
 
     await waitFor(() => expect(screen.getAllByText('용인어린이상상의숲').length).toBeGreaterThan(0), {
@@ -245,9 +256,11 @@ describe('MapExplorer 전국구 서버사이드 검색 (2026-08-30)', () => {
   });
 });
 
-// [스팟픽 나들이 전용 핵심 중분류 1단 필터 개편](2026-08-29): 대분류→중분류 2단 구조를
-// 철회하고, 나들이 목적에 맞는 핵심 중분류(+AI 추천 액션 칩)만 1단으로 노출한다.
-describe('MapExplorer 나들이 전용 핵심 중분류 1단 필터 (2026-08-29)', () => {
+// [todo.md 개선사항 6](2026-09-03 사용자 지시): "작년 8월 디자인(플랫 단일 탭) 대신, 4대
+// 대분류 탭 + 클릭 시 바텀시트로 하위 중분류 노출 구조로 가는 것이 맞다"는 확인에 따라
+// 2026-08-29에 도입했던 1단 플랫 필터를 다시 2단(대분류 탭 → 바텀시트 중분류)으로
+// 되돌렸다 — 이 describe 블록도 그 새 흐름에 맞춰 갱신한다.
+describe('MapExplorer 대분류 탭 + 중분류 바텀시트 필터 (2026-09-03, todo.md 개선사항 6)', () => {
   it('기존 목적별 테마 칩과 키즈/무료/오늘·주말 Quick 필터가 더 이상 렌더링되지 않는다', () => {
     render(<MapExplorer />);
     expect(screen.queryByText('공원·광장')).not.toBeInTheDocument();
@@ -256,34 +269,62 @@ describe('MapExplorer 나들이 전용 핵심 중분류 1단 필터 (2026-08-29)
     expect(screen.queryByText('⚡ 오늘/주말')).not.toBeInTheDocument();
   });
 
-  it('핵심 중분류 칩(공원/도서관/키즈카페/놀이터 등)과 AI 추천 칩이 1단으로 바로 노출되고, 체육시설은 제외된다', () => {
+  it('AI 추천 액션 + 4대 대분류 탭이 바로 노출되고, 중분류는 바텀시트를 열기 전엔 보이지 않는다', () => {
     render(<MapExplorer />);
     expect(screen.getAllByText(/AI 추천/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/공원/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/도서관/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/키즈카페/).length).toBeGreaterThan(0);
-    expect(screen.getAllByText(/놀이터/).length).toBeGreaterThan(0);
-    // 대분류 탭 클릭 없이 처음부터 노출되고, 체육시설(비나들이성)은 필터 목록에서 제외된다.
+    expect(screen.getAllByRole('button', { name: '키즈/놀이시설' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: '농장/체험' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: '자연/공원' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: '문화시설' }).length).toBeGreaterThan(0);
+    expect(screen.queryByText('도서관')).not.toBeInTheDocument();
     expect(screen.queryByText('테니스장')).not.toBeInTheDocument();
   });
 
-  // [단일 선택으로 변경](2026-08-29 사용자 지시): 다중 선택(최대 5개)을 철회하고 한 번에
-  // 하나의 칩만 선택 가능하도록 변경했다 — 다른 칩을 누르면 선택이 교체되고, 같은 칩을
-  // 다시 누르면 해제된다.
-  it('핵심 중분류 칩은 한 번에 하나만 선택 가능하다(단일 선택)', () => {
+  // 대분류 탭 클릭 시 바텀시트가 하나 이상(데스크톱/모바일 두 인스턴스 중 클릭한 쪽) 열리므로,
+  // 시트 안의 중분류 버튼은 헤더가 아니라 시트 오버레이(.fixed) 안에서만 찾는다 — 대분류
+  // 탭 자신도 선택된 중분류로 라벨이 바뀔 수 있어(아래 참고) 화면 전체에서 텍스트로 찾으면
+  // 모호해질 수 있기 때문이다.
+  function getOpenSheet() {
+    return screen.getByTestId('spot-category-sheet');
+  }
+
+  it('대분류 탭을 누르면 그 대분류의 중분류만 바텀시트에 노출되고, 체육시설은 어디에도 없다', () => {
     render(<MapExplorer />);
-    const parkChip = screen.getAllByText(/^🌳 공원$/)[0];
-    const libraryChip = screen.getAllByText(/^📚 도서관$/)[0];
+    fireEvent.click(screen.getAllByRole('button', { name: '문화시설' })[0]);
 
-    fireEvent.click(parkChip);
-    expect(parkChip.closest('button')?.className).toContain('bg-blue-600');
+    const sheet = within(getOpenSheet());
+    expect(sheet.getByText('도서관')).toBeInTheDocument();
+    expect(sheet.getByText('미술관')).toBeInTheDocument();
+    expect(sheet.queryByText('놀이터')).not.toBeInTheDocument();
+    expect(sheet.queryByText('테니스장')).not.toBeInTheDocument();
+  });
 
-    fireEvent.click(libraryChip);
-    expect(libraryChip.closest('button')?.className).toContain('bg-blue-600');
-    expect(parkChip.closest('button')?.className).not.toContain('bg-blue-600');
+  // [단일 선택 유지](2026-08-29 사용자 지시 원칙 그대로): 바텀시트를 거치더라도 한 번에
+  // 하나의 중분류만 선택 가능하다 — 다른 중분류를 고르면 교체되고, 같은 중분류를 다시
+  // 고르면 해제된다. 선택 상태는 해당 중분류가 속한 대분류 탭의 라벨이 그 중분류 이름
+  // 으로 바뀌는 것으로 확인한다(spot-category-filter.tsx의 표시 관례) — 시트 자신의
+  // 헤더는 항상 대분류 고정 라벨을 쓰므로(getOpenSheet 재사용을 위해) 이 라벨과는
+  // 헷갈리지 않는다.
+  it('중분류는 한 번에 하나만 선택 가능하고(단일 선택), 같은 중분류를 다시 고르면 해제된다', () => {
+    render(<MapExplorer />);
 
-    fireEvent.click(libraryChip);
-    expect(libraryChip.closest('button')?.className).not.toContain('bg-blue-600');
+    fireEvent.click(screen.getAllByRole('button', { name: '자연/공원' })[0]);
+    fireEvent.click(within(getOpenSheet()).getByText('공원'));
+    expect(screen.getAllByRole('button', { name: '공원' }).length).toBeGreaterThan(0);
+    expect(screen.queryAllByRole('button', { name: '자연/공원' }).length).toBe(0);
+
+    fireEvent.click(screen.getAllByRole('button', { name: '문화시설' })[0]);
+    fireEvent.click(within(getOpenSheet()).getByText('도서관'));
+    expect(screen.getAllByRole('button', { name: '도서관' }).length).toBeGreaterThan(0);
+    // 다른 대분류(자연/공원)를 골랐으므로 이전 선택(공원)의 대분류 탭은 원래 라벨로 돌아간다.
+    expect(screen.getAllByRole('button', { name: '자연/공원' }).length).toBeGreaterThan(0);
+
+    // 지금은 대분류 탭이 "도서관"으로 표시 중이므로 그 이름으로 다시 열어 같은 중분류를
+    // 재클릭하면 해제되어 대분류 탭이 원래 라벨("문화시설")로 돌아간다.
+    fireEvent.click(screen.getAllByRole('button', { name: '도서관' })[0]);
+    fireEvent.click(within(getOpenSheet()).getByText('도서관'));
+    expect(screen.queryAllByRole('button', { name: '도서관' }).length).toBe(0);
+    expect(screen.getAllByRole('button', { name: '문화시설' }).length).toBeGreaterThan(0);
   });
 
   it('AI 추천 칩을 누르면 페이지 이동 없이 추천 바텀시트가 뜬다', () => {

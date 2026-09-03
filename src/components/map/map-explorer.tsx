@@ -60,6 +60,25 @@ export function MapExplorer() {
     () => CORE_SPOT_CATEGORIES.find((c) => c.id === selectedCategoryId)?.minors ?? [],
     [selectedCategoryId]
   );
+  // [todo.md 개선사항 6](2026-09-03): 대분류 바텀시트에서 0건 중분류를 숨기기 위한 전역
+  // 카운트 — 마운트 시 한 번만 불러온다(지역과 무관, home-view.tsx의 categoryCounts와
+  // 동일한 관례).
+  const [categoryMinCounts, setCategoryMinCounts] = useState<Record<string, number> | undefined>(undefined);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/nearby/spot-category-counts')
+      .then((res) => res.json())
+      .then((data: { counts?: Record<string, number> }) => {
+        if (!cancelled && data.counts) setCategoryMinCounts(data.counts);
+      })
+      .catch(() => {
+        // 카운트 조회 실패해도 바텀시트는 모든 중분류를 노출하는 안전한 기본값으로
+        // 동작하므로 화면을 막지 않는다(제5장 제11조 오류 처리 원칙).
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const [items, setItems] = useState<NearbyItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<NearbyItem[] | null>(null);
@@ -295,6 +314,7 @@ export function MapExplorer() {
             selectedCategoryId={selectedCategoryId}
             onSelectCategory={handleSelectCategory}
             onSelectAiRecommend={handleOpenAiRecommend}
+            categoryMinCounts={categoryMinCounts}
           />
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -361,6 +381,7 @@ export function MapExplorer() {
             selectedCategoryId={selectedCategoryId}
             onSelectCategory={handleSelectCategory}
             onSelectAiRecommend={handleOpenAiRecommend}
+            categoryMinCounts={categoryMinCounts}
           />
           {/* implementation/todo.md: 지도 드래그 후 재검색 버튼 - 모바일에서는 필터 스택 하단에 노출해 겹침 방지 */}
           {pendingRecenter && (
