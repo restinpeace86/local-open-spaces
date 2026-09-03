@@ -85,19 +85,25 @@ export const KIDS_AGE_OPTIONS: { id: KidsAgeGroup; label: string }[] = [
 
 export const KIDS_COUNT_OPTIONS = [1, 2, 3] as const; // 3은 "3명 이상"을 의미
 
-// 대분류를 부모 친화적 말투로 변환(요구사항 8단계) — CORE_SPOT_CATEGORIES(spot-category-
-// groups.ts)의 나들이 전용 핵심 중분류를 키즈친화 식당(Meal 단계가 별도 처리) 제외하고
-// 정확히 4개 성향으로 나눈 것과 1:1 대응한다(search-engine.ts의 VIBE_CATEGORY_MINS).
+// [챗봇 카테고리 체계 동기화](2026-09-03 사용자 지시): "대분류를 이벤트픽 기준인 자연/캠핑,
+// 키즈카페, 체험/농장, 축제/이벤트, 문화/전시, 배움/클래스 6가지로 확정" — 라벨/이모지를
+// category-maj-meta.ts의 CATEGORY_MAJ_OPTIONS(이벤트픽 홈 화면 대분류)와 동일하게 맞춘다
+// (스포츠 대여만 제외 — 이 챗봇의 검색 도메인인 open_spaces에 그에 대응하는 나들이 목적
+// 데이터가 없어 원래도 다루지 않던 영역). 실제 category_min 매핑은 search-engine.ts의
+// VIBE_CATEGORY_MINS 참고(라벨은 이벤트픽과 동기화하되, open_spaces 실측 데이터 기준으로
+// 새로 구성했다 — 자세한 근거는 그 파일 주석 참고).
 // [챗봇 문제점 수정](2026-09-02 사용자 지시) 5: "이게 대분류 기준이야? 여러 개 고를 수
 // 있게 하거나 전체도 고를 수 있게 해달라" — 맞다, 대분류 기준이었고 단일 선택만
 // 가능했다. 이제 여러 개를 토글해서 고르거나(ai-chat-sheet.tsx가 다중 선택 UI 담당),
 // 분위기 상관없이 전체를 보고 싶으면 vibes를 빈 배열로 보내면 된다(matchesVibe가
 // 빈 배열을 "필터링 안 함"으로 해석).
 export const VIBE_OPTIONS: { id: Vibe; label: string; emoji: string }[] = [
-  { id: 'ACTIVE', label: '신나게 뛰어놀기', emoji: '🏃' },
-  { id: 'EDUCATION', label: '교육 및 체험', emoji: '🎨' },
-  { id: 'NATURE', label: '힐링 자연', emoji: '🌳' },
-  { id: 'CULTURE', label: '문화 즐기기', emoji: '🎭' },
+  { id: 'NATURE_CAMPING', label: '자연 / 캠핑', emoji: '🏕️' },
+  { id: 'KIDS_CAFE', label: '공공 키즈카페', emoji: '🧸' },
+  { id: 'FARM_EXPERIENCE', label: '체험 / 농장', emoji: '🌱' },
+  { id: 'FESTIVAL_EVENT', label: '축제 / 이벤트', emoji: '🎉' },
+  { id: 'CULTURE_EXHIBITION', label: '문화 / 전시', emoji: '🖼️' },
+  { id: 'LEARNING_CLASS', label: '배움 / 클래스', emoji: '📚' },
 ];
 
 // vibes: 다중 선택 결과 → 메시지/요약에 쓸 표시용 라벨. 빈 배열("전체")은 "전체"로 표시.

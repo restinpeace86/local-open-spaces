@@ -9,6 +9,37 @@ import { getSigunguOptions, SigunguOption } from '@/lib/spaces/get-sigungu-optio
 
 // spec/common/search.md 2.1: 입력 즉시(Debounce 300ms) 검색
 const DEBOUNCE_MS = 300;
+// [동네 설정 개편](2026-09-04 사용자 지시) 실측으로 발견한 버그: 시/군/구 목록 조회
+// (getSigunguOptions)가 네트워크 지연 등으로 응답 없이 멈추면 `isLoadingOptions`를
+// 되돌릴 방법이 없어 "목록 불러오는 중..."이 무한정 떠 있었다(타임아웃 없음). 일정
+// 시간 안에 응답이 없으면 강제로 실패 처리해 에러 상태로 전환되게 한다.
+const SIGUNGU_FETCH_TIMEOUT_MS = 8000;
+// 실제 응답이 아주 빨리 오면(수십~수백ms) 로딩 문구가 눈 깜빡할 새 사라져 오히려
+// 부자연스럽다 — 요청 지시("약 1초의 자연스러운 로딩 연출") 그대로, 최소 1초는 로딩
+// 상태를 유지한다(응답이 이미 1초보다 오래 걸렸다면 추가 지연 없이 즉시 반영).
+const MIN_LOADING_DURATION_MS = 1000;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// 테스트에서 컴포넌트 렌더링 없이 이 순수 타이밍 로직만 따로 검증할 수 있도록 export한다
+// (fake timer와 React 스케줄러를 함께 쓰면 상태 업데이트가 멈추는 문제를 피하기 위함).
+export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('지역 목록을 불러오는 데 시간이 너무 오래 걸립니다.')), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      }
+    );
+  });
+}
 
 // [todo.md 개선사항 2-2](2026-09-03) 실측으로 발견한 버그: 이 모달을 AI 챗봇(ai-chat-
 // sheet.tsx)처럼 "이미 열려 있는 다른 모달" 안에서 띄우면, 이 모달의 바깥(어두운
@@ -42,19 +73,39 @@ export function LocationOnboardingModal({
   const [showManualPicker, setShowManualPicker] = useState(false);
   const [sigunguOptions, setSigunguOptions] = useState<SigunguOption[]>([]);
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
+  // [동네 설정 개편](2026-09-04) 기존에는 조회 실패를 조용히 삼켜(catch 안에서 아무 것도
+  // 안 함) 사용자에게는 "목록이 텅 빈 채로 아무 반응도 없는" 상태로만 보였다 — 실패를
+  // 명시적으로 알리고 재시도할 수 있게 한다.
+  const [sigunguErrorMessage, setSigunguErrorMessage] = useState<string | null>(null);
   const mounted = useIsMounted();
+
+  function loadSigunguOptions() {
+    setIsLoadingOptions(true);
+    setSigunguErrorMessage(null);
+    const startedAt = Date.now();
+
+    const finish = async (apply: () => void) => {
+      const elapsed = Date.now() - startedAt;
+      if (elapsed < MIN_LOADING_DURATION_MS) {
+        await delay(MIN_LOADING_DURATION_MS - elapsed);
+      }
+      apply();
+      setIsLoadingOptions(false);
+    };
+
+    withTimeout(getSigunguOptions(), SIGUNGU_FETCH_TIMEOUT_MS)
+      .then((options) => finish(() => setSigunguOptions(options)))
+      .catch((err) =>
+        finish(() =>
+          setSigunguErrorMessage(err instanceof Error ? err.message : '지역 목록을 불러오지 못했습니다.')
+        )
+      );
+  }
 
   function openManualPicker() {
     setShowManualPicker(true);
     if (sigunguOptions.length > 0 || isLoadingOptions) return;
-
-    setIsLoadingOptions(true);
-    getSigunguOptions()
-      .then(setSigunguOptions)
-      .catch(() => {
-        // 목록 조회 실패해도 GPS/검색 경로는 그대로 살아있으므로 화면을 막지 않는다.
-      })
-      .finally(() => setIsLoadingOptions(false));
+    loadSigunguOptions();
   }
 
   useEffect(() => {
@@ -156,41 +207,76 @@ export function LocationOnboardingModal({
           </button>
         </div>
 
-        <button
-          type="button"
-          onClick={handleUseCurrentLocation}
-          disabled={isLocating}
-          className="mt-4 w-full rounded-lg bg-blue-600 text-white text-sm font-medium py-2.5 hover:bg-blue-700 disabled:opacity-60"
-        >
-          {isLocating ? '현재 위치 확인 중...' : '📍 현재 위치로 찾기'}
-        </button>
-
-        {/* [챗봇 문제점 수정](2026-09-02 사용자 지시) 2: "다른 지역 변경 시 동네 이름을
-            정확히 쳐야 해서 너무 국소적으로만 바꿀 수 있다"(예: 경기도 거주자가 서울/
-            경기 전역을 폭넓게 찾고 싶어도 정확한 주소를 몰라 못 바꿈) — 기존에도
-            시/군/구 목록 선택 기능(getSigunguOptions)은 있었지만 GPS 실패 시에만
-            숨겨진 채로 열리는 2차 Fallback이었다. 검색창에 입력하지 않고도 바로 쓸 수
-            있도록 상시 노출 버튼으로 승격한다(제5장 제4조 기존 구조 우선 — 새 목록을
-            만들지 않고 이미 있던 것을 더 쉽게 찾게 함). */}
-        <button
-          type="button"
-          onClick={openManualPicker}
-          className="mt-2 w-full rounded-lg border border-gray-300 text-gray-700 text-sm font-medium py-2.5 hover:bg-gray-50"
-        >
-          🗺️ 지역 목록에서 선택
-        </button>
-
+        {/* [동네 설정 개편](2026-09-04 사용자 지시): "3가지 명확한 선택지 제공: ① 평소
+            동네 근처, ② 현재 위치, ③ 다른 지역 바꾸기"에 맞춰 이미 있던 3가지 기존
+            경로(동네/주소 검색, GPS 현위치, 시/군/구 목록)를 새로 만들지 않고
+            그대로 재사용하되(제5장 제4조 기존 구조 우선), 각각에 번호가 매겨진 명확한
+            제목을 붙이고 지시된 순서(①→②→③)로 재배치한다 — 기존에는 GPS 버튼과
+            "지역 목록에서 선택" 버튼, 그 아래 무라벨 검색창이 뒤섞여 있어 세 경로의
+            역할 구분이 불명확했다. */}
         <div className="mt-4">
+          <p className="text-xs font-semibold text-gray-400">① 평소 동네 근처</p>
           <input
             type="text"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            placeholder="동네 이름 또는 주소로 검색"
-            className="w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            placeholder="평소 다니는 동네 이름이나 주소로 검색"
+            className="mt-1.5 w-full rounded-lg border border-gray-300 px-3 py-2.5 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
           />
 
           {isSearching && <p className="mt-2 text-sm text-gray-400">검색 중...</p>}
           {errorMessage && <p className="mt-2 text-sm text-red-500">{errorMessage}</p>}
+
+          {results.length > 0 && (
+            <ul className="mt-2 flex flex-col divide-y divide-gray-100 border border-gray-100 rounded-lg overflow-hidden">
+              {results.map((result, index) => (
+                <li key={`${result.lat}-${result.lng}-${index}`}>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      onConfirm({
+                        lat: result.lat,
+                        lng: result.lng,
+                        address_name: result.addressName,
+                        sigungu_name: extractSigunguName(result.addressName),
+                      })
+                    }
+                    className="w-full text-left px-3 py-2.5 text-sm text-gray-800 hover:bg-gray-50"
+                  >
+                    {result.addressName}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <div className="mt-4">
+          <p className="text-xs font-semibold text-gray-400">② 현재 위치</p>
+          <button
+            type="button"
+            onClick={handleUseCurrentLocation}
+            disabled={isLocating}
+            className="mt-1.5 w-full rounded-lg bg-blue-600 text-white text-sm font-medium py-2.5 hover:bg-blue-700 disabled:opacity-60"
+          >
+            {isLocating ? '현재 위치 확인 중...' : '📍 현재 위치로 찾기'}
+          </button>
+        </div>
+
+        <div className="mt-4">
+          <p className="text-xs font-semibold text-gray-400">③ 다른 지역 바꾸기</p>
+          {/* [챗봇 문제점 수정](2026-09-02 사용자 지시) 2: "다른 지역 변경 시 동네 이름을
+              정확히 쳐야 해서 너무 국소적으로만 바꿀 수 있다"(예: 경기도 거주자가 서울/
+              경기 전역을 폭넓게 찾고 싶어도 정확한 주소를 몰라 못 바꿈) — 기존에도
+              시/군/구 목록 선택 기능(getSigunguOptions)은 있었지만 GPS 실패 시에만
+              숨겨진 채로 열리는 2차 Fallback이었다. 상시 노출 버튼으로 승격한다. */}
+          <button
+            type="button"
+            onClick={openManualPicker}
+            className="mt-1.5 w-full rounded-lg border border-gray-300 text-gray-700 text-sm font-medium py-2.5 hover:bg-gray-50"
+          >
+            🗺️ 시·군·구 목록에서 선택
+          </button>
 
           {/* Task 9-1-8: GPS 실패 시 2단계 Fallback — 시/군/구를 직접 선택하는 수동 선택 시트 */}
           {showManualPicker && (
@@ -199,7 +285,21 @@ export function LocationOnboardingModal({
                 지역을 직접 선택해주세요
               </p>
               {isLoadingOptions && <p className="px-3 py-2.5 text-sm text-gray-400">목록 불러오는 중...</p>}
-              {!isLoadingOptions && sigunguOptions.length > 0 && (
+              {/* [동네 설정 개편](2026-09-04) 실패를 조용히 삼키지 않고 알린 뒤 재시도할
+                  수 있게 한다(무한 로딩/에러 버그 수정). */}
+              {!isLoadingOptions && sigunguErrorMessage && (
+                <div className="px-3 py-2.5">
+                  <p className="text-sm text-red-500">{sigunguErrorMessage}</p>
+                  <button
+                    type="button"
+                    onClick={loadSigunguOptions}
+                    className="mt-1.5 text-sm font-medium text-blue-600 hover:text-blue-700"
+                  >
+                    다시 시도
+                  </button>
+                </div>
+              )}
+              {!isLoadingOptions && !sigunguErrorMessage && sigunguOptions.length > 0 && (
                 <div className="max-h-72 overflow-y-auto">
                   {[...groupedSigunguOptions.entries()].map(([province, options]) => (
                     <div key={province}>
@@ -229,29 +329,6 @@ export function LocationOnboardingModal({
                 </div>
               )}
             </div>
-          )}
-
-          {results.length > 0 && (
-            <ul className="mt-2 flex flex-col divide-y divide-gray-100 border border-gray-100 rounded-lg overflow-hidden">
-              {results.map((result, index) => (
-                <li key={`${result.lat}-${result.lng}-${index}`}>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      onConfirm({
-                        lat: result.lat,
-                        lng: result.lng,
-                        address_name: result.addressName,
-                        sigungu_name: extractSigunguName(result.addressName),
-                      })
-                    }
-                    className="w-full text-left px-3 py-2.5 text-sm text-gray-800 hover:bg-gray-50"
-                  >
-                    {result.addressName}
-                  </button>
-                </li>
-              ))}
-            </ul>
           )}
         </div>
       </div>

@@ -20,9 +20,19 @@ describe('TRANSPORT_OPTIONS', () => {
   });
 });
 
+// [챗봇 카테고리 체계 동기화](2026-09-03 사용자 지시): 이벤트픽 7대 대분류 중 스포츠
+// 대여를 뺀 6가지로 확정.
 describe('VIBE_OPTIONS', () => {
-  it('4개 성향을 정의한다', () => {
-    expect(VIBE_OPTIONS).toHaveLength(4);
+  it('이벤트픽 대분류와 동기화된 6개 카테고리를 정의한다', () => {
+    expect(VIBE_OPTIONS).toHaveLength(6);
+    expect(VIBE_OPTIONS.map((o) => o.label)).toEqual([
+      '자연 / 캠핑',
+      '공공 키즈카페',
+      '체험 / 농장',
+      '축제 / 이벤트',
+      '문화 / 전시',
+      '배움 / 클래스',
+    ]);
   });
 });
 
@@ -32,9 +42,9 @@ describe('buildVibeLabel', () => {
     expect(buildVibeLabel([])).toBe('전체');
   });
   it('1개 선택이면 그 라벨 그대로', () => {
-    expect(buildVibeLabel(['NATURE'])).toBe('힐링 자연');
+    expect(buildVibeLabel(['NATURE_CAMPING'])).toBe('자연 / 캠핑');
   });
   it('여러 개 선택이면 · 로 이어붙인다', () => {
-    expect(buildVibeLabel(['ACTIVE', 'NATURE'])).toBe('신나게 뛰어놀기 · 힐링 자연');
+    expect(buildVibeLabel(['KIDS_CAFE', 'NATURE_CAMPING'])).toBe('공공 키즈카페 · 자연 / 캠핑');
   });
 });

@@ -14,7 +14,11 @@ export type OutdoorPreference = 'OUTDOOR' | 'INDOOR' | 'EITHER';
 // 걸러낼 수 없는 세분화 옵션을 화면에 보여주지 않는 것이 정직한 선택이다(제3장 제5조).
 export type Budget = 'FREE' | 'PAID' | 'ANY';
 export type KidsAgeGroup = '영유아' | '초등' | '전연령';
-export type Vibe = 'ACTIVE' | 'EDUCATION' | 'NATURE' | 'CULTURE';
+// [챗봇 카테고리 체계 동기화](2026-09-03 사용자 지시): 기존 4개 임의 성향(ACTIVE/EDUCATION/
+// NATURE/CULTURE)을 이벤트픽 홈 화면의 7대 대분류(category-maj-meta.ts CATEGORY_MAJ_OPTIONS)
+// 중 "스포츠 대여"를 뺀 6가지로 확정한다 — 사용자 지시 원문 그대로 자연/캠핑, 공공
+// 키즈카페, 체험/농장, 축제/이벤트, 문화/전시, 배움/클래스.
+export type Vibe = 'NATURE_CAMPING' | 'KIDS_CAFE' | 'FARM_EXPERIENCE' | 'FESTIVAL_EVENT' | 'CULTURE_EXHIBITION' | 'LEARNING_CLASS';
 
 // [챗봇 문제점 수정](2026-09-02 사용자 지시) 5: "분위기를 여러 개 고를 수 있게 하거나
 // 전체도 고를 수 있게 해달라" — 단일 값(vibe: Vibe)을 배열(vibes: Vibe[])로 바꾼다.
@@ -29,16 +33,74 @@ export type ChatAnswers = {
   vibes: Vibe[];
 };
 
-// 8단계(Purpose/Vibe)의 부모 친화적 말투 선택지 → 실제 category_min 매핑. CORE_SPOT_
-// CATEGORIES(spot-category-groups.ts)의 나들이 전용 핵심 중분류 전체를 키즈친화 식당(별도
-// Meal 단계가 담당)을 제외하고 정확히 4개 성향으로 분류한다 — 임의로 지어낸 값이 아니라
-// 기존 필터 칩 taxonomy를 그대로 재사용한 것이다(제5장 제4조 기존 구조 우선).
+// 8단계(Purpose/Vibe) 선택지 → 실제 category_min 매핑.
+// [챗봇 카테고리 체계 동기화](2026-09-03 사용자 지시): 라벨은 이벤트픽 7대 대분류 중
+// 6개를 그대로 쓰지만, 이 챗봇은 open_spaces만 검색하므로(get_nearby_spaces_and_events
+// RPC를 p_item_type='SPACE'로만 호출, api/ai-chat/search/route.ts) category-maj-meta.ts의
+// minorCategories를 그대로 복사하면 안 된다 — 그 목록 상당수(예: "지역축제/페스티벌",
+// "산림여가", "공공키즈카페")는 events 전용 값이라 open_spaces에 아예 존재하지 않는다
+// (실측 확인: `select category_min, count(*) from open_spaces group by category_min`
+// 결과 전량 대조). 그래서 각 대분류 "개념"에 실제로 대응하는 open_spaces category_min
+// 값만 골라 새로 매핑한다 — 라벨은 이벤트픽과 동기화하되, 매칭 대상은 이 챗봇의 실제
+// 검색 도메인(open_spaces)에 맞춘다(제3장 제5조 추측 금지). 키즈친화 식당(놀이방식당)은
+// 기존과 동일하게 별도 Meal 단계가 담당하므로 어느 vibe에도 포함하지 않는다.
+//   - 자연/캠핑: 공원·캠핑장·자연휴양림·수목원·생태공원 (실측 합계 약 3만 건)
+//   - 공공 키즈카페: 어린이놀이터·놀이시설(야외/실내)·키즈카페·물놀이시설 (약 7.1만 건)
+//   - 체험/농장: 체험휴양마을·교육농장·체험학습장 (todo.md 개선사항4의
+//     SHARED_OPEN_SPACES_CATEGORY_MINS와 동일한 3종, 약 1,650건)
+//   - 축제/이벤트: 광장 (open_spaces에 실제 대응하는 값이 이것뿐이라 약 417건으로 다른
+//     vibe보다 얇지만, 0건은 아니다 — 정직하게 그대로 둔다)
+//   - 문화/전시: 박물관류·미술관·공연장·전시실·문화의집/원·역사유적지·관광명소·과학관
+//     (약 4,825건)
+//   - 배움/클래스: 도서관·교육시설·유아교육진흥원·육아종합지원센터 (약 2,067건)
 export const VIBE_CATEGORY_MINS: Record<Vibe, string[]> = {
-  ACTIVE: ['어린이놀이터', '어린이놀이시설(야외)', '어린이놀이시설(실내)', '키즈카페'],
-  EDUCATION: ['종합/기타박물관', '역사박물관', '미술관', '도서관', '유아교육진흥원', '육아종합지원센터'],
-  NATURE: ['공원', '자연휴양림'],
-  CULTURE: ['문화의집', '문화원'],
+  NATURE_CAMPING: ['공원', '캠핑장', '자연휴양림', '수목원', '생태공원'],
+  KIDS_CAFE: ['어린이놀이터', '어린이놀이시설(야외)', '어린이놀이시설(실내)', '키즈카페', '바닥분수/물놀이시설'],
+  FARM_EXPERIENCE: ['체험휴양마을', '교육농장', '체험학습장'],
+  FESTIVAL_EVENT: ['광장'],
+  CULTURE_EXHIBITION: [
+    '종합/기타박물관',
+    '역사박물관',
+    '미술관',
+    '공연장',
+    '전시실',
+    '문화의집',
+    '문화원',
+    '역사유적지',
+    '관광명소',
+    '과학관',
+  ],
+  LEARNING_CLASS: ['도서관', '교육시설', '유아교육진흥원', '육아종합지원센터'],
 };
+
+// [챗봇 카테고리 체계 동기화](2026-09-03) 성능 안전장치: KIDS_CAFE의 category_min 5종
+// 합계는 전국 약 7.1만 건으로 이 서비스 전체 카탈로그(약 14.2만 건)의 절반에 달하는
+// 압도적 최다 카테고리다. get_nearby_spaces_and_events는 category_min+반경으로 후보를
+// 먼저 좁힌 뒤(v3, scripts/migrations/2026-09-03-nearby-rpc-category-min-prefilter-v3.sql)
+// 정렬하는데, 이 "좁히는" 단계 자체가 반경 안의 실제 매칭 행 전부를 힙에서 읽어야 해서
+// (실측: 서울시청 기준 40km 반경에 28,482건 매칭) 인덱스 전략과 무관하게 반경이 클수록
+// 선형으로 느려진다(반복 실측: 5km 110ms → 15km 5.2초 → 40km 6.8~8초, 심지어 같은
+// 조건을 반복 실행해도 3~8초로 변동폭이 컸다 — PostgREST의 8초 statement_timeout에
+// 실제로 걸린 사례를 확인). btree_gist 결합 인덱스 추가, 병렬 워커 수 조정 모두
+// 시도했지만 어느 쪽도 "항상 8초 안에 들어온다"는 보장을 주지 못했다 — 근본 원인은
+// 인덱스 전략이 아니라 매칭되는 행 자체의 절대량이다. 반면 8km는 반복 실측 모두
+// 0.5~2.7초로 여유 있게 통과했고, 어린이놀이터류는 전국 어디서나 8km 안에도 압도적으로
+// 많이 존재한다(약 7.1만 건). 그래서 사용자가 "1시간 이상 이동 가능"(40km)을 선택했더라도
+// KIDS_CAFE가 포함된 조회만큼은 실제 DB 조회 반경을 8km로 상한을 둔다 — 결과의
+// 완전성(더 먼 곳까지 다 찾기)보다 "타임아웃으로 아예 응답을 못 주는 사고"를 막는 것을
+// 우선한다(제11조: 예상 못한 상황에서도 서비스가 중단되지 않아야 한다). 나머지 5개
+// vibe는 이 상한에 걸리지 않아 사용자가 고른 반경 그대로 조회한다.
+const DENSE_VIBE_QUERY_RADIUS_CAP_METERS: Partial<Record<Vibe, number>> = {
+  KIDS_CAFE: 8000,
+};
+
+export function getEffectiveQueryRadiusMeters(vibes: Vibe[], requestedRadiusMeters: number): number {
+  const caps = vibes
+    .map((v) => DENSE_VIBE_QUERY_RADIUS_CAP_METERS[v])
+    .filter((cap): cap is number => cap != null);
+  if (caps.length === 0) return requestedRadiusMeters;
+  return Math.min(requestedRadiusMeters, ...caps);
+}
 
 // "공공시설/공공장소" 판정: 이 카탈로그(open_spaces)는 대부분 정부/지자체 공공데이터
 // 출처지만, 키즈카페/키즈친화 식당(놀이방식당)만은 민간 사업자(카페·식당) 데이터다

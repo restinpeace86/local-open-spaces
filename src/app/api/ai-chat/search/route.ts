@@ -4,7 +4,15 @@ import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { Database } from '@/types/database.types';
-import { applyStrictFilters, assembleResults, ChatAnswers, nextRadiusTier, SearchResultItem } from '@/lib/ai-chat/search-engine';
+import {
+  applyStrictFilters,
+  assembleResults,
+  ChatAnswers,
+  getEffectiveQueryRadiusMeters,
+  nextRadiusTier,
+  SearchResultItem,
+  VIBE_CATEGORY_MINS,
+} from '@/lib/ai-chat/search-engine';
 import { buildFinalSummary } from '@/lib/ai-chat/summary';
 import { canUseUnlimitedChatbot, FREE_CHATBOT_USES_BEFORE_SPROUT, MomPickGrade } from '@/lib/community/grades';
 
@@ -21,17 +29,30 @@ import { canUseUnlimitedChatbot, FREE_CHATBOT_USES_BEFORE_SPROUT, MomPickGrade }
 // 사용자가 실제로 선택한 반경으로 먼저 조회하고, 그 결과가 0건일 때만 다음 반경으로 딱
 // 한 번 더 조회하도록 바꿔 대부분의 요청은 좁은/중간 반경만 조회하게 했다(요구사항 4의
 // "1회성 완화"와도 정확히 일치하는 설계).
+// [챗봇 카테고리 체계 동기화](2026-09-03) 작업 중 실측으로 발견한 버그: 이 RPC는
+// category_min과 무관하게 "전체 중 가장 가까운 1001건"을 먼저 뽑은 뒤에야 반경/타입
+// 필터를 적용한다(2026-09-02 KNN 성능 수정) — 서울 도심처럼 밀집된 지역에서는 흔한
+// 카테고리(어린이놀이터/공원 등)가 그 1001자리를 다 차지해, 실제로는 반경 안(예: 10.78km)에
+// 있는 희귀 카테고리(예: 교육농장)조차 전혀 찾지 못했다(실측: FARM_EXPERIENCE vibe로
+// 반경 40km까지 요청해도 0건). 챗봇은 vibes 선택 시점에 이미 어떤 category_min을 찾을지
+// 알고 있으므로, KNN 정렬 전에 미리 그 값들로 좁혀(get_nearby_spaces_and_events의 새
+// p_category_mins 파라미터, scripts/migrations/2026-09-03-nearby-rpc-category-min-
+// prefilter.sql) 이 "엉뚱한 카테고리와의 1001자리 경쟁" 자체를 없앤다. vibes가 빈
+// 배열("전체")이면 categoryMins를 넘기지 않아(undefined) 기존과 동일하게 전체 카테고리를
+// 대상으로 조회한다.
 async function fetchCandidatesAtRadius(
   supabase: SupabaseClient<Database>,
   lat: number,
   lng: number,
-  radiusMeters: number
+  radiusMeters: number,
+  categoryMins?: string[]
 ): Promise<NearbyItem[]> {
   const { data, error } = await supabase.rpc('get_nearby_spaces_and_events', {
     user_lng: lng,
     user_lat: lat,
     radius_meters: radiusMeters,
     p_item_type: 'SPACE',
+    ...(categoryMins && categoryMins.length > 0 ? { p_category_mins: categoryMins } : {}),
   });
   if (error) throw new Error(`주변 스팟 조회 실패: ${error.message}`);
   return (data ?? []) as NearbyItem[];
@@ -130,9 +151,25 @@ export async function POST(request: NextRequest) {
     // 경로는 물리적으로 한 번만 존재하고(반복문/재귀 없음), 두 번째 시도까지 0건이면
     // 즉시 종료한다(무한 완화 불가능). 어떤 조건이 조정됐는지 서버 로그와 사용자 응답
     // 양쪽에 원래/최종 반경을 그대로 남겨 투명하게 안내한다.
+    // vibes가 빈 배열("전체")이면 undefined가 되어 카테고리 제한 없이 조회한다(기존 동작
+    // 그대로) — 하나 이상 선택됐으면 그 vibe들의 category_min을 합쳐 RPC의 KNN 정렬
+    // 전에 미리 좁힌다(위 fetchCandidatesAtRadius 주석 참고).
+    const categoryMins =
+      answers.vibes.length > 0 ? Array.from(new Set(answers.vibes.flatMap((v) => VIBE_CATEGORY_MINS[v]))) : undefined;
+
     const originalRadiusMeters = answers.transportRadiusMeters;
     let radiusMeters = originalRadiusMeters;
-    let candidates = await fetchCandidatesAtRadius(supabase, lat, lng, radiusMeters);
+    // [챗봇 카테고리 체계 동기화](2026-09-03) KIDS_CAFE 등 초고밀도 카테고리는 실제 DB
+    // 조회 반경만 안전 상한으로 줄인다(getEffectiveQueryRadiusMeters 주석 참고) —
+    // radiusMeters/originalRadiusMeters(사용자에게 보여주는 값, applyStrictFilters의
+    // 거리 상한)는 그대로 두므로 결과의 실제 거리 표기나 필터링 정확성에는 영향이 없다.
+    let candidates = await fetchCandidatesAtRadius(
+      supabase,
+      lat,
+      lng,
+      getEffectiveQueryRadiusMeters(answers.vibes, radiusMeters),
+      categoryMins
+    );
     let pool = applyStrictFilters(candidates, answers, radiusMeters, visitedSpotIds);
     let usedFallback = false;
 
@@ -143,7 +180,13 @@ export async function POST(request: NextRequest) {
       if (fallbackRadius != null) {
         console.log(`[AI_CHAT_SEARCH] 1차 0건 — 반경을 ${radiusMeters}m → ${fallbackRadius}m로 1회 완화해 재조회`);
         radiusMeters = fallbackRadius;
-        candidates = await fetchCandidatesAtRadius(supabase, lat, lng, radiusMeters);
+        candidates = await fetchCandidatesAtRadius(
+          supabase,
+          lat,
+          lng,
+          getEffectiveQueryRadiusMeters(answers.vibes, radiusMeters),
+          categoryMins
+        );
         pool = applyStrictFilters(candidates, answers, radiusMeters, visitedSpotIds);
         usedFallback = pool.length > 0;
         console.log(`[AI_CHAT_SEARCH] 2차 조회(반경 ${radiusMeters}m): 후보 ${candidates.length}건 → 필터 통과 ${pool.length}건`);

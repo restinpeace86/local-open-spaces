@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { applyStrictFilters, assembleResults, ChatAnswers, isPublicFacility, nextRadiusTier, runSearch } from './search-engine';
+import {
+  applyStrictFilters,
+  assembleResults,
+  ChatAnswers,
+  getEffectiveQueryRadiusMeters,
+  isPublicFacility,
+  nextRadiusTier,
+  runSearch,
+} from './search-engine';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 
 function spot(overrides: Partial<NearbyItem> = {}): NearbyItem {
@@ -40,7 +48,7 @@ function answers(overrides: Partial<ChatAnswers> = {}): ChatAnswers {
     budget: 'ANY',
     kidsCount: 1,
     kidsAgeGroup: '전연령',
-    vibes: ['NATURE'],
+    vibes: ['NATURE_CAMPING'],
     ...overrides,
   };
 }
@@ -98,13 +106,13 @@ describe('runSearch', () => {
 
   it('vibe와 category_min이 매칭되는 후보만 통과한다', () => {
     const wrongVibe = spot({ category_min: '박물관이 아닌 값' });
-    const outcome = runSearch([wrongVibe], answers({ vibes: ['NATURE'] }), null);
+    const outcome = runSearch([wrongVibe], answers({ vibes: ['NATURE_CAMPING'] }), null);
     expect(outcome.exhausted).toBe(true);
   });
 
   it('실내 선호면 facility_type이 야외 단독인 후보를 제외한다', () => {
     const outdoorOnly = spot({ facility_type: '야외', category_min: '공원' });
-    const outcome = runSearch([outdoorOnly], answers({ outdoorPreference: 'INDOOR', vibes: ['NATURE'] }), null);
+    const outcome = runSearch([outdoorOnly], answers({ outdoorPreference: 'INDOOR', vibes: ['NATURE_CAMPING'] }), null);
     expect(outcome.exhausted).toBe(true);
   });
 
@@ -140,12 +148,12 @@ describe('runSearch', () => {
   });
 
   it('필수 믹스 룰: 공공시설이 하나도 없으면 최하위 항목을 공공시설로 교체한다', () => {
-    // ACTIVE vibe는 키즈카페(민간)/놀이터(공공)를 모두 포함 — 키즈카페만 여럿, 놀이터 1개 섞어 검증.
+    // KIDS_CAFE vibe는 키즈카페(민간)/놀이터(공공)를 모두 포함 — 키즈카페만 여럿, 놀이터 1개 섞어 검증.
     const kidsCafes = Array.from({ length: 9 }, (_, i) =>
       spot({ id: `cafe${i}`, distance_meters: i * 10, category_min: '키즈카페', is_kids_friendly: true })
     );
     const onePlayground = spot({ id: 'playground', distance_meters: 999, category_min: '어린이놀이터' });
-    const outcome = runSearch([...kidsCafes, onePlayground], answers({ vibes: ['ACTIVE'] }), null);
+    const outcome = runSearch([...kidsCafes, onePlayground], answers({ vibes: ['KIDS_CAFE'] }), null);
 
     const hasPublic = outcome.results.some((r) => r.kind === 'SPOT' && isPublicFacility(r.item));
     expect(hasPublic).toBe(true);
@@ -170,6 +178,33 @@ describe('nextRadiusTier', () => {
   it('마지막 티어거나 알 수 없는 값이면 null이다', () => {
     expect(nextRadiusTier(40000)).toBeNull();
     expect(nextRadiusTier(999)).toBeNull();
+  });
+});
+
+// [챗봇 카테고리 체계 동기화](2026-09-03) KIDS_CAFE 초고밀도 카테고리 타임아웃 방지용
+// 조회 반경 상한 — 실측(EXPLAIN ANALYZE)으로 8km는 항상 8초 안에 들어오고 40km는
+// 6.8~8초로 위험하다는 것을 확인한 뒤 도입했다.
+describe('getEffectiveQueryRadiusMeters', () => {
+  it('KIDS_CAFE가 포함되면 요청 반경이 상한(8km)보다 커도 8km로 줄인다', () => {
+    expect(getEffectiveQueryRadiusMeters(['KIDS_CAFE'], 40000)).toBe(8000);
+    expect(getEffectiveQueryRadiusMeters(['KIDS_CAFE'], 15000)).toBe(8000);
+  });
+
+  it('KIDS_CAFE가 포함돼도 요청 반경이 상한보다 이미 작으면 그대로 둔다', () => {
+    expect(getEffectiveQueryRadiusMeters(['KIDS_CAFE'], 5000)).toBe(5000);
+  });
+
+  it('KIDS_CAFE 외 다른 vibe에는 상한이 적용되지 않는다', () => {
+    expect(getEffectiveQueryRadiusMeters(['NATURE_CAMPING'], 40000)).toBe(40000);
+    expect(getEffectiveQueryRadiusMeters(['FESTIVAL_EVENT', 'CULTURE_EXHIBITION'], 40000)).toBe(40000);
+  });
+
+  it('vibes가 빈 배열("전체")이면 요청 반경 그대로 둔다', () => {
+    expect(getEffectiveQueryRadiusMeters([], 40000)).toBe(40000);
+  });
+
+  it('KIDS_CAFE를 다른 vibe와 함께 선택해도 전체 조회 반경이 8km로 줄어든다(둘 이상 선택 시 가장 낮은 상한 적용)', () => {
+    expect(getEffectiveQueryRadiusMeters(['NATURE_CAMPING', 'KIDS_CAFE'], 40000)).toBe(8000);
   });
 });
 
@@ -224,21 +259,27 @@ describe('방문 이력(mom_pick_posts) 기반 중복 배제 — Step 3-②', ()
 });
 
 // [챗봇 문제점 수정](2026-09-02 사용자 지시) 5: 분위기 다중 선택 + "전체" 지원.
+// [챗봇 카테고리 체계 동기화](2026-09-03 사용자 지시) 이후: NATURE_CAMPING/CULTURE_
+// EXHIBITION/LEARNING_CLASS 3개 서로 다른 vibe에 속한 category_min으로 갱신.
 describe('분위기(vibe) 다중 선택 및 전체 옵션', () => {
   it('vibes가 여러 개면 그중 하나라도 일치하면 통과한다', () => {
-    const park = spot({ category_min: '공원' }); // NATURE
-    const museum = spot({ category_min: '역사박물관' }); // EDUCATION
-    const cafe = spot({ category_min: '문화의집' }); // CULTURE — 선택하지 않은 분위기
-    const pool = applyStrictFilters([park, museum, cafe], answers({ vibes: ['NATURE', 'EDUCATION'] }), 5000);
+    const park = spot({ category_min: '공원' }); // NATURE_CAMPING
+    const museum = spot({ category_min: '역사박물관' }); // CULTURE_EXHIBITION
+    const library = spot({ category_min: '도서관' }); // LEARNING_CLASS — 선택하지 않은 분위기
+    const pool = applyStrictFilters(
+      [park, museum, library],
+      answers({ vibes: ['NATURE_CAMPING', 'CULTURE_EXHIBITION'] }),
+      5000
+    );
 
     expect(pool).toEqual([park, museum]);
   });
 
   it('vibes가 빈 배열("전체")이면 분위기로 걸러내지 않는다', () => {
     const park = spot({ category_min: '공원' });
-    const cafe = spot({ category_min: '문화의집' });
-    const pool = applyStrictFilters([park, cafe], answers({ vibes: [] }), 5000);
+    const library = spot({ category_min: '도서관' });
+    const pool = applyStrictFilters([park, library], answers({ vibes: [] }), 5000);
 
-    expect(pool).toEqual([park, cafe]);
+    expect(pool).toEqual([park, library]);
   });
 });

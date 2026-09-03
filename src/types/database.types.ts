@@ -1104,6 +1104,7 @@ export type Database = {
       }
       get_nearby_spaces_and_events: {
         Args: {
+          p_category_mins?: string[]
           p_item_type?: string
           radius_meters?: number
           user_lat: number
