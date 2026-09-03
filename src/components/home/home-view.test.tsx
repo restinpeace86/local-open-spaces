@@ -211,9 +211,13 @@ describe('HomeView', () => {
     });
 
     // [중분류 데이터 로딩 속도 개선 - 페이지네이션 도입](2026-09-04 사용자 지시): 1페이지를
-    // 처음부터 전부 불러오는 대신, hasMore=true일 때만 "더보기" 버튼을 보여주고 눌렀을 때만
-    // offset을 실어 다음 페이지를 요청해 기존 카드 뒤에 이어붙이는지 검증한다.
-    it('hasMore=true면 "더보기" 버튼이 보이고, 누르면 offset으로 다음 페이지를 이어붙인다', async () => {
+    // 처음부터 전부 불러오지 않고, 필요할 때만 offset을 실어 다음 페이지를 요청해 기존
+    // 카드 뒤에 이어붙인다.
+    // [무한 스크롤 도입](2026-09-04 후속 지시): "더보기 버튼 말고 무한 스크롤로" — 버튼
+    // 클릭 대신 바텀시트 스크롤이 바닥에 닿는 것으로 다음 페이지를 트리거한다(실제 스크롤
+    // 임계값 판정 로직 자체는 major-category-grid.test.tsx에서 더 촘촘히 검증하고, 여기서는
+    // HomeView→MajorCategoryGrid로 이어지는 배선 전체가 실제로 동작하는지만 확인한다).
+    it('바텀시트 스크롤이 바닥에 닿으면 offset으로 다음 페이지를 요청해 이어붙인다', async () => {
       const fetchMock = vi.fn((url: string) => {
         if (url.startsWith('/api/home/category-feed')) {
           if (url.includes('offset=')) {
@@ -234,20 +238,25 @@ describe('HomeView', () => {
       });
       vi.stubGlobal('fetch', fetchMock);
 
-      render(<HomeView initialHeroEvents={[]} />);
+      const { container } = render(<HomeView initialHeroEvents={[]} />);
 
       fireEvent.click(screen.getByText('체험 / 농장'));
       fireEvent.click(screen.getByText('도시농업'));
       expect(await screen.findByText('도시농업 체험 행사')).toBeInTheDocument();
-      expect(screen.getByText('더보기')).toBeInTheDocument();
+      expect(screen.queryByText('더보기')).not.toBeInTheDocument(); // 버튼은 더 이상 없다
 
-      fireEvent.click(screen.getByText('더보기'));
+      // HomeView 자체의 최상위 스크롤 컨테이너도 overflow-y-auto라 첫 매치가 아니라
+      // 가장 안쪽(=바텀시트)인 마지막 매치를 찾는다.
+      const scrollAreas = container.querySelectorAll('.overflow-y-auto');
+      const sheetScrollArea = scrollAreas[scrollAreas.length - 1];
+      Object.defineProperty(sheetScrollArea, 'scrollHeight', { value: 1000, configurable: true });
+      Object.defineProperty(sheetScrollArea, 'scrollTop', { value: 900, configurable: true });
+      Object.defineProperty(sheetScrollArea, 'clientHeight', { value: 100, configurable: true });
+      fireEvent.scroll(sheetScrollArea);
 
       expect(await screen.findByText('두 번째 페이지 행사')).toBeInTheDocument();
       // 1페이지 카드도 그대로 남아 있어야 한다(교체가 아니라 이어붙이기).
       expect(screen.getByText('도시농업 체험 행사')).toBeInTheDocument();
-      // 2페이지 응답의 hasMore=false를 반영해 버튼이 사라진다.
-      expect(screen.queryByText('더보기')).not.toBeInTheDocument();
 
       const secondPageCall = fetchMock.mock.calls.map((call) => call[0]).find((url) => url.includes('offset='));
       expect(secondPageCall).toContain('offset=1');

@@ -9,23 +9,13 @@ import { ReservationOpenSlider, ReservationOpenSliderSkeleton } from '@/componen
 import { BestPickSlider, BestPickSliderSkeleton, CuratedItem } from '@/components/home/best-pick-slider';
 import { EventBrowseSheet, EventBrowseSheetMode } from '@/components/home/event-browse-sheet';
 import { MajorCategoryGrid } from '@/components/home/major-category-grid';
+import { FeedCard } from '@/components/home/feed-card';
 import { FreeFeedSkeleton } from '@/components/home/free-feed-skeleton';
 import { ThemeSpotKey } from '@/lib/theme-spots';
 import { themeOptionsFor } from '@/lib/home-categories';
-import { SpaceGridCard } from '@/components/region/space-grid-card';
-import { EventCard } from '@/components/cards/event-card';
 import { DetailModal } from '@/components/map/detail-modal';
 import { LocationOnboardingModal } from '@/components/map/location-onboarding-modal';
 import { AiChatFab } from '@/components/chat/ai-chat-fab';
-
-// docs/spec.md 2.2: 메인 홈 레이아웃 스택 — Hero Carousel → 5대 카테고리 Quick 그리드 → 큐레이션 카드 피드
-function FeedCard({ item, onSelect }: { item: NearbyItem; onSelect: (item: NearbyItem) => void }) {
-  return item.item_type === 'EVENT' ? (
-    <EventCard item={item} onSelect={onSelect} />
-  ) : (
-    <SpaceGridCard item={item} onSelect={onSelect} />
-  );
-}
 
 // Task 9-1-9: Hero Carousel은 처음엔 이만큼만 보여주고, 10개를 넘는 나머지는 마지막 슬라이드의
 // "전체 보기" CTA 카드(/events/today 연동, Task 9-6-6)로 대체한다.
@@ -378,6 +368,11 @@ export function HomeView({
                 뒤에 있었다)을 화면의 첫 콘텐츠 섹션으로 옮긴다. 검색 활성화 시에는
                 기존과 동일하게 이 화면 전체가 숨겨지므로(위 isSearchActive 분기) 이
                 섹션만 별도로 검색 중 노출할 필요는 없다. */}
+            {/* [바텀시트 구조 복구 및 재적용](2026-09-04 사용자 지시): "중분류를 고르면
+                데이터가 바텀시트가 아니라 이벤트픽 화면에서 나온다" — 결과 카드를 이
+                섹션(시트 밖)에 그리던 것을 없애고, MajorCategoryGrid의 시트 안에서
+                직접 그리도록 옮겼다. 데이터 조회(useCategoryFeed) 자체는 여전히 여기서
+                담당하고, 그 상태/콜백만 props로 넘긴다(제5장 제4조 기존 구조 우선). */}
             <section aria-label="카테고리별 행사">
               <MajorCategoryGrid
                 selectedMaj={selectedMaj}
@@ -385,39 +380,13 @@ export function HomeView({
                 selectedMin={selectedCategory}
                 onSelectMin={selectCategory}
                 categoryCounts={categoryCounts}
+                categoryFeedItems={categoryFeedItems}
+                isCategoryFeedLoading={isCategoryFeedLoading}
+                isCategoryFeedLoadingMore={isCategoryFeedLoadingMore}
+                categoryFeedHasMore={categoryFeedHasMore}
+                onLoadMoreCategoryFeed={loadMoreCategoryFeed}
+                onSelectResultItem={setSelectedItem}
               />
-              {selectedCategory !== null && (
-                <div className="px-4 mt-3">
-                  {isCategoryFeedLoading || categoryFeedItems === null ? (
-                    <FreeFeedSkeleton />
-                  ) : categoryFeedItems.length > 0 ? (
-                    <>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                        {categoryFeedItems.map((item) => (
-                          <FeedCard key={item.id} item={item} onSelect={setSelectedItem} />
-                        ))}
-                      </div>
-                      {/* [중분류 데이터 로딩 속도 개선 - 페이지네이션 도입](2026-09-04
-                          사용자 지시): 처음부터 전부 불러오지 않고, 더 볼 사람만 눌러서
-                          다음 페이지를 이어붙인다("적절한 단위의 끊어읽기"). */}
-                      {categoryFeedHasMore && (
-                        <div className="mt-3 flex justify-center">
-                          <button
-                            type="button"
-                            onClick={loadMoreCategoryFeed}
-                            disabled={isCategoryFeedLoadingMore}
-                            className="rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
-                          >
-                            {isCategoryFeedLoadingMore ? '불러오는 중...' : '더보기'}
-                          </button>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <p className="text-sm text-gray-400">조건에 맞는 행사를 찾는 중입니다.</p>
-                  )}
-                </div>
-              )}
             </section>
 
             {/* Task 9-6-10(2026-08-23): 하단 탭 재편으로 이 화면("이벤트픽")은 항상 events만

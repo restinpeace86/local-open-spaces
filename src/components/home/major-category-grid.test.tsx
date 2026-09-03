@@ -1,6 +1,38 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { MajorCategoryGrid } from './major-category-grid';
+import { NearbyItem } from '@/lib/spaces/get-nearby';
+
+function nearbyItem(overrides: Partial<NearbyItem> = {}): NearbyItem {
+  return {
+    id: 'item-1',
+    name: '테스트 결과',
+    category: 'EXPERIENCE_CLASS',
+    category_min: '도시농업',
+    distance_meters: 500,
+    item_type: 'EVENT',
+    lng: 127,
+    lat: 37.5,
+    address: null,
+    thumbnail_url: null,
+    start_date: null,
+    end_date: null,
+    reservation_start_date: null,
+    reservation_end_date: null,
+    reservation_url: null,
+    is_reservation_required: null,
+    operating_hours: null,
+    is_free: null,
+    info_url: null,
+    is_kids_friendly: null,
+    has_parking: null,
+    stroller_accessible: null,
+    facility_type: null,
+    target_age_group: null,
+    booking_status: null,
+    ...overrides,
+  };
+}
 
 // [대분류·중분류 드릴다운 개편](2026-08-27 사용자 지시): 7대 대분류(category_maj) 아이콘 →
 // 선택 시 중분류(category_min) 칩 목록 → 중분류 선택 시 실제 조회 콜백 호출.
@@ -70,7 +102,11 @@ describe('MajorCategoryGrid', () => {
   // 받으므로, onSelectMaj를 no-op으로 두면 클릭해도 prop이 바뀌지 않아(실제 부모라면
   // 리렌더로 반영됨) activeOption이 계속 null로 남는다 — 아이콘 클릭은 isSheetOpen만
   // 토글하는 용도로만 쓴다.
-  it('중분류 클릭 시 onSelectMin(중분류값)이 호출되고 시트가 닫힌다', () => {
+  // [바텀시트 구조 복구 및 재적용](2026-09-04 사용자 지시): "중분류를 고르면 데이터가
+  // 바텀시트가 아니라 이벤트픽 화면에서 나온다"는 지적에 따라, 이제 중분류를 골라도
+  // 시트를 닫지 않는다(결과를 같은 시트 안에서 보여줘야 하므로) — 예전에는 선택 즉시
+  // 시트가 닫혔었다(과거 동작을 이 테스트 이름으로 남겨 대조한다).
+  it('중분류 클릭 시 onSelectMin(중분류값)이 호출되지만, 시트는 닫히지 않고 그대로 열려 있다', () => {
     const onSelectMin = vi.fn();
     render(
       <MajorCategoryGrid selectedMaj="체험 / 농장" onSelectMaj={() => {}} selectedMin={null} onSelectMin={onSelectMin} />
@@ -80,7 +116,8 @@ describe('MajorCategoryGrid', () => {
     fireEvent.click(screen.getByText('도시농업'));
 
     expect(onSelectMin).toHaveBeenCalledWith('도시농업');
-    expect(screen.queryByText('도시농업')).not.toBeInTheDocument(); // 선택 후 시트가 닫혀 사라짐
+    expect(screen.getByText('도시농업')).toBeInTheDocument(); // 시트가 열린 채 칩도 그대로 보인다
+    expect(screen.getByLabelText('닫기')).toBeInTheDocument();
   });
 
   it('✕ 버튼을 누르면 시트가 닫힌다', () => {
@@ -180,5 +217,197 @@ describe('MajorCategoryGrid', () => {
     fireEvent.click(screen.getByText('체험 / 농장').closest('button')!);
     expect(screen.getByText('도시농업')).toBeInTheDocument();
     expect(screen.getByText('농장체험')).toBeInTheDocument();
+  });
+});
+
+// [바텀시트 구조 복구 및 재적용](2026-09-04 사용자 지시): 중분류 선택 결과 카드를 이제
+// 이 시트 안(칩 목록 바로 아래)에 그린다 — 시트 밖(HomeView 본문)에는 더 이상 그리지
+// 않는다.
+describe('MajorCategoryGrid — 결과 피드를 시트 안에 렌더링 (2026-09-04)', () => {
+  it('selectedMin이 있고 결과가 있으면 시트 안에 카드를 렌더링한다', () => {
+    render(
+      <MajorCategoryGrid
+        selectedMaj="체험 / 농장"
+        onSelectMaj={() => {}}
+        selectedMin="도시농업"
+        onSelectMin={() => {}}
+        categoryFeedItems={[nearbyItem({ id: 'r1', name: '도시농업 체험 행사' })]}
+        isCategoryFeedLoading={false}
+      />
+    );
+
+    fireEvent.click(screen.getByText('체험 / 농장').closest('button')!);
+    expect(screen.getByText('도시농업 체험 행사')).toBeInTheDocument();
+    // 칩과 결과 카드가 같은 시트(✕ 닫기 버튼이 있는 컨테이너) 안에 함께 있어야 한다.
+    expect(screen.getByLabelText('닫기')).toBeInTheDocument();
+  });
+
+  it('selectedMin이 있고 로딩 중이면 스켈레톤을 보여준다(결과 카드는 아직 없음)', () => {
+    render(
+      <MajorCategoryGrid
+        selectedMaj="체험 / 농장"
+        onSelectMaj={() => {}}
+        selectedMin="도시농업"
+        onSelectMin={() => {}}
+        categoryFeedItems={null}
+        isCategoryFeedLoading={true}
+      />
+    );
+
+    fireEvent.click(screen.getByText('체험 / 농장').closest('button')!);
+    expect(screen.queryByText('도시농업 체험 행사')).not.toBeInTheDocument();
+  });
+
+  it('selectedMin이 있고 결과가 0건이면 안내 문구를 보여준다', () => {
+    render(
+      <MajorCategoryGrid
+        selectedMaj="체험 / 농장"
+        onSelectMaj={() => {}}
+        selectedMin="도시농업"
+        onSelectMin={() => {}}
+        categoryFeedItems={[]}
+        isCategoryFeedLoading={false}
+      />
+    );
+
+    fireEvent.click(screen.getByText('체험 / 농장').closest('button')!);
+    expect(screen.getByText('조건에 맞는 행사를 찾는 중입니다.')).toBeInTheDocument();
+  });
+
+  it('selectedMin이 없으면(아직 중분류를 안 골랐으면) 결과 영역 자체가 없다', () => {
+    render(
+      <MajorCategoryGrid
+        selectedMaj="체험 / 농장"
+        onSelectMaj={() => {}}
+        selectedMin={null}
+        onSelectMin={() => {}}
+        categoryFeedItems={[nearbyItem({ id: 'r1', name: '도시농업 체험 행사' })]}
+        isCategoryFeedLoading={false}
+      />
+    );
+
+    fireEvent.click(screen.getByText('체험 / 농장').closest('button')!);
+    expect(screen.queryByText('도시농업 체험 행사')).not.toBeInTheDocument();
+  });
+
+  it('결과 카드를 누르면 onSelectResultItem이 그 아이템으로 호출된다', () => {
+    const onSelectResultItem = vi.fn();
+    const item = nearbyItem({ id: 'r1', name: '도시농업 체험 행사' });
+    render(
+      <MajorCategoryGrid
+        selectedMaj="체험 / 농장"
+        onSelectMaj={() => {}}
+        selectedMin="도시농업"
+        onSelectMin={() => {}}
+        categoryFeedItems={[item]}
+        isCategoryFeedLoading={false}
+        onSelectResultItem={onSelectResultItem}
+      />
+    );
+
+    fireEvent.click(screen.getByText('체험 / 농장').closest('button')!);
+    fireEvent.click(screen.getByText('도시농업 체험 행사'));
+    expect(onSelectResultItem).toHaveBeenCalledWith(item);
+  });
+});
+
+// [무한 스크롤 도입](2026-09-04 사용자 지시): "더보기 버튼 말고 무한 스크롤로" — 시트
+// 스크롤 컨테이너가 바닥 근처에 닿으면 onLoadMoreCategoryFeed를 호출하는지 검증한다.
+// jsdom은 실제 레이아웃을 계산하지 않아 scrollHeight/clientHeight가 항상 0이므로,
+// Object.defineProperty로 값을 직접 주입해 "바닥에 가까움"/"아직 멀음" 상황을 재현한다.
+describe('MajorCategoryGrid — 결과 무한 스크롤 (2026-09-04)', () => {
+  function fireScrollNearBottom(container: Element, overrides: Partial<{ scrollHeight: number; scrollTop: number; clientHeight: number }> = {}) {
+    const el = container.querySelector('.overflow-y-auto')!;
+    const values = { scrollHeight: 1000, scrollTop: 900, clientHeight: 100, ...overrides };
+    for (const [key, value] of Object.entries(values)) {
+      Object.defineProperty(el, key, { value, configurable: true });
+    }
+    fireEvent.scroll(el);
+  }
+
+  it('바닥 근처까지 스크롤하면 onLoadMoreCategoryFeed를 호출한다(더 볼 결과가 있을 때)', () => {
+    const onLoadMoreCategoryFeed = vi.fn();
+    const { container } = render(
+      <MajorCategoryGrid
+        selectedMaj="체험 / 농장"
+        onSelectMaj={() => {}}
+        selectedMin="도시농업"
+        onSelectMin={() => {}}
+        categoryFeedItems={[nearbyItem({ id: 'r1', name: '도시농업 체험 행사' })]}
+        isCategoryFeedLoading={false}
+        categoryFeedHasMore={true}
+        onLoadMoreCategoryFeed={onLoadMoreCategoryFeed}
+      />
+    );
+    fireEvent.click(screen.getByText('체험 / 농장').closest('button')!);
+
+    fireScrollNearBottom(container, { scrollHeight: 1000, scrollTop: 900, clientHeight: 100 }); // 남은 거리 0px
+
+    expect(onLoadMoreCategoryFeed).toHaveBeenCalledTimes(1);
+  });
+
+  it('아직 바닥에서 멀면 onLoadMoreCategoryFeed를 호출하지 않는다', () => {
+    const onLoadMoreCategoryFeed = vi.fn();
+    const { container } = render(
+      <MajorCategoryGrid
+        selectedMaj="체험 / 농장"
+        onSelectMaj={() => {}}
+        selectedMin="도시농업"
+        onSelectMin={() => {}}
+        categoryFeedItems={[nearbyItem({ id: 'r1', name: '도시농업 체험 행사' })]}
+        isCategoryFeedLoading={false}
+        categoryFeedHasMore={true}
+        onLoadMoreCategoryFeed={onLoadMoreCategoryFeed}
+      />
+    );
+    fireEvent.click(screen.getByText('체험 / 농장').closest('button')!);
+
+    fireScrollNearBottom(container, { scrollHeight: 1000, scrollTop: 300, clientHeight: 100 }); // 남은 거리 600px
+
+    expect(onLoadMoreCategoryFeed).not.toHaveBeenCalled();
+  });
+
+  it('더 볼 결과가 없으면(hasMore=false) 바닥에 닿아도 호출하지 않는다', () => {
+    const onLoadMoreCategoryFeed = vi.fn();
+    const { container } = render(
+      <MajorCategoryGrid
+        selectedMaj="체험 / 농장"
+        onSelectMaj={() => {}}
+        selectedMin="도시농업"
+        onSelectMin={() => {}}
+        categoryFeedItems={[nearbyItem({ id: 'r1', name: '도시농업 체험 행사' })]}
+        isCategoryFeedLoading={false}
+        categoryFeedHasMore={false}
+        onLoadMoreCategoryFeed={onLoadMoreCategoryFeed}
+      />
+    );
+    fireEvent.click(screen.getByText('체험 / 농장').closest('button')!);
+
+    fireScrollNearBottom(container);
+
+    expect(onLoadMoreCategoryFeed).not.toHaveBeenCalled();
+  });
+
+  it('이미 다음 페이지를 불러오는 중이면(isCategoryFeedLoadingMore=true) 중복 호출하지 않는다', () => {
+    const onLoadMoreCategoryFeed = vi.fn();
+    const { container } = render(
+      <MajorCategoryGrid
+        selectedMaj="체험 / 농장"
+        onSelectMaj={() => {}}
+        selectedMin="도시농업"
+        onSelectMin={() => {}}
+        categoryFeedItems={[nearbyItem({ id: 'r1', name: '도시농업 체험 행사' })]}
+        isCategoryFeedLoading={false}
+        isCategoryFeedLoadingMore={true}
+        categoryFeedHasMore={true}
+        onLoadMoreCategoryFeed={onLoadMoreCategoryFeed}
+      />
+    );
+    fireEvent.click(screen.getByText('체험 / 농장').closest('button')!);
+
+    fireScrollNearBottom(container);
+
+    expect(onLoadMoreCategoryFeed).not.toHaveBeenCalled();
+    expect(screen.getByText('불러오는 중...')).toBeInTheDocument();
   });
 });
