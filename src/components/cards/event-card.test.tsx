@@ -90,29 +90,31 @@ describe('EventCard hideBadgeKeys', () => {
   });
 });
 
-// [EventCard 이미지:텍스트 4:6 포션 고정](2026-08-29 사용자 지시): 카드 고정 높이 안에서
-// 이미지/텍스트 영역이 flex-[4]/flex-[6]로 정확히 나뉘는지 검증한다(사용자 확인: 중분류
-// 태그·상태 라벨·마감임박 배너는 이미지 위 오버레이로 그대로 유지).
-describe('EventCard 이미지:텍스트 4:6 포션', () => {
-  it('이미지 영역은 flex-[4], 텍스트 영역은 flex-[6]으로 고정된다', () => {
+// [EventCard 이미지:텍스트 포션 고정](2026-08-29 사용자 지시, 2026-09-03 비율 5:5로
+// 조정): 카드 고정 높이 안에서 이미지/텍스트 영역이 flex-[5]/flex-[5]로 정확히
+// 나뉘는지 검증한다(사용자 확인: 중분류 태그·상태 라벨·마감임박 배너는 이미지 위
+// 오버레이로 그대로 유지).
+describe('EventCard 이미지:텍스트 5:5 포션 (2026-09-03)', () => {
+  it('이미지 영역과 텍스트 영역이 flex-[5]/flex-[5]로 동일하게 고정된다', () => {
     render(<EventCard item={makeEventItem()} onSelect={() => {}} />);
 
     const title = screen.getByText('도시농업 체험');
     const textArea = title.parentElement!;
     const imageArea = textArea.previousElementSibling!;
 
-    expect(imageArea).toHaveClass('flex-[4]');
-    expect(textArea).toHaveClass('flex-[6]');
+    expect(imageArea).toHaveClass('flex-[5]');
+    expect(textArea).toHaveClass('flex-[5]');
   });
 
   // [카드 내 이미지/텍스트 영역 비율 불일치 진짜 원인](2026-08-30 사용자 재확인): 이미지
-  // 영역(flex-[4])에 min-h-0이 없으면, flex 아이템 기본값(min-height:auto)이 <img>의
+  // 영역에 min-h-0이 없으면, flex 아이템 기본값(min-height:auto)이 <img>의
   // min-content 크기(원본 이미지 가로세로 비율을 폭에 대입한 높이)를 존중해 버려 썸네일마다
   // 이미지 영역 실제 렌더링 높이가 제각각이 된다(jsdom은 실제 레이아웃을 계산하지 않아 이
   // 버그 자체를 유닛 테스트로 재현할 수는 없다 — Playwright로 실제 브라우저 렌더링 높이를
-  // 실측해 8장 전부 92px:162px로 고정됨을 확인했다, 구현 기록 참고). 이 테스트는 최소한
-  // 그 수정에 필요한 min-h-0 클래스가 유지되는지만 회귀 방지한다.
-  it('이미지 영역에 min-h-0이 있어 원본 이미지 비율과 무관하게 flex-[4] 높이가 강제된다', () => {
+  // 실측해 8장 전부 92px:162px로 고정됨을 확인했다, 구현 기록 참고 — 4:6이던 당시 실측값이며
+  // 5:5로 바뀐 지금은 비율만 다를 뿐 원리는 동일하다). 이 테스트는 최소한 그 수정에 필요한
+  // min-h-0 클래스가 유지되는지만 회귀 방지한다.
+  it('이미지 영역에 min-h-0이 있어 원본 이미지 비율과 무관하게 flex-[5] 높이가 강제된다', () => {
     render(<EventCard item={makeEventItem()} onSelect={() => {}} />);
 
     const title = screen.getByText('도시농업 체험');
@@ -196,9 +198,10 @@ describe('EventCard 카드 높이/뱃지 정리 (2026-09-03)', () => {
 
 // [카드 내 이미지/텍스트 영역 비율 불일치 수정](2026-08-30 사용자 지시): 오늘 마감/오늘
 // 한정 dateBanner가 이미지/텍스트 사이의 별도 flex 행으로 존재하면, 배너가 있는 카드는
-// "전체 높이 - 배너 높이"만 4:6으로 나누고 배너 없는 카드는 전체 높이를 4:6으로 나눠
+// "전체 높이 - 배너 높이"만 비율대로 나누고 배너 없는 카드는 전체 높이를 그 비율로 나눠
 // 같은 크기 래퍼 안에서도 카드마다 이미지/텍스트 크기가 달라졌다 — 배너를 이미지 영역
-// 위 절대 위치 오버레이로 옮겨 배너 유무와 무관하게 항상 동일한 4:6 분할을 보장한다.
+// 위 절대 위치 오버레이로 옮겨 배너 유무와 무관하게 항상 동일한 분할(2026-09-03부터
+// 5:5)을 보장한다.
 describe('EventCard dateBanner가 있어도 이미지:텍스트 비율이 항상 동일하다 (2026-08-30)', () => {
   it('오늘 마감/오늘 한정 배너는 별도 flex 행이 아니라 이미지 영역 위 오버레이로 렌더링된다', () => {
     const today = localTodayStr();
@@ -207,17 +210,17 @@ describe('EventCard dateBanner가 있어도 이미지:텍스트 비율이 항상
     );
 
     const button = container.querySelector('button')!;
-    // 버튼의 최상위 자식은 이미지 영역(flex-[4])/텍스트 영역(flex-[6]) 단 둘뿐이어야 한다 —
-    // 배너가 셋째 자식(별도 flex 행)으로 끼어들면 4:6 분할 기준이 배너 유무에 따라 달라진다.
+    // 버튼의 최상위 자식은 이미지 영역(flex-[5])/텍스트 영역(flex-[5]) 단 둘뿐이어야 한다 —
+    // 배너가 셋째 자식(별도 flex 행)으로 끼어들면 분할 비율이 배너 유무에 따라 달라진다.
     expect(button.children.length).toBe(2);
-    expect(button.children[0]).toHaveClass('flex-[4]');
-    expect(button.children[1]).toHaveClass('flex-[6]');
+    expect(button.children[0]).toHaveClass('flex-[5]');
+    expect(button.children[1]).toHaveClass('flex-[5]');
 
     const banner = screen.getByText('⚡ 오늘 한정');
     expect(button.children[0]).toContainElement(banner);
   });
 
-  it('배너가 있는 카드와 없는 카드 모두 이미지 영역이 동일하게 flex-[4]이다', () => {
+  it('배너가 있는 카드와 없는 카드 모두 이미지 영역이 동일하게 flex-[5]이다', () => {
     const today = localTodayStr();
     const withoutBanner = render(<EventCard item={makeEventItem()} onSelect={() => {}} />);
     const imageAreaWithout = withoutBanner.container.querySelector('button')!.children[0];

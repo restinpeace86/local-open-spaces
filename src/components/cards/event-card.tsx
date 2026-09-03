@@ -19,14 +19,19 @@ import { formatDateRange, formatVenueLine } from '@/lib/spaces/format';
 // 그대로 채우게 하고, 타이틀에는 min-h로 2줄 분량을 항상 예약해 1줄짜리 제목도 흔들리지
 // 않게 한다. 부모가 높이를 지정하지 않는 기존 화면(그리드/오늘 전체보기 등)에서는 h-full이
 // height:auto와 동일하게 동작해 기존 모습에 영향이 없다.
-// [EventCard 이미지:텍스트 4:6 포션 고정](2026-08-29 사용자 지시): 기존에는 이미지 영역을
-// aspect-[16/9](가로세로 비율 기반)로 잡아 카드 실제 높이(h-64 등)와 무관하게 이미지 자체
-// 비율로 높이가 정해졌다 — 이제 이미지/텍스트 두 영역을 flex-[4]/flex-[6]로 명시해 카드의
-// 고정 높이를 정확히 40:60으로 나눈다. 텍스트 영역에 min-h-0 + overflow-hidden을 준 것은
-// flex 아이템의 기본값(min-height:auto)이 내용물 크기만큼은 줄어들지 않으려는 것을 막기
-// 위함이다 — 이게 없으면 뱃지+제목+장소+날짜가 많은 카드에서 텍스트 영역이 60%를 넘겨
-// 버튼 전체 높이가 h-64보다 커져 버릴 수 있다(사용자 확인: 이미지 위 뱃지/마감임박 배너는
-// 그대로 오버레이 유지, 텍스트 영역으로 옮기지 않음).
+// [EventCard 이미지:텍스트 포션 고정](2026-08-29 사용자 지시, 2026-09-03 비율 조정):
+// 기존에는 이미지 영역을 aspect-[16/9](가로세로 비율 기반)로 잡아 카드 실제 높이
+// (h-64 등)와 무관하게 이미지 자체 비율로 높이가 정해졌다 — 이제 이미지/텍스트 두
+// 영역을 flex-[N]으로 명시해 카드의 고정 높이를 정확한 비율로 나눈다. 텍스트 영역에
+// min-h-0 + overflow-hidden을 준 것은 flex 아이템의 기본값(min-height:auto)이 내용물
+// 크기만큼은 줄어들지 않으려는 것을 막기 위함이다 — 이게 없으면 뱃지+제목+장소+날짜가
+// 많은 카드에서 텍스트 영역이 비율을 넘겨 버튼 전체 높이가 카드 높이보다 커져 버릴 수
+// 있다(사용자 확인: 이미지 위 뱃지/마감임박 배너는 그대로 오버레이 유지, 텍스트
+// 영역으로 옮기지 않음).
+// [비율 5:5로 조정](2026-09-03 사용자 지시): 원래 4:6이었으나, 무료/유료·실내야외
+// 뱃지를 이미지 오버레이로 옮기면서(바로 아래 "[카드 높이/뱃지 정리]" 참고) 텍스트
+// 영역에 필요한 공간이 줄어든 만큼, 상대적으로 커진 이미지 영역이 잘 활용되도록
+// flex-[4]/flex-[6] → flex-[5]/flex-[5]로 바꿨다.
 // [카드 내 이미지/텍스트 영역 비율 불일치 수정 1차 시도](2026-08-30): dateBanner(오늘
 // 한정/오늘 마감, 당일 종료 이벤트에만 뜸)를 flex-col의 별도 행에서 이미지 영역 위
 // 절대 위치 오버레이로 옮겼다 — 이 자체는 유효한 개선이라 유지하지만, Playwright로
@@ -87,7 +92,7 @@ export function EventCard({
       onClick={() => onSelect(item)}
       className="h-full text-left rounded-2xl border border-gray-200 bg-white overflow-hidden hover:shadow-md transition-shadow flex flex-col"
     >
-      <div className="relative flex-[4] min-h-0 bg-gray-100">
+      <div className="relative flex-[5] min-h-0 bg-gray-100">
         {dateBanner && (
           <div
             className={`absolute top-0 left-0 right-0 z-10 px-2 py-1 text-[11px] font-bold text-white text-center ${
@@ -141,7 +146,7 @@ export function EventCard({
         )}
       </div>
 
-      <div className="p-3 flex-[6] min-h-0 overflow-hidden flex flex-col gap-1.5">
+      <div className="p-3 flex-[5] min-h-0 overflow-hidden flex flex-col gap-1.5">
         <p className="text-sm font-medium text-gray-900 line-clamp-2 min-h-[2.5rem]">{item.name}</p>
         {venueLine && <p className="text-xs text-gray-400 line-clamp-1">{venueLine}</p>}
         {period && <p className="text-xs text-gray-400 line-clamp-1">{period}</p>}
