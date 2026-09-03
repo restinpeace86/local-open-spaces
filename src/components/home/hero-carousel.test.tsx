@@ -299,14 +299,23 @@ describe('HeroCarousel 4대 뱃지 보완 (Task 9-1-4)', () => {
     vi.useRealTimers();
   });
 
-  it('실내외(facility_type)와 아이동반(kids) 뱃지를 오버레이와 중복 없이 카드 본문에 보완 노출한다', () => {
+  it('실내외(facility_type) 뱃지를 오버레이와 중복 없이 카드 본문에 보완 노출한다', () => {
     const item = makeItem('1', '실내 체험 행사');
     item.facility_type = '실내';
-    item.is_kids_friendly = true;
 
     render(<HeroCarousel items={[item]} onSelect={() => {}} />);
 
     expect(screen.getByText('실내')).toBeInTheDocument();
-    expect(screen.getByText('👶 키즈/어린이')).toBeInTheDocument();
+  });
+
+  // [이벤트 카드 텍스트 영역 뱃지 정리](2026-09-04 사용자 지시): 아이동반(kids) 뱃지는
+  // 더 이상 어디에서도(오버레이/본문 보완 모두) 노출하지 않는다.
+  it('is_kids_friendly=true여도 아이동반 뱃지를 더 이상 보여주지 않는다', () => {
+    const item = makeItem('1', '실내 체험 행사');
+    item.is_kids_friendly = true;
+
+    render(<HeroCarousel items={[item]} onSelect={() => {}} />);
+
+    expect(screen.queryByText('👶 키즈/어린이')).not.toBeInTheDocument();
   });
 });

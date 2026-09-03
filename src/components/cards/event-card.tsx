@@ -13,6 +13,10 @@ import { formatDateRange, formatVenueLine } from '@/lib/spaces/format';
 // 키즈/어린이 뱃지를 빼 달라는 요청 — EventCard는 카테고리 그리드/검색/무료 피드 등 여러
 // 화면에서 공유하는 컴포넌트라(제5장 제4조 기존 구조 우선) 전역으로 뺄 수 없다. 특정 배지
 // key만 선택적으로 숨기는 옵션을 추가해 호출부(ReservationOpenSlider)에서만 적용한다.
+// [이벤트 카드 텍스트 영역 뱃지 정리](2026-09-04 사용자 지시): 위 hideBadgeKeys는 오직
+// 'kids' 뱃지 하나만 숨기는 데 쓰였는데, parental-badges.ts에서 그 뱃지 자체를 아예
+// 만들지 않게 바꿔 더 이상 숨길 대상이 없다 — 이 prop과 필터 로직을 완전히 제거한다
+// (실제로 unused가 된 코드, 제거가 맞다).
 // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시): 가로 슬라이드에서 뱃지 유무/타이틀 줄바꿈에
 // 따라 카드 높이가 제각각이라 스와이프 시 흔들려 보였다 — 버튼에 h-full을 추가해 부모가
 // 정한 높이(그리드/플렉스 기본 stretch 정렬로 이미 형제 중 가장 큰 높이만큼 늘어난 래퍼)를
@@ -61,21 +65,21 @@ import { formatDateRange, formatVenueLine } from '@/lib/spaces/format';
 //      정리한다.
 // 남은 뱃지 중 무료/유료(is_free)와 실내/야외(facility_type)는 이미지 위 하단 좌/우
 // 오버레이로 옮긴다 — 텍스트 영역의 줄 수를 늘리지 않고(이미지 영역은 뱃지가 몇 개든
-// 높이가 그대로다) 정보는 그대로 유지한다. 텍스트 영역에는 접수 임박(booking_status)/
-// 키즈 대상 뱃지만 남아 최대 2개로 줄었다.
+// 높이가 그대로다) 정보는 그대로 유지한다.
+// [이벤트 카드 텍스트 영역 뱃지 정리](2026-09-04 사용자 지시): 키즈/어린이 뱃지도
+// parental-badges.ts에서 아예 제거해, 텍스트 영역에는 이제 접수 임박(booking_status)
+// 뱃지 하나만 남는다(0~1개).
 const IMAGE_OVERLAY_BADGE_KEYS = new Set(['is_free', 'facility_type']);
 
 export function EventCard({
   item,
   onSelect,
-  hideBadgeKeys = [],
 }: {
   item: NearbyItem;
   onSelect: (item: NearbyItem) => void;
-  hideBadgeKeys?: string[];
 }) {
   const meta = getCategoryMeta(item.category);
-  const allBadges = getParentalBadges(item).filter((badge) => !hideBadgeKeys.includes(badge.key));
+  const allBadges = getParentalBadges(item);
   const imageBadges = allBadges.filter((badge) => IMAGE_OVERLAY_BADGE_KEYS.has(badge.key));
   const textBadges = allBadges.filter((badge) => !IMAGE_OVERLAY_BADGE_KEYS.has(badge.key));
   const priceBadge = imageBadges.find((badge) => badge.key === 'is_free');

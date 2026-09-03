@@ -11,6 +11,21 @@
 // get-home-feed.ts의 EXCLUDED_CATEGORY_MIN(나들이/여가와 무관한 시설 대관·행정 시설류 16종)에
 // 해당하는 중분류는 이 목록에서 제외했다 — 선택해도 항상 0건만 나오는 죽은 옵션을 만들지
 // 않기 위함이다(실제 겹치는 항목은 "골프장" 1건뿐, 나머지 15종은 애초에 이 taxonomy에 없다).
+//
+// [이벤트픽 대분류 6종으로 축소](2026-09-04 사용자 지시): 기존 7대 대분류 중 "스포츠 대여"
+// (테니스장/축구장/체육관 등 15개 중분류)를 제거해 6대 대분류(자연/캠핑·공공 키즈카페·
+// 체험/농장·축제/이벤트·문화/전시·배움/클래스)로 축소한다 — 실측으로 확인한 이유: 이
+// 화면은 "오늘 진행 중인 가족 대상 이벤트"만 카운트하는데, 스포츠 대여 15개 중분류 중
+// 12개(테니스장·축구장·체육관·운동장·수영장 등)는 그 조건에 항상 0건이라 바텀시트를 열어도
+// 칩 자체가 하나도 안 보였고, 나머지 3개(스포츠/야구장/풋살장)도 2~4건뿐이었다(개선사항 3의
+// categoryCounts 0건 제외 로직이 의도대로 정상 작동한 결과였을 뿐, 그 로직 자체의 버그는
+// 아니다). 이 시설들은 open_spaces에 실제로 수백 건씩 존재하지만(테니스장 705건 등),
+// getCategoryMinFeed가 캠핑장/체험휴양마을/교육농장/체험학습장(개선사항 4)처럼
+// SHARED_OPEN_SPACES_CATEGORY_MINS에 등록돼 있지 않아 연동되지 않는다 — 사용자가 이번에
+// 이 대분류 자체를 없애기로 확정해, open_spaces 연동을 추가로 넓히는 대신 목록에서 제거한다.
+// 기반 데이터(category_maj='스포츠 대여'로 태깅된 기존 행)는 삭제하지 않는다 — 이 UI
+// 목록에서만 선택할 수 없게 될 뿐이다. 챗봇 vibe taxonomy(search-engine.ts VIBE_CATEGORY_MINS)는
+// 이미 이 6종만 쓰고 있었으므로(2026-09-03) 이제 두 체계가 완전히 일치한다.
 export type CategoryMajOption = {
   maj: string;
   emoji: string;
@@ -39,15 +54,6 @@ export const CATEGORY_MAJ_OPTIONS: CategoryMajOption[] = [
     minorCategories: ['공연장', '전시실', '전시/관람', '미술제작', '공예/취미', '역사'],
   },
   { maj: '배움 / 클래스', emoji: '📚', color: '#f43f5e', minorCategories: ['교육체험', '교양/어학', '교육시설'] },
-  {
-    maj: '스포츠 대여',
-    emoji: '🏀',
-    color: '#ea580c',
-    minorCategories: [
-      '테니스장', '풋살장', '축구장', '체육관', '농구장', '족구장', '야구장',
-      '다목적경기장', '배드민턴장', '탁구장', '배구장', '수영장', '운동장', '피클볼장', '스포츠',
-    ],
-  },
 ];
 
 const ALL_MINOR_CATEGORIES = new Set(CATEGORY_MAJ_OPTIONS.flatMap((opt) => opt.minorCategories));

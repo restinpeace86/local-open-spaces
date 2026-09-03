@@ -209,6 +209,49 @@ describe('HomeView', () => {
       expect(screen.queryByText('도시농업 체험 행사')).not.toBeInTheDocument();
       expect(screen.getByText('캠핑장')).toBeInTheDocument();
     });
+
+    // [중분류 데이터 로딩 속도 개선 - 페이지네이션 도입](2026-09-04 사용자 지시): 1페이지를
+    // 처음부터 전부 불러오는 대신, hasMore=true일 때만 "더보기" 버튼을 보여주고 눌렀을 때만
+    // offset을 실어 다음 페이지를 요청해 기존 카드 뒤에 이어붙이는지 검증한다.
+    it('hasMore=true면 "더보기" 버튼이 보이고, 누르면 offset으로 다음 페이지를 이어붙인다', async () => {
+      const fetchMock = vi.fn((url: string) => {
+        if (url.startsWith('/api/home/category-feed')) {
+          if (url.includes('offset=')) {
+            return Promise.resolve({
+              json: () =>
+                Promise.resolve({ items: [makeEventItem({ id: 'farm-2', name: '두 번째 페이지 행사' })], hasMore: false }),
+            } as Response);
+          }
+          return Promise.resolve({
+            json: () =>
+              Promise.resolve({ items: [makeEventItem({ id: 'farm-1', name: '도시농업 체험 행사' })], hasMore: true }),
+          } as Response);
+        }
+        if (url.startsWith('/api/home/free-feed')) {
+          return Promise.resolve({ json: () => Promise.resolve({ freeFeed: [] }) } as Response);
+        }
+        return Promise.resolve({ json: () => Promise.resolve({ heroEvents: [] }) } as Response);
+      });
+      vi.stubGlobal('fetch', fetchMock);
+
+      render(<HomeView initialHeroEvents={[]} />);
+
+      fireEvent.click(screen.getByText('체험 / 농장'));
+      fireEvent.click(screen.getByText('도시농업'));
+      expect(await screen.findByText('도시농업 체험 행사')).toBeInTheDocument();
+      expect(screen.getByText('더보기')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText('더보기'));
+
+      expect(await screen.findByText('두 번째 페이지 행사')).toBeInTheDocument();
+      // 1페이지 카드도 그대로 남아 있어야 한다(교체가 아니라 이어붙이기).
+      expect(screen.getByText('도시농업 체험 행사')).toBeInTheDocument();
+      // 2페이지 응답의 hasMore=false를 반영해 버튼이 사라진다.
+      expect(screen.queryByText('더보기')).not.toBeInTheDocument();
+
+      const secondPageCall = fetchMock.mock.calls.map((call) => call[0]).find((url) => url.includes('offset='));
+      expect(secondPageCall).toContain('offset=1');
+    });
   });
 
   // [홈 화면 큐레이션 섹션 추가 및 상단 탭 정리](2026-08-30 사용자 지시) 요구사항 1:

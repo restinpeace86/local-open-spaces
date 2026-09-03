@@ -108,38 +108,75 @@ function useThemeSpotFeed(region: { sigunguName: string | null; lat?: number; ln
 // 클릭 시에만 지연 페칭). 이 화면은 항상 events만 다루므로(Task 9-6-10) dataType 파라미터는
 // 넘기지 않는다. 이제 선택 대상은 event_type이 아니라 중분류(category_min) 값이다 — 대분류를
 // 바꾸면 이전 중분류 선택이 더 이상 유효하지 않으므로 reset()으로 지운다.
+// [중분류 데이터 로딩 속도 개선 - 페이지네이션 도입](2026-09-04 사용자 지시): "중분류
+// 선택 시 데이터가 한 번에 너무 많이 불려와 로딩이 지연되는 문제"를 해결하기 위해,
+// 처음엔 1페이지(20건)만 받고 "더보기" 클릭 시에만 다음 페이지를 이어붙인다(끊어읽기).
+// isLoadingMore을 isLoading과 분리한 이유: 더보기 중에는 이미 보이는 카드들을
+// 스켈레톤으로 가리지 않고 그대로 둔 채 버튼만 로딩 상태로 바꿔야 자연스럽다.
 function useCategoryFeed(region: { sigunguName: string | null; lat?: number; lng?: number }) {
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [items, setItems] = useState<NearbyItem[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
 
-  const selectCategory = useCallback(
-    (category: string) => {
-      setSelectedCategory(category);
-      setItems(null);
-      setIsLoading(true);
-
+  const fetchPage = useCallback(
+    (category: string, offset: number) => {
       const params = new URLSearchParams({ category });
       if (region.sigunguName) params.set('sigungu', region.sigunguName);
       if (typeof region.lat === 'number') params.set('lat', String(region.lat));
       if (typeof region.lng === 'number') params.set('lng', String(region.lng));
-
-      fetch(`/api/home/category-feed?${params.toString()}`)
-        .then((res) => res.json())
-        .then((data: { items?: NearbyItem[] }) => setItems(Array.isArray(data.items) ? data.items : []))
-        .catch(() => setItems([]))
-        .finally(() => setIsLoading(false));
+      if (offset > 0) params.set('offset', String(offset));
+      return fetch(`/api/home/category-feed?${params.toString()}`).then(
+        (res) => res.json() as Promise<{ items?: NearbyItem[]; hasMore?: boolean }>
+      );
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [region.sigunguName, region.lat, region.lng]
   );
 
+  const selectCategory = useCallback(
+    (category: string) => {
+      setSelectedCategory(category);
+      setItems(null);
+      setHasMore(false);
+      setIsLoading(true);
+
+      fetchPage(category, 0)
+        .then((data) => {
+          setItems(Array.isArray(data.items) ? data.items : []);
+          setHasMore(Boolean(data.hasMore));
+        })
+        .catch(() => {
+          setItems([]);
+          setHasMore(false);
+        })
+        .finally(() => setIsLoading(false));
+    },
+    [fetchPage]
+  );
+
+  const loadMore = useCallback(() => {
+    if (!selectedCategory || isLoadingMore) return;
+    setIsLoadingMore(true);
+
+    fetchPage(selectedCategory, items?.length ?? 0)
+      .then((data) => {
+        const nextItems = Array.isArray(data.items) ? data.items : [];
+        setItems((prev) => [...(prev ?? []), ...nextItems]);
+        setHasMore(Boolean(data.hasMore));
+      })
+      .catch(() => setHasMore(false))
+      .finally(() => setIsLoadingMore(false));
+  }, [selectedCategory, items, isLoadingMore, fetchPage]);
+
   const reset = useCallback(() => {
     setSelectedCategory(null);
     setItems(null);
+    setHasMore(false);
   }, []);
 
-  return { selectedCategory, items, isLoading, selectCategory, reset };
+  return { selectedCategory, items, isLoading, isLoadingMore, hasMore, selectCategory, loadMore, reset };
 }
 
 // [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "GNB 헤더 & 글로벌 위치 상태 공유"):
@@ -210,7 +247,10 @@ export function HomeView({
     selectedCategory,
     items: categoryFeedItems,
     isLoading: isCategoryFeedLoading,
+    isLoadingMore: isCategoryFeedLoadingMore,
+    hasMore: categoryFeedHasMore,
     selectCategory,
+    loadMore: loadMoreCategoryFeed,
     reset: resetCategoryFeed,
   } = useCategoryFeed(region);
   // [대분류·중분류 드릴다운 개편](2026-08-27 사용자 지시): 대분류 선택은 순수 UI 상태라(조회를
@@ -351,11 +391,28 @@ export function HomeView({
                   {isCategoryFeedLoading || categoryFeedItems === null ? (
                     <FreeFeedSkeleton />
                   ) : categoryFeedItems.length > 0 ? (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                      {categoryFeedItems.map((item) => (
-                        <FeedCard key={item.id} item={item} onSelect={setSelectedItem} />
-                      ))}
-                    </div>
+                    <>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                        {categoryFeedItems.map((item) => (
+                          <FeedCard key={item.id} item={item} onSelect={setSelectedItem} />
+                        ))}
+                      </div>
+                      {/* [중분류 데이터 로딩 속도 개선 - 페이지네이션 도입](2026-09-04
+                          사용자 지시): 처음부터 전부 불러오지 않고, 더 볼 사람만 눌러서
+                          다음 페이지를 이어붙인다("적절한 단위의 끊어읽기"). */}
+                      {categoryFeedHasMore && (
+                        <div className="mt-3 flex justify-center">
+                          <button
+                            type="button"
+                            onClick={loadMoreCategoryFeed}
+                            disabled={isCategoryFeedLoadingMore}
+                            className="rounded-full border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                          >
+                            {isCategoryFeedLoadingMore ? '불러오는 중...' : '더보기'}
+                          </button>
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <p className="text-sm text-gray-400">조건에 맞는 행사를 찾는 중입니다.</p>
                   )}

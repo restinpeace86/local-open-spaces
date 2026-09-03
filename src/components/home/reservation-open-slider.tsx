@@ -11,6 +11,9 @@ import { EventCard } from '@/components/cards/event-card';
 // [카드 뱃지 문구 정리](2026-08-27 사용자 지시): 이 컴포넌트의 두 소비처("현재 이용 가능"/
 // "예약 가능") 모두에서 키즈/어린이 뱃지를 뺀다 — 이미 타겟 연령 필터(4종)로 좁혀진 화면이라
 // 뱃지로 다시 강조할 필요가 적다는 지적.
+// [이벤트 카드 텍스트 영역 뱃지 정리](2026-09-04 사용자 지시): 키즈/어린이 뱃지를 EventCard
+// 전역(parental-badges.ts)에서 아예 없앴으므로, 여기서만 특별히 숨기던 hideBadgeKeys={['kids']}
+// 지정은 더 이상 필요 없다 — 제거.
 // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시): 카드마다 뱃지/타이틀 줄바꿈 유무가 달라 높이가
 // 제각각이던 문제 — 래퍼에 고정 높이를 주면 EventCard의 h-full이 그 높이를 그대로
 // 채워 폭(w-40)·높이 모두 고정된 동일 규격 카드가 된다.
@@ -34,7 +37,7 @@ export function ReservationOpenSlider({
     <div className="flex gap-3 overflow-x-auto px-4 pb-1 snap-x snap-mandatory">
       {items.map((item) => (
         <div key={item.id} className="shrink-0 w-40 h-56 snap-start [scroll-snap-stop:always]">
-          <EventCard item={item} onSelect={onSelect} hideBadgeKeys={['kids']} />
+          <EventCard item={item} onSelect={onSelect} />
         </div>
       ))}
     </div>

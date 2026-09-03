@@ -128,8 +128,13 @@ describe('getParentalBadges (EVENT)', () => {
     expect(badges.some((b) => b.key === 'is_free')).toBe(false);
   });
 
-  it('target_age_group이 영유아면 유아전용 뱃지를 노출한다', () => {
-    const badges = getParentalBadges(makeEvent({ target_age_group: '영유아' }));
-    expect(badges).toContainEqual({ key: 'kids', label: '👶 유아전용' });
+  // [이벤트 카드 텍스트 영역 뱃지 정리](2026-09-04 사용자 지시): 이벤트 카드에서는 키즈/
+  // 어린이 관련 뱃지(kids)를 완전히 제거한다 — is_kids_friendly/target_age_group 값과
+  // 무관하게 더 이상 만들어지지 않아야 한다(getSpaceBadges의 'kids' 뱃지는 이번 지시
+  // 대상이 아니므로 그대로 유지된다, 위 getParentalBadges(SPACE) 스위트 참고).
+  it('target_age_group/is_kids_friendly 값과 무관하게 kids 뱃지를 만들지 않는다', () => {
+    expect(getParentalBadges(makeEvent({ target_age_group: '영유아' })).some((b) => b.key === 'kids')).toBe(false);
+    expect(getParentalBadges(makeEvent({ target_age_group: '초등' })).some((b) => b.key === 'kids')).toBe(false);
+    expect(getParentalBadges(makeEvent({ is_kids_friendly: true })).some((b) => b.key === 'kids')).toBe(false);
   });
 });

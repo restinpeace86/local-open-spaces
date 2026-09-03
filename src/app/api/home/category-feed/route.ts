@@ -8,6 +8,13 @@ import { isKnownCategoryMin } from '@/lib/spaces/category-maj-meta';
 // 순서대로 선택했을 때만 호출한다(쿼리 파라미터 이름은 하위 호환을 위해 그대로 `category`를
 // 쓰지만, 값 자체는 이제 event_type이 아니라 category_min이다) — /api/home/theme-feed와
 // 쿼리 파라미터 규약(sigungu/lat/lng)을 동일하게 맞춘다.
+const CATEGORY_FEED_PAGE_SIZE = 20;
+
+// [중분류 데이터 로딩 속도 개선 - 페이지네이션 도입](2026-09-04 사용자 지시): "더보기"가
+// 다음 페이지를 요청할 수 있도록 offset 쿼리 파라미터를 추가한다(기본 0 = 기존 동작과
+// 동일). hasMore는 "이번 페이지가 꽉 찼는지"로 판단하는 표준적인 휴리스틱이다 — 정확히
+// 페이지 크기만큼 왔으면 다음 페이지가 있을 가능성이 있다고 보고, 그보다 적게 왔으면
+// (마지막 페이지까지 다 읽었다는 뜻) 더 없다고 확정한다.
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
@@ -22,13 +29,16 @@ export async function GET(request: NextRequest) {
     const hasCoords =
       searchParams.has('lat') && searchParams.has('lng') && Number.isFinite(latParam) && Number.isFinite(lngParam);
 
+    const offsetParam = Number(searchParams.get('offset'));
+    const offset = Number.isFinite(offsetParam) && offsetParam > 0 ? Math.floor(offsetParam) : 0;
+
     const region: HomeRegion = {
       sigunguName: sigunguParam || DEFAULT_HOME_REGION.sigunguName,
       ...(hasCoords ? { lat: latParam, lng: lngParam } : {}),
     };
 
-    const items = await getCategoryMinFeed(categoryParam, 20, region);
-    return NextResponse.json({ items });
+    const items = await getCategoryMinFeed(categoryParam, CATEGORY_FEED_PAGE_SIZE, region, offset);
+    return NextResponse.json({ items, hasMore: items.length === CATEGORY_FEED_PAGE_SIZE });
   } catch (err) {
     const message = err instanceof Error ? err.message : '카테고리 피드 조회 실패';
     return NextResponse.json({ error: message }, { status: 500 });

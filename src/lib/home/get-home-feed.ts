@@ -331,13 +331,18 @@ function rankByRegion(
   return [...items].sort((a, b) => tierFn(a, region) - tierFn(b, region));
 }
 
+// [중분류 데이터 로딩 속도 개선 - 페이지네이션 도입](2026-09-04 사용자 지시): 이 함수의
+// 유일한 호출부(getCategoryMinFeed)가 "더보기" 다음 페이지를 요청할 수 있도록 offset을
+// 추가했다 — 다른 호출부가 없어(주석 참고, selectRegionFirst는 getCategoryMinFeed
+// 전용) 시그니처를 바꿔도 영향받는 다른 코드가 없다.
 function selectRegionFirst(
   items: NearbyItem[],
   region: HomeRegion,
+  offset: number,
   limit: number,
   tierFn: (item: NearbyItem, region: HomeRegion) => number = regionTier
 ): NearbyItem[] {
-  return rankByRegion(items, region, tierFn).slice(0, limit);
+  return rankByRegion(items, region, tierFn).slice(offset, offset + limit);
 }
 
 // [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "Hero 카드 구역"): "사용자 위치가
@@ -1044,13 +1049,29 @@ export async function getThemeSpotFeed(
 // 함수가 반환하는 NearbyItem은 애초에 화면 표시용 DTO이지 원본 로우 자체가 아니다).
 const SHARED_OPEN_SPACES_CATEGORY_MINS = new Set(['캠핑장', '체험휴양마을', '교육농장', '체험학습장']);
 
+// [중분류 데이터 로딩 속도 개선 - 페이지네이션 도입](2026-09-04 사용자 지시): 기존에는
+// "지역 우선순위 재정렬" 품질을 위해 매 요청마다 이벤트/공간 각각 최대 500건씩(그것도
+// 지역 범위를 3단계로 넓혀가며 최대 3번, 실측: 최악의 경우 한 테이블당 최대 1,500건)
+// 미리 가져온 뒤 정작 화면에는 20건만 보여줬다 — 흔한 중분류(예: 캠핑장 3,857건)일수록
+// 이 500건 상한을 항상 그대로 채워, 필요한 데이터양(20건)과 실제로 내려받는 데이터양의
+// 격차가 커서 응답이 느려지는 직접적인 원인이었다. "더보기"로 다음 페이지를 요청할 수
+// 있게 되면서 이번 페이지가 필요로 하는 만큼(offset+limit)에 지역 우선순위 재정렬용
+// 여유분만 살짝 더해 가져오는 것으로 충분해졌다 — 안전망으로 500 상한은 그대로 두되
+// (region 필터 없는 마지막 폴백 단계 등 극단적인 경우 대비), 평소에는 이전보다 훨씬
+// 적게 가져온다(예: 1페이지 기준 500 → 80).
+const PAGINATION_OVERFETCH_BUFFER = 60;
+const PAGINATION_OVERFETCH_CEILING = 500;
+
 export async function getCategoryMinFeed(
   categoryMin: string,
   limit = 20,
-  region: HomeRegion = DEFAULT_HOME_REGION
+  region: HomeRegion = DEFAULT_HOME_REGION,
+  offset = 0
 ): Promise<NearbyItem[]> {
   const supabase = await createClient();
   const today = new Date().toISOString().slice(0, 10);
+  const minRequired = offset + limit;
+  const overFetchLimit = Math.min(PAGINATION_OVERFETCH_CEILING, minRequired + PAGINATION_OVERFETCH_BUFFER);
 
   const buildEventQuery = (token: string | readonly string[] | null) => {
     let query = supabase
@@ -1064,7 +1085,7 @@ export async function getCategoryMinFeed(
       .lte('start_date', today)
       .gte('end_date', today);
     if (token) query = query.or(regionOrFilter(token, 'venue_name'));
-    return query.order('start_date', { ascending: false }).limit(500);
+    return query.order('start_date', { ascending: false }).limit(overFetchLimit);
   };
 
   const buildSpaceQuery = (token: string | readonly string[] | null) => {
@@ -1074,13 +1095,13 @@ export async function getCategoryMinFeed(
       .eq('category_min', categoryMin)
       .eq('location_precision', 'EXACT');
     if (token) query = query.or(regionOrFilter(token, 'address'));
-    return query.limit(500);
+    return query.limit(overFetchLimit);
   };
 
   const isSharedCategory = SHARED_OPEN_SPACES_CATEGORY_MINS.has(categoryMin);
   const [eventData, spaceData] = await Promise.all([
-    fetchRegionFirstRows<EventRow>(buildEventQuery, region, limit),
-    isSharedCategory ? fetchRegionFirstRows<SpaceRow>(buildSpaceQuery, region, limit) : Promise.resolve([]),
+    fetchRegionFirstRows<EventRow>(buildEventQuery, region, minRequired),
+    isSharedCategory ? fetchRegionFirstRows<SpaceRow>(buildSpaceQuery, region, minRequired) : Promise.resolve([]),
   ]);
 
   // [상시 뱃지] toSpaceItem은 start_date/end_date를 항상 null로 채운다 — EventCard의
@@ -1089,7 +1110,7 @@ export async function getCategoryMinFeed(
   const spaceItems = spaceData.map((row) => ({ ...toSpaceItem(row), item_type: 'EVENT' as const }));
   const items = dedupeAndMergeFree([...eventData.map(toEventItem), ...spaceItems]);
   const ordered = sortByDistanceIfKnown(items, region);
-  return selectRegionFirst(ordered, region, limit);
+  return selectRegionFirst(ordered, region, offset, limit);
 }
 
 // [todo.md 개선사항 3](2026-09-03): 실측으로 발견한 원인 — 대분류/중분류 바텀시트 배선

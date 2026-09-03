@@ -75,10 +75,13 @@ describe('resolveCategoryForRow', () => {
       category_min_source: 'RULE',
     });
 
+    // [이벤트픽 대분류 6종으로 축소](2026-09-04 사용자 지시): "스포츠 대여" 대분류 자체를
+    // 없앴으므로, category_min은 여전히 키워드로 매칭되지만(수영장) category_maj는 이제
+    // 없는 대분류라 null이다.
     const nullRow = { title: '올림픽수영장 강습', category_min: null, category_min_source: null };
     expect(resolveCategoryForRow(nullRow)).toEqual({
       category_min: '수영장',
-      category_maj: '스포츠 대여',
+      category_maj: null,
       category_min_source: 'RULE',
     });
   });
@@ -123,9 +126,22 @@ describe('matchCategoryMinByKeyword', () => {
 });
 
 describe('CATEGORY_MAJ_OF', () => {
-  it('36개 중분류 모두 7대 대분류 중 하나에 속한다', () => {
-    const majValues = new Set(Object.values(CATEGORY_MAJ_OF));
-    expect(majValues.size).toBe(7);
+  // [이벤트픽 대분류 6종으로 축소](2026-09-04 사용자 지시): "스포츠 대여" 대분류를 없애면서
+  // 그에 속했던 15개 중분류(테니스장/축구장/체육관 등)는 이제 어느 대분류에도 속하지
+  // 않는다(null) — 나머지 21개 중분류만 6대 대분류 중 하나에 속한다.
+  it('스포츠 시설 15종을 제외한 21개 중분류는 6대 대분류 중 하나에 속한다', () => {
+    const nonNullMajValues = new Set(Object.values(CATEGORY_MAJ_OF).filter((maj) => maj !== null));
+    expect(nonNullMajValues.size).toBe(6);
+  });
+
+  it('구 "스포츠 대여" 소속이었던 15개 중분류는 이제 대분류가 없다(null)', () => {
+    const formerSportsCategoryMins = [
+      '테니스장', '풋살장', '축구장', '체육관', '농구장', '족구장', '야구장',
+      '다목적경기장', '배드민턴장', '탁구장', '배구장', '수영장', '운동장', '피클볼장', '스포츠',
+    ];
+    for (const categoryMin of formerSportsCategoryMins) {
+      expect(CATEGORY_MAJ_OF[categoryMin]).toBeNull();
+    }
   });
 });
 
@@ -209,7 +225,7 @@ describe('applyCategoryMajTaxonomy', () => {
 
     expect(rows.find((r) => r.id === 'a').category_min).toBe('전시실'); // MANUAL 보존
     expect(rows.find((r) => r.id === 'b')).toMatchObject({ category_min: '공공키즈카페', category_maj: '공공 키즈카페' });
-    expect(rows.find((r) => r.id === 'c')).toMatchObject({ category_min: '수영장', category_maj: '스포츠 대여' });
+    expect(rows.find((r) => r.id === 'c')).toMatchObject({ category_min: '수영장', category_maj: null });
     expect(rows.find((r) => r.id === 'd').category_min).toBeNull(); // 비활성이라 손대지 않음
   });
 

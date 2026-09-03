@@ -69,24 +69,30 @@ describe('EventCard 표준 중분류 뱃지', () => {
 });
 
 // [카드 뱃지 문구 정리](2026-08-27 사용자 지시)
-describe('EventCard hideBadgeKeys', () => {
-  it('hideBadgeKeys에 포함된 뱃지는 렌더링하지 않는다(키즈/어린이 뱃지 숨김)', () => {
-    render(<EventCard item={makeEventItem()} onSelect={() => {}} hideBadgeKeys={['kids']} />);
-
-    expect(screen.queryByText('👶 키즈/어린이')).not.toBeInTheDocument();
-  });
-
-  it('hideBadgeKeys를 넘기지 않으면 기존처럼 모든 뱃지를 보여준다', () => {
-    render(<EventCard item={makeEventItem()} onSelect={() => {}} />);
-
-    expect(screen.getByText('👶 키즈/어린이')).toBeInTheDocument();
-  });
-
+describe('EventCard 뱃지 문구', () => {
   it('무료 뱃지는 "완전 무료"가 아니라 "무료"로 표시된다', () => {
     render(<EventCard item={makeEventItem({ is_free: true })} onSelect={() => {}} />);
 
     expect(screen.getByText('🎁 무료')).toBeInTheDocument();
     expect(screen.queryByText('🎁 완전 무료')).not.toBeInTheDocument();
+  });
+});
+
+// [이벤트 카드 텍스트 영역 뱃지 정리](2026-09-04 사용자 지시): "키즈/어린이" 같은 거슬리는
+// 뱃지는 텍스트 영역에 아예 노출되지 않아야 한다 — parental-badges.ts에서 이벤트 카드용
+// 'kids' 뱃지 생성 자체를 없앴다(hideBadgeKeys로 개별 화면에서만 숨기던 예전 방식과 달리
+// 전역으로 제거). is_kids_friendly/target_age_group 값과 무관하게 항상 노출되지 않아야 한다.
+describe('EventCard 키즈/어린이 뱃지 제거 (2026-09-04)', () => {
+  it('is_kids_friendly=true여도 키즈/어린이 뱃지를 텍스트 영역에 보여주지 않는다', () => {
+    render(<EventCard item={makeEventItem({ is_kids_friendly: true, target_age_group: '초등' })} onSelect={() => {}} />);
+
+    expect(screen.queryByText('👶 키즈/어린이')).not.toBeInTheDocument();
+  });
+
+  it('target_age_group이 영유아여도 유아전용 뱃지를 보여주지 않는다', () => {
+    render(<EventCard item={makeEventItem({ is_kids_friendly: false, target_age_group: '영유아' })} onSelect={() => {}} />);
+
+    expect(screen.queryByText('👶 유아전용')).not.toBeInTheDocument();
   });
 });
 
@@ -186,13 +192,16 @@ describe('EventCard 카드 높이/뱃지 정리 (2026-09-03)', () => {
     expect(imageArea).toContainElement(facilityBadge);
   });
 
-  it('텍스트 영역에는 접수 상태/키즈 대상처럼 이미지로 옮기지 않은 뱃지만 남는다', () => {
+  // [이벤트 카드 텍스트 영역 뱃지 정리](2026-09-04 사용자 지시): 키즈/어린이 뱃지도
+  // parental-badges.ts에서 제거해, 텍스트 영역에는 이제 접수 상태(booking_status) 뱃지
+  // 하나만 남는다.
+  it('텍스트 영역에는 접수 상태 뱃지만 남고, 키즈 대상 뱃지는 더 이상 없다', () => {
     render(<EventCard item={makeEventItem({ booking_status: '오늘방문', is_kids_friendly: true })} onSelect={() => {}} />);
 
     const title = screen.getByText('도시농업 체험');
     const textArea = title.parentElement!;
     expect(textArea).toContainElement(screen.getByText('⚡ 오늘 당일 입장 가능'));
-    expect(textArea).toContainElement(screen.getByText('👶 키즈/어린이'));
+    expect(screen.queryByText('👶 키즈/어린이')).not.toBeInTheDocument();
   });
 });
 

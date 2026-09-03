@@ -96,10 +96,11 @@ export function HeroCarousel({
         const dateBanner = getDateBannerBadge(item);
         // Task 9-1-4: 4대 핵심 뱃지(가성비/실내외/아이동반/방문시점) 중 가성비·방문시점은 이미
         // 위 썸네일 오버레이(오늘당일·D-DAY / 무료)로 노출되므로, 여기서는 중복 없이 나머지
-        // 두 개(실내외·아이동반)만 보완해 4개 전부 빠짐없이 드러나게 한다.
-        const supplementBadges = getParentalBadges(item).filter(
-          (badge) => badge.key === 'facility_type' || badge.key === 'kids'
-        );
+        // 실내외만 보완해 노출한다.
+        // [이벤트 카드 텍스트 영역 뱃지 정리](2026-09-04 사용자 지시): 아이동반(kids) 뱃지는
+        // parental-badges.ts의 getEventBadges에서 아예 만들지 않게 바꿨다 — 여기서
+        // 'kids'를 필터링해 봐야 항상 없으므로 그 조건을 제거한다(죽은 코드 정리).
+        const supplementBadges = getParentalBadges(item).filter((badge) => badge.key === 'facility_type');
 
         return (
           // Task 9-1-8: 모바일에서 카드 1장이 화면 좌우 여백(컨테이너 px-4=32px)만큼만 뺀 폭으로

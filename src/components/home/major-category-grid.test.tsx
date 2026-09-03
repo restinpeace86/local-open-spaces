@@ -6,16 +6,20 @@ import { MajorCategoryGrid } from './major-category-grid';
 // 선택 시 중분류(category_min) 칩 목록 → 중분류 선택 시 실제 조회 콜백 호출.
 // [대분류/중분류 선택 UI 바텀시트 개편](2026-09-01 사용자 지시): 중분류 칩 목록이 그리드
 // 아래 인라인이 아니라 바텀시트로 뜨도록 바뀌어 아래 테스트도 그에 맞게 갱신한다.
+// [이벤트픽 대분류 6종으로 축소](2026-09-04 사용자 지시): "스포츠 대여"는 15개 중분류 중
+// 12개가 항상 0건이라 사실상 작동하지 않아 제거했다(category-maj-meta.ts 참고) — 6대
+// 대분류만 남는다.
 describe('MajorCategoryGrid', () => {
-  it('7대 대분류 라벨을 렌더링한다', () => {
+  it('6대 대분류 라벨을 렌더링한다', () => {
     render(
       <MajorCategoryGrid selectedMaj={null} onSelectMaj={() => {}} selectedMin={null} onSelectMin={() => {}} />
     );
 
-    const labels = ['자연 / 캠핑', '공공 키즈카페', '체험 / 농장', '축제 / 이벤트', '문화 / 전시', '배움 / 클래스', '스포츠 대여'];
+    const labels = ['자연 / 캠핑', '공공 키즈카페', '체험 / 농장', '축제 / 이벤트', '문화 / 전시', '배움 / 클래스'];
     for (const label of labels) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }
+    expect(screen.queryByText('스포츠 대여')).not.toBeInTheDocument();
   });
 
   it('대분류를 선택하기 전에는 중분류 바텀시트가 보이지 않는다', () => {

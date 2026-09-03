@@ -918,6 +918,32 @@ describe('getCategoryMinFeed (대분류·중분류 드릴다운)', () => {
     const ids = items.map((item) => item.id);
     expect(ids).toEqual(['matching']);
   });
+
+  // [중분류 데이터 로딩 속도 개선 - 페이지네이션 도입](2026-09-04 사용자 지시): offset 인자로
+  // "더보기" 다음 페이지를 요청할 수 있는지, 페이지끼리 겹치거나 건너뛰지 않는지 검증한다.
+  it('offset을 넘기면 그만큼 건너뛴 다음 페이지를 반환한다(페이지 간 겹침/누락 없음)', async () => {
+    // dedupeAndMergeFree가 제목(정규화 키)+지역이 같으면 다른 행사로 합쳐버리므로, 서로
+    // 합쳐지지 않도록 제목을 각기 다르게 준다(기본 eventRow의 동일한 제목을 그대로 쓰면
+    // 5건이 1건으로 합쳐져 페이지네이션 자체를 검증할 수 없다).
+    const rows = ['e1', 'e2', 'e3', 'e4', 'e5'].map((id) =>
+      eventRow({ id, title: `테스트 행사 ${id}`, category_min: '도시농업', is_active: true })
+    );
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeFilteringChainable(rows) }),
+    }));
+
+    const { getCategoryMinFeed } = await import('./get-home-feed');
+    const region = { sigunguName: '성남시 분당구' };
+
+    const page1 = await getCategoryMinFeed('도시농업', 2, region, 0);
+    const page2 = await getCategoryMinFeed('도시농업', 2, region, 2);
+    const page3 = await getCategoryMinFeed('도시농업', 2, region, 4);
+
+    expect(page1.map((item) => item.id)).toEqual(['e1', 'e2']);
+    expect(page2.map((item) => item.id)).toEqual(['e3', 'e4']);
+    expect(page3.map((item) => item.id)).toEqual(['e5']);
+  });
 });
 
 // [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "Hero 카드 구역 - 위치 기반 정렬 순서")
