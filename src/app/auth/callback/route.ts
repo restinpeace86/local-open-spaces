@@ -19,6 +19,26 @@ export async function GET(request: NextRequest) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error) {
+      // [구글/카카오 인증 후 필수 프로필 입력](2026-09-04 사용자 지시): "인증되면 바로
+      // 회원가입폼으로 가서 닉네임, 아이 연령을 기본으로 받게 해줘 — 나중에
+      // 마이페이지에서 입력하는 게 아니고." handle_new_user() 트리거(2026-09-02-create-
+      // profiles-table.sql)는 신규 가입 시 id만으로 빈 프로필 행을 만들 뿐 nickname/
+      // birth_years는 채우지 않으므로, 로그인 직후 이 두 값이 비어 있으면 원래
+      // 목적지(next) 대신 필수 프로필 완성 화면으로 먼저 보낸다.
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('nickname, birth_years')
+          .eq('id', user.id)
+          .single();
+        const isProfileIncomplete = !profile?.nickname || !profile.birth_years || profile.birth_years.length === 0;
+        if (isProfileIncomplete) {
+          return NextResponse.redirect(`${origin}/auth/complete-profile?next=${encodeURIComponent(next)}`);
+        }
+      }
       return NextResponse.redirect(`${origin}${next}`);
     }
     console.error('[auth/callback] 세션 교환 실패:', error.message);

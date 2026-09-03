@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { BottomTabs } from "@/components/nav/bottom-tabs";
+import { ProfileCompletionGuard } from "@/components/auth/profile-completion-guard";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -31,6 +32,7 @@ export default function RootLayout({
       <body className="h-dvh flex flex-col overflow-hidden">
         {children}
         <BottomTabs />
+        <ProfileCompletionGuard />
       </body>
     </html>
   );

@@ -209,6 +209,14 @@ describe('collectWeatherForSpots — 격자 단위 격리', () => {
     process.env.PUBLIC_DATA_API_KEY = 'decoded-test-key';
   });
 
+  // [사전 존재 결함 수정](2026-09-04 사용자 지시로 확인 요청): 이 테스트는 항상 5000ms
+  // 타임아웃으로 실패했다 — nx=98 격자가 계속 실패하면 withRetry(retries:2,
+  // baseDelayMs:5000, backoffMultiplier:2)가 실제로 5000ms→10000ms를 순서대로 기다려
+  // 총 15초 가까이 걸리는데(retry.mjs, 2026-08-30 사용자 지시로 확정된 정책값이라 그
+  // 자체는 버그가 아니다), 이 테스트는 실제 타이머로 그 시간을 그대로 기다리다 vitest
+  // 기본 테스트 타임아웃(5000ms)에 걸려 매번 실패했다(실측: 내가 만든 변경 없이도
+  // 동일하게 재현 확인). fake timer로 그 대기 시간만 건너뛰고, 실제 재시도 로직(횟수/
+  // 백오프 지연)은 그대로 검증한다.
   it('한 격자의 API 호출이 실패해도 다른 격자의 스팟은 정상적으로 날씨를 받는다', async () => {
     process.env.PUBLIC_DATA_API_KEY = 'decoded-test-key';
     vi.stubGlobal(
@@ -237,14 +245,26 @@ describe('collectWeatherForSpots — 격자 단위 격리', () => {
       { id: 'busan-spot', lat: 35.1796, lng: 129.0756 }, // nx=98 (실패)
     ];
 
-    const { rows, totalGroups, succeededGroups, failedGroups } = await collectWeatherForSpots(spots);
+    vi.useFakeTimers();
+    try {
+      const resultPromise = collectWeatherForSpots(spots);
+      // retries:2, baseDelayMs:5000, backoffMultiplier:2 → 1차 실패 후 5000ms, 2차
+      // 실패 후 10000ms 대기 — 두 지연을 순서대로 흘려보내야 재시도 루프가 끝까지
+      // 진행된다(advanceTimersByTimeAsync는 각 호출 사이에 대기 중인 마이크로태스크도
+      // 함께 흘려보낸다).
+      await vi.advanceTimersByTimeAsync(5000);
+      await vi.advanceTimersByTimeAsync(10000);
+      const { rows, totalGroups, succeededGroups, failedGroups } = await resultPromise;
 
-    expect(rows).toHaveLength(1);
-    expect(rows[0].spot_id).toBe('seoul-spot');
-    expect(rows[0].temperature).toBe(20);
-    expect(totalGroups).toBe(2);
-    expect(succeededGroups).toBe(1);
-    expect(failedGroups).toBe(1);
+      expect(rows).toHaveLength(1);
+      expect(rows[0].spot_id).toBe('seoul-spot');
+      expect(rows[0].temperature).toBe(20);
+      expect(totalGroups).toBe(2);
+      expect(succeededGroups).toBe(1);
+      expect(failedGroups).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('같은 격자를 공유하는 스팟은 API를 한 번만 호출하고 결과를 모두에게 복사한다', async () => {
