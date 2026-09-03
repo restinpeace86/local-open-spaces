@@ -54,7 +54,10 @@ export function MajorCategoryGrid({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="grid grid-cols-4 sm:grid-cols-7 gap-2 px-4">
+      {/* [이벤트픽 대분류 6종으로 축소](2026-09-04 사용자 지시): 대분류가 7개에서 6개로
+          줄었는데 큰 화면(sm 이상) 그리드 칸 수가 여전히 7칸으로 남아 있어 마지막 칸이
+          빈 채로 어색하게 보였다 — 실제 항목 수(6)에 맞춘다. */}
+      <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 px-4">
         {CATEGORY_MAJ_OPTIONS.map((opt) => {
           const isActive = selectedMaj === opt.maj;
           return (
