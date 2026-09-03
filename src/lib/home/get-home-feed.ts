@@ -51,7 +51,10 @@ export const DEFAULT_HOME_REGION: HomeRegion = { sigunguName: '성남시 분당�
 // 4종만 노출한다(ALL/TEEN/YOUTH/ADULT/SENIOR/FACILITY/OTHER 전부 제외). 실측 확인
 // (2026-08-27): is_active=true 3,463건 중 노출 대상이 1,947건(5종 허용)→939건(4종만
 // 허용)으로 줄어든다 — 데이터 자체는 그대로 두고 노출 필터만 좁힌 것이다.
-const EVENT_PICK_TARGET_AUDIENCES = ['INFANT', 'KIDS_PRE', 'KIDS_SCHOOL', 'FAMILY'] as const;
+// [todo.md 개선사항 5](2026-09-03): 어드민 마이그레이션 폼(스팟픽→이벤트픽)에서도 "이관 직후
+// 즉시 노출"을 보장하려면 이 4종 중 하나로만 target_audience를 지정해야 한다 — export해
+// migrate-to-event API 라우트/모달이 그대로 재사용한다(제5장 제4조 기존 구조 우선).
+export const EVENT_PICK_TARGET_AUDIENCES = ['INFANT', 'KIDS_PRE', 'KIDS_SCHOOL', 'FAMILY'] as const;
 
 // [행사 데이터 수집/정제 파이프라인 및 홈 피드 필터링 개선](2026-08-27) 사용자 지시 3번 및
 // 후속 확장 지시: 나들이/여가 목적과 무관한 중분류는 데이터 수집·표준 분류 자체는 그대로

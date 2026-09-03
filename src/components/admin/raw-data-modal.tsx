@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { AdminTable, AdminRow, AdminOpenSpaceRow, AdminEventRow, AdminRawIngestRow } from '@/components/admin/data-grid-client';
+import { MigrateToEventModal } from '@/components/admin/migrate-to-event-modal';
 
 // [개편] 행 클릭 시 해당 행의 전체 원천 컬럼(구조화된 값) + raw_data/raw_payload 원문 JSON을
 // 함께 보여주는 Read-Only 뷰어. 3개 탭(open_spaces/events/raw_ingest_data) 행 형태가 서로
@@ -194,6 +195,7 @@ export function RawDataModal({
   onClose,
   onCategoryMinUpdated,
   onTargetAudienceUpdated,
+  onMigratedToEvent,
 }: {
   table: AdminTable;
   row: AdminRow;
@@ -202,9 +204,13 @@ export function RawDataModal({
   onClose: () => void;
   onCategoryMinUpdated?: (id: string, nextCategoryMin: string | null, nextSource: string | null) => void;
   onTargetAudienceUpdated?: (id: string, nextTargetAudience: string | null, nextSource: string | null) => void;
+  // [todo.md 개선사항 5](2026-09-03): open_spaces 탭에서만 전달된다 — 이관 성공 시 부모가
+  // 목록에서 이 행을 제거하고 상세 모달을 닫는다(원본이 실제로 삭제됐으므로).
+  onMigratedToEvent?: (id: string) => void;
 }) {
   const { title, subtitle, raw } = getModalContent(table, row);
   const prettyJson = JSON.stringify(raw ?? null, null, 2);
+  const [isMigrateModalOpen, setIsMigrateModalOpen] = useState(false);
 
   const structuredEntries = Object.entries(row).filter(([key]) => key !== 'raw_data' && key !== 'raw_payload');
 
@@ -240,6 +246,24 @@ export function RawDataModal({
               targetAudienceOptions={targetAudienceOptions}
               onUpdated={onTargetAudienceUpdated}
             />
+          )}
+
+          {/* [todo.md 개선사항 5](2026-09-03): 스팟픽에 잘못 분류돼 있던 데이터(예: 실제로는
+              기간이 있는 행사·체험 프로그램)를 이벤트픽 테이블로 옮기는 액션. open_spaces
+              탭에서만 의미가 있다. */}
+          {table === 'open_spaces' && onMigratedToEvent && (
+            <div className="mt-3 rounded-xl border border-purple-200 bg-purple-50/60 p-3 flex items-center justify-between gap-3">
+              <p className="text-xs text-purple-800">
+                이 데이터가 사실은 시작/종료가 있는 행사·체험 프로그램인가요?
+              </p>
+              <button
+                type="button"
+                onClick={() => setIsMigrateModalOpen(true)}
+                className="shrink-0 rounded-full bg-purple-600 text-white text-xs font-semibold px-3 py-1.5 hover:bg-purple-700"
+              >
+                🚚 이벤트픽으로 이동
+              </button>
+            </div>
           )}
 
           <h3 className="mt-4 text-xs font-semibold text-gray-500">전체 컬럼</h3>
@@ -286,6 +310,17 @@ export function RawDataModal({
           </pre>
         </div>
       </div>
+
+      {isMigrateModalOpen && table === 'open_spaces' && onMigratedToEvent && (
+        <MigrateToEventModal
+          row={row as AdminOpenSpaceRow}
+          onClose={() => setIsMigrateModalOpen(false)}
+          onMigrated={(id) => {
+            setIsMigrateModalOpen(false);
+            onMigratedToEvent(id);
+          }}
+        />
+      )}
     </div>
   );
 }

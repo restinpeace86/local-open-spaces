@@ -1222,6 +1222,13 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                 : prev
             );
           }}
+          onMigratedToEvent={(id) => {
+            // [todo.md 개선사항 5](2026-09-03): 이관 성공 시 원본 open_spaces 행은 서버에서
+            // 실제로 삭제됐으므로(중복 노출 방지) 목록/총건수/상세 모달에서도 즉시 제거한다.
+            setRows((prev) => prev.filter((row) => !('id' in row) || row.id !== id));
+            setTotal((prev) => Math.max(0, prev - 1));
+            setSelectedRow(null);
+          }}
         />
       )}
       {selectedRow && tab === 'raw_ingest_data' && (
