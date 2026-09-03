@@ -30,14 +30,18 @@ type SpotCurationItem = {
 
 type SpotSearchResult = { id: string; name: string; address: string | null };
 
-const PAGE_SIZE = 20;
+// [todo.md 개선사항 9](2026-09-03) 실측으로 발견: 후보 목록 조회를 재사용하는
+// /api/admin/data-grid는 page_size를 50/100/200 중 하나로만 받고(그 외 값은 조용히
+// 기본값 50으로 대체) 다른 값은 무시한다 — 클라이언트가 20을 요청해도 서버는 50건씩
+// 내려줘 페이지 수 계산이 서버 실제 동작과 어긋나는 버그가 될 뻔했다. 서버가 실제로
+// 허용하는 값 중 하나로 맞춘다.
+const PAGE_SIZE = 50;
 
-// [관리자 '스팟 큐레이션' 탭 장소 검색 자동완성](2026-09-01 사용자 지시): 스팟 큐레이션은
+// [관리자 '스팟 큐레이션' 탭 대상 범위](2026-09-01 사용자 지시): 스팟 큐레이션은
 // 애초에 "키즈친화 식당"(gg-kidscafe-adapter.mjs가 적재하는 category_min='놀이방식당')을
-// 위해 설계된 기능이라, 검색 대상을 이 중분류로 좁힌다. 하드코딩된 문자열을 새로 만들지
+// 위해 설계된 기능이라, 후보 목록을 이 중분류로 좁힌다. 하드코딩된 문자열을 새로 만들지
 // 않고 CORE_SPOT_CATEGORIES(/nearby 필터 칩과 동일한 단일 출처)에서 찾아 쓴다.
 const KIDS_RESTAURANT_CATEGORY_MIN = CORE_SPOT_CATEGORIES.find((c) => c.id === 'kids-restaurant')?.minors[0];
-const SPOT_SEARCH_MIN_LENGTH = 2;
 
 // 요구사항 "[장소명 + 주소(동/읍/면)]": 도로명 주소 끝에 "...(가능동)"처럼 법정동/읍/면이
 // 괄호로 붙어 있으면 그 부분만 짧게 뽑아 보여준다(실측 확인: 이 표기가 실제 데이터의
@@ -71,24 +75,42 @@ function ToggleSwitch({ checked, onToggle, disabled }: { checked: boolean; onTog
   );
 }
 
+// [todo.md 개선사항 9](2026-09-03): 리스트에서 클릭해 들어온 경우(신규든 기존 편집이든)
+// 스팟은 항상 이미 정해져 있다 — 모달 내부에서 검색할 일이 없다. isEdit이면
+// initial.open_spaces에서, 신규면 presetSpot에서 이름/주소를 읽는다.
+function BoundSpotSummary({ name, address }: { name: string; address: string | null }) {
+  return (
+    <div className="rounded-lg bg-gray-50 px-3 py-2 text-sm">
+      <p className="font-medium text-gray-900">{name}</p>
+      <p className="text-xs text-gray-500">{formatShortAddress(address)}</p>
+    </div>
+  );
+}
+
 // 폼 하나(신규 등록/기존 편집 겸용)를 담당하는 하위 컴포넌트 — 목록과 분리해 상태를
 // 단순하게 유지한다.
+// [todo.md 개선사항 9](2026-09-03): 기존에는 신규 등록 시 이 모달 안에서 2글자 이상
+// 타이핑해 스팟을 직접 검색해야 했다("하노 입력 → 검색됨 → 클릭") — 이제는 부모
+// (SpotCurationsPanel)가 먼저 키즈친화 식당 전체 목록을 리스트로 보여주고, 관리자가
+// 그 리스트에서 항목을 클릭하면 이미 스팟이 정해진 채로(`presetSpot`) 이 모달이 열린다.
+// 그래서 모달 자체의 검색 UI(spotQuery/spotResults/자동완성 useEffect 전체)를 들어냈다 —
+// 요구사항 원문 "모달 내부는 메뉴/시간 정보만 입력"을 그대로 구현한 것.
 function CurationFormModal({
   initial,
+  presetSpot,
   onClose,
   onSaved,
 }: {
   initial?: SpotCurationItem;
+  presetSpot?: SpotSearchResult;
   onClose: () => void;
   onSaved: (item: SpotCurationItem) => void;
 }) {
   const isEdit = Boolean(initial);
-  const [selectedSpot, setSelectedSpot] = useState<SpotSearchResult | null>(
-    initial?.open_spaces ? { id: initial.spot_id, name: initial.open_spaces.name, address: initial.open_spaces.address } : null
-  );
-  const [spotQuery, setSpotQuery] = useState('');
-  const [spotResults, setSpotResults] = useState<SpotSearchResult[]>([]);
-  const [isSearchingSpot, setIsSearchingSpot] = useState(false);
+  const spotId = isEdit ? initial!.spot_id : presetSpot!.id;
+  const spotDisplay = isEdit
+    ? { name: initial!.open_spaces?.name ?? '(이름 없음)', address: initial!.open_spaces?.address ?? null }
+    : { name: presetSpot!.name, address: presetSpot!.address };
 
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
   const [imageUrl, setImageUrl] = useState(initial?.image_url ?? '');
@@ -105,50 +127,6 @@ function CurationFormModal({
   const [curationNote, setCurationNote] = useState(initial?.curation_note ?? '');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-
-  // [관리자 '스팟 큐레이션' 탭 장소 검색 자동완성](2026-09-01 사용자 지시): 이미 구축된
-  // 전국구 서버사이드 검색(/api/spots/search)을 그대로 재사용하되(제5장 제4조 기존
-  // 구조 우선 — 새 검색 엔드포인트를 또 만들지 않음), 이 탭은 "키즈친화 식당"
-  // (category_min='놀이방식당') 전용이라 그 범위로 좁히고, 2글자 미만은 조회하지
-  // 않는다(1,700여 건 중 1글자로는 결과가 너무 많아 자동완성 의미가 없음).
-  useEffect(() => {
-    // [실사용 버그 제보](2026-09-02) 재확인: 스팟을 이미 선택한 뒤에는 재검색할 필요가
-    // 없다 — 이전에는 이 가드가 없어 선택 직후 spotQuery가 선택된 이름으로 바뀌면서
-    // 불필요한 재검색이 한 번 더 나갔다(결과는 화면에 안 보이게만 막아뒀을 뿐 API 호출
-    // 자체는 낭비됐음).
-    if (isEdit || selectedSpot) return;
-    const trimmed = spotQuery.trim();
-    if (trimmed.length < SPOT_SEARCH_MIN_LENGTH) {
-      setSpotResults([]);
-      return;
-    }
-    let cancelled = false;
-    // AbortController로 새 검색이 시작되면 이전 요청 자체를 확실히 취소해 느린 응답이
-    // 뒤섞여 보일 가능성을 막는다(방어적 강화).
-    const controller = new AbortController();
-    const timer = setTimeout(() => {
-      setIsSearchingSpot(true);
-      const params = new URLSearchParams({ q: trimmed });
-      if (KIDS_RESTAURANT_CATEGORY_MIN) params.set('category_min', KIDS_RESTAURANT_CATEGORY_MIN);
-      fetch(`/api/spots/search?${params.toString()}`, { signal: controller.signal })
-        .then((res) => res.json())
-        .then((data: { items?: Array<{ id: string; name: string; address: string | null }> }) => {
-          if (cancelled) return;
-          setSpotResults((data.items ?? []).slice(0, 10).map((i) => ({ id: i.id, name: i.name, address: i.address })));
-        })
-        .catch((err) => {
-          if (err instanceof DOMException && err.name === 'AbortError') return; // 새 검색으로 대체된 정상적인 취소
-        })
-        .finally(() => {
-          if (!cancelled) setIsSearchingSpot(false);
-        });
-    }, 300);
-    return () => {
-      cancelled = true;
-      controller.abort();
-      clearTimeout(timer);
-    };
-  }, [spotQuery, isEdit, selectedSpot]);
 
   async function handlePasteImage(e: React.ClipboardEvent<HTMLDivElement>) {
     const items = e.clipboardData?.items;
@@ -197,16 +175,11 @@ function CurationFormModal({
     e.preventDefault();
     if (isSaving) return;
 
-    if (!isEdit && !selectedSpot) {
-      setErrorMessage('먼저 스팟을 검색해서 선택해 주세요.');
-      return;
-    }
-
     setIsSaving(true);
     setErrorMessage(null);
     try {
       const payload = {
-        spot_id: isEdit ? initial!.spot_id : selectedSpot!.id,
+        spot_id: spotId,
         is_active: isActive,
         image_url: imageUrl.trim() || null,
         operating_hours_raw: hoursRaw || null,
@@ -259,83 +232,7 @@ function CurationFormModal({
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          {isEdit ? (
-            <div className="rounded-lg bg-gray-50 px-3 py-2 text-sm">
-              <p className="font-medium text-gray-900">{initial!.open_spaces?.name}</p>
-              <p className="text-xs text-gray-500">{initial!.open_spaces?.address}</p>
-            </div>
-          ) : (
-            <label className="flex flex-col gap-1 text-sm">
-              <span className="font-medium text-gray-700">스팟 검색(키즈친화 식당 · 2글자 이상)</span>
-              {/* [실사용 버그 재제보](2026-09-02) "검색결과를 눌렀을 때 입력칸에 그 데이터가
-                  들어가야 하는데 안 들어간다": 이전에는 선택 시 입력란 자체를 완전히
-                  다른 요약 카드로 바꿔버려 "이름이 입력칸에 들어갔다"는 기대와 어긋났다
-                  — 이제는 입력란을 그대로 유지하고, 선택되면 그 입력란의 값 자체를
-                  선택한 이름으로 채운다(요청 원문의 "하노 입력 → 하노이진영 검색됨 →
-                  클릭 → 입력칸에 하노이진영" 흐름 그대로). 다시 수정하고 싶으면 그
-                  입력란을 직접 편집하면 되므로 별도 "읽기 전용" 처리는 하지 않는다. */}
-              <input
-                type="text"
-                value={selectedSpot ? selectedSpot.name : spotQuery}
-                onChange={(e) => {
-                  if (selectedSpot) setSelectedSpot(null); // 직접 수정하면 선택을 해제하고 다시 검색한다.
-                  setSpotQuery(e.target.value);
-                }}
-                placeholder="장소명 2글자 이상 입력(예: 키즈)"
-                className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-              {selectedSpot && (
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs text-gray-500 truncate">✅ {formatShortAddress(selectedSpot.address)}</p>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSelectedSpot(null);
-                      setSpotQuery('');
-                    }}
-                    className="shrink-0 text-xs text-blue-600 hover:underline"
-                  >
-                    변경
-                  </button>
-                </div>
-              )}
-              {/* [실사용 버그 제보](2026-09-02): 검색이 콜드 스타트 시 수 초까지도
-                  걸릴 수 있는데(라이브 실측 확인), 회색 잔글씨 안내만으로는 "아직
-                  찾는 중"임이 잘 눈에 띄지 않아 결과가 없다고 오해하기 쉬웠다 —
-                  파란색 강조로 눈에 띄게 한다. */}
-              {!selectedSpot && isSearchingSpot && (
-                <p className="text-xs font-medium text-blue-600">🔍 검색 중이에요, 잠시만 기다려주세요...</p>
-              )}
-              {!selectedSpot && spotResults.length > 0 && (
-                <ul className="max-h-40 overflow-y-auto rounded-lg border border-gray-200 divide-y divide-gray-100">
-                  {spotResults.map((spot) => (
-                    <li key={spot.id}>
-                      <button
-                        type="button"
-                        // [실사용 버그 재제보](2026-09-02) "선택했지만 아무 반응 없었음":
-                        // 스크롤 가능한 목록(overflow-y-auto)에서는 클릭 도중 마우스가
-                        // 미세하게 움직이면(트랙패드 등) 브라우저가 이를 "드래그"로 판단해
-                        // click 이벤트 자체를 발생시키지 않을 수 있다 — mousedown은
-                        // 드래그 여부와 무관하게 버튼을 누르는 즉시 발생해 이 문제를
-                        // 피한다(자동완성 위젯들이 흔히 쓰는 방식). preventDefault로
-                        // 입력란의 포커스가 흔들리는 것도 막는다.
-                        onMouseDown={(e) => {
-                          e.preventDefault();
-                          setSelectedSpot(spot);
-                          setSpotQuery(spot.name);
-                          setSpotResults([]);
-                        }}
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-                      >
-                        <p className="font-medium text-gray-900">{spot.name}</p>
-                        <p className="text-xs text-gray-500">{formatShortAddress(spot.address)}</p>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </label>
-          )}
+          <BoundSpotSummary name={spotDisplay.name} address={spotDisplay.address} />
 
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
@@ -518,16 +415,32 @@ function CurationFormModal({
   );
 }
 
+// [todo.md 개선사항 9](2026-09-03): 후보 목록 조회에 재사용하는 기존 어드민 그리드
+// 응답 행 모양 — /api/admin/data-grid?table=open_spaces가 내려주는 실제 컬럼 중 이
+// 리스트가 필요로 하는 것만 뽑아 쓴다(전체 AdminOpenSpaceRow 타입을 그대로 끌어오면
+// 이 파일이 data-grid-client.tsx의 세부 구현에 과하게 결합된다).
+type CandidateSpotRow = { id: string; name: string; address: string };
+
+// 모달을 "기존 큐레이션 수정" 또는 "리스트에서 고른 신규 스팟으로 등록" 중 하나로 연다.
+// 자유 검색으로 등록하는 경로는 더 이상 없다 — 리스트의 검색창이 그 역할을 대신한다.
+type ModalTarget = SpotCurationItem | { presetSpot: SpotSearchResult } | null;
+
 export function SpotCurationsPanel() {
   const [q, setQ] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
   const [page, setPage] = useState(1);
-  const [rows, setRows] = useState<SpotCurationItem[]>([]);
+  const [rows, setRows] = useState<CandidateSpotRow[]>([]);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
-  const [modalMode, setModalMode] = useState<'create' | SpotCurationItem | null>(null);
+  const [modalTarget, setModalTarget] = useState<ModalTarget>(null);
+  // [todo.md 개선사항 9](2026-09-03): spot_id → 이미 등록된 큐레이션 조회용 맵. 큐레이션
+  // 전체 건수(1,700여 건 후보 중 실제 큐레이션은 그보다 훨씬 적을 것으로 예상)는
+  // 한 번에 불러와도 무리가 없어(관리자 전용, 페이지당이 아니라 전체 1회 조회) 이미 있는
+  // `/api/admin/spot-curations` 목록 API를 page_size만 크게 줘서 그대로 재사용한다
+  // (제5장 제4조 기존 구조 우선 — 배치 조회용 새 API를 따로 만들지 않음).
+  const [curationsBySpotId, setCurationsBySpotId] = useState<Map<string, SpotCurationItem>>(new Map());
   // [관리자 페이지 성능 최적화](2026-08-30 사용자 지시): 다른 탭과 동일하게 마운트 시
   // 자동 조회하지 않는다.
   const [hasLoaded, setHasLoaded] = useState(false);
@@ -541,26 +454,57 @@ export function SpotCurationsPanel() {
     setPage(1);
   }, [debouncedQ]);
 
+  // [todo.md 개선사항 9](2026-09-03): "불러오기"를 누른 최초 한 번만 전체 큐레이션 맵을
+  // 채운다 — 이후 등록/수정은 handleSaved가 맵을 직접 갱신하므로 재조회가 필요 없다.
   useEffect(() => {
     if (!hasLoaded) return;
+    let cancelled = false;
+    fetch('/api/admin/spot-curations?page_size=5000')
+      .then(async (res) => {
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error ?? '큐레이션 현황 조회에 실패했습니다.');
+        return json as { items: SpotCurationItem[] };
+      })
+      .then((result) => {
+        if (cancelled) return;
+        setCurationsBySpotId(new Map(result.items.map((item) => [item.spot_id, item])));
+      })
+      .catch(() => {
+        // 큐레이션 현황(뱃지/토글) 조회 실패해도 후보 목록 자체는 그대로 쓸 수 있어야
+        // 하므로 화면을 막지 않는다(제5장 제11조 오류 처리 원칙) — 이 경우 모든 후보가
+        // "미등록"으로만 보이고, 클릭하면 항상 신규 등록 모달이 열린다.
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasLoaded]);
+
+  // [todo.md 개선사항 9](2026-09-03): 키즈친화 식당(category_min='놀이방식당') 후보를
+  // 리스트로 먼저 보여준다 — 기존 관리자 그리드 API(/api/admin/data-grid)를 그대로
+  // 재사용해(제5장 제4조) 검색/페이지네이션을 새로 만들지 않는다.
+  useEffect(() => {
+    if (!hasLoaded || !KIDS_RESTAURANT_CATEGORY_MIN) return;
     let cancelled = false;
     setIsLoading(true);
     setErrorMessage(null);
 
     const params = new URLSearchParams();
+    params.set('table', 'open_spaces');
+    params.set('category_min', KIDS_RESTAURANT_CATEGORY_MIN);
     if (debouncedQ) params.set('q', debouncedQ);
     params.set('page', String(page));
     params.set('page_size', String(PAGE_SIZE));
 
-    fetch(`/api/admin/spot-curations?${params.toString()}`)
+    fetch(`/api/admin/data-grid?${params.toString()}`)
       .then(async (res) => {
         const json = await res.json();
         if (!res.ok) throw new Error(json.error ?? '조회에 실패했습니다.');
-        return json as { items: SpotCurationItem[]; total: number };
+        return json as { rows: CandidateSpotRow[]; total: number };
       })
       .then((result) => {
         if (cancelled) return;
-        setRows(result.items);
+        setRows(result.rows);
         setTotal(result.total);
       })
       .catch((err: Error) => {
@@ -575,18 +519,18 @@ export function SpotCurationsPanel() {
     };
   }, [hasLoaded, debouncedQ, page]);
 
-  async function handleToggle(row: SpotCurationItem) {
-    setTogglingId(row.id);
-    const nextIsActive = !row.is_active;
+  async function handleToggle(curation: SpotCurationItem) {
+    setTogglingId(curation.id);
+    const nextIsActive = !curation.is_active;
     try {
       const res = await fetch('/api/admin/spot-curations', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: row.id, is_active: nextIsActive }),
+        body: JSON.stringify({ id: curation.id, is_active: nextIsActive }),
       });
       const data: { item?: SpotCurationItem; error?: string } = await res.json();
       if (!res.ok || !data.item) throw new Error(data.error ?? '노출 상태 변경에 실패했습니다.');
-      setRows((prev) => prev.map((r) => (r.id === row.id ? data.item! : r)));
+      setCurationsBySpotId((prev) => new Map(prev).set(data.item!.spot_id, data.item!));
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : '노출 상태 변경에 실패했습니다.');
     } finally {
@@ -595,40 +539,37 @@ export function SpotCurationsPanel() {
   }
 
   function handleSaved(item: SpotCurationItem) {
-    setRows((prev) => {
-      const exists = prev.some((r) => r.id === item.id);
-      return exists ? prev.map((r) => (r.id === item.id ? item : r)) : [item, ...prev];
-    });
-    setTotal((prev) => (prev === 0 || rows.some((r) => r.id === item.id) ? prev : prev + 1));
+    setCurationsBySpotId((prev) => new Map(prev).set(item.spot_id, item));
+  }
+
+  function handleRowClick(spot: CandidateSpotRow) {
+    const existing = curationsBySpotId.get(spot.id);
+    setModalTarget(existing ?? { presetSpot: { id: spot.id, name: spot.name, address: spot.address } });
   }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const modalInitial = modalTarget && 'id' in modalTarget ? modalTarget : undefined;
+  const modalPresetSpot = modalTarget && 'presetSpot' in modalTarget ? modalTarget.presetSpot : undefined;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="shrink-0 p-4 border-b border-gray-100 flex flex-col gap-3">
-        <div className="flex items-center justify-between gap-3">
-          <input
-            type="text"
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="스팟 이름/주소 검색"
-            className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
-          />
-          <button
-            type="button"
-            onClick={() => setModalMode('create')}
-            className="shrink-0 text-xs font-semibold text-white bg-blue-600 rounded-full px-3 py-1.5 hover:bg-blue-700"
-          >
-            + 스팟 큐레이션 등록
-          </button>
-        </div>
+        {/* [todo.md 개선사항 9](2026-09-03): "등록" 버튼(자유 검색)을 없애고, 이 검색창은
+            이제 아래 후보 리스트 자체를 좁히는 용도다 — 원하는 식당을 찾아 바로 클릭하면
+            그게 곧 등록/수정 진입이다. */}
+        <input
+          type="text"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="키즈친화 식당 이름/주소 검색"
+          className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+        />
       </div>
 
       <div className="flex-1 overflow-auto p-4">
         {!hasLoaded && (
           <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-            <p className="text-sm text-gray-500">필터를 설정한 뒤 불러오기를 눌러주세요.</p>
+            <p className="text-sm text-gray-500">키즈친화 식당 목록을 불러와 주세요.</p>
             <button
               type="button"
               onClick={() => setHasLoaded(true)}
@@ -642,32 +583,47 @@ export function SpotCurationsPanel() {
         {hasLoaded && isLoading && <p className="text-sm text-gray-400">불러오는 중...</p>}
         {hasLoaded && errorMessage && <p className="text-sm text-red-500">{errorMessage}</p>}
         {hasLoaded && !isLoading && !errorMessage && rows.length === 0 && (
-          <p className="text-sm text-gray-400">등록된 스팟 큐레이션이 없습니다.</p>
+          <p className="text-sm text-gray-400">조건에 맞는 키즈친화 식당이 없습니다.</p>
         )}
 
         {hasLoaded && !isLoading && !errorMessage && rows.length > 0 && (
           <ul className="flex flex-col divide-y divide-gray-100">
-            {rows.map((row) => (
-              <li key={row.id} className="flex items-center gap-3 py-3">
-                {row.image_url ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={row.image_url} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
-                ) : (
-                  <div className="h-12 w-12 shrink-0 rounded-lg bg-gray-100 flex items-center justify-center text-lg">🏷️</div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{row.open_spaces?.name}</p>
-                  <p className="text-xs text-gray-500 truncate">{row.open_spaces?.address}</p>
-                  {row.menu_items.length > 0 && (
-                    <p className="text-xs text-gray-400">메뉴 {row.menu_items.length}건</p>
+            {rows.map((spot) => {
+              const curation = curationsBySpotId.get(spot.id);
+              return (
+                <li key={spot.id} className="flex items-center gap-3 py-3">
+                  <button type="button" onClick={() => handleRowClick(spot)} className="flex-1 min-w-0 flex items-center gap-3 text-left">
+                    {curation?.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={curation.image_url} alt="" className="h-12 w-12 shrink-0 rounded-lg object-cover" />
+                    ) : (
+                      <div className="h-12 w-12 shrink-0 rounded-lg bg-gray-100 flex items-center justify-center text-lg">🍽️</div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {curation ? (
+                          <span className="mr-1.5 inline-block align-middle text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                            큐레이션됨
+                          </span>
+                        ) : (
+                          <span className="mr-1.5 inline-block align-middle text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
+                            미등록
+                          </span>
+                        )}
+                        <span>{spot.name}</span>
+                      </p>
+                      <p className="text-xs text-gray-500 truncate">{formatShortAddress(spot.address)}</p>
+                      {curation && curation.menu_items.length > 0 && (
+                        <p className="text-xs text-gray-400">메뉴 {curation.menu_items.length}건</p>
+                      )}
+                    </div>
+                  </button>
+                  {curation && (
+                    <ToggleSwitch checked={curation.is_active} onToggle={() => handleToggle(curation)} disabled={togglingId === curation.id} />
                   )}
-                </div>
-                <ToggleSwitch checked={row.is_active} onToggle={() => handleToggle(row)} disabled={togglingId === row.id} />
-                <button type="button" onClick={() => setModalMode(row)} className="text-xs text-blue-600 hover:underline">
-                  수정
-                </button>
-              </li>
-            ))}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>
@@ -698,10 +654,11 @@ export function SpotCurationsPanel() {
         </div>
       )}
 
-      {modalMode && (
+      {modalTarget && (
         <CurationFormModal
-          initial={modalMode === 'create' ? undefined : modalMode}
-          onClose={() => setModalMode(null)}
+          initial={modalInitial}
+          presetSpot={modalPresetSpot}
+          onClose={() => setModalTarget(null)}
           onSaved={handleSaved}
         />
       )}
