@@ -104,7 +104,7 @@ function nextMessageId(): string {
 }
 
 export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: number }; onClose: () => void }) {
-  const { user } = useUser();
+  const { user, isLoading: isUserLoading } = useUser();
   const { sigunguName } = useUserLocation();
   const [messages, setMessages] = useState<ChatMessage[]>([
     { id: nextMessageId(), from: 'AI', text: '안녕하세요! 오늘 아이와 함께할 나들이 장소를 찾아드릴게요 😊 먼저 오늘 날씨부터 확인해볼게요...' },
@@ -158,7 +158,30 @@ export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: n
   }
 
   // ---- 0단계(신규): 마운트 시 오늘 날씨 선제 제안 + (로그인 시) 프로필 자동 연동 ----
+  // [todo.md 개선사항 8](2026-09-03): 기존에는 이 마운트 시점에 곧바로 인터뷰(날씨 질문)를
+  // 시작해, 비로그인 사용자가 8단계 넘게 타이핑을 다 마친 뒤(handleVibeConfirm, 최종 검색
+  // 직전)에야 무료 체험 소진 여부를 확인해 로그인 유도 문구를 띄웠다 — 이미 입력을 다
+  // 끝낸 사용자에게 허탈감을 준다는 지적이었다. 챗봇을 여는 바로 이 시점에 먼저 확인해,
+  // 소진된 비로그인 사용자에게는 어떤 질문(ChipOptions)도 노출하지 않고 곧바로
+  // LIMIT_REACHED 화면(로그인 유도 CTA)만 보여준다 — handleVibeConfirm의 동일 검사는
+  // (localStorage를 다른 탭에서 방금 소진했을 수 있어) 그대로 남겨둔다(이중 방어).
+  // isLoading이 풀리기 전(useUser의 supabase.auth.getUser() 비동기 응답 대기 중)에는
+  // user가 항상 null이라 실제로는 로그인된 사용자까지 여기서 잘못 걸러질 수 있었던
+  // 잠재 버그도 함께 바로잡는다 — hasInitializedRef로 auth 상태가 확정된 뒤 딱 한 번만
+  // 이 초기화 로직이 실행되도록 한다.
+  const hasInitializedRef = useRef(false);
   useEffect(() => {
+    if (isUserLoading || hasInitializedRef.current) return;
+    hasInitializedRef.current = true;
+
+    if (!user && hasConsumedAnonymousFreeUse()) {
+      const message = '무료 체험을 이미 사용하셨어요. 로그인 후 맘스픽에 첫 후기나 체크리스트를 남기면 챗봇을 무제한으로 이용할 수 있어요!';
+      setLimitReachedMessage(message);
+      pushAi(message);
+      setPhase('LIMIT_REACHED');
+      return;
+    }
+
     fetchWeatherIntro(resolveWhenChoice('TODAY', null)!, '오늘', 'INITIAL');
 
     if (user) {
@@ -188,7 +211,7 @@ export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: n
         });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [isUserLoading, user]);
 
   // ---- 1단계(신규): Weather Intro — 오늘(또는 재확인 날짜)의 날씨로 먼저 제안한다 ----
   async function fetchWeatherIntro(isoDate: string, label: string, stage: 'INITIAL' | 'AFTER_DATE') {
