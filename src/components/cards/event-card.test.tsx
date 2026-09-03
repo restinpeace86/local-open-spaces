@@ -137,6 +137,63 @@ describe('EventCard 이미지:텍스트 4:6 포션', () => {
   });
 });
 
+// [카드 높이/뱃지 정리](2026-09-03 사용자 지시): "카드 세로 높이가 길고 뱃지가 중구난방" —
+// 예약 마감 경고와 status 오버레이가 같은 정보를 중복 표시하던 것을 제거하고, 예약 안내
+// 뱃지는 DetailModal에만 남기고, 무료/유료·실내/야외는 이미지 오버레이로 옮겨 텍스트
+// 영역의 줄 수(=카드 높이)를 줄였다.
+describe('EventCard 카드 높이/뱃지 정리 (2026-09-03)', () => {
+  it('예약 마감 임박이어도 텍스트 영역에 중복 경고 뱃지("🚨 오늘 예약 마감")를 더 이상 보여주지 않는다', () => {
+    render(
+      <EventCard
+        item={makeEventItem({ is_reservation_required: true, reservation_end_date: localTodayStr() })}
+        onSelect={() => {}}
+      />
+    );
+    // 이미지 오버레이(status.label)로는 여전히 "오늘 마감"이 보인다 — 정보 자체가
+    // 사라진 게 아니라 중복 표시만 없앴다.
+    expect(screen.getByText('오늘 마감')).toBeInTheDocument();
+    expect(screen.queryByText('🚨 오늘 예약 마감')).not.toBeInTheDocument();
+  });
+
+  it('예약 안내 뱃지("사전예약필요"/"예약불필요")는 더 이상 카드에 노출하지 않는다(DetailModal로 이동)', () => {
+    const required = render(
+      <EventCard item={makeEventItem({ is_reservation_required: true, reservation_url: null })} onSelect={() => {}} />
+    );
+    expect(screen.queryByText(/사전예약필요/)).not.toBeInTheDocument();
+    required.unmount();
+
+    render(<EventCard item={makeEventItem({ is_reservation_required: false, reservation_url: null })} onSelect={() => {}} />);
+    expect(screen.queryByText(/예약불필요/)).not.toBeInTheDocument();
+  });
+
+  it('무료/유료 뱃지는 텍스트 영역이 아니라 이미지 영역 안에 렌더링된다', () => {
+    render(<EventCard item={makeEventItem({ is_free: true })} onSelect={() => {}} />);
+
+    const priceBadge = screen.getByText('🎁 무료');
+    const title = screen.getByText('도시농업 체험');
+    const imageArea = title.parentElement!.previousElementSibling!;
+    expect(imageArea).toContainElement(priceBadge);
+  });
+
+  it('실내/야외 뱃지는 텍스트 영역이 아니라 이미지 영역 안에 렌더링된다', () => {
+    render(<EventCard item={makeEventItem({ facility_type: '실내' })} onSelect={() => {}} />);
+
+    const facilityBadge = screen.getByText('실내');
+    const title = screen.getByText('도시농업 체험');
+    const imageArea = title.parentElement!.previousElementSibling!;
+    expect(imageArea).toContainElement(facilityBadge);
+  });
+
+  it('텍스트 영역에는 접수 상태/키즈 대상처럼 이미지로 옮기지 않은 뱃지만 남는다', () => {
+    render(<EventCard item={makeEventItem({ booking_status: '오늘방문', is_kids_friendly: true })} onSelect={() => {}} />);
+
+    const title = screen.getByText('도시농업 체험');
+    const textArea = title.parentElement!;
+    expect(textArea).toContainElement(screen.getByText('⚡ 오늘 당일 입장 가능'));
+    expect(textArea).toContainElement(screen.getByText('👶 키즈/어린이'));
+  });
+});
+
 // [카드 내 이미지/텍스트 영역 비율 불일치 수정](2026-08-30 사용자 지시): 오늘 마감/오늘
 // 한정 dateBanner가 이미지/텍스트 사이의 별도 flex 행으로 존재하면, 배너가 있는 카드는
 // "전체 높이 - 배너 높이"만 4:6으로 나누고 배너 없는 카드는 전체 높이를 4:6으로 나눠

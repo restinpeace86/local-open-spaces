@@ -19,24 +19,15 @@ describe('BottomTabs', () => {
   // Task 9-6-10(2026-08-23): [카테고리-내주변-홈-찜-마이] → [추천픽-스팟픽-이벤트픽-찜-마이] 재편.
   // [todo.md 개선사항 7](2026-09-03): 맨 왼쪽 슬롯을 미구현 "추천픽"에서 실제 라이브
   // 기능인 "맘스픽"(/mom-pick)으로 교체.
-  it('5개 탭(맘스픽/스팟픽/이벤트픽/찜/마이)을 모두 노출한다', () => {
+  // [하단 탭에서 "찜" 제거](2026-09-03 사용자 지시): "찜된 데이터는 마이페이지 안에서
+  // 보도록 할 것"이라는 명시적 지시로 4개 탭(맘스픽/스팟픽/이벤트픽/마이)만 남는다.
+  it('4개 탭(맘스픽/스팟픽/이벤트픽/마이)을 모두 노출하고, 찜 탭은 더 이상 노출하지 않는다', () => {
     render(<BottomTabs />);
     expect(screen.getByText('맘스픽')).toBeInTheDocument();
     expect(screen.getByText('스팟픽')).toBeInTheDocument();
     expect(screen.getByText('이벤트픽')).toBeInTheDocument();
-    expect(screen.getByText('찜')).toBeInTheDocument();
     expect(screen.getByText('마이')).toBeInTheDocument();
-  });
-
-  // [Decision 018](2026-09-02): "마이"는 소셜 로그인 도입으로 .env.local에서
-  // NEXT_PUBLIC_ENABLE_MY_PAGE=true로 활성화했다 — 다만 FEATURE_FLAGS는 모듈 최상단에서
-  // process.env를 한 번만 읽어 굳어지는 상수라, 이 값 자체를 유닛 테스트로 흔드는 것은
-  // (vi.stubEnv로는 이미 평가된 상수를 되돌릴 수 없음) 취약하다 — 실제 활성화 여부는
-  // 개발 서버(Next.js가 .env.local을 정식으로 읽음)에서 실측 확인했다(구현 기록 참고).
-  // 이 테스트는 여전히 비활성 상태인 찜만 검증한다.
-  it('찜 탭은 비활성화 상태로 노출되며 클릭해도 이동하지 않는다', () => {
-    render(<BottomTabs />);
-    expect(screen.getByText('찜').closest('div')).toHaveAttribute('aria-disabled', 'true');
+    expect(screen.queryByText('찜')).not.toBeInTheDocument();
   });
 
   // [todo.md 개선사항 7](2026-09-03): 맘스픽은 라이브 기능이라 더 이상 비활성화 플래그가

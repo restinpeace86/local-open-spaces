@@ -331,6 +331,38 @@ export function HomeView({
           </section>
         ) : (
           <>
+            {/* [홈 화면 대분류 그리드 최상단 배치](2026-09-03 사용자 지시): "자연/캠핑,
+                공공 키즈카페 등 대분류가 맨 아래에 있다 — 오늘 마감/오늘 한정 뱃지가
+                뜨는 행사 카드 영역(오늘의 추천 행사)보다 위로 올려달라"는 지적에 따라
+                이 섹션(원래는 "예약 가능" 아래, 여러 시한성 이벤트 슬라이더보다 한참
+                뒤에 있었다)을 화면의 첫 콘텐츠 섹션으로 옮긴다. 검색 활성화 시에는
+                기존과 동일하게 이 화면 전체가 숨겨지므로(위 isSearchActive 분기) 이
+                섹션만 별도로 검색 중 노출할 필요는 없다. */}
+            <section aria-label="카테고리별 행사">
+              <MajorCategoryGrid
+                selectedMaj={selectedMaj}
+                onSelectMaj={handleSelectMaj}
+                selectedMin={selectedCategory}
+                onSelectMin={selectCategory}
+                categoryCounts={categoryCounts}
+              />
+              {selectedCategory !== null && (
+                <div className="px-4 mt-3">
+                  {isCategoryFeedLoading || categoryFeedItems === null ? (
+                    <FreeFeedSkeleton />
+                  ) : categoryFeedItems.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                      {categoryFeedItems.map((item) => (
+                        <FeedCard key={item.id} item={item} onSelect={setSelectedItem} />
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-400">조건에 맞는 행사를 찾는 중입니다.</p>
+                  )}
+                </div>
+              )}
+            </section>
+
             {/* Task 9-6-10(2026-08-23): 하단 탭 재편으로 이 화면("이벤트픽")은 항상 events만
                 보여준다 — 이전의 EVENTS/SPACES 대분류 토글 섹션은 제거했다(상시 공간은
                 "스팟픽"(/nearby) 탭이 전담).
@@ -428,34 +460,6 @@ export function HomeView({
                 )}
               </section>
             )}
-
-            {/* Task 9-6-17(2026-08-25, docs/spec.md 2.2 ② 개정)/[대분류·중분류 드릴다운
-                개편](2026-08-27 사용자 지시): 대분류를 누르면 중분류 칩이 펼쳐지고, 중분류를
-                누르면 라우팅 없이 이 화면 내부에서 바로 아래 카드 피드가 전환된다(인라인 피딩). */}
-            <section aria-label="카테고리별 행사">
-              <MajorCategoryGrid
-                selectedMaj={selectedMaj}
-                onSelectMaj={handleSelectMaj}
-                selectedMin={selectedCategory}
-                onSelectMin={selectCategory}
-                categoryCounts={categoryCounts}
-              />
-              {selectedCategory !== null && (
-                <div className="px-4 mt-3">
-                  {isCategoryFeedLoading || categoryFeedItems === null ? (
-                    <FreeFeedSkeleton />
-                  ) : categoryFeedItems.length > 0 ? (
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                      {categoryFeedItems.map((item) => (
-                        <FeedCard key={item.id} item={item} onSelect={setSelectedItem} />
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-400">조건에 맞는 행사를 찾는 중입니다.</p>
-                  )}
-                </div>
-              )}
-            </section>
 
             {/* Task 9-5-1(2026-08-22)/9-6-10(2026-08-23): 이벤트 목적별 5개 하위 테마 칩 — 기본
                 선택 테마가 없어(임의로 하나를 고를 근거가 없음) 칩을 직접 누를 때만 지연

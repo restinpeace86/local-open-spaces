@@ -336,6 +336,52 @@ describe('HomeView', () => {
       expect(bestPickIndex).toBeGreaterThan(ongoingIndex);
       expect(reservationIndex).toBeGreaterThan(bestPickIndex);
     });
+
+    // [홈 화면 대분류 그리드 최상단 배치](2026-09-03 사용자 지시): "자연/캠핑, 공공
+    // 키즈카페 등 대분류가 맨 아래에 있다 — 오늘 마감/오늘 한정 뱃지가 뜨는 행사 카드
+    // 영역(오늘의 추천 행사)보다 위로 올려달라"는 지적에 따라 이 섹션을 화면의 첫
+    // 콘텐츠 섹션으로 옮겼다.
+    it('"카테고리별 행사"(대분류 그리드)가 다른 모든 시한성 이벤트 섹션보다 먼저 나온다', async () => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn((url: string) => {
+          if (url.startsWith('/api/curated-items')) {
+            return Promise.resolve({ json: () => Promise.resolve({ items: [makeCuratedItem()] }) } as Response);
+          }
+          if (url.startsWith('/api/home/feed')) {
+            return Promise.resolve({
+              json: () =>
+                Promise.resolve({
+                  // heroEvents는 일부러 생략한다 — Array.isArray(undefined)가 false라
+                  // HomeView가 initialHeroEvents prop 값을 그대로 유지한다(마운트 시
+                  // 재조회로 덮어써 0건이 되면 "오늘의 추천 행사" 섹션이 숨겨져 이
+                  // 테스트가 검증하려는 순서를 확인할 수 없다).
+                  currentlyOngoingEvents: [makeEventItem({ id: 'ongoing-1' })],
+                  reservationOpenEvents: [makeEventItem({ id: 'reservation-1' })],
+                }),
+            } as Response);
+          }
+          return Promise.resolve({ json: () => Promise.resolve({}) } as Response);
+        })
+      );
+      const { container } = render(<HomeView initialHeroEvents={[makeEventItem({ id: 'hero-1' })]} />);
+      await screen.findByText('가을 단풍 나들이 축제 입장권');
+
+      const labels = Array.from(container.querySelectorAll('section[aria-label]')).map((el) =>
+        el.getAttribute('aria-label')
+      );
+      const categoryGridIndex = labels.indexOf('카테고리별 행사');
+      const heroIndex = labels.indexOf('오늘의 추천 행사');
+      const ongoingIndex = labels.indexOf('현재 이용 가능');
+      const bestPickIndex = labels.indexOf('베스트 나들이 픽');
+      const reservationIndex = labels.indexOf('예약 가능');
+
+      expect(categoryGridIndex).toBe(0);
+      expect(heroIndex).toBeGreaterThan(categoryGridIndex);
+      expect(ongoingIndex).toBeGreaterThan(categoryGridIndex);
+      expect(bestPickIndex).toBeGreaterThan(categoryGridIndex);
+      expect(reservationIndex).toBeGreaterThan(categoryGridIndex);
+    });
   });
 
   // [홈 화면 큐레이션 섹션 추가 및 상단 탭 정리](2026-08-30 사용자 지시)로 "🎁 무료·공공"

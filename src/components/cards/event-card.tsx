@@ -3,7 +3,7 @@
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
 import { getParentalBadges } from '@/lib/spaces/parental-badges';
-import { getEventStatus, getDateBannerBadge, getReservationAvailabilityTag } from '@/lib/spaces/event-status';
+import { getEventStatus, getDateBannerBadge } from '@/lib/spaces/event-status';
 import { formatDateRange, formatVenueLine } from '@/lib/spaces/format';
 
 // spec/event/event-card.md 준용 신규 카드 (Task 9-1) — 기존에는 이벤트 전용 카드가 없었고
@@ -45,6 +45,21 @@ import { formatDateRange, formatVenueLine } from '@/lib/spaces/format';
 // 영역에도 min-h-0을 추가해 flex-[4]/flex-[6] 비율이 이미지 내용물과 무관하게 항상
 // 정확히 지켜지도록 고쳤다(Playwright로 실제 브라우저 렌더링 높이를 재측정해 8장 카드
 // 전부 102px:154px로 고정됨을 확인 — 상세 검증 로그는 구현 기록 참고).
+// [카드 높이/뱃지 정리](2026-09-03 사용자 지시): "카드 세로 높이가 길고 뱃지가 중구난방"
+// — 실측으로 두 가지 원인을 찾았다.
+//   ① `showReservationAlert`("🚨 오늘 예약 마감")는 `status.label === '오늘 마감'`일
+//      때만 뜨는데, 바로 그 값이 이미지 위 오버레이(top-right)로도 항상 노출된다 —
+//      같은 정보를 문구만 바꿔 텍스트 영역에 한 번 더 보여주던 순수 중복이라 제거한다.
+//   ② `reservationTag`("📋 사전예약필요"/"✅ 예약불필요 · 현장방문")는 DetailModal에
+//      이미 동일한 정보가 표시되고 있어(detail-modal.tsx) 카드에서 빼도 정보 손실이
+//      없다 — 목록 카드는 "고를지 말지 판단할 핵심 정보"만, 나머지는 상세에서 보도록
+//      정리한다.
+// 남은 뱃지 중 무료/유료(is_free)와 실내/야외(facility_type)는 이미지 위 하단 좌/우
+// 오버레이로 옮긴다 — 텍스트 영역의 줄 수를 늘리지 않고(이미지 영역은 뱃지가 몇 개든
+// 높이가 그대로다) 정보는 그대로 유지한다. 텍스트 영역에는 접수 임박(booking_status)/
+// 키즈 대상 뱃지만 남아 최대 2개로 줄었다.
+const IMAGE_OVERLAY_BADGE_KEYS = new Set(['is_free', 'facility_type']);
+
 export function EventCard({
   item,
   onSelect,
@@ -55,16 +70,16 @@ export function EventCard({
   hideBadgeKeys?: string[];
 }) {
   const meta = getCategoryMeta(item.category);
-  const badges = getParentalBadges(item).filter((badge) => !hideBadgeKeys.includes(badge.key));
+  const allBadges = getParentalBadges(item).filter((badge) => !hideBadgeKeys.includes(badge.key));
+  const imageBadges = allBadges.filter((badge) => IMAGE_OVERLAY_BADGE_KEYS.has(badge.key));
+  const textBadges = allBadges.filter((badge) => !IMAGE_OVERLAY_BADGE_KEYS.has(badge.key));
+  const priceBadge = imageBadges.find((badge) => badge.key === 'is_free');
+  const facilityBadge = imageBadges.find((badge) => badge.key === 'facility_type');
   const status = getEventStatus(item);
   const dateBanner = getDateBannerBadge(item);
-  const reservationTag = getReservationAvailabilityTag(item);
   const period = formatDateRange(item.start_date, item.end_date);
   // Task 9-1-3: "[장소명] · [시/군/구]" (예: "율동공원 야외무대 · 성남시 분당구")
   const venueLine = formatVenueLine(item.address, item.sigungu_name);
-
-  // event-card.md 2: 예약 마감 임박(오늘까지)이면 붉은 경고 뱃지를 최우선 노출
-  const showReservationAlert = item.is_reservation_required === true && status.label === '오늘 마감';
 
   return (
     <button
@@ -112,29 +127,27 @@ export function EventCard({
         >
           {status.label}
         </span>
+        {/* [카드 높이/뱃지 정리](2026-09-03 사용자 지시): 무료/유료·실내/야외는 이미지
+            하단 좌/우 오버레이로 — 텍스트 영역 줄 수를 늘리지 않는다. */}
+        {priceBadge && (
+          <span className="absolute bottom-2 left-2 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-black/60 text-white">
+            {priceBadge.label}
+          </span>
+        )}
+        {facilityBadge && (
+          <span className="absolute bottom-2 right-2 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-black/60 text-white">
+            {facilityBadge.label}
+          </span>
+        )}
       </div>
 
       <div className="p-3 flex-[6] min-h-0 overflow-hidden flex flex-col gap-1.5">
-        {showReservationAlert && (
-          <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-red-600 text-white self-start">
-            🚨 오늘 예약 마감
-          </span>
-        )}
         <p className="text-sm font-medium text-gray-900 line-clamp-2 min-h-[2.5rem]">{item.name}</p>
         {venueLine && <p className="text-xs text-gray-400 line-clamp-1">{venueLine}</p>}
         {period && <p className="text-xs text-gray-400 line-clamp-1">{period}</p>}
-        {reservationTag && (
-          <span
-            className={`text-[11px] font-semibold px-2 py-0.5 rounded-full self-start ${
-              reservationTag.tone === 'warn' ? 'bg-amber-50 text-amber-700' : 'bg-gray-100 text-gray-600'
-            }`}
-          >
-            {reservationTag.label}
-          </span>
-        )}
-        {badges.length > 0 && (
+        {textBadges.length > 0 && (
           <div className="flex flex-wrap gap-1">
-            {badges.map((badge) => (
+            {textBadges.map((badge) => (
               <span
                 key={badge.key}
                 className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
