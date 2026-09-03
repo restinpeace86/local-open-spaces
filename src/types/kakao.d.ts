@@ -19,6 +19,28 @@ declare namespace kakao.maps {
     // 상호작용을 꺼두기 위해 추가 — 카카오 맵 JS SDK v2 공식 API에 실제로 존재하는 메서드다.
     setDraggable(draggable: boolean): void;
     setZoomable(zoomable: boolean): void;
+    // [인앱 길찾기](2026-09-03): 출발지·경로·목적지가 모두 보이도록 뷰포트를 자동으로
+    // 맞추기 위해 추가 — 공식 API에 실제로 존재하는 메서드다.
+    setBounds(bounds: LatLngBounds): void;
+  }
+
+  // [인앱 길찾기](2026-09-03 사용자 지시): 경로 좌표를 지도 위에 선으로 그리기 위해 추가.
+  class Polyline {
+    constructor(options: {
+      path: LatLng[];
+      strokeWeight?: number;
+      strokeColor?: string;
+      strokeOpacity?: number;
+      strokeStyle?: string;
+    });
+    setMap(map: Map | null): void;
+  }
+
+  // [인앱 길찾기](2026-09-03 사용자 지시): 여러 좌표(출발지+경로 전체)를 한 화면에 담기
+  // 위한 뷰포트 계산에 쓴다.
+  class LatLngBounds {
+    constructor();
+    extend(latlng: LatLng): void;
   }
 
   class CustomOverlay {

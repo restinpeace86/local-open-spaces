@@ -16,6 +16,15 @@ import { loadKakaoMapSdk } from '@/lib/kakao/load-kakao-sdk';
 // 정상 동작해야 하므로(제5장 제11조 무중단 원칙) throw하지 않고 상태로만 표시한다.
 type LoadState = 'loading' | 'loaded' | 'error';
 
+// [인앱 길찾기](2026-09-03 사용자 지시): 현재 위치→스팟 경로를 이 지도 위에 직접 그리기
+// 위한 데이터 모양. path는 서버(/api/nearby/directions, 카카오모빌리티 길찾기 API를
+// 감싼 라우트)가 반환하는 순서 있는 좌표 목록이다.
+export type MiniMapRoute = {
+  originLat: number;
+  originLng: number;
+  path: { lat: number; lng: number }[];
+};
+
 export function MiniMap({
   lat,
   lng,
@@ -23,6 +32,7 @@ export function MiniMap({
   address = null,
   interactive = false,
   className = 'w-full h-40',
+  route = null,
 }: {
   lat: number;
   lng: number;
@@ -30,6 +40,7 @@ export function MiniMap({
   address?: string | null;
   interactive?: boolean;
   className?: string;
+  route?: MiniMapRoute | null;
 }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<kakao.maps.Map | null>(null);
@@ -65,6 +76,47 @@ export function MiniMap({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lat, lng, interactive]);
+
+  // [인앱 길찾기](2026-09-03 사용자 지시): 지도 생성 effect와 완전히 분리한 독립 effect —
+  // route가 나중에(버튼 클릭 후 비동기 응답으로) 채워져도 지도 자체를 다시 만들지
+  // 않고 그 위에 폴리라인/출발지 마커만 추가한다(불필요한 재생성으로 사용자가 이미
+  // 조작한 확대/이동 상태를 잃지 않게 함).
+  useEffect(() => {
+    if (!route || loadState !== 'loaded' || !mapRef.current) return;
+    const map = mapRef.current;
+
+    const linePath = route.path.map((p) => new window.kakao.maps.LatLng(p.lat, p.lng));
+    const polyline = new window.kakao.maps.Polyline({
+      path: linePath,
+      strokeWeight: 5,
+      strokeColor: '#2563eb',
+      strokeOpacity: 0.85,
+      strokeStyle: 'solid',
+    });
+    polyline.setMap(map);
+
+    const originPosition = new window.kakao.maps.LatLng(route.originLat, route.originLng);
+    const originMarker = new window.kakao.maps.Marker({
+      position: originPosition,
+      map,
+      image: new window.kakao.maps.MarkerImage(
+        `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(
+          '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><circle cx="10" cy="10" r="7" fill="#2563eb" stroke="white" stroke-width="2.5"/></svg>'
+        )}`,
+        new window.kakao.maps.Size(20, 20)
+      ),
+    });
+
+    const bounds = new window.kakao.maps.LatLngBounds();
+    bounds.extend(originPosition);
+    linePath.forEach((point) => bounds.extend(point));
+    map.setBounds(bounds);
+
+    return () => {
+      polyline.setMap(null);
+      originMarker.setMap(null);
+    };
+  }, [route, loadState]);
 
   async function handleCopyAddress() {
     if (!address) return;

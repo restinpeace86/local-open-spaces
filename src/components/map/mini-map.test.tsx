@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { MiniMap } from './mini-map';
 
@@ -11,12 +11,32 @@ import { MiniMap } from './mini-map';
 const { loadKakaoMapSdk } = vi.hoisted(() => ({ loadKakaoMapSdk: vi.fn() }));
 vi.mock('@/lib/kakao/load-kakao-sdk', () => ({ loadKakaoMapSdk }));
 
+// [인앱 길찾기](2026-09-03) 실측으로 발견한 함정: vi.fn()에 화살표 함수를 구현체로 주면
+// `new`로 호출했을 때 "is not a constructor"로 실제 런타임 에러가 난다(화살표 함수는
+// 애초에 JS 스펙상 생성자로 쓸 수 없음, vi.fn이 `new.target`을 그대로 내부 구현체 호출에
+// 반영하기 때문 — vitest 자체 경고 메시지도 이를 안내한다). 기존 Map/Marker 스텁도 이미
+// 화살표 함수였는데, 그 두 스텁을 쓰던 기존 테스트들의 단언이 약해서(항상 렌더링되는
+// role="img" div의 존재만 확인) 이 에러가 조용히 'error' 상태로 삼켜지고도 무증상으로
+// 통과하고 있었다 — 이번에 Polyline 호출 여부처럼 더 엄격한 단언을 추가하면서 발견했다.
+// 전부 `function` 표현식으로 바꿔 실제로 `new`가 가능하게 고친다.
 function stubKakaoGlobal() {
   (window as unknown as { kakao: unknown }).kakao = {
     maps: {
-      LatLng: vi.fn(),
-      Map: vi.fn(() => ({ setDraggable: vi.fn(), setZoomable: vi.fn() })),
-      Marker: vi.fn(() => ({ setMap: vi.fn() })),
+      LatLng: vi.fn(function LatLng() {}),
+      Map: vi.fn(function Map() {
+        return { setDraggable: vi.fn(), setZoomable: vi.fn(), setBounds: vi.fn() };
+      }),
+      Marker: vi.fn(function Marker() {
+        return { setMap: vi.fn() };
+      }),
+      Polyline: vi.fn(function Polyline() {
+        return { setMap: vi.fn() };
+      }),
+      LatLngBounds: vi.fn(function LatLngBounds() {
+        return { extend: vi.fn() };
+      }),
+      MarkerImage: vi.fn(function MarkerImage() {}),
+      Size: vi.fn(function Size() {}),
     },
   };
 }
@@ -76,5 +96,48 @@ describe('MiniMap', () => {
 
     expect(screen.getByText('지도를 불러올 수 없습니다.')).toBeInTheDocument();
     expect(screen.queryByText('주소 복사')).not.toBeInTheDocument();
+  });
+
+  // [인앱 길찾기](2026-09-03 사용자 지시): route가 주어지면 경로선(Polyline)과 출발지
+  // 마커를 지도 위에 그리고, 출발지+경로 전체가 보이도록 뷰포트를 맞춘다.
+  describe('route(길찾기 경로) 렌더링', () => {
+    it('route가 있으면 Polyline과 출발지 마커를 그리고 뷰포트를 경로에 맞춘다', async () => {
+      stubKakaoGlobal();
+      loadKakaoMapSdk.mockResolvedValue(undefined);
+      const kakaoMaps = (window as unknown as { kakao: { maps: Record<string, unknown> } }).kakao.maps;
+
+      render(
+        <MiniMap
+          lat={37.5}
+          lng={127.1}
+          name="테스트 장소"
+          route={{
+            originLat: 37.4,
+            originLng: 127.0,
+            path: [
+              { lat: 37.4, lng: 127.0 },
+              { lat: 37.45, lng: 127.05 },
+              { lat: 37.5, lng: 127.1 },
+            ],
+          }}
+        />
+      );
+
+      await waitFor(() => expect(kakaoMaps.Polyline).toHaveBeenCalledTimes(1));
+      // 출발지(1) + 목적지(1) = 총 2개의 마커가 생성된다.
+      expect(kakaoMaps.Marker).toHaveBeenCalledTimes(2);
+      expect(kakaoMaps.LatLngBounds).toHaveBeenCalledTimes(1);
+    });
+
+    it('route가 없으면(기본값) Polyline을 그리지 않는다', async () => {
+      stubKakaoGlobal();
+      loadKakaoMapSdk.mockResolvedValue(undefined);
+      const kakaoMaps = (window as unknown as { kakao: { maps: Record<string, unknown> } }).kakao.maps;
+
+      render(<MiniMap lat={37.5} lng={127.1} name="테스트 장소" />);
+      await waitFor(() => expect(screen.getByLabelText('테스트 장소 위치 지도')).toBeInTheDocument());
+
+      expect(kakaoMaps.Polyline).not.toHaveBeenCalled();
+    });
   });
 });
