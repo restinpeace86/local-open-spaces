@@ -12,7 +12,7 @@ import { getMyProfile, Profile } from '@/lib/auth/profile';
 import { calculateAgesFromBirthYears, deriveKidsAgeGroup, buildPersonalizedGreeting } from '@/lib/ai-chat/personalization';
 import { LocationOnboardingModal } from '@/components/map/location-onboarding-modal';
 import { UserLocation } from '@/lib/location/user-location-storage';
-import { isToday, resolveWhenChoice, WhenChoice } from '@/lib/ai-chat/date-resolver';
+import { isLateInDay, resolveWhenChoice, WhenChoice } from '@/lib/ai-chat/date-resolver';
 import { OutdoorRecommendation } from '@/lib/ai-chat/weather-reaction';
 import {
   Budget,
@@ -41,6 +41,7 @@ import {
   WEATHER_INTRO_CHOICE_OPTIONS,
   WeatherIntroChoice,
   WHEN_OPTIONS,
+  WHEN_OPTIONS_WHEN_LATE,
 } from '@/lib/ai-chat/step-options';
 
 // [AI 챗봇 맞춤 추천 상세 구현(초개인화 고도화)](2026-09-02 사용자 지시): 기존 8단계
@@ -106,8 +107,20 @@ function nextMessageId(): string {
 export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: number }; onClose: () => void }) {
   const { user, isLoading: isUserLoading } = useUser();
   const { sigunguName } = useUserLocation();
+  // [챗봇 개선](2026-09-04 사용자 지시) 1: "날씨 알아보기 전에 현재 시간을 먼저 파악해줘 —
+  // 늦은 오후/저녁이면 오늘 나갈 계획을 생각하지 말고 내일/다른 날만 물어보도록." 세션
+  // 시작 시각 기준으로 한 번만 판정해 고정한다(대화 도중 자정을 넘기는 등으로 값이
+  // 바뀌어 질문 목록이 갑자기 달라지면 안 되므로). 이 값이 아래 messages 초기값에도
+  // 쓰이므로 반드시 그 useState보다 먼저 선언한다(같은 렌더 안 훅 실행 순서 의존).
+  const [isLateStart] = useState(() => isLateInDay());
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { id: nextMessageId(), from: 'AI', text: '안녕하세요! 오늘 아이와 함께할 나들이 장소를 찾아드릴게요 😊 먼저 오늘 날씨부터 확인해볼게요...' },
+    {
+      id: nextMessageId(),
+      from: 'AI',
+      text: isLateStart
+        ? '안녕하세요! 지금은 이미 늦은 시간이라 내일 나들이 기준으로 도와드릴게요 😊 먼저 내일 날씨부터 확인해볼게요...'
+        : '안녕하세요! 오늘 아이와 함께할 나들이 장소를 찾아드릴게요 😊 먼저 오늘 날씨부터 확인해볼게요...',
+    },
   ]);
   const [phase, setPhase] = useState<Phase>('WEATHER_INTRO_LOADING');
   const [answers, setAnswers] = useState<Answers>({});
@@ -133,6 +146,12 @@ export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: n
   // 따라 3지 선다 응답 후 다음 단계(WHEN vs REGION)가 달라진다.
   const [weatherStage, setWeatherStage] = useState<'INITIAL' | 'AFTER_DATE'>('INITIAL');
   const [lastWeatherMode, setLastWeatherMode] = useState<OutdoorRecommendation>('EITHER');
+  // [챗봇 개선](2026-09-04 사용자 지시) 1: 이미 날씨를 확인한 날짜를 기억해 둔다 — 기존에는
+  // "오늘"인지만 봐서(isToday) WHEN에서 같은 날짜를 다시 골라도 재조회를 건너뛸 수 있었지만,
+  // 늦은 시간에는 초기 조회 자체가 "내일"이라(TODAY가 아님) 그 방식으로는 WHEN에서 "내일"을
+  // 다시 골랐을 때 이미 있는 데이터를 무시하고 중복 조회/중복 안내를 하게 된다 — 날짜
+  // 자체를 비교해 일반화한다.
+  const [weatherFetchedForIso, setWeatherFetchedForIso] = useState<string | null>(null);
 
   // [Step 2 프로필 자동 연동] 로그인 사용자의 birth_years로 나이를 자동 환산해 KIDS_COUNT/
   // KIDS_AGE 질문을 건너뛴다. 아직 로딩 전이거나 데이터가 없으면 null → 기존처럼 직접 묻는다.
@@ -182,7 +201,14 @@ export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: n
       return;
     }
 
-    fetchWeatherIntro(resolveWhenChoice('TODAY', null)!, '오늘', 'INITIAL');
+    // [챗봇 개선](2026-09-04 사용자 지시) 1: 이미 늦은 시간이면 "오늘" 날씨 대신 처음부터
+    // "내일" 날씨를 확인한다 — 오늘 남은 시간대로 나들이 계획을 제안하는 것 자체가
+    // 의미가 없기 때문(date-resolver.ts isLateInDay 주석 참고).
+    if (isLateStart) {
+      fetchWeatherIntro(resolveWhenChoice('TOMORROW', null)!, '내일', 'INITIAL');
+    } else {
+      fetchWeatherIntro(resolveWhenChoice('TODAY', null)!, '오늘', 'INITIAL');
+    }
 
     if (user) {
       getMyProfile()
@@ -226,10 +252,12 @@ export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: n
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? '날씨 조회 실패');
       setLastWeatherMode(data.recommendedMode as OutdoorRecommendation);
+      setWeatherFetchedForIso(isoDate);
       pushAi(data.reactionText);
       setPhase('WEATHER_INTRO_CHOICE');
     } catch (err) {
       setLastWeatherMode('EITHER');
+      setWeatherFetchedForIso(isoDate);
       const detail = process.env.NODE_ENV !== 'production' ? ` (개발자용 상세: ${err instanceof Error ? err.message : String(err)})` : '';
       pushAi(`${label} 날씨 정보를 불러오는 데 문제가 생겼어요. 야외/실내 중 편하신 쪽을 골라주세요!${detail}`);
       setPhase('WEATHER_INTRO_CHOICE');
@@ -254,7 +282,14 @@ export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: n
   function commitOutdoorPreference(pref: OutdoorPreference) {
     setAnswers((a) => ({ ...a, outdoorPreference: pref }));
     if (weatherStage === 'INITIAL') {
-      pushAi('오늘 바로 아이와 나들이 다녀오실 계획이신가요, 아니면 다른 날 갈 예정인가요?');
+      // [챗봇 개선](2026-09-04 사용자 지시) 1: 이미 늦은 시간이면 "오늘 바로" 나갈지
+      // 묻는 것 자체가 의미가 없다 — 이미 "내일" 날씨를 확인했으니 그 맥락에 맞는
+      // 질문으로 바꾼다.
+      pushAi(
+        isLateStart
+          ? '내일 아이와 나들이 다녀오실 계획이신가요, 아니면 다른 날 갈 예정인가요?'
+          : '오늘 바로 아이와 나들이 다녀오실 계획이신가요, 아니면 다른 날 갈 예정인가요?'
+      );
       setPhase('WHEN');
     } else {
       proceedToRegion();
@@ -281,7 +316,12 @@ export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: n
   function commitWhen(iso: string, label: string) {
     pushUser(label);
     setAnswers((a) => ({ ...a, whenIso: iso, whenLabel: label }));
-    if (isToday(iso)) {
+    // [챗봇 개선](2026-09-04 사용자 지시) 1: 원래는 "오늘인지"(isToday)만 봐서 이미 조회한
+    // 오늘 날씨를 다시 조회하지 않았다 — 늦은 시간에는 초기 조회 자체가 "내일"이라(오늘이
+    // 아님), 그 기준으로는 WHEN에서 "내일"을 또 골라도 매번 다시 조회하게 된다. 실제로
+    // "이미 그 날짜로 날씨를 확인했는지"를 비교해야 한다(isToday(iso)는 그 특수 사례
+    // 하나만 다루던 것 — weatherFetchedForIso가 그 사례를 포함해 일반화한다).
+    if (iso === weatherFetchedForIso) {
       proceedToRegion();
     } else {
       // Step 1: "날짜 선택 시 해당일 예보 기반 제안 멘트 동적 출력" — 같은 흐름을 그 날짜로
@@ -600,6 +640,7 @@ export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: n
           <div className="border-t border-gray-100 p-3">
             <ChipOptions
               phase={phase}
+              isLateStart={isLateStart}
               onWeatherIntroChoice={handleWeatherIntroChoice}
               onManualOutdoorPreference={handleManualOutdoorPreference}
               onWhenSelect={handleWhenSelect}
@@ -659,6 +700,7 @@ function ChipButton({ children, onClick }: { children: React.ReactNode; onClick:
 
 function ChipOptions({
   phase,
+  isLateStart,
   onWeatherIntroChoice,
   onManualOutdoorPreference,
   onWhenSelect,
@@ -678,6 +720,7 @@ function ChipOptions({
   onCustomDateConfirm,
 }: {
   phase: Phase;
+  isLateStart: boolean;
   onWeatherIntroChoice: (choice: WeatherIntroChoice, label: string) => void;
   onManualOutdoorPreference: (pref: OutdoorPreference, label: string) => void;
   onWhenSelect: (choice: WhenChoice, label: string) => void;
@@ -718,9 +761,11 @@ function ChipOptions({
         </div>
       );
     case 'WHEN':
+      // [챗봇 개선](2026-09-04 사용자 지시) 1: 이미 늦은 시간이면 "오늘"/"이번 주 토·일요일"
+      // (오늘일 수도 있음)을 빼고 "내일"/"다른 날"만 남긴다.
       return (
         <div className="flex flex-wrap gap-2">
-          {WHEN_OPTIONS.map((o) => (
+          {(isLateStart ? WHEN_OPTIONS_WHEN_LATE : WHEN_OPTIONS).map((o) => (
             <ChipButton key={o.id} onClick={() => onWhenSelect(o.id, o.label)}>
               {o.label}
             </ChipButton>

@@ -98,6 +98,28 @@ describe('buildProactiveWeatherSuggestion', () => {
     );
     expect(text).toContain('야외/실내 중 어디로 가고 싶으신지');
   });
+
+  // [챗봇 개선](2026-09-04 사용자 지시) 2: "구체적인 수치 알려줘 — 온도랑 강수확률,
+  // 미세먼지랑 초미세먼지 등." 정성적 문구뿐 아니라 실제 수치도 함께 보여주는지 검증한다.
+  it('오늘(미세먼지 데이터 있음)이면 기온/강수확률/미세먼지/초미세먼지 수치를 모두 보여준다', () => {
+    const text = buildProactiveWeatherSuggestion(snapshot(), '2026-09-01', true);
+    expect(text).toContain('기온 24℃');
+    expect(text).toContain('강수확률 10%');
+    expect(text).toContain("미세먼지 '좋음'");
+    expect(text).toContain("초미세먼지 '좋음'");
+  });
+
+  it('오늘이 아닌 날짜(미세먼지 예보 없음)면 기온/강수확률만 보여주고 미세먼지는 정직하게 안내한다', () => {
+    const text = buildProactiveWeatherSuggestion(
+      snapshot({ pm10Grade: null, pm25Grade: null, airQualityAvailable: false }),
+      '2026-09-05',
+      false
+    );
+    expect(text).toContain('기온 24℃');
+    expect(text).toContain('강수확률 10%');
+    expect(text).not.toContain("미세먼지 '"); // 등급 수치는 없어야 한다
+    expect(text).toContain('그 날이 가까워져야 정확히 알 수 있어요'); // 정직한 안내 문구는 있어야 한다
+  });
 });
 
 describe('resolveWeatherSnapshot', () => {

@@ -20,7 +20,7 @@
 import { pathToFileURL } from 'url';
 import { loadEnv } from '../lib/load-env.mjs';
 import { getMissingEnvVars, formatMissingEnvVarsMessage } from './lib/env-precheck.mjs';
-import { createAdminClient, analyzeOpenSpaces } from './lib/supabase-admin.mjs';
+import { createAdminClient, analyzeOpenSpaces, refreshSigunguOptionsCache } from './lib/supabase-admin.mjs';
 import { dedupeOpenSpaces } from './lib/dedupe-open-spaces.mjs';
 import { applyDetailedCategoryFallback } from './lib/detailed-category-fallback.mjs';
 import { applyLegacySourceCategoryMapping } from './lib/legacy-source-category-mapping.mjs';
@@ -264,6 +264,44 @@ async function runAnalyzeOpenSpaces({ dryRun }) {
   };
 }
 
+// [챗봇 개선](2026-09-04 사용자 지시) 3: get_sigungu_options()가 매 요청마다 open_spaces+
+// events 전체를 다시 집계해 17.68초가 걸려 PostgREST 8초 타임아웃에 항상 걸리던 문제를
+// sigungu_options_cache 머티리얼라이즈드 뷰로 해결했다(scripts/migrations/2026-09-04-
+// sigungu-options-cache.sql). 이 데이터는 새 지역이 이 배치로 처음 수집될 때만
+// 달라지므로, 오늘 배치가 끝난 직후 한 번 갱신해 다음 조회부터 최신 지역까지 반영되게
+// 한다.
+async function runRefreshSigunguOptionsCache({ dryRun }) {
+  if (dryRun) {
+    return {
+      sourceKey: 'REFRESH_SIGUNGU_OPTIONS_CACHE',
+      source: null,
+      targetTable: 'sigungu_options_cache',
+      rawCount: 0,
+      count: 0,
+      upserted: false,
+      safeMergeCount: 0,
+      errorCount: 0,
+      excludeFromVerification: true,
+      note: 'dry-run: 실제 REFRESH는 실행하지 않음',
+    };
+  }
+
+  const client = createAdminClient();
+  await refreshSigunguOptionsCache(client);
+  return {
+    sourceKey: 'REFRESH_SIGUNGU_OPTIONS_CACHE',
+    source: null,
+    targetTable: 'sigungu_options_cache',
+    rawCount: 0,
+    count: 0,
+    upserted: false,
+    safeMergeCount: 0,
+    errorCount: 0,
+    excludeFromVerification: true,
+    note: '시/군/구 목록 캐시 갱신 완료(오늘 배치로 새로 추가된 지역이 있다면 반영됨)',
+  };
+}
+
 // [open_spaces 중복 데이터 정제](2026-08-28): 서로 다른 두 개 이상의 어댑터(source_type)가
 // 각자 원본 API에서 같은 실제 장소를 카탈로그에 등재해두면(예: "선화랑"이 KOR_TOUR_API_V4와
 // seoul_public_culture 양쪽에 존재), 각 어댑터는 서로 다른 external_id를 매기므로
@@ -304,7 +342,7 @@ async function runDedupeOpenSpaces({ dryRun }) {
 }
 
 export async function runDailyBatch({ dryRun = false } = {}) {
-  console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length + 7}개 단계\n`);
+  console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length + 8}개 단계\n`);
 
   // [핵심 events 수집 파이프라인 장애 점검](2026-08-30 사용자 지시): 필수 환경변수가 하나라도
   // 없으면 이후 11개 단계가 각자 다른 형태로 실패해(외부 API 키 누락 예외/Supabase 클라이언트
@@ -405,6 +443,14 @@ export async function runDailyBatch({ dryRun = false } = {}) {
   } catch (err) {
     console.error(`❌ [ANALYZE_OPEN_SPACES] 실패: ${err.message}`);
     results.push({ failed: true, sourceKey: 'ANALYZE_OPEN_SPACES', source: null, note: err.message });
+  }
+
+  console.log('\n=== [REFRESH_SIGUNGU_OPTIONS_CACHE] ===');
+  try {
+    results.push(await runRefreshSigunguOptionsCache({ dryRun }));
+  } catch (err) {
+    console.error(`❌ [REFRESH_SIGUNGU_OPTIONS_CACHE] 실패: ${err.message}`);
+    results.push({ failed: true, sourceKey: 'REFRESH_SIGUNGU_OPTIONS_CACHE', source: null, note: err.message });
   }
 
   if (!dryRun) {

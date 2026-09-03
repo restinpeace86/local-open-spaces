@@ -95,6 +95,13 @@ export function buildWeatherReactionText(snapshot: WeatherSnapshot, isoDate: str
 // 문구. 기존 buildWeatherReactionText()는 이동거리 질문 다음(옛 5단계)에 나오는 리액션
 // 톤이라 그대로 재사용하기 어려워 새 함수로 분리한다 — 톤은 요구사항 원문 예시("오늘
 // 날씨가 화창하고 참 좋네요! ☀️...")를 그대로 템플릿화했다.
+// [챗봇 개선](2026-09-04 사용자 지시) 2: "구체적인 수치 알려줘 — 온도랑 강수확률, 미세먼지랑
+// 초미세먼지 등 기상데이터 기반으로." 기존에는 "화창하다"/"구름이 많다"처럼 정성적으로만
+// 말해 snapshot에 이미 있는 실제 수치(기온/강수확률/미세먼지 등급)를 전혀 보여주지
+// 않았다 — buildWeatherReactionText가 이미 만들어 둔 수치 표기 방식을 그대로 가져와
+// 이 함수에도 반영한다. 미세먼지/초미세먼지는 "오늘"에만 있는 값이라(위 파일 상단 설명
+// 참고) 미래 날짜는 값을 지어내지 않고 정직하게 "그 날이 가까워져야 알 수 있다"고
+// 안내한다.
 export function buildProactiveWeatherSuggestion(snapshot: WeatherSnapshot, isoDate: string, today: boolean): string {
   const whenLabel = today ? '오늘' : `선택하신 날짜(${isoDate})`;
 
@@ -102,14 +109,24 @@ export function buildProactiveWeatherSuggestion(snapshot: WeatherSnapshot, isoDa
     return `${whenLabel} 날씨 예보를 아직 확인하지 못했어요. 야외/실내 중 어디로 가고 싶으신지 편하게 골라주세요!`;
   }
 
+  const numberBits: string[] = [];
+  if (snapshot.temperature != null) numberBits.push(`기온 ${snapshot.temperature}℃`);
+  if (snapshot.precipitationProb != null) numberBits.push(`강수확률 ${snapshot.precipitationProb}%`);
+  if (snapshot.airQualityAvailable) {
+    if (snapshot.pm10Grade) numberBits.push(`미세먼지 '${snapshot.pm10Grade}'`);
+    if (snapshot.pm25Grade) numberBits.push(`초미세먼지 '${snapshot.pm25Grade}'`);
+  }
+  const numberSentence = numberBits.length > 0 ? ` (${numberBits.join(', ')})` : '';
+  const airCaveat = !today && !snapshot.airQualityAvailable ? ' 미세먼지는 아쉽게도 그 날이 가까워져야 정확히 알 수 있어요.' : '';
+
   const mode = recommendMode(snapshot);
   if (mode === 'OUTDOOR') {
-    return `${whenLabel} 날씨가 화창하고 참 좋네요! ☀️ 파란 하늘 아래 아이랑 뛰어놀기 좋은 야외 공원이 좋아보여요. 야외/공원 위주로 알아볼까요?`;
+    return `${whenLabel} 날씨가 화창하고 참 좋네요!${numberSentence} ☀️ 파란 하늘 아래 아이랑 뛰어놀기 좋은 야외 공원이 좋아보여요.${airCaveat} 야외/공원 위주로 알아볼까요?`;
   }
   if (mode === 'INDOOR') {
-    return `${whenLabel} 날씨를 보니 구름이 많거나 비가 오네요. 🌧️ 아이와 함께 포근한 실내 위주가 좋아보여요. 실내 위주로 알아볼까요?`;
+    return `${whenLabel} 날씨를 보니 구름이 많거나 비가 오네요.${numberSentence} 🌧️ 아이와 함께 포근한 실내 위주가 좋아보여요.${airCaveat} 실내 위주로 알아볼까요?`;
   }
-  return `${whenLabel} 날씨는 야외도 실내도 무난할 것 같아요! 어떤 스타일로 알아봐드릴까요?`;
+  return `${whenLabel} 날씨는 야외도 실내도 무난할 것 같아요!${numberSentence}${airCaveat} 어떤 스타일로 알아봐드릴까요?`;
 }
 
 type NearestWeatherRow = {

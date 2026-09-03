@@ -213,6 +213,17 @@ export async function analyzeOpenSpaces(client) {
   if (error) throw new Error(`open_spaces ANALYZE 실패: ${error.message}`);
 }
 
+// [챗봇 개선](2026-09-04 사용자 지시) 3: get_sigungu_options()가 매 요청마다 open_spaces+
+// events 전체(16만+ 행)를 다시 집계해 17.68초가 걸려 PostgREST 8초 타임아웃에 항상
+// 걸리던 문제를 sigungu_options_cache 머티리얼라이즈드 뷰로 해결했다(scripts/migrations/
+// 2026-09-04-sigungu-options-cache.sql). 이 참조 데이터는 새 지역이 수집되거나
+// sigungu_name 정규화가 바뀔 때만 달라지므로, 매일 배치 마지막에 한 번씩만 갱신하면
+// 충분하다(실시간 최신성 불필요).
+export async function refreshSigunguOptionsCache(client) {
+  const { error } = await client.rpc('refresh_sigungu_options_cache');
+  if (error) throw new Error(`sigungu_options_cache 갱신 실패: ${error.message}`);
+}
+
 // [긴급 아키텍처 개편] RAW 레이어 재가공(2단계 단독 재실행)용 — 원본 API를 다시 호출하지 않고
 // 이미 raw_ingest_data에 보존된 원본을 읽어온다.
 export async function fetchRawIngestData(client, source) {

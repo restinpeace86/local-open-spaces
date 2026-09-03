@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isToday, resolveThisSaturday, resolveThisSunday, resolveWhenChoice } from './date-resolver';
+import { getKstHour, isLateInDay, isToday, resolveThisSaturday, resolveThisSunday, resolveWhenChoice } from './date-resolver';
 
 // [스팟픽 AI 맞춤 추천 챗봇 엔진](2026-09-01 사용자 지시): 실행 환경의 로컬 타임존과
 // 무관하게 KST 기준으로 계산되는지 검증한다(`kma-base-time.test.mjs`와 동일한 관례) —
@@ -63,5 +63,26 @@ describe('isToday', () => {
   it('KST 자정 근처(UTC로는 전날)에도 올바른 KST 날짜로 판정한다', () => {
     const lateNightUtc = new Date('2026-08-31T23:00:00Z'); // KST 2026-09-01 08:00
     expect(isToday('2026-09-01', lateNightUtc)).toBe(true);
+  });
+});
+
+// [챗봇 개선](2026-09-04 사용자 지시) 1: 실행 환경의 로컬 타임존과 무관하게 KST 기준
+// 시각으로 "늦은 오후/저녁"을 판정하는지 검증한다.
+describe('getKstHour/isLateInDay', () => {
+  it('KST 시각의 시(hour)만 뽑아낸다', () => {
+    expect(getKstHour(new Date('2026-09-01T05:00:00Z'))).toBe(14); // KST 14:00
+    expect(getKstHour(new Date('2026-09-01T23:30:00Z'))).toBe(8); // KST 다음날 08:30
+  });
+
+  it('KST 17시 이전이면 늦지 않은 것으로 판정한다', () => {
+    expect(isLateInDay(new Date('2026-09-01T07:59:00Z'))).toBe(false); // KST 16:59
+  });
+
+  it('KST 17시 정각부터 늦은 것으로 판정한다', () => {
+    expect(isLateInDay(new Date('2026-09-01T08:00:00Z'))).toBe(true); // KST 17:00
+  });
+
+  it('KST 자정 근처(새벽)에도 로컬 타임존과 무관하게 늦지 않은 것으로 정확히 판정한다', () => {
+    expect(isLateInDay(new Date('2026-08-31T16:00:00Z'))).toBe(false); // KST 2026-09-01 01:00(새벽)
   });
 });

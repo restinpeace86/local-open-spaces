@@ -3,6 +3,7 @@
 // 후보(NearbyItem[], 거리순)를 필터/점수화해 최대 10개를 뽑는다. 순수 함수로만 구성해
 // DB 접근 없이 단위 테스트할 수 있게 한다 — 실제 Supabase 조회는 API 라우트가 맡는다.
 import { NearbyItem } from '@/lib/spaces/get-nearby';
+import { CATEGORY_MAJ_OPTIONS } from '@/lib/spaces/category-maj-meta';
 
 export type OutdoorPreference = 'OUTDOOR' | 'INDOOR' | 'EITHER';
 // [챗봇 문제점 수정](2026-09-03 사용자 지시) 예산 옵션 재설계: "1만원 이하/2~3만원 이하"는
@@ -73,6 +74,33 @@ export const VIBE_CATEGORY_MINS: Record<Vibe, string[]> = {
   LEARNING_CLASS: ['도서관', '교육시설', '유아교육진흥원', '육아종합지원센터'],
 };
 
+// [챗봇 개선](2026-09-04 사용자 지시) 5: "대분류로 검색했을 때 나오는 게 스팟픽(open_spaces)
+// 기준이야? 장소 말고 이벤트 기준으로 찾고, events에서 못 찾으면 그때 open_spaces에서
+// 다시 찾아." 실측 확인: 지금까지 이 챗봇은 get_nearby_spaces_and_events를 항상
+// p_item_type='SPACE'로만 호출해 events는 한 번도 검색하지 않았다(위 VIBE_CATEGORY_MINS
+// 주석 참고 — open_spaces 전용으로 설계됐었다). "축제/이벤트" 같은 vibe는 open_spaces에
+// 실제 대응 데이터가 거의 없어(광장 417건뿐) 이벤트 도메인이 훨씬 풍부한 실제 신호를
+// 가진 경우가 많다. 이벤트픽 홈 화면의 대분류/중분류 taxonomy(category-maj-meta.ts
+// CATEGORY_MAJ_OPTIONS)가 이미 이 6개 vibe와 1:1로 동기화돼 있으므로(2026-09-04
+// 이벤트픽 대분류 6종 축소) 새 매핑을 하드코딩하지 않고 그 배열에서 그대로 파생한다
+// (제5장 제4조 기존 구조 우선, 제6조 하드코딩 최소화 — CATEGORY_MAJ_OPTIONS가 바뀌면
+// 이 매핑도 자동으로 따라간다).
+const VIBE_TO_EVENT_MAJ: Record<Vibe, string> = {
+  NATURE_CAMPING: '자연 / 캠핑',
+  KIDS_CAFE: '공공 키즈카페',
+  FARM_EXPERIENCE: '체험 / 농장',
+  FESTIVAL_EVENT: '축제 / 이벤트',
+  CULTURE_EXHIBITION: '문화 / 전시',
+  LEARNING_CLASS: '배움 / 클래스',
+};
+
+export const VIBE_EVENT_CATEGORY_MINS: Record<Vibe, string[]> = Object.fromEntries(
+  (Object.keys(VIBE_TO_EVENT_MAJ) as Vibe[]).map((vibe) => [
+    vibe,
+    CATEGORY_MAJ_OPTIONS.find((opt) => opt.maj === VIBE_TO_EVENT_MAJ[vibe])?.minorCategories ?? [],
+  ])
+) as Record<Vibe, string[]>;
+
 // [챗봇 카테고리 체계 동기화](2026-09-03) 성능 안전장치: KIDS_CAFE의 category_min 5종
 // 합계는 전국 약 7.1만 건으로 이 서비스 전체 카탈로그(약 14.2만 건)의 절반에 달하는
 // 압도적 최다 카테고리다. get_nearby_spaces_and_events는 category_min+반경으로 후보를
@@ -138,9 +166,16 @@ function matchesBudget(item: NearbyItem, budget: Budget): boolean {
   return true;
 }
 
+// [챗봇 개선](2026-09-04 사용자 지시) 5: 이제 후보가 events(VIBE_EVENT_CATEGORY_MINS
+// 기준 category_min)에서 올 수도, open_spaces(VIBE_CATEGORY_MINS 기준)에서 올 수도
+// 있다 — item_type과 무관하게 항상 두 도메인의 매핑을 합쳐서 검사해야, RPC가 이미
+// category_min으로 정확히 좁혀 내려준 이벤트 후보가 여기서 다시 잘못 걸러지지 않는다.
 function matchesVibe(item: NearbyItem, vibes: Vibe[]): boolean {
   if (vibes.length === 0) return true; // "전체" — 분위기로 걸러내지 않음
-  return !!item.category_min && vibes.some((v) => VIBE_CATEGORY_MINS[v].includes(item.category_min as string));
+  if (!item.category_min) return false;
+  return vibes.some(
+    (v) => VIBE_CATEGORY_MINS[v].includes(item.category_min as string) || VIBE_EVENT_CATEGORY_MINS[v].includes(item.category_min as string)
+  );
 }
 
 function withinRadius(item: NearbyItem, radiusMeters: number): boolean {

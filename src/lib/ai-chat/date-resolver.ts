@@ -71,3 +71,22 @@ export function resolveWhenChoice(choice: WhenChoice, customDate: string | null,
 export function isToday(isoDate: string, now: Date = new Date()): boolean {
   return isoDate === toIsoDate(toKstCalendarDate(now));
 }
+
+// [챗봇 개선](2026-09-04 사용자 지시) 1: "날씨 알아보기 전에 현재 시간을 먼저 파악해줘 —
+// 늦은 오후/저녁이면 오늘 나갈 계획을 생각하지 말고 내일/다른 날만 물어보도록." KST
+// 시(hour)만 필요하므로 toKstCalendarDate처럼 날짜 자체를 재계산하지 않고, KST epoch의
+// 시간 성분만 뽑는다(UTC 서버리스 환경에서도 항상 KST 기준 시각이 나오게).
+export function getKstHour(now: Date = new Date()): number {
+  const kstEpoch = now.getTime() + KST_OFFSET_MS;
+  return new Date(kstEpoch).getUTCHours();
+}
+
+// "이미 늦은 오후이거나 저녁"의 기준 — 이 서비스의 당일 출발 시간대 선택지
+// (TIME_OPTIONS, step-options.ts) 중 마지막 칸이 "저녁(18시)"이다. 17시(오후 5시)가
+// 지나면 그 마지막 칸까지도 사실상 여유가 없어(주차/이동/입장 마감 등 감안) "오늘"을
+// 선택지로 두는 것 자체가 실질적 의미가 없다고 판단했다(구현 판단, 기록에 명시).
+export const LATE_IN_DAY_HOUR_THRESHOLD = 17;
+
+export function isLateInDay(now: Date = new Date()): boolean {
+  return getKstHour(now) >= LATE_IN_DAY_HOUR_THRESHOLD;
+}

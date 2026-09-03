@@ -13,6 +13,16 @@ export const WHEN_OPTIONS: { id: WhenChoice; label: string }[] = [
   { id: 'CUSTOM', label: '직접 선택할게요' },
 ];
 
+// [챗봇 개선](2026-09-04 사용자 지시) 1: "날씨 알아보기 전에 현재 시간을 먼저 파악해줘 —
+// 늦은 오후/저녁이면 오늘 나갈 계획을 생각하지 말고 그냥 내일 갈 건지 다른 날 갈 건지만
+// 물어보도록." 이미 늦은 시간(date-resolver.ts isLateInDay)이면 "오늘"은 물론
+// "이번 주 토/일요일"도 오늘일 수 있어(오늘이 토/일요일이면) 함께 제외하고, 내일과
+// "다른 날 직접 선택" 두 가지만 남긴다.
+export const WHEN_OPTIONS_WHEN_LATE: { id: WhenChoice; label: string }[] = [
+  { id: 'TOMORROW', label: '내일' },
+  { id: 'CUSTOM', label: '다른 날 선택할게요' },
+];
+
 export type TimeSlotId = 'BEFORE_LUNCH' | 'AFTER_LUNCH' | 'AFTERNOON' | 'EVENING';
 export const TIME_OPTIONS: { id: TimeSlotId; label: string; hour: number }[] = [
   { id: 'BEFORE_LUNCH', label: '점심 전', hour: 10 },
@@ -64,9 +74,14 @@ export function buildRegionQuestion(sigunguName: string | null): string {
 // 사실상 없는 가짜 정밀도였다(search-engine.ts matchesBudget 주석 참고). 거의 전체
 // 데이터에 안정적으로 채워진 `is_free`만으로 판단 가능한 무료/유료/상관없음 3단계로
 // 되돌린다(제3장 제5조 추측 금지 — 실제로 못 거르는 옵션을 보여주지 않는다).
+// [챗봇 개선](2026-09-04 사용자 지시) 4: "우리 예산 선택지는 완전무료/유료밖에 없으니
+// 혹시 무료인 곳들 위주로 알아볼까요? 하고 질문을 바꿔" — 실제로 가진 데이터(is_free)로
+// 걸러낼 수 있는 것은 여전히 무료/유료/상관없음 3단계뿐이라 Budget 타입과 필터 로직은
+// 그대로 두고(matchesBudget), "예산은 어느 정도로 생각하세요?"라는 중립적 설문 톤 대신
+// "무료 위주로 볼까요?"라고 먼저 제안하는 톤으로 질문/라벨만 바꾼다.
 export const BUDGET_OPTIONS: { id: Budget; label: string }[] = [
-  { id: 'FREE', label: '완전 무료' },
-  { id: 'PAID', label: '유료' },
+  { id: 'FREE', label: '네, 무료인 곳 위주로 볼래요' },
+  { id: 'PAID', label: '아니요, 유료도 괜찮아요' },
   { id: 'ANY', label: '상관없어요' },
 ];
 
@@ -129,7 +144,7 @@ export function buildTransportAck(): string {
 }
 
 export function buildBudgetAck(): string {
-  return '취향을 확실히 알려주셔서 감사해요! 예산은 어느 정도로 생각하고 계세요?';
+  return '취향을 확실히 알려주셔서 감사해요! 혹시 무료인 곳들 위주로 알아볼까요?';
 }
 
 export function buildKidsAck(): string {

@@ -7,7 +7,9 @@ import {
   isPublicFacility,
   nextRadiusTier,
   runSearch,
+  VIBE_EVENT_CATEGORY_MINS,
 } from './search-engine';
+import { CATEGORY_MAJ_OPTIONS } from '@/lib/spaces/category-maj-meta';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 
 function spot(overrides: Partial<NearbyItem> = {}): NearbyItem {
@@ -281,5 +283,46 @@ describe('분위기(vibe) 다중 선택 및 전체 옵션', () => {
     const pool = applyStrictFilters([park, library], answers({ vibes: [] }), 5000);
 
     expect(pool).toEqual([park, library]);
+  });
+
+  // [챗봇 개선](2026-09-04 사용자 지시) 5: "장소(open_spaces)가 아니라 이벤트 기준으로
+  // 먼저 찾아라" — RPC가 events에서 category_min으로 이미 정확히 좁혀 내려준 후보를
+  // matchesVibe가 (open_spaces 전용 매핑만 보고) 다시 걸러내 버리면 안 된다.
+  it('item_type이 EVENT이고 category_min이 이벤트 도메인 값이어도 해당 vibe로 통과한다', () => {
+    const festivalEvent = spot({ item_type: 'EVENT', category_min: '지역축제/페스티벌' }); // FESTIVAL_EVENT(이벤트 도메인 전용, open_spaces엔 없음)
+    const pool = applyStrictFilters([festivalEvent], answers({ vibes: ['FESTIVAL_EVENT'] }), 5000);
+
+    expect(pool).toEqual([festivalEvent]);
+  });
+
+  it('item_type이 SPACE이고 category_min이 open_spaces 도메인 값이면 기존처럼 그대로 통과한다', () => {
+    const plaza = spot({ item_type: 'SPACE', category_min: '광장' }); // FESTIVAL_EVENT(open_spaces 도메인)
+    const pool = applyStrictFilters([plaza], answers({ vibes: ['FESTIVAL_EVENT'] }), 5000);
+
+    expect(pool).toEqual([plaza]);
+  });
+});
+
+// [챗봇 개선](2026-09-04 사용자 지시) 5: VIBE_EVENT_CATEGORY_MINS가 category-maj-meta.ts의
+// CATEGORY_MAJ_OPTIONS(이벤트픽 홈 화면 대분류, 이미 이 6개 vibe와 1:1 동기화됨)에서
+// 그대로 파생됐는지 검증한다 — 하드코딩 중복이 아니라 단일 소스에서 나온 값인지가
+// 핵심이므로, 실제 값을 다시 베껴 쓰지 않고 CATEGORY_MAJ_OPTIONS 자체를 기준으로
+// 비교한다.
+describe('VIBE_EVENT_CATEGORY_MINS', () => {
+  it('CATEGORY_MAJ_OPTIONS의 해당 대분류 minorCategories와 정확히 일치한다', () => {
+    const majByLabel = (label: string) => CATEGORY_MAJ_OPTIONS.find((opt) => opt.maj === label)?.minorCategories;
+
+    expect(VIBE_EVENT_CATEGORY_MINS.NATURE_CAMPING).toEqual(majByLabel('자연 / 캠핑'));
+    expect(VIBE_EVENT_CATEGORY_MINS.KIDS_CAFE).toEqual(majByLabel('공공 키즈카페'));
+    expect(VIBE_EVENT_CATEGORY_MINS.FARM_EXPERIENCE).toEqual(majByLabel('체험 / 농장'));
+    expect(VIBE_EVENT_CATEGORY_MINS.FESTIVAL_EVENT).toEqual(majByLabel('축제 / 이벤트'));
+    expect(VIBE_EVENT_CATEGORY_MINS.CULTURE_EXHIBITION).toEqual(majByLabel('문화 / 전시'));
+    expect(VIBE_EVENT_CATEGORY_MINS.LEARNING_CLASS).toEqual(majByLabel('배움 / 클래스'));
+  });
+
+  it('6개 vibe 모두 빈 배열이 아니다(매핑 누락/오타로 죽은 vibe가 없어야 함)', () => {
+    for (const list of Object.values(VIBE_EVENT_CATEGORY_MINS)) {
+      expect(list.length).toBeGreaterThan(0);
+    }
   });
 });

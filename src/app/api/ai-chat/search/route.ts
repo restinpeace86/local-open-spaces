@@ -12,6 +12,7 @@ import {
   nextRadiusTier,
   SearchResultItem,
   VIBE_CATEGORY_MINS,
+  VIBE_EVENT_CATEGORY_MINS,
 } from '@/lib/ai-chat/search-engine';
 import { buildFinalSummary } from '@/lib/ai-chat/summary';
 import { canUseUnlimitedChatbot, FREE_CHATBOT_USES_BEFORE_SPROUT, MomPickGrade } from '@/lib/community/grades';
@@ -40,21 +41,25 @@ import { canUseUnlimitedChatbot, FREE_CHATBOT_USES_BEFORE_SPROUT, MomPickGrade }
 // prefilter.sql) 이 "엉뚱한 카테고리와의 1001자리 경쟁" 자체를 없앤다. vibes가 빈
 // 배열("전체")이면 categoryMins를 넘기지 않아(undefined) 기존과 동일하게 전체 카테고리를
 // 대상으로 조회한다.
+// [챗봇 개선](2026-09-04 사용자 지시) 5: 이전에는 p_item_type을 항상 'SPACE'로 고정
+// 호출해 events는 한 번도 검색하지 않았다 — 이제 호출부가 도메인을 선택할 수 있게
+// 파라미터로 뺀다.
 async function fetchCandidatesAtRadius(
   supabase: SupabaseClient<Database>,
   lat: number,
   lng: number,
   radiusMeters: number,
+  itemType: 'EVENT' | 'SPACE',
   categoryMins?: string[]
 ): Promise<NearbyItem[]> {
   const { data, error } = await supabase.rpc('get_nearby_spaces_and_events', {
     user_lng: lng,
     user_lat: lat,
     radius_meters: radiusMeters,
-    p_item_type: 'SPACE',
+    p_item_type: itemType,
     ...(categoryMins && categoryMins.length > 0 ? { p_category_mins: categoryMins } : {}),
   });
-  if (error) throw new Error(`주변 스팟 조회 실패: ${error.message}`);
+  if (error) throw new Error(`주변 ${itemType === 'EVENT' ? '행사' : '스팟'} 조회 실패: ${error.message}`);
   return (data ?? []) as NearbyItem[];
 }
 
@@ -153,8 +158,13 @@ export async function POST(request: NextRequest) {
     // 양쪽에 원래/최종 반경을 그대로 남겨 투명하게 안내한다.
     // vibes가 빈 배열("전체")이면 undefined가 되어 카테고리 제한 없이 조회한다(기존 동작
     // 그대로) — 하나 이상 선택됐으면 그 vibe들의 category_min을 합쳐 RPC의 KNN 정렬
-    // 전에 미리 좁힌다(위 fetchCandidatesAtRadius 주석 참고).
-    const categoryMins =
+    // 전에 미리 좁힌다(위 fetchCandidatesAtRadius 주석 참고). 도메인(events/open_spaces)
+    // 마다 실제 category_min 값 자체가 다르므로 두 매핑을 각각 따로 계산한다.
+    const eventCategoryMins =
+      answers.vibes.length > 0
+        ? Array.from(new Set(answers.vibes.flatMap((v) => VIBE_EVENT_CATEGORY_MINS[v])))
+        : undefined;
+    const spaceCategoryMins =
       answers.vibes.length > 0 ? Array.from(new Set(answers.vibes.flatMap((v) => VIBE_CATEGORY_MINS[v]))) : undefined;
 
     const originalRadiusMeters = answers.transportRadiusMeters;
@@ -163,17 +173,23 @@ export async function POST(request: NextRequest) {
     // 조회 반경만 안전 상한으로 줄인다(getEffectiveQueryRadiusMeters 주석 참고) —
     // radiusMeters/originalRadiusMeters(사용자에게 보여주는 값, applyStrictFilters의
     // 거리 상한)는 그대로 두므로 결과의 실제 거리 표기나 필터링 정확성에는 영향이 없다.
+    // [챗봇 개선](2026-09-04 사용자 지시) 5: "장소(open_spaces)가 아니라 이벤트 기준으로
+    // 먼저 찾고, events에서 못 찾으면 그때 open_spaces에서 다시 찾아." events를 먼저
+    // 조회하고(반경 완화까지 포함해 기존과 동일하게 딱 1회), 그래도 0건이면 마지막으로
+    // open_spaces를 한 번 더 조회한다 — 도메인 폴백도 반경 폴백과 마찬가지로 "정확히
+    // 1회"만 일어나 무한 완화가 될 수 없다(제11조).
     let candidates = await fetchCandidatesAtRadius(
       supabase,
       lat,
       lng,
       getEffectiveQueryRadiusMeters(answers.vibes, radiusMeters),
-      categoryMins
+      'EVENT',
+      eventCategoryMins
     );
     let pool = applyStrictFilters(candidates, answers, radiusMeters, visitedSpotIds);
     let usedFallback = false;
 
-    console.log(`[AI_CHAT_SEARCH] 1차 조회(반경 ${radiusMeters}m): 후보 ${candidates.length}건 → 필터 통과 ${pool.length}건`);
+    console.log(`[AI_CHAT_SEARCH] 1차 조회(EVENT, 반경 ${radiusMeters}m): 후보 ${candidates.length}건 → 필터 통과 ${pool.length}건`);
 
     if (pool.length === 0) {
       const fallbackRadius = nextRadiusTier(radiusMeters);
@@ -185,18 +201,33 @@ export async function POST(request: NextRequest) {
           lat,
           lng,
           getEffectiveQueryRadiusMeters(answers.vibes, radiusMeters),
-          categoryMins
+          'EVENT',
+          eventCategoryMins
         );
         pool = applyStrictFilters(candidates, answers, radiusMeters, visitedSpotIds);
         usedFallback = pool.length > 0;
-        console.log(`[AI_CHAT_SEARCH] 2차 조회(반경 ${radiusMeters}m): 후보 ${candidates.length}건 → 필터 통과 ${pool.length}건`);
+        console.log(`[AI_CHAT_SEARCH] 2차 조회(EVENT, 반경 ${radiusMeters}m): 후보 ${candidates.length}건 → 필터 통과 ${pool.length}건`);
       } else {
         console.log(`[AI_CHAT_SEARCH] 1차 0건이고 더 넓힐 반경 티어가 없어(이미 최대 반경) 완화를 시도하지 않음`);
       }
     }
 
     if (pool.length === 0) {
-      console.log('[AI_CHAT_SEARCH] 완화 1회까지 시도했지만 0건 — 검색 중단');
+      console.log(`[AI_CHAT_SEARCH] EVENT에서 0건 — SPACE(open_spaces)로 한 번 더 조회(반경 ${radiusMeters}m)`);
+      candidates = await fetchCandidatesAtRadius(
+        supabase,
+        lat,
+        lng,
+        getEffectiveQueryRadiusMeters(answers.vibes, radiusMeters),
+        'SPACE',
+        spaceCategoryMins
+      );
+      pool = applyStrictFilters(candidates, answers, radiusMeters, visitedSpotIds);
+      console.log(`[AI_CHAT_SEARCH] 3차 조회(SPACE, 반경 ${radiusMeters}m): 후보 ${candidates.length}건 → 필터 통과 ${pool.length}건`);
+    }
+
+    if (pool.length === 0) {
+      console.log('[AI_CHAT_SEARCH] EVENT/SPACE, 완화 1회까지 시도했지만 0건 — 검색 중단');
       await consumeFreeUseIfNeeded();
       return NextResponse.json({
         exhausted: true,
