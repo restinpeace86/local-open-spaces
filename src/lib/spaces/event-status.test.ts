@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getDateBannerBadge, getReservationAvailabilityTag } from './event-status';
+import { getDateBannerBadge, getEventStatus, getReservationAvailabilityTag } from './event-status';
 import { NearbyItem } from './get-nearby';
 
 function makeEvent(overrides: Partial<NearbyItem> = {}): NearbyItem {
@@ -33,6 +33,35 @@ function makeEvent(overrides: Partial<NearbyItem> = {}): NearbyItem {
 }
 
 const TODAY = new Date('2026-08-25T00:00:00');
+
+// [todo.md 개선사항 4](2026-09-03): open_spaces를 이벤트픽에 공유 노출하는 캠핑장 등은
+// start_date/end_date가 둘 다 null인데(실제 이벤트는 두 컬럼 모두 NOT NULL이라 이 조합이
+// 나올 수 없음) 기존에는 "진행중"으로 오인 표시됐다 — 명시적으로 "상시" 뱃지를 반환하는지
+// 검증한다.
+describe('getEventStatus', () => {
+  it('start_date/end_date가 둘 다 없으면(open_spaces 공유 항목) "상시"를 반환한다', () => {
+    const status = getEventStatus(makeEvent({ start_date: null, end_date: null }), TODAY);
+    expect(status).toEqual({ label: '상시', tone: 'active' });
+  });
+
+  it('start_date가 미래면 "예정"을 반환한다', () => {
+    const status = getEventStatus(makeEvent({ start_date: '2026-09-01', end_date: '2026-09-05' }), TODAY);
+    expect(status.label).toBe('예정');
+  });
+
+  it('start_date가 오늘 이전이면 "진행중"을 반환한다', () => {
+    const status = getEventStatus(makeEvent({ start_date: '2026-08-01', end_date: '2026-09-05' }), TODAY);
+    expect(status.label).toBe('진행중');
+  });
+
+  it('예약 마감이 임박하면(오늘 이내) "오늘 마감"을 반환한다', () => {
+    const status = getEventStatus(
+      makeEvent({ is_reservation_required: true, reservation_end_date: '2026-08-25' }),
+      TODAY
+    );
+    expect(status.label).toBe('오늘 마감');
+  });
+});
 
 // Task 9-6-13: 메인카드 배너 2종 유형 분리 검증
 describe('getDateBannerBadge', () => {

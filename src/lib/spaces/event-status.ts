@@ -3,6 +3,12 @@ import { NearbyItem } from '@/lib/spaces/get-nearby';
 export type EventStatus = { label: string; tone: 'active' | 'urgent' | 'upcoming' | 'closed' };
 
 // spec/event/event-card.md 2: 접수중/마감/진행중 등 상태 뱃지
+// [todo.md 개선사항 4](2026-09-03): open_spaces 원본을 이벤트픽에 공유 노출하는 캠핑장/
+// 체험휴양마을/교육농장/체험학습장은 시작/종료일 자체가 없는 상시 운영 공간이다
+// (get-home-feed.ts getCategoryMinFeed가 toSpaceItem으로 start_date/end_date를 항상
+// null로 채운다 — events 테이블은 두 컬럼 모두 NOT NULL이라 실제 이벤트에서는 이 조합이
+// 나올 수 없다, 실측 확인). 날짜가 아예 없으면 "진행중"이 아니라 명시적으로 "상시"임을
+// 보여준다(요구사항 원문 "[상시] 또는 [상시 운영] 뱃지").
 export function getEventStatus(item: NearbyItem, today: Date = new Date()): EventStatus {
   const t = new Date(today);
   t.setHours(0, 0, 0, 0);
@@ -24,6 +30,13 @@ export function getEventStatus(item: NearbyItem, today: Date = new Date()): Even
     if (start.getTime() > t.getTime()) {
       return { label: '예정', tone: 'upcoming' };
     }
+  }
+
+  // 예약 마감 정보도, 시작일도 없는 경우에만 "상시"로 판단한다 — 실제 이벤트는
+  // start_date/end_date가 NOT NULL이라 이 분기까지 올 수 없고(실측 확인), open_spaces
+  // 공유 항목(캠핑장 등, toSpaceItem이 둘 다 null로 채움)만 이 마지막 폴백에 해당한다.
+  if (!item.start_date && !item.end_date) {
+    return { label: '상시', tone: 'active' };
   }
 
   return { label: '진행중', tone: 'active' };

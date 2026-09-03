@@ -1031,6 +1031,16 @@ export async function getThemeSpotFeed(
 // 대분류(category_maj) → 중분류(category_min) 2단계 드릴다운이라, 최종 카드 조회는 사용자가
 // 실제로 선택한 중분류 값 그대로 필터링해야 한다. 이 함수의 유일한 소비처
 // (/api/home/category-feed)도 함께 바꿨다 — 다른 호출부는 없다(실측 확인).
+// [todo.md 개선사항 4](2026-09-03): open_spaces의 상시 공간 중분류 4종을 이벤트픽
+// 화면에서도 함께 조회한다("별도 중복 테이블/데이터를 만들지 않고 원천 데이터를 공유" —
+// 실측 확인한 실제 건수: 캠핑장 3,857건/체험휴양마을 1,208건/교육농장 246건/
+// 체험학습장 196건, 전부 open_spaces 원본을 그대로 재사용). 이벤트픽 카드/상세는
+// item_type이 'EVENT'인지로 분기하므로(FeedCard, DetailModal 등 다수 소비처), 이
+// 피드에 한해서만 open_spaces 행을 'EVENT'로 표시 관점에서 재해석해 담는다(원본
+// open_spaces 테이블/스팟픽 화면의 item_type='SPACE' 분류는 전혀 바꾸지 않음 — 이
+// 함수가 반환하는 NearbyItem은 애초에 화면 표시용 DTO이지 원본 로우 자체가 아니다).
+const SHARED_OPEN_SPACES_CATEGORY_MINS = new Set(['캠핑장', '체험휴양마을', '교육농장', '체험학습장']);
+
 export async function getCategoryMinFeed(
   categoryMin: string,
   limit = 20,
@@ -1039,7 +1049,7 @@ export async function getCategoryMinFeed(
   const supabase = await createClient();
   const today = new Date().toISOString().slice(0, 10);
 
-  const buildQuery = (token: string | readonly string[] | null) => {
+  const buildEventQuery = (token: string | readonly string[] | null) => {
     let query = supabase
       .from('events')
       .select(EVENT_COLUMNS)
@@ -1054,9 +1064,27 @@ export async function getCategoryMinFeed(
     return query.order('start_date', { ascending: false }).limit(500);
   };
 
-  const data = await fetchRegionFirstRows<EventRow>(buildQuery, region, limit);
+  const buildSpaceQuery = (token: string | readonly string[] | null) => {
+    let query = supabase
+      .from('open_spaces')
+      .select(SPACE_COLUMNS)
+      .eq('category_min', categoryMin)
+      .eq('location_precision', 'EXACT');
+    if (token) query = query.or(regionOrFilter(token, 'address'));
+    return query.limit(500);
+  };
 
-  const items = dedupeAndMergeFree(data.map(toEventItem));
+  const isSharedCategory = SHARED_OPEN_SPACES_CATEGORY_MINS.has(categoryMin);
+  const [eventData, spaceData] = await Promise.all([
+    fetchRegionFirstRows<EventRow>(buildEventQuery, region, limit),
+    isSharedCategory ? fetchRegionFirstRows<SpaceRow>(buildSpaceQuery, region, limit) : Promise.resolve([]),
+  ]);
+
+  // [상시 뱃지] toSpaceItem은 start_date/end_date를 항상 null로 채운다 — EventCard의
+  // getEventStatus()가 이를 "상시" 상태로 인식해 [상시] 뱃지를 보여준다(날짜 정보가
+  // 없어도 자연스럽게 처리되도록 event-status.ts에도 분기를 추가했다).
+  const spaceItems = spaceData.map((row) => ({ ...toSpaceItem(row), item_type: 'EVENT' as const }));
+  const items = dedupeAndMergeFree([...eventData.map(toEventItem), ...spaceItems]);
   const ordered = sortByDistanceIfKnown(items, region);
   return selectRegionFirst(ordered, region, limit);
 }
@@ -1088,6 +1116,21 @@ export async function getCategoryMinCounts(categoryMins: readonly string[]): Pro
         console.error(`[getCategoryMinCounts] ${categoryMin} 카운트 조회 실패: ${error.message}`);
         return [categoryMin, 1] as const; // 조회 실패 시엔 "있을 수도 있다"고 보수적으로 보여준다(숨기지 않음)
       }
+
+      // [todo.md 개선사항 4](2026-09-03): 캠핑장/체험휴양마을/교육농장/체험학습장은
+      // 이벤트 자체는 거의 없고 open_spaces 원본이 실제 콘텐츠다 — events 카운트만
+      // 보면 항상 0으로 나와 실제로는 수천 건이 있는데도 바텀시트에서 숨겨질 뻔했다.
+      if (SHARED_OPEN_SPACES_CATEGORY_MINS.has(categoryMin)) {
+        const spaceCountResult = await supabase
+          .from('open_spaces')
+          .select('id', { count: 'exact', head: true })
+          .eq('category_min', categoryMin)
+          .eq('location_precision', 'EXACT');
+        if (!spaceCountResult.error) {
+          return [categoryMin, (count ?? 0) + (spaceCountResult.count ?? 0)] as const;
+        }
+      }
+
       return [categoryMin, count ?? 0] as const;
     })
   );

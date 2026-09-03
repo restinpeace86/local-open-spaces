@@ -151,7 +151,12 @@ export function DetailModal({
   // 3) 그 외(위 링크 미존재) → 지도에서 보기(정확한 좌표가 있을 때만, 인앱 지도 모달 오픈)
   // 공간은 reservation_url 컬럼이 없어(project/database_schema.md 3.1) 늘 null이므로,
   // is_free=true인데 reservation_url이 없는 공간은 기존처럼 info_url을 공식 링크로 대신 쓴다.
-  const publicReservationUrl = item.reservation_url ?? (isEvent ? null : item.info_url);
+  // [todo.md 개선사항 4](2026-09-03): isEvent일 때 info_url을 무조건 null 취급하면
+  // open_spaces를 공유해 이벤트픽에 노출하는 캠핑장/체험휴양마을 등(item_type='EVENT'로
+  // 표시되지만 실제로는 스팟 데이터라 info_url이 채워져 있음)이 안내 링크를 잃는다.
+  // 진짜 이벤트는 toEventItem이 info_url을 항상 null로 채우므로(get-home-feed.ts) 이
+  // 조건을 없애도 기존 이벤트 동작에는 전혀 영향이 없다.
+  const publicReservationUrl = item.reservation_url ?? item.info_url;
   const cta = (item.is_free === true || !!item.reservation_url) && publicReservationUrl
     ? { type: 'link' as const, label: '🏛️ 공공 예약하기', href: publicReservationUrl }
     : item.is_free === false && item.affiliate_url

@@ -21,7 +21,16 @@ export type CategoryMajOption = {
 export const CATEGORY_MAJ_OPTIONS: CategoryMajOption[] = [
   { maj: '자연 / 캠핑', emoji: '🏕️', color: '#16a34a', minorCategories: ['캠핑장', '산림여가', '공원탐방'] },
   { maj: '공공 키즈카페', emoji: '🧸', color: '#f59e0b', minorCategories: ['공공키즈카페', '어린이실내놀이터'] },
-  { maj: '체험 / 농장', emoji: '🌱', color: '#84cc16', minorCategories: ['농장체험', '도시농업', '자연/과학'] },
+  {
+    maj: '체험 / 농장',
+    emoji: '🌱',
+    color: '#84cc16',
+    // [todo.md 개선사항 4](2026-09-03): 체험휴양마을/교육농장/체험학습장은 open_spaces
+    // 원본 데이터를 공유해 노출하는 상시 공간이다(get-home-feed.ts getCategoryMinFeed의
+    // SHARED_OPEN_SPACES_CATEGORY_MINS 참고) — 별도 이벤트 데이터가 아니라 스팟픽과
+    // 동일한 원천을 재사용한다(제5장 제4조 기존 구조 우선).
+    minorCategories: ['농장체험', '도시농업', '자연/과학', '체험휴양마을', '교육농장', '체험학습장'],
+  },
   { maj: '축제 / 이벤트', emoji: '🎉', color: '#0ea5e9', minorCategories: ['지역축제/페스티벌', '문화행사', '광장'] },
   {
     maj: '문화 / 전시',
