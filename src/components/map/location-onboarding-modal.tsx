@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { reverseGeocodeAddress, searchPlaceKeyword, PlaceSearchResult } from '@/lib/kakao/geocode';
 import { UserLocation } from '@/lib/location/user-location-storage';
 import { extractSigunguName } from '@/lib/spaces/extract-district';
@@ -8,6 +9,21 @@ import { getSigunguOptions, SigunguOption } from '@/lib/spaces/get-sigungu-optio
 
 // spec/common/search.md 2.1: 입력 즉시(Debounce 300ms) 검색
 const DEBOUNCE_MS = 300;
+
+// [todo.md 개선사항 2-2](2026-09-03) 실측으로 발견한 버그: 이 모달을 AI 챗봇(ai-chat-
+// sheet.tsx)처럼 "이미 열려 있는 다른 모달" 안에서 띄우면, 이 모달의 바깥(어두운
+// 배경) 영역 클릭이 리액트 트리를 타고 부모 모달의 onClick={onClose}까지 그대로
+// 버블링돼 챗봇 전체가 함께 닫혀버렸다(부모 모달 쪽엔 별도 stopPropagation이 없어
+// 감지 불가) — "다른 지역 선택 중 배경을 살짝 스치면 챗봇이 통째로 꺼진다"는 형태로
+// 나타난다. DOM 트리 자체를 `document.body` 바로 아래로 분리하는 포탈로 렌더링해 어떤
+// 부모가 감싸고 있어도 더 이상 그 부모의 클릭 핸들러를 타지 않게 한다 — 스택 순서
+// 문제(모달 위에 모달)도 함께 해결된다. 서버 렌더링 시점엔 document가 없어, 마운트
+// 이후에만 포탈을 그린다(Next.js 클라이언트 컴포넌트의 표준 포탈 패턴).
+function useIsMounted() {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  return mounted;
+}
 
 // implementation/todo.md Phase 2: GPS 현위치 탐색 + 동네/주소 직접 검색을 지원하는 위치 설정 온보딩
 export function LocationOnboardingModal({
@@ -26,6 +42,7 @@ export function LocationOnboardingModal({
   const [showManualPicker, setShowManualPicker] = useState(false);
   const [sigunguOptions, setSigunguOptions] = useState<SigunguOption[]>([]);
   const [isLoadingOptions, setIsLoadingOptions] = useState(false);
+  const mounted = useIsMounted();
 
   function openManualPicker() {
     setShowManualPicker(true);
@@ -99,7 +116,24 @@ export function LocationOnboardingModal({
     );
   }
 
-  return (
+  if (!mounted) return null;
+
+  // [todo.md 개선사항 2-3](2026-09-03) "너무 세부적이거나 모호했던 선택지 대신
+  // [시/도] + [시/군/구] 광역 단위의 명확하고 넓은 선택지 리스트" — sigungu_name은
+  // 이미 DB에 "경기도 성남시"처럼 시/도 접두어가 포함돼 저장돼 있다(실측 확인,
+  // scripts/migrations/2026-08-22-get-sigungu-options-rpc.sql). 다만 368건이 하나의
+  // 평평한 목록으로만 나와 있어 훑어보기 어려웠던 게 진짜 문제라, 시/도 단위로
+  // 묶어 소제목을 붙인다(새 데이터/컬럼 없이 문자열의 첫 단어만 그룹 키로 사용 —
+  // 제5장 제4조 기존 구조 우선).
+  const groupedSigunguOptions = sigunguOptions.reduce<Map<string, SigunguOption[]>>((groups, option) => {
+    const province = option.sigungu_name.split(' ')[0] ?? option.sigungu_name;
+    const list = groups.get(province) ?? [];
+    list.push(option);
+    groups.set(province, list);
+    return groups;
+  }, new Map());
+
+  return createPortal(
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center px-4" onClick={onClose}>
       <div
         className="w-full md:w-[420px] max-h-[85vh] overflow-y-auto bg-white rounded-t-2xl md:rounded-2xl shadow-xl p-5"
@@ -166,26 +200,33 @@ export function LocationOnboardingModal({
               </p>
               {isLoadingOptions && <p className="px-3 py-2.5 text-sm text-gray-400">목록 불러오는 중...</p>}
               {!isLoadingOptions && sigunguOptions.length > 0 && (
-                <ul className="max-h-56 overflow-y-auto flex flex-col divide-y divide-gray-100">
-                  {sigunguOptions.map((option) => (
-                    <li key={option.sigungu_name}>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          onConfirm({
-                            lat: option.lat,
-                            lng: option.lng,
-                            address_name: option.sigungu_name,
-                            sigungu_name: option.sigungu_name,
-                          })
-                        }
-                        className="w-full text-left px-3 py-2.5 text-sm text-gray-800 hover:bg-gray-50"
-                      >
-                        {option.sigungu_name}
-                      </button>
-                    </li>
+                <div className="max-h-72 overflow-y-auto">
+                  {[...groupedSigunguOptions.entries()].map(([province, options]) => (
+                    <div key={province}>
+                      <p className="sticky top-0 bg-gray-50 px-3 py-1.5 text-[11px] font-semibold text-gray-400">{province}</p>
+                      <ul className="flex flex-col divide-y divide-gray-100">
+                        {options.map((option) => (
+                          <li key={option.sigungu_name}>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onConfirm({
+                                  lat: option.lat,
+                                  lng: option.lng,
+                                  address_name: option.sigungu_name,
+                                  sigungu_name: option.sigungu_name,
+                                })
+                              }
+                              className="w-full text-left px-3 py-2.5 text-sm text-gray-800 hover:bg-gray-50"
+                            >
+                              {option.sigungu_name}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
                   ))}
-                </ul>
+                </div>
               )}
             </div>
           )}
@@ -214,6 +255,7 @@ export function LocationOnboardingModal({
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
