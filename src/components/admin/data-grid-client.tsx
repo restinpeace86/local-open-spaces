@@ -14,6 +14,7 @@ import { Pagination } from '@/components/admin/pagination';
 import { CuratedItemsPanel } from '@/components/admin/curated-items-panel';
 import { SpotCurationsPanel } from '@/components/admin/spot-curations-panel';
 import { MomPickPostsPanel } from '@/components/admin/mom-pick-posts-panel';
+import { SpotDedupPanel } from '@/components/admin/spot-dedup-panel';
 
 // [관리자 화면(/admin/data-grid) 기능 고도화 및 범용 제휴 상품 테이블 개편](2026-08-30
 // 사용자 지시): 'curated_items'를 네 번째 탭으로 추가한다. 아래 나머지 탭 3개(open_spaces/
@@ -22,7 +23,11 @@ import { MomPickPostsPanel } from '@/components/admin/mom-pick-posts-panel';
 // 위치 기반 시설/행사) 그 공유 로직에 억지로 끼워넣지 않고 별도의 자기완결적 패널
 // (CuratedItemsPanel)로 렌더링한다 — 기존 3개 탭의 필터/테이블 코드는 전혀 건드리지
 // 않는다(아래에서 tab === 'curated_items'일 때 이 컴포넌트로 조기 분기).
-export type AdminTable = 'open_spaces' | 'events' | 'raw_ingest_data' | 'curated_items' | 'spot_curations' | 'mom_pick_posts';
+// [개선사항10 - 중복 스팟 그룹핑 및 매핑 탭](2026-09-04 todo.md): 'spot_dedup'을
+// 여섯 번째 탭으로 추가한다. 위 curated_items/spot_curations/mom_pick_posts와 동일한
+// 이유(데이터 모양이 근본적으로 다름 — 그룹 단위 후보 목록 + 매핑 폼)로 자기완결적인
+// 별도 패널(SpotDedupPanel)로 렌더링한다.
+export type AdminTable = 'open_spaces' | 'events' | 'raw_ingest_data' | 'curated_items' | 'spot_curations' | 'mom_pick_posts' | 'spot_dedup';
 
 export type AdminOpenSpaceRow = {
   id: string;
@@ -121,6 +126,7 @@ type FilterOptions = {
   curated_items: Record<string, never>;
   spot_curations: Record<string, never>;
   mom_pick_posts: Record<string, never>;
+  spot_dedup: Record<string, never>;
 };
 
 type TriState = 'all' | 'true' | 'false';
@@ -148,6 +154,7 @@ const TAB_LABEL: Record<AdminTable, string> = {
   curated_items: '🏷️ 큐레이션/제휴 상품',
   spot_curations: '📍 스팟 큐레이션',
   mom_pick_posts: '👑 맘스픽 채택 관리',
+  spot_dedup: '🔗 중복 스팟 검수 및 매핑',
 };
 
 // [매일 배치 신규 데이터 모니터링](2026-08-28): get-home-feed.ts와 동일한 관례로 날짜 문자열을
@@ -678,6 +685,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     curated_items: false,
     spot_curations: false,
     mom_pick_posts: false,
+    spot_dedup: false,
   });
 
   const resetFilters = () => {
@@ -829,6 +837,8 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
         <SpotCurationsPanel />
       ) : tab === 'mom_pick_posts' ? (
         <MomPickPostsPanel />
+      ) : tab === 'spot_dedup' ? (
+        <SpotDedupPanel />
       ) : (
       <>
       <div className="shrink-0 p-4 border-b border-gray-100 flex flex-col gap-3">
@@ -949,7 +959,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                 className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
               >
                 <option value="">전체</option>
-                {currentOptions.minClassNames.map((v) => (
+                {currentOptions.minClassNames.map((v: string) => (
                   <option key={v} value={v}>
                     {v}
                   </option>
@@ -1187,7 +1197,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
       </>
       )}
 
-      {selectedRow && tab !== 'raw_ingest_data' && tab !== 'curated_items' && tab !== 'spot_curations' && tab !== 'mom_pick_posts' && (
+      {selectedRow && tab !== 'raw_ingest_data' && tab !== 'curated_items' && tab !== 'spot_curations' && tab !== 'mom_pick_posts' && tab !== 'spot_dedup' && (
         <RawDataModal
           table={tab}
           row={selectedRow}

@@ -32,6 +32,7 @@ const EMPTY_FILTER_OPTIONS = {
   curated_items: {},
   spot_curations: {},
   mom_pick_posts: {},
+  spot_dedup: {},
 };
 
 describe('AdminDataGridClient — curated_items 탭 통합', () => {

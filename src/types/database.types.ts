@@ -39,6 +39,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      air_quality_week_forecasts: {
+        Row: {
+          announced_date: string
+          created_at: string
+          forecast_date: string
+          id: string
+          raw_forecast_text: string | null
+          region_grades: Json
+          reliability: string | null
+          summary: string | null
+        }
+        Insert: {
+          announced_date: string
+          created_at?: string
+          forecast_date: string
+          id?: string
+          raw_forecast_text?: string | null
+          region_grades?: Json
+          reliability?: string | null
+          summary?: string | null
+        }
+        Update: {
+          announced_date?: string
+          created_at?: string
+          forecast_date?: string
+          id?: string
+          raw_forecast_text?: string | null
+          region_grades?: Json
+          reliability?: string | null
+          summary?: string | null
+        }
+        Relationships: []
+      }
       category_rules: {
         Row: {
           category_min: string
@@ -390,12 +423,16 @@ export type Database = {
       open_spaces: {
         Row: {
           address: string
+          age_group: string | null
+          blog_url: string | null
           category: string
           category_min: string | null
           category_min_source: string | null
           created_at: string | null
           external_id: string
           facility_type: string
+          feature_tag: string | null
+          group_id: string | null
           has_parking: boolean
           id: string
           info_url: string | null
@@ -406,21 +443,27 @@ export type Database = {
           name: string
           operating_hours: string | null
           raw_data: Json | null
+          service_category_id: string | null
           sigungu_name: string | null
           source: string | null
           source_type: string
+          standard_name: string | null
           stroller_accessible: boolean
           target_age_group: string | null
           updated_at: string | null
         }
         Insert: {
           address: string
+          age_group?: string | null
+          blog_url?: string | null
           category: string
           category_min?: string | null
           category_min_source?: string | null
           created_at?: string | null
           external_id: string
           facility_type?: string
+          feature_tag?: string | null
+          group_id?: string | null
           has_parking?: boolean
           id?: string
           info_url?: string | null
@@ -431,21 +474,27 @@ export type Database = {
           name: string
           operating_hours?: string | null
           raw_data?: Json | null
+          service_category_id?: string | null
           sigungu_name?: string | null
           source?: string | null
           source_type: string
+          standard_name?: string | null
           stroller_accessible?: boolean
           target_age_group?: string | null
           updated_at?: string | null
         }
         Update: {
           address?: string
+          age_group?: string | null
+          blog_url?: string | null
           category?: string
           category_min?: string | null
           category_min_source?: string | null
           created_at?: string | null
           external_id?: string
           facility_type?: string
+          feature_tag?: string | null
+          group_id?: string | null
           has_parking?: boolean
           id?: string
           info_url?: string | null
@@ -456,14 +505,24 @@ export type Database = {
           name?: string
           operating_hours?: string | null
           raw_data?: Json | null
+          service_category_id?: string | null
           sigungu_name?: string | null
           source?: string | null
           source_type?: string
+          standard_name?: string | null
           stroller_accessible?: boolean
           target_age_group?: string | null
           updated_at?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "open_spaces_service_category_id_fkey"
+            columns: ["service_category_id"]
+            isOneToOne: false
+            referencedRelation: "service_categories"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -590,6 +649,30 @@ export type Database = {
           },
         ]
       }
+      service_categories: {
+        Row: {
+          category_name: string
+          created_at: string
+          id: string
+          parent_category: string
+          updated_at: string
+        }
+        Insert: {
+          category_name: string
+          created_at?: string
+          id?: string
+          parent_category: string
+          updated_at?: string
+        }
+        Update: {
+          category_name?: string
+          created_at?: string
+          id?: string
+          parent_category?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       spatial_ref_sys: {
         Row: {
           auth_name: string | null
@@ -672,6 +755,47 @@ export type Database = {
             columns: ["spot_id"]
             isOneToOne: true
             referencedRelation: "open_spaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      spot_dedup_groups: {
+        Row: {
+          age_group: string | null
+          blog_url: string | null
+          feature_tag: string | null
+          id: string
+          member_spot_ids: string[]
+          processed_at: string
+          service_category_id: string | null
+          standard_name: string | null
+        }
+        Insert: {
+          age_group?: string | null
+          blog_url?: string | null
+          feature_tag?: string | null
+          id?: string
+          member_spot_ids: string[]
+          processed_at?: string
+          service_category_id?: string | null
+          standard_name?: string | null
+        }
+        Update: {
+          age_group?: string | null
+          blog_url?: string | null
+          feature_tag?: string | null
+          id?: string
+          member_spot_ids?: string[]
+          processed_at?: string
+          service_category_id?: string | null
+          standard_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "spot_dedup_groups_service_category_id_fkey"
+            columns: ["service_category_id"]
+            isOneToOne: false
+            referencedRelation: "service_categories"
             referencedColumns: ["id"]
           },
         ]
@@ -806,6 +930,14 @@ export type Database = {
           f_table_schema?: unknown
           srid?: number | null
           type?: string | null
+        }
+        Relationships: []
+      }
+      sigungu_options_cache: {
+        Row: {
+          lat: number | null
+          lng: number | null
+          sigungu_name: string | null
         }
         Relationships: []
       }
@@ -981,6 +1113,20 @@ export type Database = {
         | { Args: { table_name: string }; Returns: string }
       enablelongtransactions: { Args: never; Returns: string }
       equals: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
+      find_spot_dedup_candidates: {
+        Args: { p_eps_degrees?: number; p_limit?: number }
+        Returns: {
+          address: string
+          category: string
+          category_min: string
+          id: string
+          lat: number
+          lng: number
+          name: string
+          normalized_address: string
+          proximity_cluster_id: number
+        }[]
+      }
       geometry: { Args: { "": string }; Returns: unknown }
       geometry_above: {
         Args: { geom1: unknown; geom2: unknown }
@@ -1235,6 +1381,7 @@ export type Database = {
       }
       postgis_version: { Args: never; Returns: string }
       postgis_wagyu_version: { Args: never; Returns: string }
+      refresh_sigungu_options_cache: { Args: never; Returns: undefined }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       st_3dclosestpoint: {

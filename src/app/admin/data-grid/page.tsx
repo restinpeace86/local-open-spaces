@@ -111,6 +111,9 @@ export default async function AdminDataGridPage() {
         // [맘스픽 채택 관리 탭](2026-09-02, Decision 019): MomPickPostsPanel도 동일하게
         // 자기완결적이라 빈 객체만 넘긴다.
         mom_pick_posts: {},
+        // [개선사항10 - 중복 스팟 그룹핑 및 매핑 탭](2026-09-04): SpotDedupPanel도 동일하게
+        // 자기완결적이라 빈 객체만 넘긴다.
+        spot_dedup: {},
       }}
     />
   );
