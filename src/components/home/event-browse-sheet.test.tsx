@@ -118,7 +118,10 @@ describe('EventBrowseSheet', () => {
     });
   });
 
-  it('paginated 모드에서 남은 항목이 있으면 "더 보기"를 눌러 다음 페이지를 이어붙인다', async () => {
+  // [개선사항3](2026-09-04 사용자 지시): "전체보기 바텀시트에도 페이지네이션/무한
+  // 스크롤 도입" — "더 보기" 버튼을 스크롤 바닥 근접 감지로 교체했다
+  // (MajorCategoryGrid 바텀시트와 동일한 패턴).
+  it('paginated 모드에서 남은 항목이 있으면 스크롤이 바닥에 닿을 때 다음 페이지를 이어붙인다', async () => {
     const fetchMock = vi.fn((url: string) => {
       const page = new URL(url, 'http://localhost').searchParams.get('page');
       if (page === '2') {
@@ -132,14 +135,18 @@ describe('EventBrowseSheet', () => {
     });
     vi.stubGlobal('fetch', fetchMock);
 
-    render(<EventBrowseSheet mode="ongoing" onClose={() => {}} onSelectItem={() => {}} />);
+    const { container } = render(<EventBrowseSheet mode="ongoing" onClose={() => {}} onSelectItem={() => {}} />);
     expect(await screen.findByText('첫번째 행사')).toBeInTheDocument();
+    expect(screen.queryByText('더 보기')).not.toBeInTheDocument(); // 버튼은 더 이상 없다
 
-    fireEvent.click(screen.getByText('더 보기'));
+    const scrollArea = container.querySelector('.overflow-y-auto')!;
+    Object.defineProperty(scrollArea, 'scrollHeight', { value: 1000, configurable: true });
+    Object.defineProperty(scrollArea, 'scrollTop', { value: 900, configurable: true });
+    Object.defineProperty(scrollArea, 'clientHeight', { value: 100, configurable: true });
+    fireEvent.scroll(scrollArea);
 
     expect(await screen.findByText('두번째 행사')).toBeInTheDocument();
     expect(screen.getByText('첫번째 행사')).toBeInTheDocument();
-    expect(screen.queryByText('더 보기')).not.toBeInTheDocument();
   });
 
   it('카드를 클릭하면 onSelectItem을 호출한다', async () => {

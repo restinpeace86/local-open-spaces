@@ -118,6 +118,19 @@ export function EventBrowseSheet({
   const isEmpty = !isLoading && !errorMessage && items.length === 0;
   const hasMorePages = meta.paginated && items.length < total;
 
+  // [개선사항3](2026-09-04 사용자 지시): "전체보기 바텀시트에도 페이지네이션/무한 스크롤을
+  // 도입" — "더 보기" 버튼을 누르는 대신, 시트 스크롤이 바닥 근처에 닿으면 자동으로
+  // 다음 페이지를 이어붙인다(MajorCategoryGrid 바텀시트에 먼저 적용한 것과 동일한
+  // 패턴, 제5장 제4조 기존 구조 우선).
+  function handleScroll(e: React.UIEvent<HTMLDivElement>) {
+    if (!hasMorePages || isLoading) return;
+    const el = e.currentTarget;
+    const distanceToBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    if (distanceToBottom < 150) {
+      loadMore();
+    }
+  }
+
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center" onClick={onClose}>
       <div
@@ -183,7 +196,7 @@ export function EventBrowseSheet({
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 overflow-y-auto p-4" onScroll={handleScroll}>
           {isLoading && items.length === 0 && <p className="text-sm text-gray-400">불러오는 중...</p>}
           {errorMessage && <p className="text-sm text-red-500">{errorMessage}</p>}
           {isEmpty && <EmptyState onReset={() => setSelectedMaj(null)} />}
@@ -194,17 +207,8 @@ export function EventBrowseSheet({
               ))}
             </div>
           )}
-          {hasMorePages && (
-            <div className="flex justify-center mt-4">
-              <button
-                type="button"
-                onClick={loadMore}
-                disabled={isLoading}
-                className="rounded-full border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-              >
-                {isLoading ? '불러오는 중...' : '더 보기'}
-              </button>
-            </div>
+          {isLoading && items.length > 0 && (
+            <p className="mt-4 text-center text-xs text-gray-400">불러오는 중...</p>
           )}
         </div>
       </div>
