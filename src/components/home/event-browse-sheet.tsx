@@ -11,10 +11,18 @@ export type EventBrowseSheetMode = 'today' | 'ongoing' | 'reservation-open';
 
 const PAGE_SIZE = 24;
 
+// [개선사항2](2026-09-04 사용자 지시): 목록 영역 타이틀("현재 이용 가능"→"지금 이 순간
+// 함께하기 좋은 알찬 픽", "예약 가능"→"놓치면 후회하는 인기 만점 예약 픽")이 바뀌어
+// 이 바텀시트의 "전체보기" 제목도 일관되게 맞춘다 — 목록에서 "전체보기"를 눌렀는데
+// 다른 이름의 시트가 뜨면 혼란을 준다.
 const MODE_META: Record<EventBrowseSheetMode, { title: string; endpoint: string; paginated: boolean }> = {
   today: { title: '🎪 오늘 전체보기', endpoint: '/api/events/today', paginated: false },
-  ongoing: { title: '✅ 현재 이용 가능 전체보기', endpoint: '/api/events/ongoing', paginated: true },
-  'reservation-open': { title: '📋 예약 가능 전체보기', endpoint: '/api/events/reservation-open', paginated: true },
+  ongoing: { title: '지금 이 순간 함께하기 좋은 알찬 픽 전체보기', endpoint: '/api/events/ongoing', paginated: true },
+  'reservation-open': {
+    title: '놓치면 후회하는 인기 만점 예약 픽 전체보기',
+    endpoint: '/api/events/reservation-open',
+    paginated: true,
+  },
 };
 
 // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시) 요구사항 3/4: 기존 3개 전체보기 페이지

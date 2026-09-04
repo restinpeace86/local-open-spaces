@@ -129,7 +129,7 @@ describe('HomeView', () => {
     stubFetchFreeFeed([]);
   });
 
-  // [홈 화면 성능 최적화](2026-08-29 사용자 지시): "현재 이용 가능"/"예약 가능" 지연 페칭
+  // [홈 화면 성능 최적화](2026-08-29 사용자 지시): "지금 이 순간 함께하기 좋은 알찬 픽"/"놓치면 후회하는 인기 만점 예약 픽" 지연 페칭
   // effect가 이제 addressName 유무와 무관하게 마운트 시 항상 실행돼, 이 effect의 결과를
   // 검증하지 않는 기존 동기(sync) 테스트들에서도 테스트 종료 후 상태 업데이트가 걸려
   // "not wrapped in act(...)" 경고가 뜬다 — 다음 테스트로 넘어가기 전에 대기 중인 마이크로
@@ -352,8 +352,8 @@ describe('HomeView', () => {
       });
     });
 
-    it('"현재 이용 가능"과 "예약 가능" 섹션 사이에 위치한다', async () => {
-      // "현재 이용 가능"/"예약 가능" 섹션은 0건이면 숨겨지므로(가변 노출), 이 테스트에서는
+    it('"지금 이 순간 함께하기 좋은 알찬 픽"과 "놓치면 후회하는 인기 만점 예약 픽" 섹션 사이에 위치한다', async () => {
+      // "지금 이 순간 함께하기 좋은 알찬 픽"/"놓치면 후회하는 인기 만점 예약 픽" 섹션은 0건이면 숨겨지므로(가변 노출), 이 테스트에서는
       // 둘 다 실제로 렌더링되도록 /api/home/feed 응답에 최소 1건씩 채워 넣는다.
       vi.stubGlobal(
         'fetch',
@@ -380,9 +380,9 @@ describe('HomeView', () => {
       const labels = Array.from(container.querySelectorAll('section[aria-label]')).map((el) =>
         el.getAttribute('aria-label')
       );
-      const ongoingIndex = labels.indexOf('현재 이용 가능');
+      const ongoingIndex = labels.indexOf('지금 이 순간 함께하기 좋은 알찬 픽');
       const bestPickIndex = labels.indexOf('베스트 나들이 픽');
-      const reservationIndex = labels.indexOf('예약 가능');
+      const reservationIndex = labels.indexOf('놓치면 후회하는 인기 만점 예약 픽');
 
       expect(ongoingIndex).toBeGreaterThanOrEqual(0);
       expect(bestPickIndex).toBeGreaterThan(ongoingIndex);
@@ -424,9 +424,9 @@ describe('HomeView', () => {
       );
       const categoryGridIndex = labels.indexOf('카테고리별 행사');
       const heroIndex = labels.indexOf('오늘의 추천 행사');
-      const ongoingIndex = labels.indexOf('현재 이용 가능');
+      const ongoingIndex = labels.indexOf('지금 이 순간 함께하기 좋은 알찬 픽');
       const bestPickIndex = labels.indexOf('베스트 나들이 픽');
-      const reservationIndex = labels.indexOf('예약 가능');
+      const reservationIndex = labels.indexOf('놓치면 후회하는 인기 만점 예약 픽');
 
       expect(categoryGridIndex).toBe(0);
       expect(heroIndex).toBeGreaterThan(categoryGridIndex);
@@ -542,9 +542,9 @@ describe('HomeView', () => {
     expect(await screen.findByText('🎪 오늘 전체보기')).toBeInTheDocument();
   });
 
-  // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시) 요구사항 3: "현재 이용 가능"/"예약 가능"의
+  // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시) 요구사항 3: "지금 이 순간 함께하기 좋은 알찬 픽"/"놓치면 후회하는 인기 만점 예약 픽"의
   // "전체보기"도 페이지 이동(/events/ongoing, /events/reservation-open) 대신 바텀시트로 뜬다.
-  it('"현재 이용 가능"/"예약 가능" 전체보기를 누르면 각각 해당 바텀시트가 뜬다', async () => {
+  it('"지금 이 순간 함께하기 좋은 알찬 픽"/"놓치면 후회하는 인기 만점 예약 픽" 전체보기를 누르면 각각 해당 바텀시트가 뜬다', async () => {
     // 위치 온보딩 모달도 동일한 aria-label="닫기" 닫기 버튼을 쓰므로, 위치를 미리 설정해
     // 온보딩 모달이 함께 뜨는 것을 막아 이 시트의 닫기 버튼만 유일하게 남긴다.
     localStorage.setItem(
@@ -575,15 +575,15 @@ describe('HomeView', () => {
     await screen.findByText('진행중 행사');
     await screen.findByText('예약가능 행사');
 
-    fireEvent.click(screen.getByText('✅ 현재 이용 가능').parentElement!.querySelector('button')!);
-    expect(await screen.findByText('✅ 현재 이용 가능 전체보기')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('지금 이 순간 함께하기 좋은 알찬 픽').parentElement!.querySelector('button')!);
+    expect(await screen.findByText('지금 이 순간 함께하기 좋은 알찬 픽 전체보기')).toBeInTheDocument();
     fireEvent.click(screen.getByLabelText('닫기'));
 
-    fireEvent.click(screen.getByText('📋 예약 가능').parentElement!.querySelector('button')!);
-    expect(await screen.findByText('📋 예약 가능 전체보기')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('놓치면 후회하는 인기 만점 예약 픽').parentElement!.querySelector('button')!);
+    expect(await screen.findByText('놓치면 후회하는 인기 만점 예약 픽 전체보기')).toBeInTheDocument();
   });
 
-  // [홈 화면 성능 최적화](2026-08-29 사용자 지시) 요구사항 2: "현재 이용 가능"/"예약 가능"은
+  // [홈 화면 성능 최적화](2026-08-29 사용자 지시) 요구사항 2: "지금 이 순간 함께하기 좋은 알찬 픽"/"놓치면 후회하는 인기 만점 예약 픽"은
   // 더 이상 SSR로 채워지지 않고 마운트 후 클라이언트에서 지연 페칭된다 — 그동안 스켈레톤을
   // 먼저 보여줘야 한다.
   describe('홈 슬라이드 Lazy Loading', () => {
@@ -603,8 +603,8 @@ describe('HomeView', () => {
 
       render(<HomeView initialHeroEvents={[]} />);
 
-      expect(screen.getByLabelText('현재 이용 가능 불러오는 중')).toBeInTheDocument();
-      expect(screen.getByLabelText('예약 가능 불러오는 중')).toBeInTheDocument();
+      expect(screen.getByLabelText('지금 이 순간 함께하기 좋은 알찬 픽 불러오는 중')).toBeInTheDocument();
+      expect(screen.getByLabelText('놓치면 후회하는 인기 만점 예약 픽 불러오는 중')).toBeInTheDocument();
       // 로딩 중에는 아직 몇 건인지 몰라 "전체보기" 버튼을 노출하지 않는다.
       expect(screen.queryByText('전체보기 →')).not.toBeInTheDocument();
 
@@ -619,8 +619,8 @@ describe('HomeView', () => {
 
       expect(await screen.findByText('진행중 행사')).toBeInTheDocument();
       expect(screen.getByText('예약가능 행사')).toBeInTheDocument();
-      expect(screen.queryByLabelText('현재 이용 가능 불러오는 중')).not.toBeInTheDocument();
-      expect(screen.queryByLabelText('예약 가능 불러오는 중')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('지금 이 순간 함께하기 좋은 알찬 픽 불러오는 중')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText('놓치면 후회하는 인기 만점 예약 픽 불러오는 중')).not.toBeInTheDocument();
     });
 
     it('로드 결과가 0건이면 스켈레톤 대신 섹션 자체를 숨긴다', async () => {
@@ -640,12 +640,12 @@ describe('HomeView', () => {
       render(<HomeView initialHeroEvents={[]} />);
 
       await waitFor(() => {
-        expect(screen.queryByLabelText('현재 이용 가능 불러오는 중')).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('지금 이 순간 함께하기 좋은 알찬 픽 불러오는 중')).not.toBeInTheDocument();
       });
-      expect(screen.queryByLabelText(/현재 이용 가능/)).not.toBeInTheDocument();
-      expect(screen.queryByLabelText(/예약 가능/)).not.toBeInTheDocument();
-      expect(screen.queryByText('✅ 현재 이용 가능')).not.toBeInTheDocument();
-      expect(screen.queryByText('📋 예약 가능')).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/지금 이 순간 함께하기 좋은 알찬 픽/)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/놓치면 후회하는 인기 만점 예약 픽/)).not.toBeInTheDocument();
+      expect(screen.queryByText('지금 이 순간 함께하기 좋은 알찬 픽')).not.toBeInTheDocument();
+      expect(screen.queryByText('놓치면 후회하는 인기 만점 예약 픽')).not.toBeInTheDocument();
     });
   });
 

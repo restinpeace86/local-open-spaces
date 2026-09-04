@@ -417,10 +417,15 @@ export function HomeView({
             {/* [홈 화면 성능 최적화](2026-08-29 사용자 지시): 이 섹션의 데이터는 더 이상
                 SSR로 미리 오지 않는다 — null(로드 전)이면 스켈레톤을, 로드 후 0건이면
                 섹션 자체를 숨기고(가변 노출 원칙 유지), 1건 이상이면 실제 슬라이더를 보여준다. */}
+            {/* [개선사항2](2026-09-04 사용자 지시): "현재 이용 가능" → "지금 이 순간
+                함께하기 좋은 알찬 픽"으로 영역 타이틀 변경(section aria-label/스켈레톤
+                안내 문구까지 전부 일관되게 맞춘다 — 스크린 리더 사용자도 같은 이름으로
+                듣게). "베스트 나들이 픽" 섹션(위)도 이모지 없이 텍스트만 쓰는 기존
+                관례를 그대로 따른다. */}
             {(currentlyOngoingEvents === null || currentlyOngoingEvents.length > 0) && (
-              <section aria-label="현재 이용 가능">
+              <section aria-label="지금 이 순간 함께하기 좋은 알찬 픽">
                 <div className="flex items-center justify-between mb-3 px-4">
-                  <h2 className="text-base font-bold text-gray-900">✅ 현재 이용 가능</h2>
+                  <h2 className="text-base font-bold text-gray-900">지금 이 순간 함께하기 좋은 알찬 픽</h2>
                   {currentlyOngoingEvents !== null && (
                     <button
                       type="button"
@@ -432,7 +437,7 @@ export function HomeView({
                   )}
                 </div>
                 {currentlyOngoingEvents === null ? (
-                  <ReservationOpenSliderSkeleton label="현재 이용 가능 불러오는 중" />
+                  <ReservationOpenSliderSkeleton label="지금 이 순간 함께하기 좋은 알찬 픽 불러오는 중" />
                 ) : (
                   <ReservationOpenSlider items={currentlyOngoingEvents} onSelect={setSelectedItem} />
                 )}
@@ -465,10 +470,12 @@ export function HomeView({
                 접수중인 이벤트가 없으면 섹션 자체를 숨긴다(Hero와 동일한 가변 노출 원칙).
                 [전체보기 페이지](2026-08-27 후속 지시): /events/reservation-open로 가는
                 전체보기 링크 추가. */}
+            {/* [개선사항2](2026-09-04 사용자 지시): "예약 가능" → "놓치면 후회하는 인기
+                만점 예약 픽"으로 영역 타이틀 변경. */}
             {(reservationOpenEvents === null || reservationOpenEvents.length > 0) && (
-              <section aria-label="예약 가능">
+              <section aria-label="놓치면 후회하는 인기 만점 예약 픽">
                 <div className="flex items-center justify-between mb-3 px-4">
-                  <h2 className="text-base font-bold text-gray-900">📋 예약 가능</h2>
+                  <h2 className="text-base font-bold text-gray-900">놓치면 후회하는 인기 만점 예약 픽</h2>
                   {reservationOpenEvents !== null && (
                     <button
                       type="button"
@@ -480,7 +487,7 @@ export function HomeView({
                   )}
                 </div>
                 {reservationOpenEvents === null ? (
-                  <ReservationOpenSliderSkeleton label="예약 가능 불러오는 중" />
+                  <ReservationOpenSliderSkeleton label="놓치면 후회하는 인기 만점 예약 픽 불러오는 중" />
                 ) : (
                   <ReservationOpenSlider items={reservationOpenEvents} onSelect={setSelectedItem} />
                 )}

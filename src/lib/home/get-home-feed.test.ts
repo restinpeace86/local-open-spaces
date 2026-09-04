@@ -1636,3 +1636,42 @@ describe('searchSpacesNationwide', () => {
     expect(items[0].lat).toBe(35.15);
   });
 });
+
+// [개선사항2](2026-09-04 사용자 지시) "'오늘 가능' 영역 중복 제거": getTodayEvents(Hero)의
+// end_date=오늘 조건과 getCurrentlyOngoingEvents("지금 이 순간 함께하기 좋은 알찬 픽")의
+// start_date~end_date 진행 기간 조건이 구조적으로 겹쳐(오늘 마감인 행사는 거의 항상 오늘도
+// 진행 기간 안에 있음) 같은 행사가 두 영역에 중복 노출되던 문제를 검증한다.
+describe('getHomeFeed — Hero와 "지금 이 순간 함께하기 좋은 알찬 픽" 중복 제거 (2026-09-04)', () => {
+  afterEach(() => {
+    vi.doUnmock('@/lib/supabase/server');
+    vi.resetModules();
+  });
+
+  it('Hero(오늘 마감/한정)에 뜬 행사는 "지금 이 순간 함께하기 좋은 알찬 픽" 목록에서 제외된다', async () => {
+    // start_date=end_date=오늘 → getTodayEvents(end_date=오늘)와 getCurrentlyOngoingEvents
+    // (start_date<=오늘<=end_date) 양쪽 조건을 모두 만족하는 행사.
+    const overlapping = eventRow({ id: 'overlap', title: '오늘만 하는 행사', is_active: true });
+    // 오늘 마감이 아니라 계속 진행 중이기만 한 행사 — "지금 이 순간 함께하기 좋은 알찬
+    // 픽"에만 있어야 한다.
+    const ongoingOnly = eventRow({
+      id: 'ongoing-only',
+      title: '계속 진행 중인 행사',
+      start_date: '2020-01-01',
+      end_date: '2099-12-31',
+      is_active: true,
+    });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () =>
+        Promise.resolve({ from: () => makeFilteringChainable([overlapping, ongoingOnly]) }),
+    }));
+
+    const { getHomeFeed } = await import('./get-home-feed');
+    const feed = await getHomeFeed({ sigunguName: null });
+
+    expect(feed.heroEvents.map((item) => item.id)).toContain('overlap');
+    const ongoingIds = feed.currentlyOngoingEvents.map((item) => item.id);
+    expect(ongoingIds).not.toContain('overlap'); // Hero에 이미 나왔으니 여기서는 제외
+    expect(ongoingIds).toContain('ongoing-only'); // Hero에 없는 행사는 그대로 노출
+  });
+});

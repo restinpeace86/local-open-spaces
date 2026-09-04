@@ -201,6 +201,24 @@ describe('HeroCarousel 뱃지 구분 (Task 9-6-13)', () => {
     expect(screen.queryByText('⚡ 오늘 한정')).not.toBeInTheDocument();
   });
 
+  // [개선사항2](2026-09-04 사용자 지시): "오늘 한정/오늘 마감 뱃지를 다시 선명하게" —
+  // 무료/유료 뱃지와 한 줄에 끼어 있던 작은 알약 대신, EventCard와 동일하게 이미지
+  // 상단을 가로지르는 전체 폭 스트립(+ z-10)으로 노출되는지 검증한다.
+  it('"오늘 한정" 뱃지는 무료/유료 뱃지와 분리된 이미지 상단 전체 폭 스트립으로 노출된다', () => {
+    const item = makeItem('1', '오늘 행사');
+    item.start_date = '2026-08-22';
+    item.end_date = '2026-08-22';
+    item.is_free = true;
+
+    render(<HeroCarousel items={[item]} onSelect={() => {}} />);
+
+    const banner = screen.getByText('⚡ 오늘 한정');
+    expect(banner).toHaveClass('left-0', 'right-0', 'z-10');
+    // 무료 뱃지는 이 스트립과 같은 요소가 아니라 별도 컨테이너에 있어야 한다.
+    const freeBadge = screen.getByText('🎁 무료');
+    expect(banner.parentElement).not.toBe(freeBadge.parentElement);
+  });
+
   // [메인 카드 유료/무료 뱃지 누락 수정](2026-08-27 사용자 지시): is_free===false(유료)일 때
   // 아무 뱃지도 없어 요금 정보를 전혀 알 수 없었다.
   it('is_free===true면 "🎁 무료" 뱃지를 보여준다', () => {

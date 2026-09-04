@@ -1191,5 +1191,16 @@ export async function getHomeFeed(region: HomeRegion = DEFAULT_HOME_REGION): Pro
     getReservationOpenEvents(RESERVATION_OPEN_FETCH_LIMIT, region),
     getCurrentlyOngoingEvents(CURRENTLY_ONGOING_FETCH_LIMIT, region),
   ]);
-  return { heroEvents, freeFeed, reservationOpenEvents, currentlyOngoingEvents };
+
+  // [개선사항2](2026-09-04 사용자 지시) "'오늘 가능' 영역 중복 제거": getTodayEvents는
+  // end_date=오늘인 행사만 뽑고, getCurrentlyOngoingEvents는 "오늘이 start_date~end_date
+  // 진행 기간 안"인 행사를 뽑는다 — end_date=오늘이면 거의 항상(오늘이 아직 지나지
+  // 않았으므로) start_date<=오늘<=end_date도 함께 만족해, Hero에 뜬 "오늘 한정/오늘
+  // 마감" 행사가 바로 아래 "현재 이용 가능"에도 그대로 다시 뜨는 중복이 구조적으로
+  // 발생했다(실측 확인 — 두 조회 사이에 id 교집합 배제 로직이 전혀 없었다). Hero에
+  // 이미 나온 항목은 여기서 제외한다.
+  const heroIds = new Set(heroEvents.map((item) => item.id));
+  const dedupedCurrentlyOngoing = currentlyOngoingEvents.filter((item) => !heroIds.has(item.id));
+
+  return { heroEvents, freeFeed, reservationOpenEvents, currentlyOngoingEvents: dedupedCurrentlyOngoing };
 }

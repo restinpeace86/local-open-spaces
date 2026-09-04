@@ -57,14 +57,14 @@ describe('EventBrowseSheet', () => {
     expect(screen.getByLabelText('지역')).toBeInTheDocument();
 
     rerender(<EventBrowseSheet mode="ongoing" onClose={() => {}} onSelectItem={() => {}} />);
-    expect(await screen.findByText('✅ 현재 이용 가능 전체보기')).toBeInTheDocument();
+    expect(await screen.findByText('지금 이 순간 함께하기 좋은 알찬 픽 전체보기')).toBeInTheDocument();
     expect(screen.queryByLabelText('지역')).not.toBeInTheDocument();
   });
 
   // [전체보기 바텀시트 칩 정리](2026-08-29 사용자 지시): 무의미한 "전체" 칩 제거.
   it('중분류 필터 칩 목록에 무의미한 "전체" 칩이 없다', async () => {
     render(<EventBrowseSheet mode="ongoing" onClose={() => {}} onSelectItem={() => {}} />);
-    await screen.findByText('✅ 현재 이용 가능 전체보기');
+    await screen.findByText('지금 이 순간 함께하기 좋은 알찬 픽 전체보기');
 
     expect(screen.queryByRole('button', { name: '전체' })).not.toBeInTheDocument();
     expect(screen.getByText('🎉 축제 / 이벤트')).toBeInTheDocument();
@@ -86,7 +86,7 @@ describe('EventBrowseSheet', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     render(<EventBrowseSheet mode="ongoing" onClose={() => {}} onSelectItem={() => {}} />);
-    await screen.findByText('✅ 현재 이용 가능 전체보기');
+    await screen.findByText('지금 이 순간 함께하기 좋은 알찬 픽 전체보기');
 
     fireEvent.click(screen.getByText('🎉 축제 / 이벤트'));
 
@@ -103,7 +103,7 @@ describe('EventBrowseSheet', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     render(<EventBrowseSheet mode="ongoing" onClose={() => {}} onSelectItem={() => {}} />);
-    await screen.findByText('✅ 현재 이용 가능 전체보기');
+    await screen.findByText('지금 이 순간 함께하기 좋은 알찬 픽 전체보기');
 
     fireEvent.click(screen.getByText('🎉 축제 / 이벤트'));
     await waitFor(() => {

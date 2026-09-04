@@ -141,16 +141,21 @@ export function HeroCarousel({
                   🖼️
                 </div>
               )}
-              <div className="absolute top-2 left-2 flex gap-1">
-                {dateBanner && (
-                  <span
-                    className={`text-[11px] font-bold px-2 py-0.5 rounded-full text-white ${
-                      dateBanner.kind === 'today_only' ? 'bg-amber-500' : 'bg-rose-600'
-                    }`}
-                  >
-                    {dateBanner.label}
-                  </span>
-                )}
+              {/* [개선사항2](2026-09-04 사용자 지시): "'오늘 한정'/'오늘 마감' 뱃지를 다시
+                  선명하게 노출"— 기존에는 작은 알약 뱃지가 무료/유료 뱃지와 같은 줄에
+                  끼어 있어 아주 작고 눈에 잘 안 띄었다. EventCard(카드 목록)가 이미 쓰는
+                  "이미지 상단 전체 폭 스트립 + z-10" 패턴을 그대로 재사용해(제5장 제4조
+                  기존 구조 우선) 이 카드가 왜 메인에 있는지 한눈에 보이게 한다. */}
+              {dateBanner && (
+                <div
+                  className={`absolute top-0 left-0 right-0 z-10 px-2 py-1 text-[11px] font-bold text-white text-center ${
+                    dateBanner.kind === 'today_only' ? 'bg-amber-500' : 'bg-rose-600'
+                  }`}
+                >
+                  {dateBanner.label}
+                </div>
+              )}
+              <div className={`absolute ${dateBanner ? 'top-8' : 'top-2'} left-2 flex gap-1`}>
                 {/* [메인 카드 유료/무료 뱃지 누락 수정](2026-08-27 사용자 지시): is_free===true일
                     때만 "무료" 뱃지를 보여주고 is_free===false(유료)면 아무 뱃지도 없어 요금
                     정보를 전혀 알 수 없었다 — EventCard(getParentalBadges)처럼 두 상태 모두
