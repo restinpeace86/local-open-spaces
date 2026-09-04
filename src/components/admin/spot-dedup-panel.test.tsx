@@ -21,10 +21,25 @@ function mockFetchByUrl(handlers: {
   apply?: unknown;
   bulkPreview?: unknown;
   bulkApply?: unknown;
+  pendingGroups?: unknown; // GET /pending-groups 응답
 }) {
   return vi.fn((url: string, init?: RequestInit) => {
     if (url.includes('/api/admin/service-categories')) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve(handlers.categories ?? { items: [] }) } as Response);
+    }
+    if (url.includes('/api/admin/spot-dedup/pending-groups')) {
+      // [중복 스팟 검수 — 진행 상태 임시 저장](2026-09-05 사용자 지시) POST(그룹 열기/무시)와
+      // DELETE(삭제)는 화면 흐름을 막지 않는 부수 효과라 단순 성공 응답만 흉내 낸다 —
+      // 실제 저장 여부/바디는 각 테스트가 fetchMock.mock.calls로 직접 검증한다.
+      if (init?.method === 'POST') {
+        const body = JSON.parse((init.body as string) ?? '{}');
+        const groupKey = [...(body.member_spot_ids ?? [])].sort().join(',');
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ group_key: groupKey }) } as Response);
+      }
+      if (init?.method === 'DELETE') {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ ok: true }) } as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(handlers.pendingGroups ?? { items: [] }) } as Response);
     }
     if (url.includes('/api/admin/spot-dedup/groups')) {
       const afterMatch = url.match(/after=([^&]+)/);
@@ -68,7 +83,7 @@ describe('SpotDedupPanel', () => {
     vi.stubGlobal('fetch', mockFetchByUrl({}));
     renderPanel();
 
-    expect(screen.getAllByText('📥 불러오기')).toHaveLength(2); // 중분류 영역 + 그룹 영역
+    expect(screen.getAllByText('📥 불러오기')).toHaveLength(3); // 중분류 영역 + 그룹 영역 + 진행 중 저장된 그룹 영역
     expect(screen.queryByText('현재 중복 의심 그룹이 없습니다.')).not.toBeInTheDocument();
   });
 
@@ -252,6 +267,114 @@ describe('SpotDedupPanel', () => {
       fireEvent.click(screen.getByText('일괄 매핑 적용'));
 
       expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
+  // [중복 스팟 검수 — 진행 상태 임시 저장](2026-09-05 사용자 지시): "따로 저장해주는
+  // 테이블 신규 생성하던가.. 상태 변경중이라던가 status 구분자로 진행중해놓던가..."
+  describe('진행 상태 임시 저장 (pending groups)', () => {
+    function groupsPagesWithOneGroup() {
+      return {
+        initial: {
+          candidates: [candidateRow({ id: 'a' }), candidateRow({ id: 'b', name: '행복놀이터(구)', address: '경기도 성남시 분당구 1-1' })],
+          next_cursor: 'b',
+          has_more: false,
+        },
+      };
+    }
+
+    it('그룹을 열면 in_progress로 임시 저장한다', async () => {
+      const fetchMock = mockFetchByUrl({ groupsPages: groupsPagesWithOneGroup() });
+      vi.stubGlobal('fetch', fetchMock);
+      renderPanel();
+
+      fireEvent.click(screen.getAllByText('📥 불러오기')[1]);
+      fireEvent.click(await screen.findByText(/행복놀이터 외 1건/));
+
+      expect(screen.getByText('중복 의심 그룹 검수 (2건)')).toBeInTheDocument();
+      await waitFor(() => {
+        const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/pending-groups') && c[1]?.method === 'POST');
+        expect(call).toBeDefined();
+        expect(JSON.parse((call![1] as RequestInit).body as string)).toEqual({
+          member_spot_ids: ['a', 'b'],
+          status: 'in_progress',
+        });
+      });
+    });
+
+    it('"중복 아님"을 누르면 ignored로 저장하고 목록에서 즉시 사라진다', async () => {
+      const fetchMock = mockFetchByUrl({ groupsPages: groupsPagesWithOneGroup() });
+      vi.stubGlobal('fetch', fetchMock);
+      renderPanel();
+
+      fireEvent.click(screen.getAllByText('📥 불러오기')[1]);
+      await screen.findByText(/행복놀이터 외 1건/);
+      fireEvent.click(screen.getByText('🙈 중복 아님'));
+
+      await waitFor(() => {
+        const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/pending-groups') && c[1]?.method === 'POST');
+        expect(JSON.parse((call![1] as RequestInit).body as string)).toEqual({
+          member_spot_ids: ['a', 'b'],
+          status: 'ignored',
+        });
+      });
+      expect(screen.queryByText(/행복놀이터 외 1건/)).not.toBeInTheDocument();
+    });
+
+    it('진행 중 저장된 그룹 불러오기를 누르면 서버 목록을 보여주고, "이어서 검수"를 누르면 모달이 열린다', async () => {
+      const fetchMock = mockFetchByUrl({
+        pendingGroups: {
+          items: [
+            {
+              id: 'p-1',
+              group_key: 'a,b',
+              status: 'in_progress',
+              updated_at: '2026-09-05T00:00:00Z',
+              members: [
+                { id: 'a', name: '행복놀이터', category: 'PARK', category_min: '공원', address: '경기도 성남시 분당구 1' },
+                { id: 'b', name: '행복놀이터(구)', category: 'PARK', category_min: '공원', address: '경기도 성남시 분당구 1-1' },
+              ],
+            },
+          ],
+        },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      renderPanel();
+
+      fireEvent.click(screen.getAllByText('📥 불러오기')[2]);
+      expect(await screen.findByText('행복놀이터 외 1건')).toBeInTheDocument();
+      expect(screen.getByText('진행중')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText('이어서 검수'));
+      expect(screen.getByText('중복 의심 그룹 검수 (2건)')).toBeInTheDocument();
+    });
+
+    it('삭제를 누르면 DELETE를 호출하고 목록에서 제거한다', async () => {
+      const fetchMock = mockFetchByUrl({
+        pendingGroups: {
+          items: [
+            {
+              id: 'p-1',
+              group_key: 'a,b',
+              status: 'ignored',
+              updated_at: '2026-09-05T00:00:00Z',
+              members: [{ id: 'a', name: '행복놀이터', category: 'PARK', category_min: '공원', address: null }],
+            },
+          ],
+        },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      renderPanel();
+
+      fireEvent.click(screen.getAllByText('📥 불러오기')[2]);
+      await screen.findByText('무시됨');
+      fireEvent.click(screen.getByText('삭제'));
+
+      expect(screen.queryByText('무시됨')).not.toBeInTheDocument();
+      await waitFor(() => {
+        const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('group_key=a%2Cb') && c[1]?.method === 'DELETE');
+        expect(call).toBeDefined();
+      });
     });
   });
 });

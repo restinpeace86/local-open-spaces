@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { buildPendingGroupKey } from '@/lib/admin/spot-dedup-pending-key';
 
 // open_spaces.age_group과 정확히 같은 허용값(2026-09-04 마이그레이션의 CHECK 제약과
 // 동일 — 한쪽만 바뀌면 서버가 DB에서 거부당하는 오류로 드러나는 대신 여기서 먼저
@@ -70,6 +71,22 @@ export async function POST(request: NextRequest) {
       .select('id');
 
     if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 });
+
+    // [중복 스팟 검수 — 진행 상태 임시 저장](2026-09-05 사용자 지시): "수정 다하고
+    // 등록하면 임시테이블에서.. 진짜 테이블로 옮겨가고 임시테이블에서는 해당 row들
+    // 삭제된다거나?" 위 두 단계(spot_dedup_groups 이력 기록 + open_spaces 반영)로
+    // "진짜 테이블로 옮기는" 절차는 이미 끝났으니, 같은 구성원 집합으로 임시 저장돼
+    // 있었을 행을 정리한다. 애초에 임시 저장을 거치지 않고(예: 처음 열자마자 바로
+    // 저장) 등록된 경우 삭제 대상이 없을 수 있는데, 그 자체는 정상 상황이라 에러로
+    // 취급하지 않는다 — 이 정리가 실패해도 이미 반영된 실제 결과(위 두 단계)는
+    // 되돌리지 않는다(부수적인 정리 실패로 핵심 작업 성공 응답을 막지 않음).
+    await admin
+      .from('spot_dedup_pending_groups')
+      .delete()
+      .eq('group_key', buildPendingGroupKey(spotIds))
+      .then(({ error: cleanupError }) => {
+        if (cleanupError) console.warn(`⚠️ 임시 저장 그룹 정리 실패(무시하고 계속): ${cleanupError.message}`);
+      });
 
     return NextResponse.json({ group_id: groupRow.id, updated_count: updatedRows?.length ?? 0 });
   } catch (err) {

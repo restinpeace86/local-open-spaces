@@ -834,6 +834,33 @@ export type Database = {
           },
         ]
       }
+      spot_dedup_pending_groups: {
+        Row: {
+          created_at: string
+          group_key: string
+          id: string
+          member_spot_ids: string[]
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          group_key: string
+          id?: string
+          member_spot_ids: string[]
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          group_key?: string
+          id?: string
+          member_spot_ids?: string[]
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       spot_weather_caches: {
         Row: {
           humidity: number | null

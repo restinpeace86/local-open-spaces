@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { DedupCandidateRow, DedupGroup, formatDedupGroupLabel, groupDedupCandidates } from '@/lib/admin/spot-dedup-grouping';
+import { buildPendingGroupKey } from '@/lib/admin/spot-dedup-pending-key';
 
 // [2026-09-05 페이지네이션 도입 — 사용자 timeout 신고 대응] "중복 의심 그룹 데이터
 // 너무 많나봐 또 timeout 걸리네.. 이것도 50여건씩 pagination 하던가..." 진짜 원인은
@@ -210,6 +211,17 @@ function GroupDetailModal({
 // (NULL) 행" 전체를 가리키는 선택지.
 const NULL_CATEGORY_MIN_TOKEN = '__NULL__';
 
+// [중복 스팟 검수 — 진행 상태 임시 저장](2026-09-05 사용자 지시): GET /api/admin/spot-dedup/
+// pending-groups가 돌려주는 모양 그대로 — open_spaces 조인까지 서버에서 끝내 온다.
+type PendingGroupMember = { id: string; name: string; category: string; category_min: string | null; address: string | null };
+type PendingGroupItem = {
+  id: string;
+  group_key: string;
+  status: 'in_progress' | 'ignored';
+  updated_at: string;
+  members: PendingGroupMember[];
+};
+
 export function SpotDedupPanel({ categoryMinOptions }: { categoryMinOptions: string[] }) {
   const [serviceCategories, setServiceCategories] = useState<ServiceCategory[]>([]);
   const [hasLoadedCategories, setHasLoadedCategories] = useState(false);
@@ -244,7 +256,29 @@ export function SpotDedupPanel({ categoryMinOptions }: { categoryMinOptions: str
   const [groupsError, setGroupsError] = useState<string | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<DedupGroup | null>(null);
 
-  const groups = useMemo(() => groupDedupCandidates(candidates), [candidates]);
+  // [중복 스팟 검수 — 진행 상태 임시 저장](2026-09-05 사용자 지시) 참고: 그룹을 열어
+  // 검수를 시작하면 in_progress로, "중복 아님"으로 확인하면 ignored로 이 임시 테이블에
+  // 남긴다. 최종 등록되면(GroupDetailModal → apply) 서버가 자동으로 삭제한다.
+  const [pendingGroups, setPendingGroups] = useState<PendingGroupItem[]>([]);
+  const [hasLoadedPendingGroups, setHasLoadedPendingGroups] = useState(false);
+  const [isLoadingPendingGroups, setIsLoadingPendingGroups] = useState(false);
+  const [pendingGroupsError, setPendingGroupsError] = useState<string | null>(null);
+
+  // ignored로 확인된 그룹은 다음 스캔에서도 계속 같은 조합으로 재구성될 수 있으므로
+  // (open_spaces 데이터 자체는 그대로라 union-find가 매번 똑같이 묶는다), 같은 구성원
+  // 집합이면 목록에서 걸러내 반복 검토를 막는다.
+  const ignoredGroupKeys = useMemo(
+    () => new Set(pendingGroups.filter((g) => g.status === 'ignored').map((g) => g.group_key)),
+    [pendingGroups]
+  );
+
+  const groups = useMemo(
+    () =>
+      groupDedupCandidates(candidates).filter(
+        (g) => !ignoredGroupKeys.has(buildPendingGroupKey(g.members.map((m) => m.id)))
+      ),
+    [candidates, ignoredGroupKeys]
+  );
 
   function loadServiceCategories() {
     setHasLoadedCategories(true);
@@ -315,6 +349,80 @@ export function SpotDedupPanel({ categoryMinOptions }: { categoryMinOptions: str
     // 없이도 이미 정확함). groups는 candidates에서 파생되므로 이걸로 충분하다.
     const removed = new Set(memberIds);
     setCandidates((prev) => prev.filter((c) => !removed.has(c.id)));
+    // apply/route.ts가 서버에서 이미 임시 저장 행을 삭제했다 — 클라이언트 목록도
+    // 같은 group_key를 골라내 즉시 반영한다(다시 불러오지 않아도 정확함).
+    const groupKey = buildPendingGroupKey(memberIds);
+    setPendingGroups((prev) => prev.filter((g) => g.group_key !== groupKey));
+  }
+
+  function loadPendingGroups() {
+    setHasLoadedPendingGroups(true);
+    setIsLoadingPendingGroups(true);
+    setPendingGroupsError(null);
+    fetch('/api/admin/spot-dedup/pending-groups')
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? '진행 중 그룹 조회에 실패했습니다.');
+        setPendingGroups(data.items ?? []);
+      })
+      .catch((err) => setPendingGroupsError(err instanceof Error ? err.message : '진행 중 그룹 조회에 실패했습니다.'))
+      .finally(() => setIsLoadingPendingGroups(false));
+  }
+
+  // 그룹을 열어 검수를 시작할 때(in_progress) 또는 "중복 아님"으로 확인할 때(ignored)
+  // 호출한다 — 실패해도 화면 흐름을 막지 않는다(부수적인 임시 저장일 뿐, 핵심 기능인
+  // 검수/매핑 자체는 이 저장과 무관하게 계속 동작해야 한다).
+  function stagePendingGroup(group: DedupGroup, status: 'in_progress' | 'ignored') {
+    const memberIds = group.members.map((m) => m.id);
+    fetch('/api/admin/spot-dedup/pending-groups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ member_spot_ids: memberIds, status }),
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? '임시 저장 실패');
+        // "중복 아님"으로 넘긴 그룹은 (진행 중 저장된 그룹 영역을 아직 불러오지 않았어도)
+        // 위 ignoredGroupKeys가 즉시 반영되도록 hasLoadedPendingGroups 여부와 무관하게
+        // 항상 로컬 상태를 갱신한다 — 서버 목록은 그 영역을 실제로 열 때 다시 정확히
+        // 맞춰진다(loadPendingGroups가 덮어씀).
+        setPendingGroups((prev) => {
+          const groupKey = data.group_key as string;
+          const next = prev.filter((g) => g.group_key !== groupKey);
+          next.unshift({
+            id: groupKey,
+            group_key: groupKey,
+            status,
+            updated_at: new Date().toISOString(),
+            members: group.members.map((m) => ({ id: m.id, name: m.name, category: m.category, category_min: m.category_min, address: m.address })),
+          });
+          return next;
+        });
+      })
+      .catch((err) => console.warn('⚠️ 그룹 임시 저장 실패(무시하고 계속):', err instanceof Error ? err.message : err));
+  }
+
+  function handleOpenGroup(group: DedupGroup) {
+    setSelectedGroup(group);
+    stagePendingGroup(group, 'in_progress');
+  }
+
+  function handleIgnoreGroup(group: DedupGroup) {
+    stagePendingGroup(group, 'ignored');
+  }
+
+  function handleRemovePendingGroup(groupKey: string) {
+    setPendingGroups((prev) => prev.filter((g) => g.group_key !== groupKey));
+    fetch(`/api/admin/spot-dedup/pending-groups?group_key=${encodeURIComponent(groupKey)}`, { method: 'DELETE' }).catch(
+      (err) => console.warn('⚠️ 임시 저장 삭제 실패:', err)
+    );
+  }
+
+  function resumePendingGroup(pending: PendingGroupItem) {
+    setSelectedGroup({
+      groupKey: pending.group_key,
+      members: pending.members.map((m) => ({ ...m, normalized_address: '', lat: null, lng: null })),
+    });
   }
 
   function handlePreviewBulk() {
@@ -563,13 +671,21 @@ export function SpotDedupPanel({ categoryMinOptions }: { categoryMinOptions: str
             )}
             <ul className="flex flex-col divide-y divide-gray-100">
               {groups.map((group) => (
-                <li key={group.groupKey}>
+                <li key={group.groupKey} className="flex items-center gap-2 py-2.5">
                   <button
                     type="button"
-                    onClick={() => setSelectedGroup(group)}
-                    className="w-full text-left py-2.5 text-sm text-gray-800 hover:bg-gray-50"
+                    onClick={() => handleOpenGroup(group)}
+                    className="flex-1 text-left text-sm text-gray-800 hover:underline"
                   >
                     {formatDedupGroupLabel(group)}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleIgnoreGroup(group)}
+                    className="shrink-0 rounded-full border border-gray-200 px-2.5 py-1 text-[11px] text-gray-500 hover:bg-gray-50"
+                    title="중복이 아니라고 확인 — 다음 스캔부터 다시 보이지 않습니다."
+                  >
+                    🙈 중복 아님
                   </button>
                 </li>
               ))}
@@ -585,6 +701,67 @@ export function SpotDedupPanel({ categoryMinOptions }: { categoryMinOptions: str
               </button>
             )}
           </>
+        )}
+      </section>
+
+      {/* [중복 스팟 검수 — 진행 상태 임시 저장](2026-09-05 사용자 지시): 검수를 시작했거나
+          (진행중) 중복이 아니라고 확인한(무시) 그룹을 세션이 끊겨도 잃어버리지 않도록
+          여기서 보여준다. */}
+      <section className="rounded-xl border border-gray-200 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-bold text-gray-900">📌 진행 중 저장된 그룹</h2>
+          {hasLoadedPendingGroups && (
+            <button
+              type="button"
+              onClick={loadPendingGroups}
+              disabled={isLoadingPendingGroups}
+              className="text-xs font-medium text-blue-600 hover:underline disabled:opacity-50"
+            >
+              {isLoadingPendingGroups ? '불러오는 중...' : '새로고침'}
+            </button>
+          )}
+        </div>
+        {pendingGroupsError && <p className="text-xs text-red-600 mb-2">{pendingGroupsError}</p>}
+        {!hasLoadedPendingGroups ? (
+          <button type="button" onClick={loadPendingGroups} className="text-xs font-medium text-blue-600 hover:underline">
+            📥 불러오기
+          </button>
+        ) : pendingGroups.length === 0 && !isLoadingPendingGroups ? (
+          <p className="text-xs text-gray-400">진행 중이거나 무시 처리한 그룹이 없습니다.</p>
+        ) : (
+          <ul className="flex flex-col divide-y divide-gray-100">
+            {pendingGroups.map((pending) => (
+              <li key={pending.group_key} className="flex items-center gap-2 py-2.5">
+                <span
+                  className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                    pending.status === 'in_progress' ? 'bg-amber-100 text-amber-700' : 'bg-gray-100 text-gray-500'
+                  }`}
+                >
+                  {pending.status === 'in_progress' ? '진행중' : '무시됨'}
+                </span>
+                <span className="flex-1 text-sm text-gray-800">
+                  {pending.members[0]?.name ?? '(삭제된 스팟)'} 외 {pending.members.length - 1}건
+                </span>
+                {pending.status === 'in_progress' && (
+                  <button
+                    type="button"
+                    onClick={() => resumePendingGroup(pending)}
+                    className="shrink-0 rounded-full border border-gray-300 px-2.5 py-1 text-[11px] text-gray-600 hover:bg-gray-50"
+                  >
+                    이어서 검수
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleRemovePendingGroup(pending.group_key)}
+                  className="shrink-0 rounded-full border border-gray-200 px-2.5 py-1 text-[11px] text-gray-400 hover:bg-gray-50"
+                  title={pending.status === 'ignored' ? '무시 취소 — 다음 스캔에 다시 나타납니다.' : '임시 저장 삭제'}
+                >
+                  삭제
+                </button>
+              </li>
+            ))}
+          </ul>
         )}
       </section>
 
