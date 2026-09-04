@@ -424,6 +424,14 @@ CTA 버튼:
 
 ---
 [개선사항9] 
+
+> ✅ **완료 (2026-09-04)** — 상세:
+> `implementation/2026-09-04-todo-improvement-9-airkorea-week-forecast.md`.
+> 실측 호출로 확인한 결과 지시서가 언급한 필드명(informData/informCode/
+> informOverall)은 실제로 존재하지 않았고, PM10/PM25 구분도 없이 통합 주간 전망
+> 1건만 발표됨을 확인해 실제 구조(presnatnDt/gwthcnd/frcstOneDt~FourCn)에 맞춰
+> 신규 테이블+어댑터를 구현했다. 라이브 API+DB로 직접 실행해 4건 upsert까지 확인.
+
 현재 우리 프로젝트에 구현되어 있는 에어코리아 대기질 '단기 예보' 연동 로직(컨트롤러/서비스/DB 모델 등)을 참고해서, 
 초미세먼지 '주간 예보' 엔드포인트를 하나 더 추가하려고 해.
 

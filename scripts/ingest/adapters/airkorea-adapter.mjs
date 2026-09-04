@@ -48,7 +48,11 @@ function buildUrl(path, params) {
   return `${BASE_URL}${path}?serviceKey=${encodeURIComponent(apiKey)}&${search.toString()}`;
 }
 
-async function fetchAirKoreaItems(path, params, label) {
+// [개선사항9 - 에어코리아 주간예보 연동](2026-09-04 todo.md)에서 신규 어댑터
+// (airkorea-week-forecast-adapter.mjs)가 동일한 호출/에러 처리 로직을 그대로 재사용할
+// 수 있도록 export한다(제5장 제4조 기존 구조 우선 — 거의 동일한 fetch+파싱 보일러
+// 플레이트를 복붙하지 않음).
+export async function fetchAirKoreaItems(path, params, label) {
   return withRetry(
     async () => {
       const url = buildUrl(path, params);
