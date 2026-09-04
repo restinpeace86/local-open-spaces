@@ -17,6 +17,17 @@ import { DedupCandidateRow } from '@/lib/admin/spot-dedup-grouping';
 // next_cursor/has_more)를 그대로 돌려준다. 그룹 병합(Union-Find)은 여러 페이지에
 // 걸쳐 누적된 후보를 대상으로 다시 계산해야 하므로 클라이언트(SpotDedupPanel)가
 // 담당한다(제5장 제4조 — groupDedupCandidates는 이미 순수 함수라 그대로 재사용).
+//
+// [2026-09-05 스캔 순서를 id → geohash로 변경, 좌표 근접 판정을 SQL → 클라이언트로
+// 이전] 사용자가 실제 데이터로 지적한 중복 사례를 재현해 확인한 결과, id(무작위
+// uuid) 순 스캔은 실제로 가까운 두 행이 같은 배치에 함께 걸릴 확률이 거의 0이었다 —
+// ST_GeoHash 기반 공간 순서로 바꿔 몇 번의 "더 보기" 안에 함께 스캔되도록 했고,
+// 좌표 근접 자체는 이제 Haversine(정확한 실제 미터 거리)로 클라이언트가 누적된
+// 전체 후보를 대상으로 계산한다(spot-dedup-grouping.ts, 2026-09-05-spot-dedup-
+// geohash-scan-and-accurate-distance.sql 참고). `p_after_id`(uuid)는
+// `p_after_key`(geohash 기반 텍스트 커서)로 바뀌었지만, 이 라우트의 외부 계약
+// (쿼리 파라미터 `after`, 응답의 `next_cursor`)은 둘 다 불투명한 문자열이라
+// 변경이 없다.
 const DEFAULT_LIMIT = 50;
 
 export async function GET(request: NextRequest) {
@@ -29,7 +40,7 @@ export async function GET(request: NextRequest) {
     const admin = createAdminClient();
     const { data, error } = await admin.rpc('find_spot_dedup_candidates', {
       p_limit: limit,
-      p_after_id: after,
+      p_after_key: after,
     });
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

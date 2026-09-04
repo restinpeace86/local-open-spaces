@@ -55,7 +55,6 @@ function candidateRow(overrides: Record<string, unknown> = {}) {
     normalized_address: 'x',
     lat: 37.3,
     lng: 127.1,
-    proximity_cluster_id: 1,
     ...overrides,
   };
 }
@@ -133,9 +132,15 @@ describe('SpotDedupPanel', () => {
       'fetch',
       mockFetchByUrl({
         groupsPages: {
-          initial: { candidates: [candidateRow({ id: 'a', normalized_address: 'addr-1', proximity_cluster_id: null })], next_cursor: 'a', has_more: true },
+          // 좌표는 서로 멀리 떨어뜨려(lat 차이 약 1도 ≈ 111km) 이 테스트가 순수하게
+          // "같은 normalized_address" 기준의 페이지 간 병합만 검증하도록 한다.
+          initial: {
+            candidates: [candidateRow({ id: 'a', normalized_address: 'addr-1', lat: 37.3, lng: 127.1 })],
+            next_cursor: 'a',
+            has_more: true,
+          },
           a: {
-            candidates: [candidateRow({ id: 'b', name: '행복놀이터(구)', normalized_address: 'addr-1', proximity_cluster_id: null })],
+            candidates: [candidateRow({ id: 'b', name: '행복놀이터(구)', normalized_address: 'addr-1', lat: 38.3, lng: 127.1 })],
             next_cursor: 'b',
             has_more: false,
           },
