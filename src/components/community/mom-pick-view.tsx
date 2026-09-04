@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { useMomPickAccess } from '@/hooks/use-mom-pick-access';
 import { getMyProfile } from '@/lib/auth/profile';
 import { LoginPromptModal } from './login-prompt-modal';
@@ -13,8 +12,12 @@ import { GRADE_LABEL } from '@/lib/community/grades';
 import { DashboardPost } from '@/lib/community/mom-pick-dashboard';
 
 // [Decision 019](2026-09-02) / spec/community/mom-pick-grades.md: 맘스픽 커뮤니티는 로그인
-// 사용자만 이용 가능하다. 로그인은 했지만 아직 새싹맘(첫 후기/체크리스트 1회) 조건을
-// 못 채운 사용자는 "글쓰기"만 가능하고 피드 열람은 막는다.
+// 사용자만 이용 가능하다.
+// [개선사항8 - 미등업 유저 진입 플로우 개선](2026-09-04 todo.md): 로그인은 했지만 아직
+// 새싹맘(첫 후기/체크리스트 1회) 조건을 못 채운 사용자도 피드 열람은 자유롭게
+// 허용한다(전에는 "글쓰기"만 가능하고 피드는 막았다 — project/decision-log.md
+// "등급 게이팅 범위"가 "로그인 사용자면 피드 열람 가능"이라고 이미 상위 결정해 둔
+// 것과도 맞춘다). 새싹맘 등업 자체를 요구하는 시점은 챗봇 무제한 이용/글쓰기뿐이다.
 //
 // [새싹맘 등급 조건부 권한 제어 및 안내 팝업](2026-09-02 사용자 지시): "맘스픽 클릭 시"
 // 3가지 분기(비로그인/새싹맘 미달성/새싹맘 이상)를 모달로 안내한다. 이 앱에는 "맘스픽"
@@ -30,7 +33,6 @@ import { DashboardPost } from '@/lib/community/mom-pick-dashboard';
 type DashboardData = { expert: DashboardPost[]; trending: DashboardPost[]; live: DashboardPost[] };
 
 export function MomPickView() {
-  const router = useRouter();
   const { state, profile: initialProfile } = useMomPickAccess();
   const [profile, setProfile] = useState(initialProfile);
   const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
@@ -55,11 +57,17 @@ export function MomPickView() {
 
   // [todo.md 개선사항 10](2026-09-03): "맘스픽 메인 화면은 비로그인도 View-Only로 접근
   // 허용" — 이전에는 state==='allowed'일 때만 피드를 불러왔지만, 이제 게스트도 열람은
-  // 가능해야 하므로 'guest'도 함께 허용한다('not_sprout_yet'은 이번 지시 범위 밖이라
-  // 기존처럼 그대로 제외 — 로그인은 했지만 첫 글을 아직 안 쓴 사용자에게는 여전히
-  // 글쓰기 유도 화면만 보여준다).
+  // 가능해야 하므로 'guest'도 함께 허용한다.
+  // [개선사항8 - 미등업 유저 진입 플로우 개선](2026-09-04 todo.md): "맘스픽 진입 시
+  // 곧바로 강제로 후기 작성 화면으로 이동하는 로직을 폐지하고, 메인 화면(내 주변
+  // 인기 스팟 등)이 먼저 정상적으로 로딩되어야 한다 — 등급 미달성 유저도 스팟 목록을
+  // 스크롤하며 둘러보는 것은 자유롭게 허용." 기존에는 'not_sprout_yet'(로그인은 했지만
+  // 첫 글을 아직 안 쓴 상태)일 때 이 조회 자체를 하지 않아 피드가 영원히 뜨지 않았다 —
+  // 이제 함께 허용한다(project/decision-log.md "등급 게이팅 범위": 피드 열람 자체는
+  // "로그인 사용자"면 가능하다는 상위 결정과도 일치 — 등급이 아니라 로그인 여부가
+  // 기준이므로 스펙 충돌이 아니다).
   useEffect(() => {
-    if (state !== 'allowed' && state !== 'guest') return;
+    if (state !== 'allowed' && state !== 'guest' && state !== 'not_sprout_yet') return;
     let cancelled = false;
     fetch('/api/mom-pick/dashboard')
       .then((res) => res.json())
@@ -120,7 +128,7 @@ export function MomPickView() {
         )}
       </div>
 
-      {(state === 'allowed' || state === 'guest') && (
+      {(state === 'allowed' || state === 'guest' || state === 'not_sprout_yet') && (
         <>
           {dashboardError && <p className="text-xs text-red-600">{dashboardError}</p>}
           {!dashboard && !dashboardError ? (
@@ -156,7 +164,12 @@ export function MomPickView() {
             setIsGuideModalOpen(false);
             composerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
           }}
-          onClose={() => router.push('/')}
+          // [개선사항8 - 미등업 유저 진입 플로우 개선](2026-09-04 todo.md): "'X' 버튼을
+          // 누르면 모달이 닫히며 다시 맘스픽 메인 화면으로 돌아가 탐색을 지속할 수
+          // 있게 처리." 기존에는 닫기를 눌러도 '/'(홈)로 강제 이동시켜, 방금 바로 위에서
+          // 허용한 피드 열람("메인 화면 우선 노출")을 실제로는 볼 수 없게 만드는
+          // 모순이 있었다 — 그냥 모달만 닫아 같은 화면에서 계속 둘러볼 수 있게 한다.
+          onClose={() => setIsGuideModalOpen(false)}
         />
       )}
 
