@@ -4,7 +4,7 @@ import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
 import { getParentalBadges } from '@/lib/spaces/parental-badges';
 import { getEventStatus, getDateBannerBadge } from '@/lib/spaces/event-status';
-import { formatDateRange, formatVenueLine } from '@/lib/spaces/format';
+import { formatDateRange, formatDistance, formatVenueLine } from '@/lib/spaces/format';
 
 // spec/event/event-card.md 준용 신규 카드 (Task 9-1) — 기존에는 이벤트 전용 카드가 없었고
 // ItemListPanel의 리스트 행으로만 표현됐다. 썸네일/상태 뱃지/예약 마감 경고를 갖춘
@@ -131,11 +131,18 @@ export function EventCard({
         >
           {item.category_min ?? meta.label}
         </span>
-        <span
-          className={`absolute ${dateBanner ? 'top-8' : 'top-2'} right-2 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-black/60 text-white`}
-        >
-          {status.label}
-        </span>
+        {/* [개선사항1](2026-09-04 사용자 지시): open_spaces 연동 카드(캠핑장 등)에 붙는
+            "상시" 태그는 실제 운영 상황/예약 필요 여부와 무관하게 "날짜 정보가 아예
+            없다"는 사정만으로 붙는 값이라(event-status.ts getEventStatus 주석 참고)
+            사용자에게 혼선을 준다는 지적 — 이 라벨일 때만 뱃지 자체를 노출하지 않는다
+            (다른 상태값인 접수중/오늘 마감/예정/진행중은 그대로 유지). */}
+        {status.label !== '상시' && (
+          <span
+            className={`absolute ${dateBanner ? 'top-8' : 'top-2'} right-2 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-black/60 text-white`}
+          >
+            {status.label}
+          </span>
+        )}
         {/* [카드 높이/뱃지 정리](2026-09-03 사용자 지시): 무료/유료·실내/야외는 이미지
             하단 좌/우 오버레이로 — 텍스트 영역 줄 수를 늘리지 않는다. */}
         {priceBadge && (
@@ -153,6 +160,16 @@ export function EventCard({
       <div className="p-3 flex-[5] min-h-0 overflow-hidden flex flex-col gap-1.5">
         <p className="text-sm font-medium text-gray-900 line-clamp-2 min-h-[2.5rem]">{item.name}</p>
         {venueLine && <p className="text-xs text-gray-400 line-clamp-1">{venueLine}</p>}
+        {/* [개선사항1](2026-09-04 사용자 지시): 상세 페이지를 열지 않고도 목록 카드 단계에서
+            바로 거리를 알 수 있도록 상시 노출한다(DetailModal의 "현재 위치에서 X km"와
+            동일한 문구/포맷). distance_meters는 이미 서버에서 한 번만 계산돼(get-home-
+            feed.ts sortByDistanceIfKnown) NearbyItem에 담겨 오므로, 여기서는 그 값을
+            그대로 포맷팅만 한다 — 카드 렌더링마다 다시 계산하지 않는다(성능 최적화
+            요건은 이미 서버 사전 계산 구조로 충족돼 있어 추가 작업이 필요 없었다).
+            -1은 "위치 미상"을 뜻하는 sentinel이라 숨긴다. */}
+        {item.distance_meters >= 0 && (
+          <p className="text-xs text-gray-400 line-clamp-1">현재 위치에서 {formatDistance(item.distance_meters)}</p>
+        )}
         {period && <p className="text-xs text-gray-400 line-clamp-1">{period}</p>}
         {textBadges.length > 0 && (
           <div className="flex flex-wrap gap-1">

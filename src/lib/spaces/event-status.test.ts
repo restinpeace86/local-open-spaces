@@ -112,11 +112,17 @@ describe('getReservationAvailabilityTag', () => {
     expect(tag).toEqual({ label: '📋 사전예약필요 (링크미제공)', tone: 'warn' });
   });
 
-  it('reservation_url이 없고 예약 불필요면 "예약불필요/현장방문" 태그를 반환한다', () => {
-    const tag = getReservationAvailabilityTag(
-      makeEvent({ reservation_url: null, is_reservation_required: false })
-    );
-    expect(tag).toEqual({ label: '✅ 예약불필요 / 현장방문', tone: 'neutral' });
+  // [예약 안내 뱃지 신뢰도 정비](2026-09-04 사용자 지시): is_reservation_required=false는
+  // 실측 확인 결과 어느 수집기도 명시적으로 단언한 적 없는 기본값일 뿐이다(전체
+  // 어댑터에서 buildEventRow에 isReservationRequired:false를 넘기는 곳이 단 하나도
+  // 없음) — 근거 없는 "예약불필요/현장방문" 단정을 더 이상 보여주지 않는다.
+  it('reservation_url이 없고 is_reservation_required가 false/null이면(근거 없는 기본값) 태그를 반환하지 않는다', () => {
+    expect(
+      getReservationAvailabilityTag(makeEvent({ reservation_url: null, is_reservation_required: false }))
+    ).toBeNull();
+    expect(
+      getReservationAvailabilityTag(makeEvent({ reservation_url: null, is_reservation_required: null }))
+    ).toBeNull();
   });
 
   it('SPACE 항목에는 태그를 반환하지 않는다', () => {

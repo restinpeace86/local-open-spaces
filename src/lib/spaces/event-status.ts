@@ -69,10 +69,21 @@ export type ReservationAvailabilityTag = { label: string; tone: 'neutral' | 'war
 // Task 9-6-13: reservation_url이 없는 이벤트를 무조건 "길찾기"로만 폴백시키면 예약이 필요한
 // 행사인지 현장에서 바로 참여 가능한 행사인지 구분이 안 된다. is_reservation_required로 두
 // 경우를 나눠 안내한다 — 링크가 없다고 무조건 "현장방문 가능"으로 오인시키지 않기 위함.
+// [예약 안내 뱃지 신뢰도 정비](2026-09-04 사용자 지시): "정보가 불충분한데 잘못된 정보를
+// 줄 수 있는 뱃지는 과감하게 수정/제거"라는 지적에 따라 실제 데이터 근거를 추적했다.
+// scripts/ingest/adapters/lib/schema-mapper.mjs의 buildEventRow는 isReservationRequired
+// 기본값을 false로 둔다 — 그런데 실제 수집기 코드 전체를 뒤져보면(gg-culture-events-
+// adapter.mjs/seoul-culture-events.mjs/tour-api-festival.mjs) "isReservationRequired: false"가
+// 등장하는 자리는 전부 deriveBookingStatus(다른 필드) 호출에만 쓰이고, buildEventRow에는
+// 단 한 번도 명시적으로 전달되지 않는다 — 즉 오늘 DB에 있는 모든 false 값은 "예약이
+// 필요 없다고 확인됨"이 아니라 "그 수집기가 이 필드를 아예 다루지 않아 기본값으로
+// 떨어진 것"뿐이다(실측 확인, 전체 어댑터에서 명시적 true는 SEOUL_YEYAK 한 곳뿐 — "이
+// 소스는 전건 사전 예약 필수"라는 진짜 근거가 있다). 확정되지 않은 사실을 확정된 것처럼
+// 보여주지 않는다는 원칙(제3장 제5조 추측 금지)에 따라, 실제 근거가 있는 "사전예약필요"만
+// 남기고 근거 없는 "예약불필요 / 현장방문" 단정은 제거한다(뱃지를 아예 노출하지 않음 —
+// detail-modal.tsx의 렌더 조건은 이 함수가 null을 반환하면 자연히 숨겨진다).
 export function getReservationAvailabilityTag(item: NearbyItem): ReservationAvailabilityTag | null {
   if (item.item_type !== 'EVENT' || item.reservation_url) return null;
 
-  return item.is_reservation_required
-    ? { label: '📋 사전예약필요 (링크미제공)', tone: 'warn' }
-    : { label: '✅ 예약불필요 / 현장방문', tone: 'neutral' };
+  return item.is_reservation_required ? { label: '📋 사전예약필요 (링크미제공)', tone: 'warn' } : null;
 }

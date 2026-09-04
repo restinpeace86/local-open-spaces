@@ -148,7 +148,11 @@ export function DetailModal({
   // Task 9-6-11(2026-08-25, Decision 011 개정): 상세 CTA 조건부 3분류 —
   // 1) 공공/무료(is_free=true 또는 reservation_url 존재) → 공공 예약하기
   // 2) 유료/민간 제휴(is_free=false 및 affiliate_url 존재) → 할인 예매하기
-  // 3) 그 외(위 링크 미존재) → 지도에서 보기(정확한 좌표가 있을 때만, 인앱 지도 모달 오픈)
+  // 3) 그 외(위 링크 미존재) → 지도에서 길찾기(정확한 좌표가 있을 때만, 인앱 지도 모달 오픈)
+  // [개선사항1](2026-09-04 사용자 지시): 버튼명을 "지도에서 보기" → "지도에서 길찾기"로
+  // 변경 — 이 버튼이 여는 MapPreviewModal 안에 실제로 "🧭 현재 위치에서 길찾기" 기능
+  // (인앱 경로 표시, 2026-09-03 도입)이 있으므로, 버튼명이 실제 기능을 더 정확히
+  // 안내하도록 직관적으로 바꾼다.
   // 공간은 reservation_url 컬럼이 없어(project/database_schema.md 3.1) 늘 null이므로,
   // is_free=true인데 reservation_url이 없는 공간은 기존처럼 info_url을 공식 링크로 대신 쓴다.
   // [todo.md 개선사항 4](2026-09-03): isEvent일 때 info_url을 무조건 null 취급하면
@@ -162,7 +166,7 @@ export function DetailModal({
     : item.is_free === false && item.affiliate_url
     ? { type: 'link' as const, label: '🎟️ 할인 예매하기', href: item.affiliate_url }
     : hasExactLocation && !shouldHideMapForSpotScreen
-    ? { type: 'map' as const, label: '🗺️ 지도에서 보기' }
+    ? { type: 'map' as const, label: '🗺️ 지도에서 길찾기' }
     : null;
 
   // [스팟 자체 간편 예약/신청 시스템 MVP](2026-08-29 사용자 지시): 직전에 붙였던 "정보

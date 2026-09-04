@@ -59,10 +59,10 @@ describe('DetailModal (외부 지도 앱 연동 제거 및 인앱 위치 보기)
   // [외부 지도 앱 연동 제거 및 인앱 위치 보기](2026-08-30 사용자 지시): 예약/예매 링크가
   // 없을 때 뜨는 CTA가 더 이상 네이버 지도 외부 링크가 아니라, 인앱 미니맵의 "🔍 크게보기"와
   // 동일한 MapPreviewModal을 여는 버튼이어야 한다(유저가 앱을 이탈하지 않음).
-  it('"🗺️ 지도에서 보기" 버튼을 누르면 외부로 나가지 않고 인앱 지도 모달이 열린다', () => {
+  it('"🗺️ 지도에서 길찾기" 버튼을 누르면 외부로 나가지 않고 인앱 지도 모달이 열린다', () => {
     render(<DetailModal item={makeSpaceItem()} onClose={() => {}} />);
 
-    const button = screen.getByText('🗺️ 지도에서 보기');
+    const button = screen.getByText('🗺️ 지도에서 길찾기');
     expect(button.closest('a')).toBeNull(); // 외부 링크(<a>)가 아니라 버튼이어야 한다.
     expect(button.closest('button')).not.toBeNull();
 
@@ -136,7 +136,7 @@ describe('DetailModal 조건부 CTA 3분류 (Task 9-6-11, Decision 011)', () => 
     expect(link!.getAttribute('href')).toBe('https://link.coupang.com/a/example');
   });
 
-  it('is_free=false이지만 affiliate_url이 없으면 "🎟️ 할인 예매하기" 대신 "🗺️ 지도에서 보기"로 폴백한다', () => {
+  it('is_free=false이지만 affiliate_url이 없으면 "🎟️ 할인 예매하기" 대신 "🗺️ 지도에서 길찾기"로 폴백한다', () => {
     render(
       <DetailModal
         item={makeSpaceItem({ is_free: false, reservation_url: null, info_url: null, affiliate_url: null })}
@@ -145,7 +145,7 @@ describe('DetailModal 조건부 CTA 3분류 (Task 9-6-11, Decision 011)', () => 
     );
 
     expect(screen.queryByText('🎟️ 할인 예매하기')).not.toBeInTheDocument();
-    expect(screen.getByText('🗺️ 지도에서 보기')).toBeInTheDocument();
+    expect(screen.getByText('🗺️ 지도에서 길찾기')).toBeInTheDocument();
   });
 
   it('예약/예매 URL이 전혀 없고 정확한 좌표도 없으면(CITY_APPROX) CTA 버튼이 아예 렌더링되지 않는다', () => {
@@ -165,7 +165,7 @@ describe('DetailModal 조건부 CTA 3분류 (Task 9-6-11, Decision 011)', () => 
 
     expect(screen.queryByText('🏛️ 공공 예약하기')).not.toBeInTheDocument();
     expect(screen.queryByText('🎟️ 할인 예매하기')).not.toBeInTheDocument();
-    expect(screen.queryByText('🗺️ 지도에서 보기')).not.toBeInTheDocument();
+    expect(screen.queryByText('🗺️ 지도에서 길찾기')).not.toBeInTheDocument();
   });
 });
 
@@ -480,16 +480,16 @@ describe('DetailModal hideMapSection (중복 지도 뷰 제거, 2026-09-01)', ()
     vi.unstubAllGlobals();
   });
 
-  it('hideMapSection이 없으면(기존 화면들) 미니맵과 "지도에서 보기" CTA가 그대로 보인다', () => {
+  it('hideMapSection이 없으면(기존 화면들) 미니맵과 "지도에서 길찾기" CTA가 그대로 보인다', () => {
     render(<DetailModal item={makeSpaceItem()} onClose={() => {}} />);
 
-    expect(screen.getByText('🗺️ 지도에서 보기')).toBeInTheDocument();
+    expect(screen.getByText('🗺️ 지도에서 길찾기')).toBeInTheDocument();
   });
 
-  it('hideMapSection이 true이고 정확한 좌표인 스팟은 미니맵도 "지도에서 보기" CTA도 렌더링하지 않는다', () => {
+  it('hideMapSection이 true이고 정확한 좌표인 스팟은 미니맵도 "지도에서 길찾기" CTA도 렌더링하지 않는다', () => {
     render(<DetailModal item={makeSpaceItem()} onClose={() => {}} hideMapSection />);
 
-    expect(screen.queryByText('🗺️ 지도에서 보기')).not.toBeInTheDocument();
+    expect(screen.queryByText('🗺️ 지도에서 길찾기')).not.toBeInTheDocument();
     expect(screen.queryByText('🔍 크게보기')).not.toBeInTheDocument();
   });
 
@@ -508,6 +508,6 @@ describe('DetailModal hideMapSection (중복 지도 뷰 제거, 2026-09-01)', ()
   it('hideMapSection이 true여도 이벤트(EVENT)는 기존처럼 미니맵을 그대로 보여준다("이벤트픽은 기존 구조 유지")', () => {
     render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT' })} onClose={() => {}} hideMapSection />);
 
-    expect(screen.getByText('🗺️ 지도에서 보기')).toBeInTheDocument();
+    expect(screen.getByText('🗺️ 지도에서 길찾기')).toBeInTheDocument();
   });
 });

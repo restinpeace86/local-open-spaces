@@ -244,3 +244,38 @@ describe('EventCard dateBanner가 있어도 이미지:텍스트 비율이 항상
     expect(imageAreaWithout.className).toBe(imageAreaWith.className);
   });
 });
+
+// [개선사항1](2026-09-04 사용자 지시): open_spaces 연동 카드(캠핑장 등, start_date/
+// end_date가 둘 다 null)에 붙는 "상시" 태그가 실제 운영/예약 상황과 무관해 혼선을
+// 준다는 지적 — 이 라벨일 때만 상태 뱃지 자체를 숨기고, 다른 상태(접수중 등)는 그대로
+// 노출하는지 검증한다.
+describe('EventCard "상시" 태그 제거 (2026-09-04)', () => {
+  it('start_date/end_date가 둘 다 없으면(상시 상태) 상태 뱃지를 노출하지 않는다', () => {
+    render(<EventCard item={makeEventItem({ start_date: null, end_date: null })} onSelect={() => {}} />);
+    expect(screen.queryByText('상시')).not.toBeInTheDocument();
+  });
+
+  it('다른 상태(접수중)는 그대로 뱃지로 노출한다', () => {
+    render(
+      <EventCard
+        item={makeEventItem({ is_reservation_required: true, reservation_end_date: '2099-01-01' })}
+        onSelect={() => {}}
+      />
+    );
+    expect(screen.getByText('접수중')).toBeInTheDocument();
+  });
+});
+
+// [개선사항1](2026-09-04 사용자 지시): "현재 위치에서 X km" 거리 정보를 상세 페이지를
+// 열지 않고도 목록 카드 단계에서부터 상시 노출한다.
+describe('EventCard 거리 정보 상시 노출 (2026-09-04)', () => {
+  it('distance_meters가 0 이상이면 "현재 위치에서 X km"를 카드에 보여준다', () => {
+    render(<EventCard item={makeEventItem({ distance_meters: 1500 })} onSelect={() => {}} />);
+    expect(screen.getByText('현재 위치에서 1.5km')).toBeInTheDocument();
+  });
+
+  it('distance_meters가 -1(위치 미상)이면 거리 정보를 보여주지 않는다', () => {
+    render(<EventCard item={makeEventItem({ distance_meters: -1 })} onSelect={() => {}} />);
+    expect(screen.queryByText(/현재 위치에서/)).not.toBeInTheDocument();
+  });
+});
