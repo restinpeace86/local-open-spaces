@@ -2,9 +2,10 @@
 
 // [새싹맘 등급 조건부 권한 제어 및 안내 팝업](2026-09-02 사용자 지시) Case 2(로그인 완료 +
 // 새싹맘 미달성): "아직 새싹맘 등급이 아니에요!" 안내 모달. [첫 글 쓰러 가기]는 이 앱
-// 구조상 별도 /write 페이지가 없다 — 글쓰기 폼(PostComposer)이 이미 같은 화면
-// (/mom-pick)에 항상 노출돼 있으므로, 모달을 닫아 그 폼을 바로 보여주는 것으로
-// 충분하다(제5장 제4조 기존 구조 우선 — 중복 페이지를 새로 만들지 않음).
+// 구조상 별도 /write 페이지가 없다 — 글쓰기 폼(SurveyReviewComposer, 2026-09-04
+// Decision 020으로 PostComposer를 대체)이 이미 같은 화면(/mom-pick)에 항상 노출돼
+// 있으므로, 모달을 닫아 그 폼을 바로 보여주는 것으로 충분하다(제5장 제4조 기존
+// 구조 우선 — 중복 페이지를 새로 만들지 않음).
 export function SaessakMomGuideModal({ onWriteClick, onClose }: { onWriteClick: () => void; onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 md:items-center" onClick={onClose}>

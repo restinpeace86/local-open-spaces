@@ -5,7 +5,7 @@ import { useMomPickAccess } from '@/hooks/use-mom-pick-access';
 import { getMyProfile } from '@/lib/auth/profile';
 import { LoginPromptModal } from './login-prompt-modal';
 import { SaessakMomGuideModal } from './saessak-mom-guide-modal';
-import { PostComposer } from './post-composer';
+import { SurveyReviewComposer } from './survey-review-composer';
 import { PersonalizedBanner } from './personalized-banner';
 import { PreviewSection } from './preview-section';
 import { GRADE_LABEL } from '@/lib/community/grades';
@@ -28,8 +28,13 @@ import { DashboardPost } from '@/lib/community/mom-pick-dashboard';
 //
 // [자동 승급] 첫 글 작성 시 grade가 signed_up→sprout로 승급하는 로직은 이미 DB 트리거
 // (promote_to_sprout_on_first_post)로 구현·배포돼 있어 별도 클라이언트 코드가 필요
-// 없다 — PostComposer가 글을 등록하면 다음 refreshProfile()에서 승급된 값을 그대로
-// 받아온다.
+// 없다 — SurveyReviewComposer가 글을 등록하면 다음 refreshProfile()에서 승급된 값을
+// 그대로 받아온다.
+// [Decision 020](2026-09-04): 글쓰기 화면을 기존 PostComposer(마이크로 리뷰/체크리스트
+// 탭)에서 SurveyReviewComposer(설문형 스마트 리뷰 3단계 위저드)로 전면 교체한다 —
+// spec/community/mom-pick-grades.md 3-4/3-5 개정 참고. post-composer.tsx는 더 이상
+// 어디서도 쓰이지 않아 삭제한다(과거 데이터 자체는 mom_pick_posts에 그대로 남고,
+// DashboardPostCard가 여전히 렌더링한다 — 지운 것은 "새 글을 쓰는 화면"일 뿐이다).
 type DashboardData = { expert: DashboardPost[]; trending: DashboardPost[]; live: DashboardPost[] };
 
 export function MomPickView() {
@@ -99,7 +104,7 @@ export function MomPickView() {
 
   // [todo.md 개선사항 10](2026-09-03): 'guest' | 'not_sprout_yet' | 'allowed' 셋 다 같은
   // 레이아웃(헤더 + 글쓰기 영역 + 피드)을 공유한다 — 다른 점은 글쓰기 영역이 실제
-  // PostComposer인지 로그인 유도 CTA인지, 그리고 피드가 노출되는지뿐이다. 이전에는
+  // SurveyReviewComposer인지 로그인 유도 CTA인지, 그리고 피드가 노출되는지뿐이다. 이전에는
   // 'guest'만 별도의 하드 블록 화면(피드 자체를 렌더링하지 않음)을 썼는데, 이제 그
   // 분기를 없애 View-Only 열람이 자연스럽게 가능해진다.
   return (
@@ -113,18 +118,18 @@ export function MomPickView() {
 
       <div ref={composerRef}>
         {state === 'guest' ? (
-          // [todo.md 개선사항 10](2026-09-03) Soft-wall: 실제 작성 폼(SpotPicker/별점/
-          // 체크리스트)은 전혀 렌더링하지 않고, 클릭하는 즉시 로그인 유도만 띄운다 —
-          // 개선사항 8과 동일한 원칙("입력을 시작하기 전에 막는다").
+          // [todo.md 개선사항 10](2026-09-03) Soft-wall: 실제 작성 폼(SurveyReviewComposer)은
+          // 전혀 렌더링하지 않고, 클릭하는 즉시 로그인 유도만 띄운다 — 개선사항 8과
+          // 동일한 원칙("입력을 시작하기 전에 막는다").
           <button
             type="button"
             onClick={() => setIsGuestWritePromptOpen(true)}
             className="w-full rounded-xl border border-dashed border-gray-300 bg-white p-4 text-center text-sm font-medium text-gray-500 hover:bg-gray-50"
           >
-            ✍️ 로그인하고 후기·체크리스트 남기기
+            ✍️ 로그인하고 후기 남기기
           </button>
         ) : (
-          <PostComposer onPosted={refreshProfileAfterPost} />
+          <SurveyReviewComposer onPosted={refreshProfileAfterPost} />
         )}
       </div>
 

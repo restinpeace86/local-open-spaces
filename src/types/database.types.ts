@@ -368,49 +368,83 @@ export type Database = {
         Row: {
           adopted_at: string | null
           adopted_by: string | null
+          age_groups: string[] | null
           author_id: string
           checklist_answers: Json | null
+          companion_type: string | null
           content: string | null
           created_at: string
+          duration_type: string | null
+          event_id: string | null
           id: string
+          infra_tags: string[] | null
           is_adopted: boolean
           like_count: number
+          photo_urls: string[] | null
           post_type: string
           rating: number | null
+          satisfaction_points: string[] | null
           spot_id: string | null
           updated_at: string
+          visit_environment: string | null
+          weather_tags: string[] | null
         }
         Insert: {
           adopted_at?: string | null
           adopted_by?: string | null
+          age_groups?: string[] | null
           author_id: string
           checklist_answers?: Json | null
+          companion_type?: string | null
           content?: string | null
           created_at?: string
+          duration_type?: string | null
+          event_id?: string | null
           id?: string
+          infra_tags?: string[] | null
           is_adopted?: boolean
           like_count?: number
+          photo_urls?: string[] | null
           post_type: string
           rating?: number | null
+          satisfaction_points?: string[] | null
           spot_id?: string | null
           updated_at?: string
+          visit_environment?: string | null
+          weather_tags?: string[] | null
         }
         Update: {
           adopted_at?: string | null
           adopted_by?: string | null
+          age_groups?: string[] | null
           author_id?: string
           checklist_answers?: Json | null
+          companion_type?: string | null
           content?: string | null
           created_at?: string
+          duration_type?: string | null
+          event_id?: string | null
           id?: string
+          infra_tags?: string[] | null
           is_adopted?: boolean
           like_count?: number
+          photo_urls?: string[] | null
           post_type?: string
           rating?: number | null
+          satisfaction_points?: string[] | null
           spot_id?: string | null
           updated_at?: string
+          visit_environment?: string | null
+          weather_tags?: string[] | null
         }
         Relationships: [
+          {
+            foreignKeyName: "mom_pick_posts_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "mom_pick_posts_spot_id_fkey"
             columns: ["spot_id"]

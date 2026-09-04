@@ -17,12 +17,24 @@ import { ChecklistAnswers } from './checklist-items';
 // 두 번 조회해 이 파일에서 직접 이어붙인다.
 export type DashboardAuthor = { id: string; nickname: string | null; grade: MomPickGrade };
 
+// [Decision 020](2026-09-04) / spec/community/mom-pick-grades.md 2.1: 'survey_review'
+// 타입과 그 전용 필드를 추가한다. spotName은 이름 그대로 두되(호출부를 넓게 건드리지
+// 않기 위함 — 제5장 제4조), open_spaces.name 또는 events.name 중 있는 쪽을 담는다
+// (survey_review는 스팟 또는 이벤트 중 하나만 가리키므로 항상 둘 중 하나만 채워짐).
 export type DashboardPost = {
   id: string;
-  post_type: 'micro_review' | 'checklist';
+  post_type: 'micro_review' | 'checklist' | 'survey_review';
   rating: number | null;
   content: string | null;
   checklist_answers: ChecklistAnswers | null;
+  age_groups: string[] | null;
+  visit_environment: string | null;
+  satisfaction_points: string[] | null;
+  duration_type: string | null;
+  weather_tags: string[] | null;
+  infra_tags: string[] | null;
+  companion_type: string | null;
+  photo_urls: string[] | null;
   like_count: number;
   is_adopted: boolean;
   created_at: string;
@@ -30,19 +42,29 @@ export type DashboardPost = {
   author: DashboardAuthor;
 };
 
-const POST_COLUMNS = 'id, author_id, post_type, rating, content, checklist_answers, like_count, is_adopted, created_at, open_spaces(name)';
+const POST_COLUMNS =
+  'id, author_id, post_type, rating, content, checklist_answers, age_groups, visit_environment, satisfaction_points, duration_type, weather_tags, infra_tags, companion_type, photo_urls, like_count, is_adopted, created_at, open_spaces(name), events(name)';
 
 type RawPostRow = {
   id: string;
   author_id: string;
-  post_type: 'micro_review' | 'checklist';
+  post_type: 'micro_review' | 'checklist' | 'survey_review';
   rating: number | null;
   content: string | null;
   checklist_answers: ChecklistAnswers | null;
+  age_groups: string[] | null;
+  visit_environment: string | null;
+  satisfaction_points: string[] | null;
+  duration_type: string | null;
+  weather_tags: string[] | null;
+  infra_tags: string[] | null;
+  companion_type: string | null;
+  photo_urls: string[] | null;
   like_count: number;
   is_adopted: boolean;
   created_at: string;
   open_spaces: { name: string } | null;
+  events: { name: string } | null;
 };
 
 function fallbackAuthor(id: string): DashboardAuthor {
@@ -64,10 +86,18 @@ async function attachAuthors(rows: RawPostRow[]): Promise<DashboardPost[]> {
     rating: row.rating,
     content: row.content,
     checklist_answers: row.checklist_answers,
+    age_groups: row.age_groups,
+    visit_environment: row.visit_environment,
+    satisfaction_points: row.satisfaction_points,
+    duration_type: row.duration_type,
+    weather_tags: row.weather_tags,
+    infra_tags: row.infra_tags,
+    companion_type: row.companion_type,
+    photo_urls: row.photo_urls,
     like_count: row.like_count,
     is_adopted: row.is_adopted,
     created_at: row.created_at,
-    spotName: row.open_spaces?.name ?? null,
+    spotName: row.open_spaces?.name ?? row.events?.name ?? null,
     author: authorsById.get(row.author_id) ?? fallbackAuthor(row.author_id),
   }));
 }

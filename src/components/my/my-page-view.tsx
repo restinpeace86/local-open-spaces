@@ -8,6 +8,7 @@ import { GoogleLoginButton } from '@/components/auth/google-login-button';
 import { SignOutButton } from '@/components/auth/sign-out-button';
 import { BirthYearsEditor } from '@/components/auth/birth-years-editor';
 import { NicknameEditor } from '@/components/auth/nickname-editor';
+import { MyReviewsSection } from '@/components/my/my-reviews-section';
 import { getMyProfile, Profile } from '@/lib/auth/profile';
 import { canReceivePushNotifications, GRADE_LABEL } from '@/lib/community/grades';
 import { PushNotificationToggle } from '@/components/push/push-notification-toggle';
@@ -102,6 +103,11 @@ export function MyPageView() {
               <BirthYearsEditor key={profile ? 'loaded' : 'pending'} initialBirthYears={profile?.birth_years ?? []} />
             </>
           )}
+
+          {/* [todo.md 개선사항7 - 맘스픽 마이페이지 C영역](2026-09-04): "내가 쓴 후기"
+              리스트. A/B 영역(아바타 프로필 카드, 찜한 스팟)은 이번 요청 범위 밖이라
+              착수하지 않았다 — C영역만 이 페이지 기존 프로필 섹션 아래에 추가한다. */}
+          <MyReviewsSection userId={user.id} />
         </div>
       )}
     </div>
