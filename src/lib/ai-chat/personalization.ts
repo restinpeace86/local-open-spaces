@@ -27,6 +27,15 @@ export function deriveKidsAgeGroup(ages: number[]): KidsAgeGroup | null {
   return groups.size === 1 ? [...groups][0] : '전연령';
 }
 
+// [개선사항5 - 다자녀/동갑 아이 나이 멘트 최적화](2026-09-04 todo.md): "아이들의
+// 출생년도가 같거나 쌍둥이인 경우, '3살, 3살 아이들'처럼 기계적으로 반복하여 출력하지
+// 않음 — '3살 두 아이' 형태로 자연스럽게 묶는다." 2~10명까지는 고유어 수 표현으로,
+// 그 이상은(현실적으로 거의 없지만 방어적으로) 숫자+'명'으로 표현한다.
+const NATIVE_COUNT_WORDS = ['', '한', '두', '세', '네', '다섯', '여섯', '일곱', '여덟', '아홉', '열'];
+function countWord(count: number): string {
+  return NATIVE_COUNT_WORDS[count] ? `${NATIVE_COUNT_WORDS[count]} 아이` : `아이 ${count}명`;
+}
+
 // 요구사항 원문 예시("아, OO맘님! 네 살 아이와 함께 나들이 가시는군요!")의 톤 — 출생년도
 // 숫자는 절대 그대로 노출하지 않고 환산된 나이만 말한다. displayName은 Supabase Auth
 // 제공자(Kakao/Google)가 실제로 내려주는 필드가 서로 달라(추측 금지) 있으면 쓰고 없으면
@@ -36,6 +45,15 @@ export function buildPersonalizedGreeting(ages: number[], displayName?: string |
 
   const namePart = displayName ? `${displayName}님! ` : '';
   const sorted = [...ages].sort((a, b) => a - b);
-  const agesLabel = sorted.length === 1 ? `${sorted[0]}살 아이` : `${sorted.join('살, ')}살 아이들`;
+
+  let agesLabel: string;
+  if (sorted.length === 1) {
+    agesLabel = `${sorted[0]}살 아이`;
+  } else if (new Set(sorted).size === 1) {
+    // 전부 동갑(쌍둥이 포함) — 같은 숫자를 반복 나열하지 않고 자연스럽게 묶는다.
+    agesLabel = `${sorted[0]}살 ${countWord(sorted.length)}`;
+  } else {
+    agesLabel = `${sorted.join('살, ')}살 아이들`;
+  }
   return `아, ${namePart}${agesLabel}와 함께 나들이 가시는군요!`;
 }

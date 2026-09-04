@@ -74,27 +74,27 @@ describe('CompleteProfileView', () => {
     expect(replaceMock).not.toHaveBeenCalled();
   });
 
-  it('아이 출생년도를 전부 지워 유효한 값이 없으면 에러 문구를 보여준다', async () => {
+  // [개선사항5 - 출생년도 드롭박스 개편](2026-09-04): 자유 타이핑(number input)을
+  // 드롭박스(select)로 전환하면서, 값을 완전히 비워 "유효한 연도 없음" 상태를 만드는
+  // 옛 테스트는 실제 UI로는 더 이상 재현 불가능해졌다(select는 항상 목록 중 하나가
+  // 선택돼 있다) — 정직하게 제거하고, 새 UI 자체의 요구사항(연도 범위, 하한 학년
+  // 라벨, 여러 명 선택)을 검증하는 테스트로 대체한다.
+  it('출생년도 드롭박스는 올해부터 초등학교 6학년 기준 연도까지 13개 옵션을 제공하고, 가장 오래된 연도에는 학년 안내가 붙는다', async () => {
+    const currentYear = new Date().getFullYear();
     getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
     fromMock.mockReturnValue(makeProfilesFrom({ id: 'user-1', nickname: null, birth_years: [] }));
 
     render(<CompleteProfileView />);
-    const nicknameInput = await screen.findByLabelText('닉네임');
-    fireEvent.change(nicknameInput, { target: { value: '민지맘' } });
+    const yearSelect = await screen.findByLabelText('아이 1 출생년도');
 
-    // 기본으로 올해 연도 한 칸이 있다 — 값을 비워 "유효한 연도 없음" 상태를 만든다.
-    // (min/max를 벗어난 값을 넣으면 jsdom의 네이티브 HTML5 제약 검증이 폼 제출 자체를
-    // 막아버려 onSubmit이 호출되지 않는다 — 빈 값은 그 제약에 걸리지 않아 실제로
-    // onSubmit까지 도달해 커스텀 검증 문구를 확인할 수 있다.)
-    const yearInput = screen.getByPlaceholderText('예: 2022');
-    fireEvent.change(yearInput, { target: { value: '' } });
-    fireEvent.click(screen.getByText('시작하기'));
-
-    expect(await screen.findByText('아이 출생년도를 최소 1명 입력해주세요.')).toBeInTheDocument();
-    expect(replaceMock).not.toHaveBeenCalled();
+    const optionLabels = Array.from(yearSelect.querySelectorAll('option')).map((o) => o.textContent);
+    expect(optionLabels).toHaveLength(13);
+    expect(optionLabels[0]).toBe(`${currentYear}년생`);
+    expect(optionLabels[12]).toBe(`${currentYear - 12}년생 (초등 6학년)`);
   });
 
   it('"+ 아이 추가"로 여러 명을 입력하고 제출하면 두 값 모두 저장한 뒤 next로 이동한다', async () => {
+    const currentYear = new Date().getFullYear();
     getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
     fromMock.mockReturnValue(makeProfilesFrom({ id: 'user-1', nickname: null, birth_years: [] }));
     mockSearchParams = new URLSearchParams('next=%2Fmom-pick');
@@ -102,11 +102,10 @@ describe('CompleteProfileView', () => {
     render(<CompleteProfileView />);
     const nicknameInput = await screen.findByLabelText('닉네임');
     fireEvent.change(nicknameInput, { target: { value: '민지맘' } });
-    fireEvent.change(screen.getByPlaceholderText('예: 2022'), { target: { value: '2022' } });
+    fireEvent.change(screen.getByLabelText('아이 1 출생년도'), { target: { value: String(currentYear - 4) } });
 
     fireEvent.click(screen.getByText('+ 아이 추가'));
-    const yearInputs = screen.getAllByPlaceholderText('예: 2022');
-    fireEvent.change(yearInputs[1], { target: { value: '2020' } });
+    fireEvent.change(screen.getByLabelText('아이 2 출생년도'), { target: { value: String(currentYear - 6) } });
 
     fireEvent.click(screen.getByText('시작하기'));
 
@@ -124,10 +123,20 @@ describe('CompleteProfileView', () => {
     render(<CompleteProfileView />);
     const nicknameInput = await screen.findByLabelText('닉네임');
     fireEvent.change(nicknameInput, { target: { value: '민지맘' } });
-    fireEvent.change(screen.getByPlaceholderText('예: 2022'), { target: { value: '2022' } });
     fireEvent.click(screen.getByText('시작하기'));
 
     expect(await screen.findByText('닉네임 저장 실패: 네트워크 오류')).toBeInTheDocument();
     expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  it('기존에 표준 범위를 벗어난 출생년도가 저장돼 있으면(과거 자유 입력 잔존 데이터) 값을 임의로 바꾸지 않고 그대로 보존한다', async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
+    fromMock.mockReturnValue(makeProfilesFrom({ id: 'user-1', nickname: '민지맘', birth_years: [1999] }));
+
+    render(<CompleteProfileView />);
+    const yearSelect = await screen.findByLabelText('아이 1 출생년도');
+
+    expect((yearSelect as HTMLSelectElement).value).toBe('1999');
+    expect(screen.getByText('1999년생')).toBeInTheDocument();
   });
 });

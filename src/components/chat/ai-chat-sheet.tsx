@@ -9,6 +9,7 @@ import { hasConsumedAnonymousFreeUse, markAnonymousFreeUseConsumed } from '@/lib
 import { useUser } from '@/hooks/use-user';
 import { useUserLocation } from '@/hooks/use-user-location';
 import { getMyProfile, Profile } from '@/lib/auth/profile';
+import { canUseUnlimitedChatbot, FREE_CHATBOT_USES_BEFORE_SPROUT } from '@/lib/community/grades';
 import { calculateAgesFromBirthYears, deriveKidsAgeGroup, buildPersonalizedGreeting } from '@/lib/ai-chat/personalization';
 import { LocationOnboardingModal } from '@/components/map/location-onboarding-modal';
 import { UserLocation } from '@/lib/location/user-location-storage';
@@ -201,20 +202,44 @@ export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: n
       return;
     }
 
-    // [챗봇 개선](2026-09-04 사용자 지시) 1: 이미 늦은 시간이면 "오늘" 날씨 대신 처음부터
-    // "내일" 날씨를 확인한다 — 오늘 남은 시간대로 나들이 계획을 제안하는 것 자체가
-    // 의미가 없기 때문(date-resolver.ts isLateInDay 주석 참고).
-    if (isLateStart) {
-      fetchWeatherIntro(resolveWhenChoice('TOMORROW', null)!, '내일', 'INITIAL');
-    } else {
-      fetchWeatherIntro(resolveWhenChoice('TODAY', null)!, '오늘', 'INITIAL');
+    function startWeatherIntro() {
+      // [챗봇 개선](2026-09-04 사용자 지시) 1: 이미 늦은 시간이면 "오늘" 날씨 대신
+      // 처음부터 "내일" 날씨를 확인한다 — 오늘 남은 시간대로 나들이 계획을 제안하는
+      // 것 자체가 의미가 없기 때문(date-resolver.ts isLateInDay 주석 참고).
+      if (isLateStart) {
+        fetchWeatherIntro(resolveWhenChoice('TOMORROW', null)!, '내일', 'INITIAL');
+      } else {
+        fetchWeatherIntro(resolveWhenChoice('TODAY', null)!, '오늘', 'INITIAL');
+      }
     }
 
-    if (user) {
-      getMyProfile()
-        .then((p) => {
-          setProfile(p);
-          if (!p) return;
+    if (!user) {
+      startWeatherIntro();
+      return;
+    }
+
+    // [개선사항5 - 챗봇 이용 제한 안내 시점 전면 개선](2026-09-04 todo.md): "챗봇을 다
+    // 완료한 시점이 아니라, 처음 켤 때(입장하는 순간) 이용 횟수 소진 여부 및 후기 작성
+    // 상태를 먼저 검증 — 이용 권한이 없으면 질문/선택 단계를 시작하기도 전에 안내."
+    // 기존에는 로그인 사용자의 이 판정을 8단계 인터뷰를 전부 마친 뒤(handleVibeConfirm →
+    // /api/ai-chat/search 응답)에야 했다 — 비로그인 분기(바로 위)는 이미 진입 시점
+    // 판정으로 개선돼 있었는데(개선사항8, 2026-09-03) 로그인 분기만 남아 있던 사각지대다.
+    // 판정 기준은 서버(route.ts)와 동일하게 맞춘다(canUseUnlimitedChatbot/
+    // FREE_CHATBOT_USES_BEFORE_SPROUT 공유 유틸 재사용, 제5장 제4조). 서버 쪽 최종
+    // 판정(handleVibeConfirm 이후)은 다른 기기/탭에서 그 사이 소진했을 수 있어 그대로
+    // 이중 방어로 남겨둔다(비로그인과 동일한 원칙).
+    getMyProfile()
+      .then((p) => {
+        setProfile(p);
+        if (p && !canUseUnlimitedChatbot(p.grade) && p.ai_chat_free_uses_used >= FREE_CHATBOT_USES_BEFORE_SPROUT) {
+          const message = '무료 체험을 이미 사용하셨어요. 맘스픽에 첫 후기나 체크리스트를 남기면 챗봇을 무제한으로 이용할 수 있어요!';
+          setLimitReachedMessage(message);
+          pushAi(message);
+          setPhase('LIMIT_REACHED');
+          return;
+        }
+
+        if (p) {
           const ages = calculateAgesFromBirthYears(p.birth_years);
           const ageGroup = deriveKidsAgeGroup(ages);
           if (ageGroup) {
@@ -231,11 +256,15 @@ export function AiChatSheet({ center, onClose }: { center: { lat: number; lng: n
               null;
             pushAi(buildPersonalizedGreeting(ages, displayName));
           }
-        })
-        .catch(() => {
-          // 프로필 조회 실패해도 인터뷰는 계속 진행(기존 수동 KIDS 단계로 자연 폴백).
-        });
-    }
+        }
+
+        startWeatherIntro();
+      })
+      .catch(() => {
+        // 프로필 조회 실패해도 인터뷰는 계속 진행(기존 수동 KIDS 단계로 자연 폴백) —
+        // 이용 제한도 판정할 근거가 없으니 막지 않는다(제5장 제11조).
+        startWeatherIntro();
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isUserLoading, user]);
 

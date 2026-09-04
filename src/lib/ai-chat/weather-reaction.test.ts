@@ -50,6 +50,13 @@ describe('buildWeatherReactionText', () => {
     expect(text).toContain("미세먼지 '좋음'");
   });
 
+  // [개선사항5 - 봇 추천 단어 필터링](2026-09-04): 야외 제안 문구에 "공원"이라는
+  // 단어가 더 이상 없어야 한다.
+  it('야외(OUTDOOR) 제안 문구에는 "공원"이라는 단어를 쓰지 않는다', () => {
+    const text = buildWeatherReactionText(snapshot(), '2026-09-01', true);
+    expect(text).not.toContain('공원');
+  });
+
   it('미래 날짜에는 미세먼지를 그 날이 되어야 안다고 정직하게 안내한다', () => {
     const text = buildWeatherReactionText(
       snapshot({ airQualityAvailable: false, pm10Grade: null, pm25Grade: null }),
@@ -73,10 +80,13 @@ describe('buildWeatherReactionText', () => {
 // [AI 챗봇 맞춤 추천 상세 구현(초개인화 고도화)](2026-09-02 사용자 지시) Step 1: 챗봇 실행
 // 시 먼저 던지는 선제적 제안 문구 — 요구사항 원문 예시 톤을 그대로 검증한다.
 describe('buildProactiveWeatherSuggestion', () => {
-  it('맑은 날씨(OUTDOOR)면 요구사항 예시 그대로 야외/공원을 제안한다', () => {
+  // [개선사항5 - 봇 추천 단어 필터링](2026-09-04): "'공원' 단어 배제, '야외 이벤트'/
+  // '야외 나들이' 위주로 자연스럽게 제안" — 특정 시설명 대신 성격으로만 제안하는지 검증.
+  it('맑은 날씨(OUTDOOR)면 "공원"이라는 단어 없이 야외 이벤트/나들이를 제안한다', () => {
     const text = buildProactiveWeatherSuggestion(snapshot(), '2026-09-01', true);
     expect(text).toContain('오늘 날씨가 화창하고 참 좋네요');
-    expect(text).toContain('야외/공원 위주로 알아볼까요?');
+    expect(text).toContain('야외 이벤트 위주로 알아볼까요?');
+    expect(text).not.toContain('공원');
   });
 
   it('비/흐림(INDOOR)이면 요구사항 예시 그대로 실내를 제안한다', () => {

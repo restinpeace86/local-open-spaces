@@ -52,4 +52,22 @@ describe('buildPersonalizedGreeting', () => {
   it('displayName이 있으면 이름을 함께 부른다', () => {
     expect(buildPersonalizedGreeting([4], '민지맘')).toContain('민지맘님!');
   });
+
+  // [개선사항5 - 다자녀/동갑 아이 나이 멘트 최적화](2026-09-04): 출생년도가 같거나
+  // 쌍둥이인 경우 "3살, 3살 아이들"처럼 기계적으로 반복하지 않고 자연스럽게 묶는다.
+  it('동갑(쌍둥이 포함) 두 자녀면 "3살 두 아이"처럼 묶어서 말하고 숫자를 반복하지 않는다', () => {
+    const text = buildPersonalizedGreeting([3, 3]);
+    expect(text).toContain('3살 두 아이');
+    expect(text).not.toContain('3살, 3살');
+  });
+
+  it('동갑 세 자녀도 자연스럽게 묶는다', () => {
+    const text = buildPersonalizedGreeting([5, 5, 5]);
+    expect(text).toContain('5살 세 아이');
+    expect(text).not.toContain('5살, 5살, 5살');
+  });
+
+  it('나이가 서로 다르면 기존처럼 나열한다(동갑 묶기 로직이 오작동하지 않음)', () => {
+    expect(buildPersonalizedGreeting([2, 5, 7])).toContain('2살, 5살, 7살 아이들');
+  });
 });

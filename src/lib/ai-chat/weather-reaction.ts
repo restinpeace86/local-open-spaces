@@ -78,9 +78,13 @@ export function buildWeatherReactionText(snapshot: WeatherSnapshot, isoDate: str
     parts.push('미세먼지는 아쉽게도 그 날이 가까워져야 정확히 알 수 있어요.');
   }
 
+  // [개선사항5 - 봇 추천 단어 필터링](2026-09-04 todo.md): "'공원'이라는 단어와 픽스된
+  // 제안은 전면 배제, 이벤트픽의 6대 대분류 성격에 맞춰 '야외 이벤트'/'야외 나들이'
+  // 위주로 자연스럽게 제안" — 특정 시설(공원/놀이터)을 콕 집어 말하지 않고 성격으로만
+  // 제안한다.
   const mode = recommendMode(snapshot);
   if (mode === 'OUTDOOR') {
-    parts.push('날씨가 너무 맑아서 오늘 같은 날은 탁 트인 야외 공원이나 놀이터로 가는 게 훨씬 좋을 것 같은데, 어떠세요?');
+    parts.push('날씨가 너무 맑아서 오늘 같은 날은 탁 트인 야외 나들이나 야외 이벤트로 가는 게 훨씬 좋을 것 같은데, 어떠세요?');
   } else if (mode === 'INDOOR') {
     parts.push('날씨가 변덕스러울 수 있어서 실내 공간(박물관, 키즈카페 등)이 더 마음 편할 것 같아요. 어떻게 할까요?');
   } else {
@@ -119,9 +123,12 @@ export function buildProactiveWeatherSuggestion(snapshot: WeatherSnapshot, isoDa
   const numberSentence = numberBits.length > 0 ? ` (${numberBits.join(', ')})` : '';
   const airCaveat = !today && !snapshot.airQualityAvailable ? ' 미세먼지는 아쉽게도 그 날이 가까워져야 정확히 알 수 있어요.' : '';
 
+  // [개선사항5 - 봇 추천 단어 필터링](2026-09-04 todo.md): "'공원' 단어 배제, '야외
+  // 이벤트'/'야외 나들이' 위주로 자연스럽게 제안" — 위 buildWeatherReactionText와
+  // 동일한 원칙 적용.
   const mode = recommendMode(snapshot);
   if (mode === 'OUTDOOR') {
-    return `${whenLabel} 날씨가 화창하고 참 좋네요!${numberSentence} ☀️ 파란 하늘 아래 아이랑 뛰어놀기 좋은 야외 공원이 좋아보여요.${airCaveat} 야외/공원 위주로 알아볼까요?`;
+    return `${whenLabel} 날씨가 화창하고 참 좋네요!${numberSentence} ☀️ 파란 하늘 아래 아이랑 즐기기 좋은 야외 나들이가 좋아보여요.${airCaveat} 야외 이벤트 위주로 알아볼까요?`;
   }
   if (mode === 'INDOOR') {
     return `${whenLabel} 날씨를 보니 구름이 많거나 비가 오네요.${numberSentence} 🌧️ 아이와 함께 포근한 실내 위주가 좋아보여요.${airCaveat} 실내 위주로 알아볼까요?`;

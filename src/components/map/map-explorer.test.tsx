@@ -301,30 +301,36 @@ describe('MapExplorer 대분류 탭 + 중분류 바텀시트 필터 (2026-09-03,
 
   // [단일 선택 유지](2026-08-29 사용자 지시 원칙 그대로): 바텀시트를 거치더라도 한 번에
   // 하나의 중분류만 선택 가능하다 — 다른 중분류를 고르면 교체되고, 같은 중분류를 다시
-  // 고르면 해제된다. 선택 상태는 해당 중분류가 속한 대분류 탭의 라벨이 그 중분류 이름
-  // 으로 바뀌는 것으로 확인한다(spot-category-filter.tsx의 표시 관례) — 시트 자신의
-  // 헤더는 항상 대분류 고정 라벨을 쓰므로(getOpenSheet 재사용을 위해) 이 라벨과는
-  // 헷갈리지 않는다.
+  // 고르면 해제된다. 선택 상태는 "닫혀 있을 때도 상시 노출되는 바깥 대분류 탭"의
+  // 라벨이 그 중분류 이름으로 바뀌는 것으로 확인한다(spot-category-filter.tsx의 표시
+  // 관례) — [개선사항5](2026-09-04)로 시트가 더 이상 자동으로 닫히지 않게 되면서, 열려
+  // 있는 시트 안에는 라벨을 바꾸지 않는 별도 고정 탭이 함께 남아 있을 수 있어(동일한
+  // 대분류 라벨이 중복 노출) 반드시 data-testid="spot-category-tabs"로 바깥 탭만 정확히
+  // 짚어 확인한다.
+  function getOuterTabs() {
+    return screen.getAllByTestId('spot-category-tabs')[0]; // [0] = 데스크톱 인스턴스(항상 먼저 렌더링됨)
+  }
+
   it('중분류는 한 번에 하나만 선택 가능하고(단일 선택), 같은 중분류를 다시 고르면 해제된다', () => {
     render(<MapExplorer />);
 
     fireEvent.click(screen.getAllByRole('button', { name: '자연/공원' })[0]);
     fireEvent.click(within(getOpenSheet()).getByText('공원'));
-    expect(screen.getAllByRole('button', { name: '공원' }).length).toBeGreaterThan(0);
-    expect(screen.queryAllByRole('button', { name: '자연/공원' }).length).toBe(0);
+    expect(within(getOuterTabs()).getByRole('button', { name: '공원' })).toBeInTheDocument();
+    expect(within(getOuterTabs()).queryByRole('button', { name: '자연/공원' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getAllByRole('button', { name: '문화시설' })[0]);
     fireEvent.click(within(getOpenSheet()).getByText('도서관'));
-    expect(screen.getAllByRole('button', { name: '도서관' }).length).toBeGreaterThan(0);
+    expect(within(getOuterTabs()).getByRole('button', { name: '도서관' })).toBeInTheDocument();
     // 다른 대분류(자연/공원)를 골랐으므로 이전 선택(공원)의 대분류 탭은 원래 라벨로 돌아간다.
-    expect(screen.getAllByRole('button', { name: '자연/공원' }).length).toBeGreaterThan(0);
+    expect(within(getOuterTabs()).getByRole('button', { name: '자연/공원' })).toBeInTheDocument();
 
     // 지금은 대분류 탭이 "도서관"으로 표시 중이므로 그 이름으로 다시 열어 같은 중분류를
     // 재클릭하면 해제되어 대분류 탭이 원래 라벨("문화시설")로 돌아간다.
-    fireEvent.click(screen.getAllByRole('button', { name: '도서관' })[0]);
+    fireEvent.click(within(getOuterTabs()).getByRole('button', { name: '도서관' }));
     fireEvent.click(within(getOpenSheet()).getByText('도서관'));
-    expect(screen.queryAllByRole('button', { name: '도서관' }).length).toBe(0);
-    expect(screen.getAllByRole('button', { name: '문화시설' }).length).toBeGreaterThan(0);
+    expect(within(getOuterTabs()).queryByRole('button', { name: '도서관' })).not.toBeInTheDocument();
+    expect(within(getOuterTabs()).getByRole('button', { name: '문화시설' })).toBeInTheDocument();
   });
 
   it('AI 추천 칩을 누르면 페이지 이동 없이 추천 바텀시트가 뜬다', () => {

@@ -1,6 +1,37 @@
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { SpotCategoryFilter } from './spot-category-filter';
+import { NearbyItem } from '@/lib/spaces/get-nearby';
+
+function makeSpaceItem(overrides: Partial<NearbyItem> = {}): NearbyItem {
+  return {
+    id: 'space-1',
+    name: '동네도서관',
+    category: 'CULTURE',
+    distance_meters: 500,
+    item_type: 'SPACE',
+    lng: 127.12,
+    lat: 37.38,
+    address: null,
+    thumbnail_url: null,
+    start_date: null,
+    end_date: null,
+    reservation_start_date: null,
+    reservation_end_date: null,
+    reservation_url: null,
+    is_reservation_required: null,
+    operating_hours: null,
+    is_free: true,
+    info_url: null,
+    is_kids_friendly: null,
+    has_parking: null,
+    stroller_accessible: null,
+    facility_type: null,
+    target_age_group: null,
+    booking_status: null,
+    ...overrides,
+  };
+}
 
 // [todo.md 개선사항 6](2026-09-03 사용자 지시): "작년 8월 디자인(플랫 단일 탭) 대신, 4대
 // 대분류 탭 + 클릭 시 바텀시트로 하위 중분류 노출 구조로 가는 것이 맞다"는 확인에 따라
@@ -69,7 +100,10 @@ describe('SpotCategoryFilter', () => {
     expect(screen.getByText('체험학습장')).toBeInTheDocument();
   });
 
-  it('바텀시트에서 중분류를 클릭하면 onSelectCategory가 그 id로 호출되고 시트가 닫힌다', () => {
+  // [개선사항5 - 스팟픽 중분류 바텀시트 재구성](2026-09-04): "대분류를 눌러서 뜬
+  // 바텀시트는 닫히지 않고 그대로 유지" — 중분류를 선택해도 시트가 자동으로 닫히지
+  // 않아야 이어서 다른 중분류를 바로 둘러볼 수 있다(과거엔 매번 다시 열어야 했다).
+  it('바텀시트에서 중분류를 클릭하면 onSelectCategory가 그 id로 호출되고, 시트는 닫히지 않고 유지된다', () => {
     const onSelectCategory = vi.fn();
     render(<SpotCategoryFilter selectedCategoryId={null} onSelectCategory={onSelectCategory} onSelectAiRecommend={vi.fn()} />);
 
@@ -77,7 +111,69 @@ describe('SpotCategoryFilter', () => {
     fireEvent.click(screen.getByRole('button', { name: '도서관' }));
 
     expect(onSelectCategory).toHaveBeenCalledWith('library');
-    expect(screen.queryByText('도서관')).not.toBeInTheDocument(); // 시트가 닫혀 더 이상 보이지 않음
+    expect(screen.getByText('도서관')).toBeInTheDocument(); // 시트가 유지되어 계속 보임
+    expect(screen.getByTestId('spot-category-sheet')).toBeInTheDocument();
+  });
+
+  // [개선사항5] "시트 상단(또는 고정 영역)에는 해당 대분류에 속한 여러 개의 중분류
+  // 칩/버튼들이 나란히 위치. 유저가 바로 옆의 중분류로 바꾸면 시트는 그대로 열려 있는
+  // 상태에서 내용만 즉시 전환" — 대분류 전환도 동일 원칙: 시트를 닫지 않고 시트 안의
+  // 대분류 탭으로 바로 전환할 수 있어야 한다(바깥 탭 행은 이 시트가 화면 전체를 덮어
+  // 가려서 누를 수 없다 — 시트 안에도 같은 탭을 둔 이유).
+  it('시트가 열린 채로 내부 대분류 탭을 눌러 다른 대분류로 즉시 전환할 수 있다(시트를 닫지 않음)', () => {
+    render(<SpotCategoryFilter selectedCategoryId={null} onSelectCategory={vi.fn()} onSelectAiRecommend={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '농장/체험' }));
+    expect(screen.getByText('캠핑장')).toBeInTheDocument();
+
+    const sheet = screen.getByTestId('spot-category-sheet');
+    fireEvent.click(within(sheet).getByRole('button', { name: '문화시설' }));
+
+    expect(screen.getByText('도서관')).toBeInTheDocument();
+    expect(screen.queryByText('캠핑장')).not.toBeInTheDocument();
+    expect(screen.getByTestId('spot-category-sheet')).toBeInTheDocument(); // 계속 같은 시트가 열려 있음
+  });
+
+  // [개선사항5] "유저가 중분류 A를 누르면 바텀시트 내부 하단 영역에 데이터 목록이 뜸" —
+  // 스팟픽은 배경이 지도라 시트가 화면을 덮으면 지도/목록을 볼 수 없으므로, 현재
+  // 선택된 중분류의 결과를 시트 안에도 함께 보여준다(부모가 이미 필터링해 내려주는
+  // items를 그대로 재사용 — 새 조회 로직 없음).
+  it('선택된 중분류와 일치하는 결과를 시트 안에 함께 보여주고, 항목을 고르면 onSelectItem 호출 후 시트가 닫힌다', () => {
+    const onSelectItem = vi.fn();
+    const items = [makeSpaceItem({ id: 'space-1', name: '동네도서관' })];
+    render(
+      <SpotCategoryFilter
+        selectedCategoryId="library"
+        onSelectCategory={vi.fn()}
+        onSelectAiRecommend={vi.fn()}
+        items={items}
+        onSelectItem={onSelectItem}
+      />
+    );
+
+    // 이미 선택된 중분류는 대분류 자리에 라벨로 표시된다(기존 관례) — 그 탭을 눌러 시트를 연다.
+    fireEvent.click(screen.getByRole('button', { name: '도서관' }));
+
+    expect(screen.getByText('1건을 찾았어요')).toBeInTheDocument();
+    expect(screen.getByText('동네도서관')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('동네도서관'));
+    expect(onSelectItem).toHaveBeenCalledWith(items[0]);
+    expect(screen.queryByTestId('spot-category-sheet')).not.toBeInTheDocument(); // 시트가 닫힘
+  });
+
+  it('결과 로딩 중에는 "불러오는 중..." 안내를 보여준다', () => {
+    render(
+      <SpotCategoryFilter
+        selectedCategoryId="library"
+        onSelectCategory={vi.fn()}
+        onSelectAiRecommend={vi.fn()}
+        items={[]}
+        isItemsLoading
+      />
+    );
+    fireEvent.click(screen.getByRole('button', { name: '도서관' }));
+    expect(screen.getByText('불러오는 중...')).toBeInTheDocument();
   });
 
   it('배경(오버레이)을 클릭하면 시트가 닫힌다', () => {

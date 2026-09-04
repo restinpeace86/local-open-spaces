@@ -77,6 +77,11 @@ export function LocationOnboardingModal({
   // 안 함) 사용자에게는 "목록이 텅 빈 채로 아무 반응도 없는" 상태로만 보였다 — 실패를
   // 명시적으로 알리고 재시도할 수 있게 한다.
   const [sigunguErrorMessage, setSigunguErrorMessage] = useState<string | null>(null);
+  // [개선사항5 - 챗봇 지역 선택 검색 필터](2026-09-04 todo.md): "시군구 선택 리스트가
+  // 뜨면 상단에 실시간 키워드로 재검색할 수 있는 검색창을 추가, 한 글자씩 입력할
+  // 때마다 즉시 필터링" — 368건짜리 평평한 목록을 province로만 묶어둔 것만으로는
+  // 여전히 스크롤이 길어 원하는 지역을 찾기 번거로웠다.
+  const [manualPickerFilter, setManualPickerFilter] = useState('');
   const mounted = useIsMounted();
 
   function loadSigunguOptions() {
@@ -104,6 +109,7 @@ export function LocationOnboardingModal({
 
   function openManualPicker() {
     setShowManualPicker(true);
+    setManualPickerFilter(''); // 다시 열 때마다 검색어를 비워 전체 목록부터 보여준다.
     if (sigunguOptions.length > 0 || isLoadingOptions) return;
     loadSigunguOptions();
   }
@@ -176,7 +182,11 @@ export function LocationOnboardingModal({
   // 평평한 목록으로만 나와 있어 훑어보기 어려웠던 게 진짜 문제라, 시/도 단위로
   // 묶어 소제목을 붙인다(새 데이터/컬럼 없이 문자열의 첫 단어만 그룹 키로 사용 —
   // 제5장 제4조 기존 구조 우선).
-  const groupedSigunguOptions = sigunguOptions.reduce<Map<string, SigunguOption[]>>((groups, option) => {
+  const trimmedFilter = manualPickerFilter.trim();
+  const filteredSigunguOptions = trimmedFilter
+    ? sigunguOptions.filter((option) => option.sigungu_name.includes(trimmedFilter))
+    : sigunguOptions;
+  const groupedSigunguOptions = filteredSigunguOptions.reduce<Map<string, SigunguOption[]>>((groups, option) => {
     const province = option.sigungu_name.split(' ')[0] ?? option.sigungu_name;
     const list = groups.get(province) ?? [];
     list.push(option);
@@ -300,6 +310,21 @@ export function LocationOnboardingModal({
                 </div>
               )}
               {!isLoadingOptions && !sigunguErrorMessage && sigunguOptions.length > 0 && (
+                <div className="px-3 py-2 border-b border-gray-100 bg-gray-50">
+                  <input
+                    type="text"
+                    value={manualPickerFilter}
+                    onChange={(e) => setManualPickerFilter(e.target.value)}
+                    placeholder="지역명으로 검색 (예: 성남시)"
+                    aria-label="지역 검색"
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              )}
+              {!isLoadingOptions && !sigunguErrorMessage && sigunguOptions.length > 0 && groupedSigunguOptions.size === 0 && (
+                <p className="px-3 py-2.5 text-sm text-gray-400">&quot;{trimmedFilter}&quot;와 일치하는 지역이 없어요.</p>
+              )}
+              {!isLoadingOptions && !sigunguErrorMessage && sigunguOptions.length > 0 && groupedSigunguOptions.size > 0 && (
                 <div className="max-h-72 overflow-y-auto">
                   {[...groupedSigunguOptions.entries()].map(([province, options]) => (
                     <div key={province}>

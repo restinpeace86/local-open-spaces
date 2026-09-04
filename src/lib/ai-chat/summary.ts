@@ -47,9 +47,15 @@ export function buildTemplateSummary(ctx: SummaryContext): string {
 export async function buildFinalSummary(ctx: SummaryContext, apiKey: string | undefined): Promise<string> {
   if (!apiKey) return buildTemplateSummary(ctx);
 
+  // [개선사항5 - 봇 추천 및 페르소나 프롬프트 규칙](2026-09-04 todo.md): "'공원'이라는
+  // 단어와 픽스된 제안은 전면 배제, 이벤트픽의 6대 대분류 성격에 맞춰 '야외 이벤트'
+  // 또는 '야외 나들이' 위주로 자연스럽게 제안" — 유일한 LLM 호출 지점인 이 프롬프트에
+  // 규칙을 명시해 응답 생성 단계에서부터 지키도록 한다.
   const prompt = `당신은 아이와 함께하는 나들이를 추천하는 친근한 어시스턴트입니다.
 아래 조건으로 나들이 장소를 찾았습니다. 결과를 소개하는 밝고 짧은 인사말을 1~2문장으로만 작성하세요.
 - 특정 장소의 이름이나 세부 정보를 절대 지어내지 마세요(실제 목록은 별도로 표시됩니다).
+- '공원'이라는 단어와 공원을 콕 집어 추천하는 표현은 쓰지 마세요. 야외 활동을 언급할
+  때는 '야외 이벤트' 또는 '야외 나들이'라는 표현을 자연스럽게 사용하세요.
 - 이모지를 1~2개 자연스럽게 섞어도 됩니다.
 
 조건:

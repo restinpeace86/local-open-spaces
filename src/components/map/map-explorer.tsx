@@ -315,6 +315,9 @@ export function MapExplorer() {
             onSelectCategory={handleSelectCategory}
             onSelectAiRecommend={handleOpenAiRecommend}
             categoryMinCounts={categoryMinCounts}
+            items={visibleItems}
+            isItemsLoading={isBusy}
+            onSelectItem={handleSelectItem}
           />
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -382,6 +385,9 @@ export function MapExplorer() {
             onSelectCategory={handleSelectCategory}
             onSelectAiRecommend={handleOpenAiRecommend}
             categoryMinCounts={categoryMinCounts}
+            items={visibleItems}
+            isItemsLoading={isBusy}
+            onSelectItem={handleSelectItem}
           />
           {/* implementation/todo.md: 지도 드래그 후 재검색 버튼 - 모바일에서는 필터 스택 하단에 노출해 겹침 방지 */}
           {pendingRecenter && (

@@ -7,6 +7,14 @@ import { getMyProfile, updateBirthYears, updateNickname } from '@/lib/auth/profi
 
 const MAX_NICKNAME_LENGTH = 20;
 const CURRENT_YEAR = new Date().getFullYear();
+// [개선사항5 - 출생년도 드롭박스 개편](2026-09-04 todo.md): "자유 타이핑 방식 ➔
+// 드롭박스(Select) 방식으로 전면 전환. 상한선: 최근 연도부터 시작. 하한선: 서비스
+// 타겟인 초등학교 6학년 기준 연도까지." 하한 연도는 "초등 6학년"이라는 학년 기준에
+// 묶여 있어 연도가 바뀌어도 항상 만 12세 전후를 가리키도록 CURRENT_YEAR 기준
+// 상대값으로 계산한다(하드코딩된 2014를 그대로 박아두면 내년부터 기준이 틀어짐).
+const MAX_CHILD_AGE = 12; // 초등학교 6학년 기준 상한 나이
+const BIRTH_YEAR_OPTIONS = Array.from({ length: MAX_CHILD_AGE + 1 }, (_, i) => CURRENT_YEAR - i);
+const OLDEST_BIRTH_YEAR = CURRENT_YEAR - MAX_CHILD_AGE;
 
 // [구글/카카오 인증 후 필수 프로필 입력](2026-09-04 사용자 지시): "인증되면 바로
 // 회원가입폼으로 가서 닉네임, 아이 연령을 기본으로 받게 해줘 — 나중에 마이페이지에서
@@ -115,11 +123,7 @@ export function CompleteProfileView() {
         닉네임과 아이 출생년도를 알려주시면 연령에 맞는 나들이를 추천해드려요.
       </p>
 
-      {/* noValidate: 아이 출생년도 input의 min/max(1900~올해)가 브라우저 네이티브
-          제약 검증과 겹치면, 범위를 벗어난 값을 입력했을 때 폼 제출 자체가 (내 커스텀
-          에러 문구 대신) 브라우저 기본 팝업으로 막혀버린다 — 검증은 전부 아래
-          handleSubmit의 JS 로직 하나로만 판단하도록 통일한다. */}
-      <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-6">
+      <form onSubmit={handleSubmit} className="flex flex-col gap-6">
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium text-gray-700" htmlFor="complete-profile-nickname">
             닉네임
@@ -137,18 +141,26 @@ export function CompleteProfileView() {
         <div className="flex flex-col gap-2">
           <span className="text-sm font-medium text-gray-700">아이 출생년도</span>
           <p className="text-xs text-gray-400">아이가 여러 명이면 출생년도를 각각 추가해주세요.</p>
-          {birthYears.map((year, i) => (
+          {birthYears.map((year, i) => {
+            // 과거 자유 입력 시절에 저장된 값이 지금의 표준 범위(최근 13년)를 벗어날
+            // 수 있다 — 그런 경우 드롭박스에 없는 값이라고 조용히 다른 값으로
+            // 바뀌어버리면 안 되므로(추측 금지·데이터 임의 변경 금지), 목록에 없는
+            // 기존 값은 맨 앞에 추가로 끼워 넣어 그대로 보존한다.
+            const options = BIRTH_YEAR_OPTIONS.includes(year) ? BIRTH_YEAR_OPTIONS : [year, ...BIRTH_YEAR_OPTIONS];
+            return (
             <div key={i} className="flex items-center gap-2">
-              <input
-                type="number"
+              <select
                 value={year}
                 onChange={(e) => handleChangeYear(i, e.target.value)}
-                min={1900}
-                max={CURRENT_YEAR}
-                placeholder="예: 2022"
-                className="w-28 rounded-lg border border-gray-300 px-3 py-2 text-sm"
-              />
-              <span className="text-xs text-gray-400">년생</span>
+                aria-label={`아이 ${i + 1} 출생년도`}
+                className="w-40 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              >
+                {options.map((y) => (
+                  <option key={y} value={y}>
+                    {y}년생{y === OLDEST_BIRTH_YEAR ? ' (초등 6학년)' : ''}
+                  </option>
+                ))}
+              </select>
               {birthYears.length > 1 && (
                 <button
                   type="button"
@@ -159,7 +171,8 @@ export function CompleteProfileView() {
                 </button>
               )}
             </div>
-          ))}
+            );
+          })}
           <button type="button" onClick={handleAddChild} className="self-start text-xs text-blue-600 hover:underline">
             + 아이 추가
           </button>

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { LocationOnboardingModal, withTimeout } from './location-onboarding-modal';
 
@@ -61,6 +61,46 @@ describe('LocationOnboardingModal (Task 9-1-8: GPS 2단계 Fallback)', () => {
     expect(screen.getByText('서울특별시 강남구')).toBeInTheDocument();
     expect(screen.getByText('서울특별시 마포구')).toBeInTheDocument();
     expect(screen.getByText('경기도 성남시')).toBeInTheDocument();
+  });
+
+  // [개선사항5 - 챗봇 지역 선택 검색 필터](2026-09-04): "글자를 한 자 한 자 입력할
+  // 때마다 리스트가 실시간으로 반응하여 일치하는 지역명만 필터링되어 노출" — 별도
+  // debounce 없이 즉시 반영되는지 검증한다.
+  it('지역 검색창에 입력하면 즉시 일치하는 지역만 필터링해서 보여준다', async () => {
+    const { getSigunguOptions } = await import('@/lib/spaces/get-sigungu-options');
+    vi.mocked(getSigunguOptions).mockResolvedValue([
+      { sigungu_name: '서울특별시 강남구', lng: 127.05, lat: 37.52 },
+      { sigungu_name: '서울특별시 마포구', lng: 126.95, lat: 37.56 },
+      { sigungu_name: '경기도 성남시', lng: 127.12, lat: 37.44 },
+    ]);
+
+    vi.stubGlobal('navigator', {});
+    render(<LocationOnboardingModal onConfirm={() => {}} onClose={() => {}} />);
+    screen.getByText('📍 현재 위치로 찾기').click();
+
+    await screen.findByText('서울특별시 강남구', {}, { timeout: 2000 });
+    const searchInput = screen.getByLabelText('지역 검색');
+    fireEvent.change(searchInput, { target: { value: '성남' } });
+
+    expect(screen.getByText('경기도 성남시')).toBeInTheDocument();
+    expect(screen.queryByText('서울특별시 강남구')).not.toBeInTheDocument();
+    expect(screen.queryByText('서울특별시 마포구')).not.toBeInTheDocument();
+  });
+
+  it('검색어와 일치하는 지역이 없으면 안내 문구를 보여준다', async () => {
+    const { getSigunguOptions } = await import('@/lib/spaces/get-sigungu-options');
+    vi.mocked(getSigunguOptions).mockResolvedValue([
+      { sigungu_name: '서울특별시 강남구', lng: 127.05, lat: 37.52 },
+    ]);
+
+    vi.stubGlobal('navigator', {});
+    render(<LocationOnboardingModal onConfirm={() => {}} onClose={() => {}} />);
+    screen.getByText('📍 현재 위치로 찾기').click();
+
+    await screen.findByText('서울특별시 강남구', {}, { timeout: 2000 });
+    fireEvent.change(screen.getByLabelText('지역 검색'), { target: { value: '존재하지않는지역' } });
+
+    expect(await screen.findByText('"존재하지않는지역"와 일치하는 지역이 없어요.')).toBeInTheDocument();
   });
 
   it('수동 선택 시트에서 지역을 고르면 해당 지역의 대표 좌표로 확정한다', async () => {
