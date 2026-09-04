@@ -81,10 +81,23 @@ export function EventCard({
   const meta = getCategoryMeta(item.category);
   const allBadges = getParentalBadges(item);
   const imageBadges = allBadges.filter((badge) => IMAGE_OVERLAY_BADGE_KEYS.has(badge.key));
-  const textBadges = allBadges.filter((badge) => !IMAGE_OVERLAY_BADGE_KEYS.has(badge.key));
   const priceBadge = imageBadges.find((badge) => badge.key === 'is_free');
   const facilityBadge = imageBadges.find((badge) => badge.key === 'facility_type');
   const status = getEventStatus(item);
+  // [개선사항4](2026-09-04 사용자 지시) "이벤트픽 카드 목록 뱃지 최종 원칙": 목록 카드는
+  // 딱 3곳(상단 좌측 중분류/상단 우측 예약 상태/하단 실내외·무료유료)만 노출해야 하는데,
+  // 지금까지는 "상단 우측"(getEventStatus)과 별개로 텍스트 영역에 booking_status 뱃지
+  // (⚡오늘 당일 입장 가능/⏳D-1 마감임박/📅접수중)가 4번째 자리로 하나 더 있었다 — 실측
+  // 확인 결과 이 둘은 서로 다른 계산식으로 나온 "예약 상태"를 각자 보여주는 사실상
+  // 중복이었다(그것도 서로 항상 일치하지 않을 수 있는 — is_reservation_required는
+  // 대부분의 소스에서 실제로 단언된 적 없는 기본값이라(개선사항1 참고) getEventStatus가
+  // '진행중'/'예정' 같은 일반적인 값만 내는 경우가 대부분이고, booking_status는 그와
+  // 별개로 "오늘방문" 같은 더 구체적인 신호를 이미 갖고 있었다). 하나로 합친다 —
+  // booking_status 기반 문구가 있으면 그걸 우선(더 자주, 더 구체적으로 맞음), 없으면
+  // getEventStatus로 대체하되 '상시'는 계속 숨긴다. 두 자리를 하나로 합쳤으니 텍스트
+  // 영역의 별도 뱃지 줄은 완전히 없앤다.
+  const bookingStatusBadge = allBadges.find((badge) => badge.key === 'booking_status');
+  const topRightBadgeLabel = bookingStatusBadge?.label ?? (status.label !== '상시' ? status.label : null);
   const dateBanner = getDateBannerBadge(item);
   const period = formatDateRange(item.start_date, item.end_date);
   // Task 9-1-3: "[장소명] · [시/군/구]" (예: "율동공원 야외무대 · 성남시 분당구")
@@ -134,13 +147,14 @@ export function EventCard({
         {/* [개선사항1](2026-09-04 사용자 지시): open_spaces 연동 카드(캠핑장 등)에 붙는
             "상시" 태그는 실제 운영 상황/예약 필요 여부와 무관하게 "날짜 정보가 아예
             없다"는 사정만으로 붙는 값이라(event-status.ts getEventStatus 주석 참고)
-            사용자에게 혼선을 준다는 지적 — 이 라벨일 때만 뱃지 자체를 노출하지 않는다
-            (다른 상태값인 접수중/오늘 마감/예정/진행중은 그대로 유지). */}
-        {status.label !== '상시' && (
+            사용자에게 혼선을 준다는 지적 — topRightBadgeLabel 계산에서 이미 걸러진다.
+            [개선사항4](2026-09-04 사용자 지시): 이 자리 하나로 예약 상태를 통합했다
+            (booking_status 우선, 없으면 getEventStatus로 대체). */}
+        {topRightBadgeLabel && (
           <span
             className={`absolute ${dateBanner ? 'top-8' : 'top-2'} right-2 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-black/60 text-white`}
           >
-            {status.label}
+            {topRightBadgeLabel}
           </span>
         )}
         {/* [카드 높이/뱃지 정리](2026-09-03 사용자 지시): 무료/유료·실내/야외는 이미지
@@ -171,20 +185,6 @@ export function EventCard({
           <p className="text-xs text-gray-400 line-clamp-1">현재 위치에서 {formatDistance(item.distance_meters)}</p>
         )}
         {period && <p className="text-xs text-gray-400 line-clamp-1">{period}</p>}
-        {textBadges.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {textBadges.map((badge) => (
-              <span
-                key={badge.key}
-                className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
-                  badge.emphasis ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-600'
-                }`}
-              >
-                {badge.label}
-              </span>
-            ))}
-          </div>
-        )}
       </div>
     </button>
   );

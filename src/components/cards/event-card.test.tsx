@@ -192,16 +192,53 @@ describe('EventCard 카드 높이/뱃지 정리 (2026-09-03)', () => {
     expect(imageArea).toContainElement(facilityBadge);
   });
 
-  // [이벤트 카드 텍스트 영역 뱃지 정리](2026-09-04 사용자 지시): 키즈/어린이 뱃지도
-  // parental-badges.ts에서 제거해, 텍스트 영역에는 이제 접수 상태(booking_status) 뱃지
-  // 하나만 남는다.
-  it('텍스트 영역에는 접수 상태 뱃지만 남고, 키즈 대상 뱃지는 더 이상 없다', () => {
+  // [개선사항4](2026-09-04 사용자 지시) "카드 목록 뱃지 최종 원칙": booking_status 뱃지도
+  // 텍스트 영역이 아니라 상단 우측(예약 상태 자리)으로 합쳤다 — 키즈/어린이 뱃지와
+  // 함께 텍스트 영역에는 이제 아무 뱃지도 남지 않는다.
+  it('텍스트 영역에는 더 이상 어떤 뱃지도 없다(예약 상태는 상단 우측으로 통합, 키즈 뱃지는 제거됨)', () => {
     render(<EventCard item={makeEventItem({ booking_status: '오늘방문', is_kids_friendly: true })} onSelect={() => {}} />);
 
     const title = screen.getByText('도시농업 체험');
     const textArea = title.parentElement!;
-    expect(textArea).toContainElement(screen.getByText('⚡ 오늘 당일 입장 가능'));
+    const imageArea = textArea.previousElementSibling!;
+    expect(imageArea).toContainElement(screen.getByText('⚡ 오늘 당일 입장 가능'));
     expect(screen.queryByText('👶 키즈/어린이')).not.toBeInTheDocument();
+  });
+
+  // [개선사항4](2026-09-04 사용자 지시): booking_status가 있으면 그 문구가 상단 우측을
+  // 차지하고, getEventStatus의 일반 상태(예: "접수중")는 동시에 노출되지 않는다(중복
+  // 방지 — 실측 확인: is_reservation_required가 대부분 소스에서 신뢰할 수 없는 기본값이라
+  // booking_status 쪽이 더 구체적이고 자주 맞는 신호였다).
+  it('booking_status가 있으면 그 문구가 상단 우측을 차지하고 getEventStatus의 일반 상태는 동시에 뜨지 않는다', () => {
+    render(
+      <EventCard
+        item={makeEventItem({
+          booking_status: '접수중',
+          is_reservation_required: true,
+          reservation_end_date: '2099-01-01',
+        })}
+        onSelect={() => {}}
+      />
+    );
+
+    // booking_status 매핑 문구("📅 접수중")만 있어야 하고, getEventStatus의 동일 이름
+    // "접수중"이 별도로 중복 렌더링되지 않는다(둘 다 렌더되면 getByText가 여러 매치로 실패).
+    expect(screen.getByText('📅 접수중')).toBeInTheDocument();
+  });
+
+  it('booking_status가 없으면(null) getEventStatus의 상태를 상단 우측에 대신 보여준다', () => {
+    render(
+      <EventCard
+        item={makeEventItem({
+          booking_status: null,
+          is_reservation_required: true,
+          reservation_end_date: '2099-01-01',
+        })}
+        onSelect={() => {}}
+      />
+    );
+
+    expect(screen.getByText('접수중')).toBeInTheDocument();
   });
 });
 
