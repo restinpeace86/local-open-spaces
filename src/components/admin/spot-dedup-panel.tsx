@@ -1,7 +1,15 @@
 'use client';
 
-import { useState } from 'react';
-import { DedupGroup, formatDedupGroupLabel } from '@/lib/admin/spot-dedup-grouping';
+import { useMemo, useState } from 'react';
+import { DedupCandidateRow, DedupGroup, formatDedupGroupLabel, groupDedupCandidates } from '@/lib/admin/spot-dedup-grouping';
+
+// [2026-09-05 페이지네이션 도입 — 사용자 timeout 신고 대응] "중복 의심 그룹 데이터
+// 너무 많나봐 또 timeout 걸리네.. 이것도 50여건씩 pagination 하던가..." 진짜 원인은
+// open_spaces 테이블 통계가 낡아 생긴 쿼리 플래너 오판이었고(ANALYZE로 이미 해소,
+// /api/admin/spot-dedup/groups/route.ts 주석 참고) 이미 라이브 DB에 반영했지만,
+// 통계가 다시 낡아지는 경우에 대비해 방어적으로 커서 기반 페이지네이션도 함께
+// 적용한다 — 한 번에 최대 GROUPS_PAGE_SIZE(50)건만 스캔한다.
+const GROUPS_PAGE_SIZE = 50;
 
 // [개선사항10 - 관리자 '중복 스팟 그룹핑 및 매핑' 탭](2026-09-04 todo.md): open_spaces
 // 원본 데이터를 정제하기 위한 관리자 전용 화면. curated_items/spot_curations와 데이터
@@ -40,7 +48,7 @@ function GroupDetailModal({
   group: DedupGroup;
   serviceCategories: ServiceCategory[];
   onClose: () => void;
-  onSaved: (groupKey: string) => void;
+  onSaved: (memberIds: string[]) => void;
 }) {
   const [standardName, setStandardName] = useState(group.members[0]?.name ?? '');
   const [serviceCategoryId, setServiceCategoryId] = useState('');
@@ -74,7 +82,7 @@ function GroupDetailModal({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? '저장에 실패했습니다.');
-      onSaved(group.groupKey);
+      onSaved(group.members.map((m) => m.id));
       onClose();
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : '저장에 실패했습니다.');
@@ -206,11 +214,19 @@ export function SpotDedupPanel() {
   const [newCategoryName, setNewCategoryName] = useState('');
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
 
-  const [groups, setGroups] = useState<DedupGroup[]>([]);
+  // [2026-09-05 페이지네이션] 그룹은 더 이상 서버가 미리 합쳐 주지 않는다 — 원시
+  // 후보 행을 페이지(최대 50건)마다 누적하고, 누적된 전체 후보를 대상으로 매번
+  // groupDedupCandidates(순수 함수, Union-Find)를 다시 계산한다. 이렇게 해야 서로
+  // 다른 페이지에 걸쳐 있던 후보들이 나중에 하나로 합쳐질 수 있다.
+  const [candidates, setCandidates] = useState<DedupCandidateRow[]>([]);
+  const [cursor, setCursor] = useState<string | null>(null);
+  const [hasMoreGroups, setHasMoreGroups] = useState(false);
   const [hasLoadedGroups, setHasLoadedGroups] = useState(false);
   const [isLoadingGroups, setIsLoadingGroups] = useState(false);
   const [groupsError, setGroupsError] = useState<string | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<DedupGroup | null>(null);
+
+  const groups = useMemo(() => groupDedupCandidates(candidates), [candidates]);
 
   function loadServiceCategories() {
     setHasLoadedCategories(true);
@@ -224,15 +240,31 @@ export function SpotDedupPanel() {
       .catch((err) => setCategoriesError(err instanceof Error ? err.message : '중분류 조회에 실패했습니다.'));
   }
 
+  // 처음 불러오기(누적 초기화) — after를 실을 이유가 없으므로 매번 새로 시작한다.
   function loadGroups() {
     setHasLoadedGroups(true);
+    setCandidates([]);
+    setCursor(null);
+    setHasMoreGroups(false);
+    fetchGroupsPage(null, true);
+  }
+
+  // 다음 페이지(50건) 이어서 불러오기 — 기존 누적 후보에 추가한다.
+  function loadMoreGroups() {
+    fetchGroupsPage(cursor, false);
+  }
+
+  function fetchGroupsPage(after: string | null, isInitial: boolean) {
     setIsLoadingGroups(true);
     setGroupsError(null);
-    fetch('/api/admin/spot-dedup/groups')
+    const url = after ? `/api/admin/spot-dedup/groups?after=${encodeURIComponent(after)}` : '/api/admin/spot-dedup/groups';
+    fetch(url)
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? '중복 의심 그룹 조회에 실패했습니다.');
-        setGroups(data.groups ?? []);
+        setCandidates((prev) => (isInitial ? (data.candidates ?? []) : [...prev, ...(data.candidates ?? [])]));
+        setCursor(data.next_cursor ?? null);
+        setHasMoreGroups(Boolean(data.has_more));
       })
       .catch((err) => setGroupsError(err instanceof Error ? err.message : '중복 의심 그룹 조회에 실패했습니다.'))
       .finally(() => setIsLoadingGroups(false));
@@ -259,10 +291,12 @@ export function SpotDedupPanel() {
     }
   }
 
-  function handleGroupSaved(groupKey: string) {
-    // 처리된 그룹은 목록에서 제거한다 — 해당 스팟들은 이제 service_category_id가
-    // 채워져 다음 조회부터는 애초에 후보에서 빠진다(재조회 없이도 이미 정확함).
-    setGroups((prev) => prev.filter((g) => g.groupKey !== groupKey));
+  function handleGroupSaved(memberIds: string[]) {
+    // 처리된 그룹의 후보들을 누적 목록에서 제거한다 — 해당 스팟들은 이제
+    // service_category_id가 채워져 다음 조회부터는 애초에 후보에서 빠진다(재조회
+    // 없이도 이미 정확함). groups는 candidates에서 파생되므로 이걸로 충분하다.
+    const removed = new Set(memberIds);
+    setCandidates((prev) => prev.filter((c) => !removed.has(c.id)));
   }
 
   return (
@@ -353,8 +387,14 @@ export function SpotDedupPanel() {
           </button>
         ) : (
           <>
+            {/* [2026-09-05] 페이지네이션 도입으로 "지금까지 몇 건을 스캔했는지"가
+                더 이상 한눈에 안 보이므로, 관리자가 진행 상황을 가늠할 수 있게
+                누적 스캔 건수를 함께 보여준다. */}
+            <p className="mb-2 text-[11px] text-gray-400">지금까지 스캔한 후보 {candidates.length}건</p>
             {!isLoadingGroups && groups.length === 0 && !groupsError && (
-              <p className="text-xs text-gray-400">현재 중복 의심 그룹이 없습니다.</p>
+              <p className="text-xs text-gray-400">
+                {hasMoreGroups ? '이 구간에는 중복 의심 그룹이 없어요.' : '현재 중복 의심 그룹이 없습니다.'}
+              </p>
             )}
             <ul className="flex flex-col divide-y divide-gray-100">
               {groups.map((group) => (
@@ -369,6 +409,16 @@ export function SpotDedupPanel() {
                 </li>
               ))}
             </ul>
+            {hasMoreGroups && (
+              <button
+                type="button"
+                onClick={loadMoreGroups}
+                disabled={isLoadingGroups}
+                className="mt-3 w-full rounded-lg border border-gray-300 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {isLoadingGroups ? '불러오는 중...' : `다음 ${GROUPS_PAGE_SIZE}건 더 스캔하기`}
+              </button>
+            )}
           </>
         )}
       </section>

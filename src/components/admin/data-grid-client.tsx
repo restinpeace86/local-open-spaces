@@ -635,6 +635,11 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
 
   const [q, setQ] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
+  // [관리자 화면 필터 UI 압축](2026-09-05 사용자 지시): "등록일/표준 중분류/검색어
+  // 정도로만 검색하고 있다 — 이 3개 제외하고는 하나의 영역에서 숨기기/펼치기 할 수
+  // 있도록" — 나머지 필터(출처 2종/카테고리/원천 중분류/이벤트 전용 필터)를 이
+  // 접이식 영역 하나로 몰아 기본은 접어 두고, 목록이 화면을 더 넓게 쓰게 한다.
+  const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
   const [sourceTypes, setSourceTypes] = useState<string[]>([]);
   const [sources, setSources] = useState<string[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
@@ -851,7 +856,25 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
           className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
         />
 
-        {/* 요구사항 2: 단축 필터 + 달력 기간 조회(created_at 기준) */}
+        {/* [관리자 화면 필터 UI 압축](2026-09-05 사용자 지시): "등록일/표준 중분류/
+            검색어 정도로만 검색하고 있다" — 이 3개(검색어는 위 입력창, 나머지 둘은
+            아래)만 상시 노출하고, 조회하기 버튼도 등록일 줄에 함께 둬 목록 영역이
+            화면을 더 넓게 쓰게 한다. */}
+        {tab !== 'raw_ingest_data' && 'categoryMins' in currentOptions && (
+          <HierarchicalCategoryMinFilter
+            label="표준 중분류(category_min)"
+            groups={categoryMinGroups}
+            selected={pendingCategoryMin}
+            includeNullOption
+            fetchFailed={currentOptions.categoryMinsFetchFailed}
+            onRetry={() => router.refresh()}
+            onToggle={(v) =>
+              setPendingCategoryMin((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]))
+            }
+          />
+        )}
+
+        {/* 요구사항 2: 단축 필터 + 달력 기간 조회(created_at 기준) — 조회하기 버튼도 이 줄에 함께 둔다 */}
         {tab !== 'raw_ingest_data' && (
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs text-gray-500 shrink-0">등록일(created_at)</span>
@@ -908,87 +931,8 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                 날짜 초기화
               </button>
             )}
-          </div>
-        )}
 
-        {tab === 'open_spaces' && (
-          <ChipMultiSelect
-            label="출처(source_type)"
-            options={filterOptions.open_spaces.sourceTypes}
-            selected={sourceTypes}
-            onToggle={(v) => setSourceTypes((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]))}
-          />
-        )}
-        <ChipMultiSelect
-          label="출처(source)"
-          options={currentOptions.sources}
-          selected={sources}
-          onToggle={(v) => setSources((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]))}
-        />
-        {tab !== 'raw_ingest_data' && 'categories' in currentOptions && (
-          <ChipMultiSelect
-            label="카테고리"
-            options={currentOptions.categories}
-            selected={categories}
-            onToggle={(v) => setCategories((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]))}
-            colorFor={(v) => getCategoryMeta(v).color}
-          />
-        )}
-
-        {tab !== 'raw_ingest_data' && 'categoryMins' in currentOptions && (
-          <HierarchicalCategoryMinFilter
-            label="표준 중분류(category_min)"
-            groups={categoryMinGroups}
-            selected={pendingCategoryMin}
-            includeNullOption
-            fetchFailed={currentOptions.categoryMinsFetchFailed}
-            onRetry={() => router.refresh()}
-            onToggle={(v) =>
-              setPendingCategoryMin((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]))
-            }
-          />
-        )}
-
-        {tab !== 'raw_ingest_data' && 'minClassNames' in currentOptions && (
-          <div className="flex flex-wrap gap-3">
-            <label className="flex items-center gap-1.5 text-xs text-gray-500">
-              원천 중분류
-              <select
-                value={minClassName}
-                onChange={(e) => setMinClassName(e.target.value)}
-                className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
-              >
-                <option value="">전체</option>
-                {currentOptions.minClassNames.map((v: string) => (
-                  <option key={v} value={v}>
-                    {v}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-        )}
-
-        {tab === 'events' && (
-          <div className="flex flex-wrap gap-x-4 gap-y-2">
-            <TriStateToggle label="✅ 활성 상태(is_active)" value={isActive} onChange={setIsActive} />
-          </div>
-        )}
-
-        {tab === 'events' && (
-          <CheckboxMultiSelect
-            label="타겟 연령(target_audience)"
-            options={[...TARGET_AUDIENCE_TAGS]}
-            selected={pendingTargetAudience}
-            includeNullOption
-            onToggle={(v) =>
-              setPendingTargetAudience((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]))
-            }
-          />
-        )}
-
-        {tab !== 'raw_ingest_data' && (
-          <div className="flex items-center gap-2">
+            <span className="flex-1" />
             <button
               type="button"
               onClick={applyPendingFilters}
@@ -998,14 +942,88 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
             >
               🔍 조회하기
             </button>
-            {hasPendingFilterChanges && (
-              <span className="text-[11px] text-amber-600">
-                중분류/타겟 연령 선택이 변경됐습니다 — 조회하기를 눌러야 반영됩니다.
-              </span>
+          </div>
+        )}
+        {tab !== 'raw_ingest_data' && hasPendingFilterChanges && (
+          <p className="text-[11px] text-amber-600">중분류/타겟 연령 선택이 변경됐습니다 — 조회하기를 눌러야 반영됩니다.</p>
+        )}
+        {/* raw_ingest_data는 위 등록일 줄 자체가 없어(대용량 로데이터 특성상 날짜
+            필터를 지원하지 않음) 조회하기 버튼도 이 탭에는 필요 없다(중분류/타겟
+            연령 pending 필터가 애초에 이 탭에 노출되지 않으므로) — 기존 동작 그대로. */}
+
+        <button
+          type="button"
+          onClick={() => setIsFiltersExpanded((v) => !v)}
+          className="self-start text-xs font-medium text-blue-600 hover:underline"
+        >
+          {isFiltersExpanded ? '▴ 상세 필터 접기' : '▾ 상세 필터 더보기 (출처/카테고리/원천 중분류 등)'}
+        </button>
+
+        {isFiltersExpanded && (
+          <div className="flex flex-col gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3">
+            {tab === 'open_spaces' && (
+              <ChipMultiSelect
+                label="출처(source_type)"
+                options={filterOptions.open_spaces.sourceTypes}
+                selected={sourceTypes}
+                onToggle={(v) => setSourceTypes((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]))}
+              />
+            )}
+            <ChipMultiSelect
+              label="출처(source)"
+              options={currentOptions.sources}
+              selected={sources}
+              onToggle={(v) => setSources((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]))}
+            />
+            {tab !== 'raw_ingest_data' && 'categories' in currentOptions && (
+              <ChipMultiSelect
+                label="카테고리"
+                options={currentOptions.categories}
+                selected={categories}
+                onToggle={(v) => setCategories((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]))}
+                colorFor={(v) => getCategoryMeta(v).color}
+              />
+            )}
+
+            {tab !== 'raw_ingest_data' && 'minClassNames' in currentOptions && (
+              <div className="flex flex-wrap gap-3">
+                <label className="flex items-center gap-1.5 text-xs text-gray-500">
+                  원천 중분류
+                  <select
+                    value={minClassName}
+                    onChange={(e) => setMinClassName(e.target.value)}
+                    className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
+                  >
+                    <option value="">전체</option>
+                    {currentOptions.minClassNames.map((v: string) => (
+                      <option key={v} value={v}>
+                        {v}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+            )}
+
+            {tab === 'events' && (
+              <div className="flex flex-wrap gap-x-4 gap-y-2">
+                <TriStateToggle label="✅ 활성 상태(is_active)" value={isActive} onChange={setIsActive} />
+              </div>
+            )}
+
+            {tab === 'events' && (
+              <CheckboxMultiSelect
+                label="타겟 연령(target_audience)"
+                options={[...TARGET_AUDIENCE_TAGS]}
+                selected={pendingTargetAudience}
+                includeNullOption
+                onToggle={(v) =>
+                  setPendingTargetAudience((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]))
+                }
+              />
             )}
           </div>
         )}
-
       </div>
 
       {/* 4. 테이블 그리드 */}

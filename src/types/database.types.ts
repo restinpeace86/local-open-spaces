@@ -1148,18 +1148,8 @@ export type Database = {
       enablelongtransactions: { Args: never; Returns: string }
       equals: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
       find_spot_dedup_candidates: {
-        Args: { p_eps_degrees?: number; p_limit?: number }
-        Returns: {
-          address: string
-          category: string
-          category_min: string
-          id: string
-          lat: number
-          lng: number
-          name: string
-          normalized_address: string
-          proximity_cluster_id: number
-        }[]
+        Args: { p_after_id?: string; p_eps_degrees?: number; p_limit?: number }
+        Returns: Json
       }
       geometry: { Args: { "": string }; Returns: unknown }
       geometry_above: {
