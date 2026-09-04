@@ -206,13 +206,31 @@ function GroupDetailModal({
   );
 }
 
-export function SpotDedupPanel() {
+// data-grid-client.tsx의 NULL_FILTER_TOKEN과 동일한 예약값 — "category_min이 없는
+// (NULL) 행" 전체를 가리키는 선택지.
+const NULL_CATEGORY_MIN_TOKEN = '__NULL__';
+
+export function SpotDedupPanel({ categoryMinOptions }: { categoryMinOptions: string[] }) {
   const [serviceCategories, setServiceCategories] = useState<ServiceCategory[]>([]);
   const [hasLoadedCategories, setHasLoadedCategories] = useState(false);
   const [categoriesError, setCategoriesError] = useState<string | null>(null);
   const [newParentCategory, setNewParentCategory] = useState(PARENT_CATEGORY_OPTIONS[0]);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+
+  // [노출 중분류 대량 매핑](2026-09-05 사용자 지시): "현재 open_spaces에서 이 노출
+  // 중분류 매핑할 수 있도록 개선해줘. 그리고 대량의 데이터도 한꺼번에 노출
+  // 중분류로 할 수 있는 것도." 원본 중분류(category_min) 값 하나를 골라 그 전체를
+  // 노출 중분류로 일괄 반영한다(개별/중복 그룹 매핑과 별개 — 중복 여부와 무관하게
+  // 모든 행에 적용 가능).
+  const [bulkCategoryMin, setBulkCategoryMin] = useState('');
+  const [bulkServiceCategoryId, setBulkServiceCategoryId] = useState('');
+  const [bulkOnlyUnmapped, setBulkOnlyUnmapped] = useState(true);
+  const [bulkPreviewCount, setBulkPreviewCount] = useState<number | null>(null);
+  const [isPreviewingBulk, setIsPreviewingBulk] = useState(false);
+  const [isApplyingBulk, setIsApplyingBulk] = useState(false);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const [bulkResultMessage, setBulkResultMessage] = useState<string | null>(null);
 
   // [2026-09-05 페이지네이션] 그룹은 더 이상 서버가 미리 합쳐 주지 않는다 — 원시
   // 후보 행을 페이지(최대 50건)마다 누적하고, 누적된 전체 후보를 대상으로 매번
@@ -299,6 +317,67 @@ export function SpotDedupPanel() {
     setCandidates((prev) => prev.filter((c) => !removed.has(c.id)));
   }
 
+  function handlePreviewBulk() {
+    if (!bulkCategoryMin) {
+      setBulkError('원본 중분류를 선택해주세요.');
+      return;
+    }
+    setIsPreviewingBulk(true);
+    setBulkError(null);
+    setBulkResultMessage(null);
+    fetch(
+      `/api/admin/open-spaces/bulk-category-mapping?category_min=${encodeURIComponent(bulkCategoryMin)}&only_unmapped=${bulkOnlyUnmapped}`
+    )
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? '대상 건수 조회에 실패했습니다.');
+        setBulkPreviewCount(data.matching_count);
+      })
+      .catch((err) => setBulkError(err instanceof Error ? err.message : '대상 건수 조회에 실패했습니다.'))
+      .finally(() => setIsPreviewingBulk(false));
+  }
+
+  function handleApplyBulk() {
+    if (!bulkCategoryMin) {
+      setBulkError('원본 중분류를 선택해주세요.');
+      return;
+    }
+    if (!bulkServiceCategoryId) {
+      setBulkError('노출 중분류를 선택해주세요.');
+      return;
+    }
+    // 몇만 건 단위까지 한 번에 되돌릴 수 없이 반영되는 작업이라(제5장 제11조와
+    // 별개로 실수 방지 차원) 실행 전 반드시 확인을 받는다 — 미리보기를 아직 안
+    // 눌렀으면 그 사실도 함께 알려 대상 건수를 모른 채 누르는 것을 막는다.
+    const confirmed = window.confirm(
+      bulkPreviewCount != null
+        ? `${bulkPreviewCount}건에 노출 중분류를 일괄 반영합니다. 계속할까요?`
+        : '아직 [미리보기]로 대상 건수를 확인하지 않았습니다. 그래도 계속할까요?'
+    );
+    if (!confirmed) return;
+
+    setIsApplyingBulk(true);
+    setBulkError(null);
+    setBulkResultMessage(null);
+    fetch('/api/admin/open-spaces/bulk-category-mapping', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        category_min: bulkCategoryMin,
+        service_category_id: bulkServiceCategoryId,
+        only_unmapped: bulkOnlyUnmapped,
+      }),
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? '일괄 매핑에 실패했습니다.');
+        setBulkResultMessage(`${data.updated_count}건에 노출 중분류를 반영했습니다.`);
+        setBulkPreviewCount(null);
+      })
+      .catch((err) => setBulkError(err instanceof Error ? err.message : '일괄 매핑에 실패했습니다.'))
+      .finally(() => setIsApplyingBulk(false));
+  }
+
   return (
     <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-6">
       {/* [관리자 페이지 성능 최적화](2026-08-30 사용자 지시) 관례 그대로 — 탭 진입 시
@@ -363,6 +442,92 @@ export function SpotDedupPanel() {
             ))}
           </div>
         )}
+      </section>
+
+      {/* [노출 중분류 대량 매핑](2026-09-05 사용자 지시): 원본 중분류 하나를 통째로
+          노출 중분류에 매핑한다 — 중복 여부와 무관하게 모든 행에 적용 가능하고,
+          수만 건 단위도 한 번에 처리한다(서버가 id 목록이 아니라 조건절 그대로
+          UPDATE). */}
+      <section className="rounded-xl border border-gray-200 p-4">
+        <h2 className="text-sm font-bold text-gray-900 mb-3">🗂️ 노출 중분류 대량 매핑</h2>
+        <p className="mb-3 text-xs text-gray-500">
+          원본 중분류(category_min) 하나를 골라, 그 전체를 노출 중분류로 한 번에 반영합니다. 중복 여부와
+          무관하게 적용됩니다.
+        </p>
+        <div className="flex flex-col gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <select
+              value={bulkCategoryMin}
+              onChange={(e) => {
+                setBulkCategoryMin(e.target.value);
+                setBulkPreviewCount(null);
+                setBulkResultMessage(null);
+              }}
+              className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs"
+            >
+              <option value="">원본 중분류 선택</option>
+              <option value={NULL_CATEGORY_MIN_TOKEN}>(미분류 — category_min 없음)</option>
+              {categoryMinOptions.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <span className="text-xs text-gray-400">→</span>
+            <select
+              value={bulkServiceCategoryId}
+              onChange={(e) => setBulkServiceCategoryId(e.target.value)}
+              className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs"
+            >
+              <option value="">노출 중분류 선택</option>
+              {serviceCategories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.parent_category} &gt; {c.category_name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <label className="flex items-center gap-1.5 text-xs text-gray-600">
+            <input
+              type="checkbox"
+              checked={bulkOnlyUnmapped}
+              onChange={(e) => {
+                setBulkOnlyUnmapped(e.target.checked);
+                setBulkPreviewCount(null);
+              }}
+              className="h-3.5 w-3.5"
+            />
+            아직 노출 중분류가 없는 행만 대상으로(이미 매핑된 행은 덮어쓰지 않음)
+          </label>
+
+          {serviceCategories.length === 0 && hasLoadedCategories && (
+            <p className="text-[11px] text-amber-600">위 "노출 중분류 관리"에서 먼저 중분류를 만들거나 불러와주세요.</p>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={handlePreviewBulk}
+              disabled={isPreviewingBulk || !bulkCategoryMin}
+              className="rounded-full border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+            >
+              {isPreviewingBulk ? '조회 중...' : '미리보기(대상 건수 확인)'}
+            </button>
+            <button
+              type="button"
+              onClick={handleApplyBulk}
+              disabled={isApplyingBulk || !bulkCategoryMin || !bulkServiceCategoryId}
+              className="rounded-full bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-700 disabled:opacity-50"
+            >
+              {isApplyingBulk ? '적용 중...' : '일괄 매핑 적용'}
+            </button>
+            {bulkPreviewCount != null && <span className="text-xs text-gray-600">대상 {bulkPreviewCount.toLocaleString()}건</span>}
+          </div>
+
+          {bulkError && <p className="text-xs text-red-600">{bulkError}</p>}
+          {bulkResultMessage && <p className="text-xs text-emerald-600">{bulkResultMessage}</p>}
+        </div>
       </section>
 
       {/* 요구사항 3-2/3-3: 좌표/주소 기반 그룹 리스트 + 상세/매핑 */}

@@ -843,7 +843,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
       ) : tab === 'mom_pick_posts' ? (
         <MomPickPostsPanel />
       ) : tab === 'spot_dedup' ? (
-        <SpotDedupPanel />
+        <SpotDedupPanel categoryMinOptions={filterOptions.open_spaces.categoryMins} />
       ) : (
       <>
       <div className="shrink-0 p-4 border-b border-gray-100 flex flex-col gap-3">
