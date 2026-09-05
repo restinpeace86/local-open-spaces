@@ -66,22 +66,45 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const categoryMinRaw = body.category_min;
-    if (!isNonEmptyString(categoryMinRaw)) {
-      return NextResponse.json({ error: 'category_min이 필요합니다.' }, { status: 400 });
-    }
-    const categoryMin = parseCategoryMinParam(categoryMinRaw);
 
     const serviceCategoryId = body.service_category_id;
     if (!isNonEmptyString(serviceCategoryId)) {
       return NextResponse.json({ error: '노출 중분류(service_category_id)를 선택해주세요.' }, { status: 400 });
     }
+
+    const admin = createAdminClient();
+
+    // [노출 중분류 매핑/중복 스팟 검수 탭 분리](2026-09-05 사용자 지시): "원본 중분류의
+    // 데이터들의 다건에 대하여 노출중분류로 다수 이동과 관련된 기능도 있으면 좋겠다" —
+    // 기존 category_min 전체 일괄 반영(아래)과 별개로, 관리자가 화면에서 직접 골라낸
+    // 특정 행 여러 건(id 목록)만 골라 반영하는 경로를 추가한다. category_min 조건절
+    // 대신 `.in('id', ids)`로 바뀌는 것 외에는 동일한 UPDATE라 응답 모양도 그대로
+    // `updated_count`로 맞춘다(호출부가 두 모드를 구분하지 않고 같은 방식으로 처리 가능).
+    if (Array.isArray(body.ids)) {
+      const ids = body.ids.filter((id: unknown): id is string => typeof id === 'string' && id.length > 0);
+      if (ids.length === 0) {
+        return NextResponse.json({ error: '선택된 항목이 없습니다.' }, { status: 400 });
+      }
+
+      const { error, count } = await admin
+        .from('open_spaces')
+        .update({ service_category_id: serviceCategoryId }, { count: 'exact' })
+        .in('id', ids);
+      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+      return NextResponse.json({ updated_count: count ?? 0 });
+    }
+
+    const categoryMinRaw = body.category_min;
+    if (!isNonEmptyString(categoryMinRaw)) {
+      return NextResponse.json({ error: 'category_min이 필요합니다.' }, { status: 400 });
+    }
+    const categoryMin = parseCategoryMinParam(categoryMinRaw);
     const onlyUnmapped = body.only_unmapped !== false;
 
     // count: 'exact'만 요청하고 .select()는 쓰지 않는다 — 몇만 건이 매칭될 수 있어
     // (실측: category_min='어린이놀이터' 57,692건) 갱신된 행 전체를 응답 페이로드로
     // 돌려받으면 불필요하게 무겁다. 건수만 필요하다.
-    const admin = createAdminClient();
     const { error, count } = await applyScope(
       admin.from('open_spaces').update({ service_category_id: serviceCategoryId }, { count: 'exact' }),
       categoryMin,

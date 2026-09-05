@@ -114,6 +114,11 @@ export default async function AdminDataGridPage() {
         // [개선사항10 - 중복 스팟 그룹핑 및 매핑 탭](2026-09-04): SpotDedupPanel도 동일하게
         // 자기완결적이라 빈 객체만 넘긴다.
         spot_dedup: {},
+        // [노출 중분류 매핑/중복 스팟 검수 탭 분리](2026-09-05): CategoryMappingPanel도
+        // 동일하게 자기완결적이라 빈 객체만 넘긴다(실제 필요한 categoryMinOptions는
+        // 이미 위 open_spaces.categoryMins로 내려가 있어 data-grid-client.tsx가 그대로
+        // 재사용한다 — 별도 조회 없음).
+        category_mapping: {},
       }}
     />
   );
