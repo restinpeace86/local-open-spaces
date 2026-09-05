@@ -1057,7 +1057,13 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
       </div>
 
       {/* 4. 테이블 그리드 */}
-      <div className="flex-1 overflow-auto p-4">
+      {/* [관리자 화면 모바일 테이블 스크롤 최적화](2026-09-05 사용자 지시): "최적화해줘"
+          — 이전엔 이 컨테이너 하나가 세로(페이지) 스크롤과 가로(넓은 테이블) 스크롤을
+          동시에 담당해, 좁은 화면에서 대각선으로 스와이프하면 두 방향이 한꺼번에
+          움직여 부자연스러웠다. 세로 스크롤은 여기(overflow-y-auto)에서만 담당하고,
+          가로 스크롤은 아래 테이블 전용 래퍼(overflow-x-auto)로 분리한다 — 표준
+          반응형 테이블 패턴. */}
+      <div className="flex-1 overflow-y-auto p-4">
         {/* [관리자 페이지 성능 최적화](2026-08-30 사용자 지시) 요구사항 3: 탭 진입/전환
             직후에는 조회를 자동 실행하지 않고 빈 뼈대(필터 UI)만 보여준다 — 이 버튼을
             눌러야 그 탭의 첫 조회가 실행된다. raw_ingest_data는 대용량 로데이터라 특히
@@ -1086,6 +1092,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
         )}
 
         {hasLoaded[tab] && !isLoading && !errorMessage && rows.length > 0 && (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="sticky top-0 z-10 bg-white border-b-2 border-gray-200 text-left text-xs font-semibold text-gray-600 shadow-[0_1px_0_0_rgba(0,0,0,0.04)]">
@@ -1214,6 +1221,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
               })}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

@@ -253,7 +253,9 @@ export function CuratedItemsPanel() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-4">
+      {/* [관리자 화면 모바일 테이블 스크롤 최적화](2026-09-05 사용자 지시): data-grid-
+          client.tsx와 동일한 이유 — 세로 스크롤과 가로 스크롤을 분리한다. */}
+      <div className="flex-1 overflow-y-auto p-4">
         {!hasLoaded && (
           <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
             <p className="text-sm text-gray-500">필터를 설정한 뒤 불러오기를 눌러주세요.</p>
@@ -274,6 +276,7 @@ export function CuratedItemsPanel() {
         )}
 
         {hasLoaded && !isLoading && !errorMessage && rows.length > 0 && (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="border-b-2 border-gray-200 text-left text-xs font-semibold text-gray-600">
@@ -329,6 +332,7 @@ export function CuratedItemsPanel() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 
