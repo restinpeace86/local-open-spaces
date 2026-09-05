@@ -21,7 +21,7 @@ describe('resolveCategoryForRow', () => {
     };
     expect(resolveCategoryForRow(row)).toEqual({
       category_min: '공공키즈카페',
-      category_maj: '공공 키즈카페',
+      category_maj: '키즈놀이터',
       category_min_source: 'RAW',
     });
   });
@@ -62,7 +62,7 @@ describe('resolveCategoryForRow', () => {
     };
     expect(resolveCategoryForRow(rowAfterFirstRun)).toEqual({
       category_min: '공공키즈카페',
-      category_maj: '공공 키즈카페',
+      category_maj: '키즈놀이터',
       category_min_source: 'RAW',
     });
   });
@@ -142,6 +142,14 @@ describe('CATEGORY_MAJ_OF', () => {
     for (const categoryMin of formerSportsCategoryMins) {
       expect(CATEGORY_MAJ_OF[categoryMin]).toBeNull();
     }
+  });
+
+  // [이벤트픽 대분류 개편](2026-09-05 사용자 지시): "공공 키즈카페" → "키즈놀이터"
+  // 개명 + open_spaces 전용 "키즈카페"를 세 번째 중분류로 추가.
+  it('"키즈놀이터" 대분류는 공공키즈카페/어린이실내놀이터/키즈카페 3종으로 구성된다', () => {
+    expect(CATEGORY_MAJ_OF['공공키즈카페']).toBe('키즈놀이터');
+    expect(CATEGORY_MAJ_OF['어린이실내놀이터']).toBe('키즈놀이터');
+    expect(CATEGORY_MAJ_OF['키즈카페']).toBe('키즈놀이터');
   });
 });
 
@@ -224,7 +232,7 @@ describe('applyCategoryMajTaxonomy', () => {
     expect(result.updatedToValue).toBe(2);
 
     expect(rows.find((r) => r.id === 'a').category_min).toBe('전시실'); // MANUAL 보존
-    expect(rows.find((r) => r.id === 'b')).toMatchObject({ category_min: '공공키즈카페', category_maj: '공공 키즈카페' });
+    expect(rows.find((r) => r.id === 'b')).toMatchObject({ category_min: '공공키즈카페', category_maj: '키즈놀이터' });
     expect(rows.find((r) => r.id === 'c')).toMatchObject({ category_min: '수영장', category_maj: null });
     expect(rows.find((r) => r.id === 'd').category_min).toBeNull(); // 비활성이라 손대지 않음
   });
@@ -243,11 +251,11 @@ describe('applyCategoryMajTaxonomy', () => {
     const client = makeFakeClient(rows);
 
     await applyCategoryMajTaxonomy(client);
-    expect(rows[0]).toMatchObject({ category_min: '공공키즈카페', category_maj: '공공 키즈카페' });
+    expect(rows[0]).toMatchObject({ category_min: '공공키즈카페', category_maj: '키즈놀이터' });
 
     // 두 번째 실행 시점에는 category_min이 이미 "공공키즈카페"(신규 이름)로 바뀐 상태다 —
     // raw_data.MINCLASSNM(불변)을 기준으로 판단하므로 결과가 흔들리지 않아야 한다.
     await applyCategoryMajTaxonomy(client);
-    expect(rows[0]).toMatchObject({ category_min: '공공키즈카페', category_maj: '공공 키즈카페', category_min_source: 'RAW' });
+    expect(rows[0]).toMatchObject({ category_min: '공공키즈카페', category_maj: '키즈놀이터', category_min_source: 'RAW' });
   });
 });

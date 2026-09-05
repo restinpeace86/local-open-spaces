@@ -87,7 +87,10 @@ export const VIBE_CATEGORY_MINS: Record<Vibe, string[]> = {
 // 이 매핑도 자동으로 따라간다).
 const VIBE_TO_EVENT_MAJ: Record<Vibe, string> = {
   NATURE_CAMPING: '자연 / 캠핑',
-  KIDS_CAFE: '공공 키즈카페',
+  // [이벤트픽 대분류 개편](2026-09-05 사용자 지시): category-maj-meta.ts의 "공공
+  // 키즈카페" → "키즈놀이터" 개명과 동일하게 맞춘다(이 값이 CATEGORY_MAJ_OPTIONS.maj와
+  // 어긋나면 VIBE_EVENT_CATEGORY_MINS.KIDS_CAFE가 빈 배열이 되는 실제 회귀가 생긴다).
+  KIDS_CAFE: '키즈놀이터',
   FARM_EXPERIENCE: '체험 / 농장',
   FESTIVAL_EVENT: '축제 / 이벤트',
   CULTURE_EXHIBITION: '문화 / 전시',

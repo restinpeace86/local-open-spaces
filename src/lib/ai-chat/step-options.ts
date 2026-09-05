@@ -114,7 +114,8 @@ export const KIDS_COUNT_OPTIONS = [1, 2, 3] as const; // 3은 "3명 이상"을 �
 // 빈 배열을 "필터링 안 함"으로 해석).
 export const VIBE_OPTIONS: { id: Vibe; label: string; emoji: string }[] = [
   { id: 'NATURE_CAMPING', label: '자연 / 캠핑', emoji: '🏕️' },
-  { id: 'KIDS_CAFE', label: '공공 키즈카페', emoji: '🧸' },
+  // [이벤트픽 대분류 개편](2026-09-05 사용자 지시): "공공 키즈카페" → "키즈놀이터" 개명.
+  { id: 'KIDS_CAFE', label: '키즈놀이터', emoji: '🧸' },
   { id: 'FARM_EXPERIENCE', label: '체험 / 농장', emoji: '🌱' },
   { id: 'FESTIVAL_EVENT', label: '축제 / 이벤트', emoji: '🎉' },
   { id: 'CULTURE_EXHIBITION', label: '문화 / 전시', emoji: '🖼️' },

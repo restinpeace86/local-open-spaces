@@ -35,7 +35,14 @@ export type CategoryMajOption = {
 
 export const CATEGORY_MAJ_OPTIONS: CategoryMajOption[] = [
   { maj: '자연 / 캠핑', emoji: '🏕️', color: '#16a34a', minorCategories: ['캠핑장', '산림여가', '공원탐방'] },
-  { maj: '공공 키즈카페', emoji: '🧸', color: '#f59e0b', minorCategories: ['공공키즈카페', '어린이실내놀이터'] },
+  // [이벤트픽 대분류 개편](2026-09-05 사용자 지시): "공공 키즈카페"를 "키즈놀이터"로
+  // 개명하고, open_spaces의 "키즈카페"(GG_KIDSCAFE 어댑터 — 서울형/공공 한정이 아닌
+  // 민간 포함 더 넓은 데이터셋)를 세 번째 중분류로 추가한다. 체험휴양마을 등(위 "체험/농장"
+  // 참고)과 동일한 패턴 — get-home-feed.ts SHARED_OPEN_SPACES_CATEGORY_MINS에도 함께
+  // 등록해야 실제로 open_spaces 데이터가 이 대분류에 섞여 나온다. 챗봇의 KIDS_CAFE vibe
+  // (search-engine.ts VIBE_CATEGORY_MINS)는 이미 이 open_spaces 값을 포함하고 있었다 —
+  // 이번 변경으로 이벤트픽 홈 화면도 그 정의를 따라간다.
+  { maj: '키즈놀이터', emoji: '🧸', color: '#f59e0b', minorCategories: ['공공키즈카페', '어린이실내놀이터', '키즈카페'] },
   {
     maj: '체험 / 농장',
     emoji: '🌱',

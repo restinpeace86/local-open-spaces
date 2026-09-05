@@ -1047,7 +1047,12 @@ export async function getThemeSpotFeed(
 // 피드에 한해서만 open_spaces 행을 'EVENT'로 표시 관점에서 재해석해 담는다(원본
 // open_spaces 테이블/스팟픽 화면의 item_type='SPACE' 분류는 전혀 바꾸지 않음 — 이
 // 함수가 반환하는 NearbyItem은 애초에 화면 표시용 DTO이지 원본 로우 자체가 아니다).
-const SHARED_OPEN_SPACES_CATEGORY_MINS = new Set(['캠핑장', '체험휴양마을', '교육농장', '체험학습장']);
+// [이벤트픽 대분류 개편 — 키즈놀이터](2026-09-05 사용자 지시): "여기의 중분류를..
+// 추가로 open_spaces의 키즈카페 중분류 가져와서 놔줘" — 위와 동일한 패턴으로 '키즈카페'
+// 추가(category-maj-meta.ts CATEGORY_MAJ_OPTIONS의 "키즈놀이터" 대분류와 반드시 동일하게
+// 유지). 이벤트에는 이 값이 존재하지 않아(events 쪽 category_min은 '공공키즈카페'/
+// '어린이실내놀이터'뿐) open_spaces 쪽만 실제로 채워진다 — 체험휴양마을 등과 동일한 상황.
+const SHARED_OPEN_SPACES_CATEGORY_MINS = new Set(['캠핑장', '체험휴양마을', '교육농장', '체험학습장', '키즈카페']);
 
 // [중분류 데이터 로딩 속도 개선 - 페이지네이션 도입](2026-09-04 사용자 지시): 기존에는
 // "지역 우선순위 재정렬" 품질을 위해 매 요청마다 이벤트/공간 각각 최대 500건씩(그것도

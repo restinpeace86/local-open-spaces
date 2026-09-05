@@ -47,7 +47,7 @@ describe('MajorCategoryGrid', () => {
       <MajorCategoryGrid selectedMaj={null} onSelectMaj={() => {}} selectedMin={null} onSelectMin={() => {}} />
     );
 
-    const labels = ['자연 / 캠핑', '공공 키즈카페', '체험 / 농장', '축제 / 이벤트', '문화 / 전시', '배움 / 클래스'];
+    const labels = ['자연 / 캠핑', '키즈놀이터', '체험 / 농장', '축제 / 이벤트', '문화 / 전시', '배움 / 클래스'];
     for (const label of labels) {
       expect(screen.getByText(label)).toBeInTheDocument();
     }

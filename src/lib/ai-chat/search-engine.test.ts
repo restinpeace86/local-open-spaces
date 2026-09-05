@@ -313,7 +313,7 @@ describe('VIBE_EVENT_CATEGORY_MINS', () => {
     const majByLabel = (label: string) => CATEGORY_MAJ_OPTIONS.find((opt) => opt.maj === label)?.minorCategories;
 
     expect(VIBE_EVENT_CATEGORY_MINS.NATURE_CAMPING).toEqual(majByLabel('자연 / 캠핑'));
-    expect(VIBE_EVENT_CATEGORY_MINS.KIDS_CAFE).toEqual(majByLabel('공공 키즈카페'));
+    expect(VIBE_EVENT_CATEGORY_MINS.KIDS_CAFE).toEqual(majByLabel('키즈놀이터'));
     expect(VIBE_EVENT_CATEGORY_MINS.FARM_EXPERIENCE).toEqual(majByLabel('체험 / 농장'));
     expect(VIBE_EVENT_CATEGORY_MINS.FESTIVAL_EVENT).toEqual(majByLabel('축제 / 이벤트'));
     expect(VIBE_EVENT_CATEGORY_MINS.CULTURE_EXHIBITION).toEqual(majByLabel('문화 / 전시'));
