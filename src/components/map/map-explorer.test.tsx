@@ -387,6 +387,23 @@ describe('MapExplorer 마커 클릭 2단계 UX (2026-09-01)', () => {
     expect(screen.queryByText('주소')).not.toBeInTheDocument();
   });
 
+  // [마커 미리보기 카드가 바텀시트를 가리는 문제 수정](2026-09-05 사용자 지시): 바텀시트가
+  // 펼쳐진(70vh) 상태에서 마커를 누르면 미리보기 카드를 다시 가릴 수 있어, 마커 클릭 시
+  // 시트를 자동으로 접는다(리스트 클릭 시 이미 접던 것과 동일 정책).
+  it('바텀시트가 펼쳐진 상태에서 마커를 클릭하면 시트가 자동으로 접힌다', async () => {
+    rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow()], error: null });
+    render(<MapExplorer />);
+    await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByText(/목록 보기/));
+    expect(screen.getByText(/접기/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('simulate-marker-click-용인어린이상상의숲'));
+
+    expect(screen.getByText(/목록 보기/)).toBeInTheDocument();
+    expect(screen.queryByText(/접기/)).not.toBeInTheDocument();
+  });
+
   it('리스트 패널에서 항목을 클릭하면(마커 클릭 아님) 기존처럼 바로 전체 상세 모달이 열린다', async () => {
     rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow()], error: null });
     render(<MapExplorer />);

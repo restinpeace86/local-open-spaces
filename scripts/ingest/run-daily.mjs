@@ -25,6 +25,7 @@ import { dedupeOpenSpaces } from './lib/dedupe-open-spaces.mjs';
 import { applyDetailedCategoryFallback } from './lib/detailed-category-fallback.mjs';
 import { applyLegacySourceCategoryMapping } from './lib/legacy-source-category-mapping.mjs';
 import { recordBatchRun } from './lib/batch-log.mjs';
+import { withStepTimeout } from './lib/with-step-timeout.mjs';
 import { GgCultureEventsAdapter } from './adapters/gg-culture-events-adapter.mjs';
 import { SeoulYeyakAdapter } from './adapters/seoul-yeyak-adapter.mjs';
 import { enrichGgCultureEventLocations } from './adapters/gg-culture-location-enrichment.mjs';
@@ -36,6 +37,13 @@ import { deactivateExpiredEvents } from './lib/deactivate-expired-events.mjs';
 loadEnv();
 
 const BATCH_NAME = 'Daily Events Batch';
+
+// [지오코딩 안전장치 — 전체 스텝 하드 타임아웃](2026-09-05 사용자 지시) 참고 —
+// with-step-timeout.mjs. 서킷 브레이커로 지오코딩 자체는 이제 훨씬 빠르게 포기하지만,
+// 네트워크 크롤링(GG_CULTURE_LOCATION_ENRICHMENT)을 포함한 스텝은 원인을 알 수 없는
+// 다른 hang에도 대비해 별도의 상한을 둔다. 평소 실행 시간(수 초~1분대, docs/pipeline-
+// log.md 실측)에 비해 넉넉한 10분을 상한으로 잡는다.
+const STEP_TIMEOUT_MS = 10 * 60 * 1000;
 
 // [핵심 events 수집 파이프라인 장애 점검](2026-08-30 사용자 지시): 아래 4개 소스 어댑터의
 // 실제 소스 코드(각 파일의 `throw new Error('... 환경변수가 설정되지 않았습니다.')` 가드)를
@@ -366,7 +374,7 @@ export async function runDailyBatch({ dryRun = false } = {}) {
   for (const step of STEPS) {
     console.log(`\n=== [${step.label}] ===`);
     try {
-      const result = await step.run({ dryRun });
+      const result = await withStepTimeout(() => step.run({ dryRun }), { label: step.label, timeoutMs: STEP_TIMEOUT_MS });
       results.push(result);
     } catch (err) {
       console.error(`❌ [${step.label}] 실패: ${err.message}`);
@@ -381,7 +389,10 @@ export async function runDailyBatch({ dryRun = false } = {}) {
   if (cultureEventsResult && !cultureEventsResult.failed) {
     console.log('\n=== [GG_CULTURE_LOCATION_ENRICHMENT] ===');
     try {
-      const enrichmentResult = await runLocationEnrichment({ dryRun });
+      const enrichmentResult = await withStepTimeout(() => runLocationEnrichment({ dryRun }), {
+        label: 'GG_CULTURE_LOCATION_ENRICHMENT',
+        timeoutMs: STEP_TIMEOUT_MS,
+      });
       results.push(enrichmentResult);
     } catch (err) {
       console.error(`❌ [GG_CULTURE_LOCATION_ENRICHMENT] 실패: ${err.message}`);

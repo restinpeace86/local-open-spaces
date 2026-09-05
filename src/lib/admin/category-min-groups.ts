@@ -6,7 +6,12 @@
 // 시 강당/회의실/청년정보 등 다수 항목이 어느 그룹에도 속하지 못해 "누락"이 발생한다).
 export type CategoryMinGroup = { major: string; minors: string[] };
 
-const OPEN_SPACES_GROUPS_STATIC: CategoryMinGroup[] = [
+// [스팟픽 표준 중분류 동기화](2026-09-05 사용자 지시): "관리자에 있는 표준 중분류를
+// 스팟픽에서 안쓰는거 같음.. 관리자쪽과 표준중분류 일치시켜줘." — src/lib/spaces/
+// spot-category-groups.ts의 CORE_SPOT_CATEGORIES가 이 배열(어드민이 실제로 쓰는 대분류/
+// 중분류 정의)을 기준으로 동기화돼야 하므로 export한다. 두 파일의 중분류 목록이
+// 벌어지지 않도록 spot-category-groups.test.ts가 이 배열을 직접 참조해 교차 검증한다.
+export const OPEN_SPACES_GROUPS_STATIC: CategoryMinGroup[] = [
   {
     major: '체육시설',
     minors: [

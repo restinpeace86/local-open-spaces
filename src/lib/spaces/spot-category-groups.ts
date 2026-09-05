@@ -21,8 +21,27 @@
 //     이벤트픽 "체험 / 농장" 대분류로 검증된 동일 개념이라 그대로 재사용한다.
 //   - 그 외 신규 편입(수목원/생태공원/전시실/공연장/과학관/역사유적지/물놀이시설)은
 //     전부 목적이 모호하지 않고(제3장 제5조 추측 금지 회피) 실제 카운트도 유의미하다
-//     (49~495건). 목적이 모호한 "관광명소"(256건, 자연/문화 어느 쪽에도 확정하기 애매함)는
-//     기존 2026-08-29 큐레이션 철학(확실한 핵심 중분류만)을 따라 이번에도 편입하지 않는다.
+//     (49~495건).
+//
+// [스팟픽 표준 중분류 동기화](2026-09-05 사용자 지시): "현재 관리자에 있는 표준 중분류를
+// 스팟픽에서 안쓰는거 같음.. 관리자쪽과 표준중분류 일치시켜줘. 단.. 대분류 - 체육시설,
+// 공공청사 대관, 기타는 제외시켜줘." — src/lib/admin/category-min-groups.ts의
+// OPEN_SPACES_GROUPS_STATIC(어드민이 실제로 쓰는 표준 대분류/중분류 정의)을 기준 진실로
+// 삼아, 그중 요청대로 제외한 3개 대분류(체육시설/공공청사 대관/기타)를 뺀 나머지 4개
+// 대분류(키즈/놀이시설/농장/체험/자연/공원/문화시설)의 중분류 목록을 그대로 맞췄다.
+// 이 동기화로 바뀐 배정(어드민 기준이 이 파일의 기존 배정과 달랐던 3건):
+//   - 캠핑장: 농장/체험 → 자연/공원 (어드민은 캠핑을 "자연 활동"으로 분류)
+//   - 체험학습장: 농장/체험 → 키즈/놀이시설 (어드민은 어린이 체험시설로 분류)
+//   - 역사유적지: 문화시설 → 자연/공원 (어드민은 야외 유적지를 자연/공원으로 분류)
+// 그 결과 "농장/체험" 대분류는 어드민과 동일하게 체험휴양마을/교육농장 2종만 남는다
+// (2026-08-29 당시 이 파일이 독자적으로 편입했던 캠핑장/체험학습장은 어드민 기준과
+// 어긋났던 것으로 확인돼 제거). 신규 편입 3종(시민교육센터/광장/관광명소)도 어드민
+// 정의를 그대로 따른다 — "관광명소"는 이전엔 목적이 모호하다는 이유로 의도적으로
+// 제외했었지만, 이번 사용자 지시가 "일단 관리자쪽과 일치"를 명시적으로 우선했으므로
+// 어드민 정의를 그대로 따른다(더 큐레이션하고 싶다면 어드민 쪽 정의부터 바꿔야 두
+// 화면이 다시 어긋나지 않는다).
+// spot-category-groups.test.ts가 OPEN_SPACES_GROUPS_STATIC을 직접 참조해 두 파일이
+// 다시 벌어지면 실패하는 교차 검증 테스트를 둔다.
 export type SpotMajorCategoryId = 'kids-play' | 'farm-experience' | 'nature-park' | 'culture-facility';
 
 export const SPOT_MAJOR_CATEGORY_OPTIONS: { id: SpotMajorCategoryId; label: string; emoji: string }[] = [
@@ -74,9 +93,18 @@ export const CORE_SPOT_CATEGORIES: CoreSpotCategory[] = [
     minors: ['유아교육진흥원'],
     major: 'kids-play',
   },
+  // [표준 중분류 동기화](2026-09-05): 어드민 기준 체험학습장은 "농장/체험"이 아니라
+  // "키즈/놀이시설" 소속이다(위 상단 코멘트 참고).
+  {
+    id: 'experience-learning-center',
+    label: '체험학습장',
+    emoji: '🔬',
+    minors: ['체험학습장'],
+    major: 'kids-play',
+  },
 
-  // 🌱 농장/체험 — get-home-feed.ts SHARED_OPEN_SPACES_CATEGORY_MINS와 동일한 4종.
-  { id: 'camping', label: '캠핑장', emoji: '🏕️', minors: ['캠핑장'], major: 'farm-experience' },
+  // 🌱 농장/체험 — [표준 중분류 동기화](2026-09-05) 어드민 기준 이 대분류는 체험휴양마을/
+  // 교육농장 2종뿐이다(캠핑장은 자연/공원으로, 체험학습장은 키즈/놀이시설로 이동).
   {
     id: 'rural-experience-village',
     label: '체험휴양마을',
@@ -85,13 +113,6 @@ export const CORE_SPOT_CATEGORIES: CoreSpotCategory[] = [
     major: 'farm-experience',
   },
   { id: 'education-farm', label: '교육농장', emoji: '🌾', minors: ['교육농장'], major: 'farm-experience' },
-  {
-    id: 'experience-learning-center',
-    label: '체험학습장',
-    emoji: '🔬',
-    minors: ['체험학습장'],
-    major: 'farm-experience',
-  },
 
   // 🌳 자연/공원
   { id: 'park', label: '공원', emoji: '🌳', minors: ['공원'], major: 'nature-park' },
@@ -104,6 +125,12 @@ export const CORE_SPOT_CATEGORIES: CoreSpotCategory[] = [
   },
   { id: 'arboretum', label: '수목원', emoji: '🌴', minors: ['수목원'], major: 'nature-park' },
   { id: 'eco-park', label: '생태공원', emoji: '🦆', minors: ['생태공원'], major: 'nature-park' },
+  // [표준 중분류 동기화](2026-09-05): 어드민 기준 캠핑장/역사유적지는 자연/공원 소속이다.
+  { id: 'camping', label: '캠핑장', emoji: '🏕️', minors: ['캠핑장'], major: 'nature-park' },
+  { id: 'historic-site', label: '역사/유적', emoji: '🏯', minors: ['역사유적지'], major: 'nature-park' },
+  // [표준 중분류 동기화](2026-09-05) 신규 편입: 어드민 정의를 그대로 따른다(상단 코멘트 참고).
+  { id: 'plaza', label: '광장', emoji: '🏙️', minors: ['광장'], major: 'nature-park' },
+  { id: 'tourist-attraction', label: '관광명소', emoji: '📍', minors: ['관광명소'], major: 'nature-park' },
 
   // 🏛️ 문화시설
   {
@@ -125,7 +152,8 @@ export const CORE_SPOT_CATEGORIES: CoreSpotCategory[] = [
   { id: 'exhibition-hall', label: '전시실', emoji: '🖼️', minors: ['전시실'], major: 'culture-facility' },
   { id: 'performance-hall', label: '공연장', emoji: '🎭', minors: ['공연장'], major: 'culture-facility' },
   { id: 'science-museum', label: '과학관', emoji: '🔬', minors: ['과학관'], major: 'culture-facility' },
-  { id: 'historic-site', label: '역사/유적', emoji: '🏯', minors: ['역사유적지'], major: 'culture-facility' },
+  // [표준 중분류 동기화](2026-09-05) 신규 편입.
+  { id: 'civic-education-center', label: '시민교육센터', emoji: '🏫', minors: ['시민교육센터'], major: 'culture-facility' },
 ];
 
 // [todo.md 개선사항 6](2026-09-03): 대분류 탭 클릭 시 바텀시트에 노출할 하위 중분류

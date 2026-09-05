@@ -268,8 +268,15 @@ export function MapExplorer() {
   // [스팟픽 UI/UX 개선 4종](2026-09-01 사용자 지시) 항목 1: 마커 클릭은 리스트/그룹
   // 클릭과 달리 전체 상세로 바로 가지 않고 미리보기 카드부터 연다. 다른 미리보기가
   // 열려 있었다면 새 마커 클릭으로 교체한다.
+  // [마커 미리보기 카드가 바텀시트를 가리는 문제 수정](2026-09-05 사용자 지시): "마커
+  // 누르면 하단에 정보가 뜨는데.. 하단의 바텀시트를 가리게 됨." 미리보기 카드 자체는
+  // 접힌 바텀시트 위쪽으로 옮겨 겹치지 않게 했지만(marker-preview-card.tsx), 바텀시트가
+  // 펼쳐진(70vh) 상태에서 마커를 누르면 그 큰 시트가 카드를 다시 가릴 수 있어, 마커를
+  // 누르는 순간 시트를 접어 항상 카드가 보이게 한다(리스트에서 항목을 고를 때 이미
+  // 동일하게 처리하던 것과 같은 정책 — 위 handleSelectItem 참고).
   const handleMarkerSelectItem = useCallback((item: NearbyItem) => {
     setPreviewItem(item);
+    setIsSheetExpanded(false);
   }, []);
 
   const handleOpenDetailFromPreview = useCallback(() => {

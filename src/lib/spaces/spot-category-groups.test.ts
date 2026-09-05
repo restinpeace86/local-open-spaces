@@ -7,6 +7,19 @@ import {
   isKnownSpotCategoryMin,
   isSpotCategoryVisible,
 } from './spot-category-groups';
+import { OPEN_SPACES_GROUPS_STATIC } from '@/lib/admin/category-min-groups';
+
+// [스팟픽 표준 중분류 동기화](2026-09-05 사용자 지시) "관리자쪽과 표준중분류 일치시켜줘.
+// 단.. 체육시설/공공청사 대관/기타는 제외" — 어드민 정의(category-min-groups.ts)를 기준
+// 진실로 삼아, 요청대로 제외한 3개 대분류를 뺀 나머지가 정확히 일치하는지 매번 검증한다.
+// 이후 어느 한쪽만 수정되면 이 테스트가 실패해 다시 벌어지는 것을 즉시 잡아낸다.
+const EXCLUDED_MAJORS = ['체육시설', '공공청사 대관', '기타'];
+const ADMIN_MAJOR_LABEL_OF: Record<string, string> = {
+  '키즈/놀이시설': 'kids-play',
+  '농장/체험': 'farm-experience',
+  '자연/공원': 'nature-park',
+  문화시설: 'culture-facility',
+};
 
 describe('CORE_SPOT_CATEGORIES', () => {
   it('AI 추천 액션 칩 + 나들이 핵심 중분류로 구성된다', () => {
@@ -57,6 +70,18 @@ describe('CORE_SPOT_CATEGORIES', () => {
     expect(new Set(allMinors).size).toBe(allMinors.length);
   });
 
+  it('[표준 중분류 동기화](2026-09-05) 어드민 정의(체육시설/공공청사 대관/기타 제외)와 대분류별 중분류 구성이 정확히 일치한다', () => {
+    for (const group of OPEN_SPACES_GROUPS_STATIC) {
+      if (EXCLUDED_MAJORS.includes(group.major)) continue;
+      const majorId = ADMIN_MAJOR_LABEL_OF[group.major];
+      expect(majorId, `어드민 대분류 "${group.major}"에 대응하는 SpotMajorCategoryId가 없습니다`).toBeDefined();
+      const actualMinors = getSpotCategoriesByMajor(majorId as Parameters<typeof getSpotCategoriesByMajor>[0]).flatMap(
+        (c) => c.minors
+      );
+      expect(actualMinors.sort()).toEqual([...group.minors].sort());
+    }
+  });
+
   // [todo.md 개선사항 6](2026-09-03): AI 추천을 제외한 모든 칩은 반드시 4대 대분류
   // 중 하나에 배정돼 있어야 한다 — 그래야 바텀시트에서 노출된다.
   it('AI 추천을 제외한 모든 칩은 4대 대분류 중 하나에 배정된다', () => {
@@ -84,9 +109,12 @@ describe('SPOT_MAJOR_CATEGORY_OPTIONS', () => {
 });
 
 describe('getSpotCategoriesByMajor', () => {
-  it('농장/체험 대분류는 이벤트픽과 동일한 4종(캠핑장/체험휴양마을/교육농장/체험학습장)을 포함한다', () => {
+  // [표준 중분류 동기화](2026-09-05): 어드민 기준 농장/체험은 체험휴양마을/교육농장
+  // 2종뿐이다(캠핑장은 자연/공원, 체험학습장은 키즈/놀이시설로 재배정 — 상단 파일
+  // 코멘트 참고). 예전 "이벤트픽과 동일한 4종" 기대치는 어드민 정의와 어긋났었다.
+  it('농장/체험 대분류는 어드민 기준 2종(체험휴양마을/교육농장)을 포함한다', () => {
     const minors = getSpotCategoriesByMajor('farm-experience').flatMap((c) => c.minors);
-    expect(minors.sort()).toEqual(['교육농장', '체험학습장', '체험휴양마을', '캠핑장'].sort());
+    expect(minors.sort()).toEqual(['교육농장', '체험휴양마을'].sort());
   });
 
   it('다른 대분류의 중분류는 포함하지 않는다(공원은 자연/공원 소속)', () => {

@@ -34,6 +34,7 @@ import { applyDetailedCategoryFallback } from './lib/detailed-category-fallback.
 import { applyLegacySourceCategoryMapping } from './lib/legacy-source-category-mapping.mjs';
 import { applyPlaygroundInstallPlaceCategoryMapping } from './lib/localdata-playground-install-place-mapping.mjs';
 import { recordBatchRun } from './lib/batch-log.mjs';
+import { withStepTimeout } from './lib/with-step-timeout.mjs';
 import { applyCategoryRules } from './lib/category-rules.mjs';
 import { CityParkAdapter } from './adapters/city-park-adapter.mjs';
 import { CulturalFacilitySummaryAdapter } from './adapters/cultural-facility-summary-adapter.mjs';
@@ -55,6 +56,11 @@ import { run as runCulturalSpaces } from './cultural-spaces.mjs';
 loadEnv();
 
 const BATCH_NAME = 'Monthly Spaces Batch';
+
+// [지오코딩 안전장치 — 전체 스텝 하드 타임아웃](2026-09-05 사용자 지시) 참고 — run-daily.mjs
+// 동일 상수와 같은 이유(with-step-timeout.mjs 주석 참고). 이 배치는 GG_KIDSCAFE/RURAL_*
+// 등 지오코딩을 대량으로 쓰는 어댑터가 많아 특히 이 방어선이 중요하다.
+const STEP_TIMEOUT_MS = 10 * 60 * 1000;
 
 // [핵심 events 수집 파이프라인 장애 점검](2026-08-30 사용자 지시): run-daily.mjs와 동일한
 // 이유로, 아래 14개 소스 어댑터의 실제 소스 코드(`throw new Error('... 환경변수가
@@ -328,7 +334,7 @@ export async function runMonthlyBatch({ dryRun = false } = {}) {
   for (const step of STEPS) {
     console.log(`\n=== [${step.label}] ===`);
     try {
-      const result = await step.run({ dryRun });
+      const result = await withStepTimeout(() => step.run({ dryRun }), { label: step.label, timeoutMs: STEP_TIMEOUT_MS });
       results.push(result);
     } catch (err) {
       console.error(`❌ [${step.label}] 실패: ${err.message}`);

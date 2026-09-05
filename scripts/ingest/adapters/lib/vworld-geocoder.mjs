@@ -2,6 +2,9 @@
 // 원본 데이터에 좌표가 없고 주소 텍스트만 있는 소스(전국문화기반시설총람 등)를 위해 사용한다.
 // process.env.VWORLD_API_KEY가 필요하다 — 국토교통부 Vworld 오픈API(www.vworld.kr) 신청 후 발급받는 인증키.
 import { fetchWithTimeout } from '../../lib/fetch-with-timeout.mjs';
+import { isRetryableError } from '../../lib/retry.mjs';
+import { isVworldCircuitOpen, recordVworldFailure, recordVworldSuccess } from './vworld-circuit-breaker.mjs';
+import { geocodeAddress, hasKakaoApiKey } from './kakao-geocoder.mjs';
 
 const ADDRESS_API_URL = 'https://api.vworld.kr/req/address';
 
@@ -17,26 +20,47 @@ export function hasVworldApiKey() {
 // [외부 공공 API 배치 수집 안정성 고도화](2026-09-01 사용자 지시): 이 함수는 배치 하나당
 // 수천 개 주소에 대해 반복 호출되는 세밀한 단위 재시도라, retry.mjs의 5초/10초 지수
 // 백오프(어댑터 전체 fetch() 단위 재시도용)를 그대로 적용하면 대량 지오코딩이 지나치게
-// 느려진다 — 기존의 짧은 고정 1초 재시도 간격은 그대로 유지하고, 30초 타임아웃만
-// fetchWithTimeout으로 추가한다(타임아웃과 재시도 간격은 서로 다른 관심사).
+// 느려진다 — 기존의 짧은 고정 1초 재시도 간격은 그대로 유지한다.
+//
+// [지오코딩 안전장치 — 서킷 브레이커/타임아웃 강화](2026-09-05 사용자 지시): 실측으로
+// 확인한 장애(UND_ERR_CONNECT_TIMEOUT, 10000ms) 원인은 두 겹이었다 — ① 이 파일 자체의
+// 재시도(최대 4회 시도)와 ② 이 함수를 부르는 5개 어댑터가 각자 또 감싼 재시도(최대 3회)가
+// 곱해져(최악 12회) 완전 장애 시에도 몇 시간을 소진할 수 있었다. 해결: (a) 기존 30초
+// 공용 기본 타임아웃 대신 이 API 전용으로 8초의 엄격한 타임아웃을 준다(다른 API의
+// 공용 fetchWithTimeout 기본값은 건드리지 않음 — 영향 범위 최소화), (b) 연결류 에러
+// (502/타임아웃/소켓 오류 — retry.mjs의 isRetryableError와 동일 기준)가 연속 3회
+// 발생하면 서킷 브레이커를 열어 이후 시도를 즉시 건너뛴다(vworld-circuit-breaker.mjs).
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
+const VWORLD_TIMEOUT_MS = 8000;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function fetchVworld(params) {
+  if (isVworldCircuitOpen()) {
+    throw new Error('V-World 서킷 브레이커 열림 — 연결 장애가 지속돼 호출을 건너뜁니다.');
+  }
+
   let lastErr;
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt += 1) {
     try {
-      const res = await fetchWithTimeout(`${ADDRESS_API_URL}?${params.toString()}`);
+      const res = await fetchWithTimeout(`${ADDRESS_API_URL}?${params.toString()}`, {}, VWORLD_TIMEOUT_MS);
       if (!res.ok) {
         throw new Error(`Vworld API 호출 실패 (HTTP ${res.status}): ${(await res.text()).slice(0, 200)}`);
       }
-      return await res.json();
+      const json = await res.json();
+      recordVworldSuccess();
+      return json;
     } catch (err) {
       lastErr = err;
+      if (isRetryableError(err)) {
+        recordVworldFailure();
+        // 서킷이 이번 시도로 막 열렸다면(Fail Fast) 남은 시도를 소진하지 않고 즉시
+        // 포기한다 — "연속 3회 이상 발생하면.. 즉시 중단"이라는 요구사항 그대로.
+        if (isVworldCircuitOpen()) break;
+      }
       if (attempt < MAX_RETRIES) await sleep(RETRY_DELAY_MS * (attempt + 1));
     }
   }
@@ -94,18 +118,41 @@ async function tryGeocode(address, type) {
 // 도로명(ROAD) 주소 검색 우선 시도, 결과 없으면 지번(PARCEL) 주소로 폴백한다
 // (원본 instAddr가 도로명/지번 어느 쪽으로 표기되어 있는지 소스마다 일정하지 않음).
 // 그래도 실패하면 위 리·동 토큰 제거 보정 후 ROAD로 한 번 더 시도한다.
+//
+// [지오코딩 안전장치 — 대체 API Fallback](2026-09-05 사용자 지시): V-World가 (서킷
+// 브레이커가 열렸거나 그냥 이번 요청만) 실패하면 즉시 카카오 주소 검색으로 자동
+// 전환하고, 그마저 실패하거나 카카오 키가 없으면 좌표를 지어내지 않고 null을 반환한다
+// ("그것도 안 되면 빈 값으로 안전하게 예외 처리"). 이 함수는 더 이상 예외를 던지지
+// 않는다 — 예전에는 실패 시 그대로 throw해, 호출부 중 일부(예: gg-culture-location-
+// enrichment.mjs의 for 루프)가 try/catch 없이 이 함수를 불러 배치 전체가 죽을 수 있었다
+// (실측: 5개 어댑터의 자체 재시도 루프 + 이 함수의 재시도가 곱해져 완전 장애 시 몇
+// 시간을 소진 — 이제는 여기서 한 번에 안전하게 흡수한다).
 export async function geocode(address) {
   if (!address) return null;
 
-  for (const type of ['ROAD', 'PARCEL']) {
-    const result = await tryGeocode(address, type);
-    if (result) return result;
+  try {
+    for (const type of ['ROAD', 'PARCEL']) {
+      const result = await tryGeocode(address, type);
+      if (result) return result;
+    }
+
+    const cleaned = stripVillageTokenBeforeRoad(address);
+    if (cleaned) {
+      const result = await tryGeocode(cleaned, 'ROAD');
+      if (result) return result;
+    }
+
+    return null; // 진짜 NOT_FOUND — 서버는 정상 응답했으므로 카카오로 재시도할 이유가 없다.
+  } catch (err) {
+    console.warn(`⚠️ V-World 지오코딩 실패, 카카오 주소 검색으로 폴백: "${address}" — ${err.message}`);
   }
 
-  const cleaned = stripVillageTokenBeforeRoad(address);
-  if (cleaned) {
-    const result = await tryGeocode(cleaned, 'ROAD');
-    if (result) return result;
+  if (hasKakaoApiKey()) {
+    try {
+      return await geocodeAddress(address);
+    } catch (err) {
+      console.warn(`⚠️ 카카오 주소 검색도 실패, 좌표 없이 진행: "${address}" — ${err.message}`);
+    }
   }
 
   return null;

@@ -305,7 +305,7 @@ function IngestRerunPanel() {
   );
 }
 
-function extractLngLat(location: unknown): { lng: number; lat: number } | null {
+export function extractLngLat(location: unknown): { lng: number; lat: number } | null {
   const geometry = location as { coordinates?: [number, number] } | null;
   if (!geometry?.coordinates) return null;
   return { lng: geometry.coordinates[0], lat: geometry.coordinates[1] };
@@ -1248,6 +1248,14 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
               prev && 'id' in prev && prev.id === id
                 ? { ...prev, target_audience: nextTargetAudience, target_audience_source: nextSource }
                 : prev
+            );
+          }}
+          onLocationUpdated={(id, nextLocation, nextPrecision) => {
+            setRows((prev) =>
+              prev.map((row) => ('id' in row && row.id === id ? { ...row, location: nextLocation, location_precision: nextPrecision } : row))
+            );
+            setSelectedRow((prev) =>
+              prev && 'id' in prev && prev.id === id ? { ...prev, location: nextLocation, location_precision: nextPrecision } : prev
             );
           }}
           onMigratedToEvent={(id) => {

@@ -89,15 +89,19 @@ describe('SpotCategoryFilter', () => {
     expect(screen.queryByText('테니스장')).not.toBeInTheDocument();
   });
 
-  it('농장/체험 대분류 바텀시트에는 캠핑장/체험휴양마을/교육농장/체험학습장이 노출된다', () => {
+  // [표준 중분류 동기화](2026-09-05 사용자 지시): 어드민 정의(category-min-groups.ts)
+  // 기준으로 캠핑장은 자연/공원, 체험학습장은 키즈/놀이시설로 재배정돼 농장/체험에는
+  // 체험휴양마을/교육농장 2종만 남는다(spot-category-groups.ts 상단 코멘트 참고).
+  it('농장/체험 대분류 바텀시트에는 체험휴양마을/교육농장이 노출된다', () => {
     render(<SpotCategoryFilter selectedCategoryId={null} onSelectCategory={vi.fn()} onSelectAiRecommend={vi.fn()} />);
 
     fireEvent.click(screen.getByRole('button', { name: '농장/체험' }));
 
-    expect(screen.getByText('캠핑장')).toBeInTheDocument();
     expect(screen.getByText('체험휴양마을')).toBeInTheDocument();
     expect(screen.getByText('교육농장')).toBeInTheDocument();
-    expect(screen.getByText('체험학습장')).toBeInTheDocument();
+    // 어드민 기준 이 대분류 소속이 아닌 값들.
+    expect(screen.queryByText('캠핑장')).not.toBeInTheDocument();
+    expect(screen.queryByText('체험학습장')).not.toBeInTheDocument();
   });
 
   // [개선사항5 - 스팟픽 중분류 바텀시트 재구성](2026-09-04): "대분류를 눌러서 뜬
@@ -124,13 +128,13 @@ describe('SpotCategoryFilter', () => {
     render(<SpotCategoryFilter selectedCategoryId={null} onSelectCategory={vi.fn()} onSelectAiRecommend={vi.fn()} />);
 
     fireEvent.click(screen.getByRole('button', { name: '농장/체험' }));
-    expect(screen.getByText('캠핑장')).toBeInTheDocument();
+    expect(screen.getByText('체험휴양마을')).toBeInTheDocument();
 
     const sheet = screen.getByTestId('spot-category-sheet');
     fireEvent.click(within(sheet).getByRole('button', { name: '문화시설' }));
 
     expect(screen.getByText('도서관')).toBeInTheDocument();
-    expect(screen.queryByText('캠핑장')).not.toBeInTheDocument();
+    expect(screen.queryByText('체험휴양마을')).not.toBeInTheDocument();
     expect(screen.getByTestId('spot-category-sheet')).toBeInTheDocument(); // 계속 같은 시트가 열려 있음
   });
 

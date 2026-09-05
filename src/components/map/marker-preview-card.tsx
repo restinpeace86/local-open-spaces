@@ -25,7 +25,15 @@ export function MarkerPreviewCard({
   const meta = getCategoryMeta(item.category);
 
   return (
-    <div className="absolute left-3 right-3 bottom-4 z-30 md:left-1/2 md:right-auto md:-translate-x-1/2 md:w-96">
+    // [마커 미리보기 카드가 바텀시트를 가리는 문제 수정](2026-09-05 사용자 지시): "지도에
+    // 마커 누르면 하단에 정보가 뜨는데.. 하단의 바텀시트를 가리게 됨.. 마커 위에 뜨게
+    // 하던가.." 모바일 바텀시트(map-explorer.tsx)는 화면 바닥에서 bottom-16(64px) 띄운
+    // 위치에, 접힌 상태 높이가 112px다 — 즉 시트 윗면은 화면 바닥에서 64+112=176px
+    // 지점에 있다. 기존 bottom-4(16px)로는 이 카드가 시트 윗면(핸들/"목록 보기" 버튼)을
+    // 그대로 덮었다. 시트 윗면보다 위(184px, 8px 여유)로 옮겨 마커 대신 "바텀시트 바로
+    // 위"에 뜨도록 한다 — 데스크톱은 이 모바일 전용 바텀시트가 없어(별도 사이드 패널
+    // 구조) 기존 위치(md:bottom-4)를 그대로 유지한다.
+    <div className="absolute left-3 right-3 bottom-[184px] z-30 md:left-1/2 md:right-auto md:bottom-4 md:-translate-x-1/2 md:w-96">
       <div className="relative bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
         <button
           type="button"

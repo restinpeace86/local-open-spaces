@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { AdminTable, AdminRow, AdminOpenSpaceRow, AdminEventRow, AdminRawIngestRow } from '@/components/admin/data-grid-client';
+import { AdminTable, AdminRow, AdminOpenSpaceRow, AdminEventRow, AdminRawIngestRow, extractLngLat } from '@/components/admin/data-grid-client';
 import { MigrateToEventModal } from '@/components/admin/migrate-to-event-modal';
 
 // [개편] 행 클릭 시 해당 행의 전체 원천 컬럼(구조화된 값) + raw_data/raw_payload 원문 JSON을
@@ -187,6 +187,92 @@ function TargetAudienceEditor({
   );
 }
 
+// [지오코딩 실패 행 수동 좌표 입력](2026-09-05 사용자 지시): "지오코딩하지 못하여 위경도
+// 좌표가 없는경우는 수동으로 위경도 좌표 돌릴수있도록.. events쪽에 구현해줘." — CategoryMinEditor/
+// TargetAudienceEditor와 동일 관례: 저장하면 location_precision이 항상 'EXACT'로 바뀐다
+// (관리자가 직접 확인한 값이 자동 지오코딩보다 우선). 좌표를 직접 찾기 쉽도록 카카오맵
+// 검색 링크(장소명/시군구명으로 새 탭 검색)를 함께 제공한다 — 좌표 자체를 대신 찾아주는
+// 것은 아니지만(그건 서버 지오코딩의 역할), 관리자가 손으로 찾아 입력하는 실제 작업
+// 흐름에서 반드시 필요한 보조 링크라 함께 넣는다.
+function LocationEditor({ row, onUpdated }: { row: AdminEventRow; onUpdated: (id: string, nextLocation: unknown, nextPrecision: string) => void }) {
+  const current = extractLngLat(row.location);
+  const [lat, setLat] = useState(current ? String(current.lat) : '');
+  const [lng, setLng] = useState(current ? String(current.lng) : '');
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const kakaoMapSearchUrl = `https://map.kakao.com/?q=${encodeURIComponent(row.venue_name || row.title)}`;
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setErrorMessage(null);
+    try {
+      const res = await fetch('/api/admin/data-grid/location', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: row.id, lat: Number(lat), lng: Number(lng) }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? '좌표 수동 수정 실패');
+      onUpdated(row.id, json.row.location, json.row.location_precision);
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : '좌표 수동 수정 실패');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 rounded-xl border border-gray-200 p-3">
+      <h3 className="text-xs font-semibold text-gray-500 mb-2">
+        좌표(위도/경도) 수동 입력
+        <span
+          className={`ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+            row.location_precision === 'EXACT' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'
+          }`}
+        >
+          현재: {row.location_precision}
+        </span>
+        <a
+          href={kakaoMapSearchUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="ml-2 text-[11px] font-medium text-blue-600 hover:underline"
+        >
+          🗺️ 카카오맵에서 찾기
+        </a>
+      </h3>
+      <div className="flex items-center gap-2">
+        <input
+          type="number"
+          step="any"
+          value={lat}
+          onChange={(e) => setLat(e.target.value)}
+          placeholder="위도(lat) 예: 37.4"
+          className="w-1/3 rounded-lg border border-gray-300 px-2 py-1.5 text-xs"
+        />
+        <input
+          type="number"
+          step="any"
+          value={lng}
+          onChange={(e) => setLng(e.target.value)}
+          placeholder="경도(lng) 예: 127.1"
+          className="w-1/3 rounded-lg border border-gray-300 px-2 py-1.5 text-xs"
+        />
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={isSaving || !lat.trim() || !lng.trim()}
+          className="rounded-full bg-purple-600 text-white text-xs font-semibold px-3 py-1.5 disabled:opacity-40 hover:bg-purple-700"
+        >
+          {isSaving ? '저장 중...' : '저장(EXACT)'}
+        </button>
+      </div>
+      {errorMessage && <p className="mt-1.5 text-xs text-red-500">{errorMessage}</p>}
+    </div>
+  );
+}
+
 export function RawDataModal({
   table,
   row,
@@ -195,6 +281,7 @@ export function RawDataModal({
   onClose,
   onCategoryMinUpdated,
   onTargetAudienceUpdated,
+  onLocationUpdated,
   onMigratedToEvent,
 }: {
   table: AdminTable;
@@ -204,6 +291,7 @@ export function RawDataModal({
   onClose: () => void;
   onCategoryMinUpdated?: (id: string, nextCategoryMin: string | null, nextSource: string | null) => void;
   onTargetAudienceUpdated?: (id: string, nextTargetAudience: string | null, nextSource: string | null) => void;
+  onLocationUpdated?: (id: string, nextLocation: unknown, nextPrecision: string) => void;
   // [todo.md 개선사항 5](2026-09-03): open_spaces 탭에서만 전달된다 — 이관 성공 시 부모가
   // 목록에서 이 행을 제거하고 상세 모달을 닫는다(원본이 실제로 삭제됐으므로).
   onMigratedToEvent?: (id: string) => void;
@@ -247,6 +335,8 @@ export function RawDataModal({
               onUpdated={onTargetAudienceUpdated}
             />
           )}
+
+          {table === 'events' && onLocationUpdated && <LocationEditor row={row as AdminEventRow} onUpdated={onLocationUpdated} />}
 
           {/* [todo.md 개선사항 5](2026-09-03): 스팟픽에 잘못 분류돼 있던 데이터(예: 실제로는
               기간이 있는 행사·체험 프로그램)를 이벤트픽 테이블로 옮기는 액션. open_spaces
