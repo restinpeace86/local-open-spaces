@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { DedupCandidateRow, DedupGroup, formatDedupGroupLabel, groupDedupCandidates } from '@/lib/admin/spot-dedup-grouping';
 import { buildPendingGroupKey } from '@/lib/admin/spot-dedup-pending-key';
 import { ServiceCategory } from '@/lib/admin/service-category';
+import { useBackdropDismiss } from '@/lib/admin/use-backdrop-dismiss';
 
 // [2026-09-05 페이지네이션 도입 — 사용자 timeout 신고 대응] "중복 의심 그룹 데이터
 // 너무 많나봐 또 timeout 걸리네.. 이것도 50여건씩 pagination 하던가..." 진짜 원인은
@@ -52,6 +53,8 @@ export function GroupDetailModal({
   onClose: () => void;
   onSaved: (memberIds: string[]) => void;
 }) {
+  // [드래그 시 팝업 닫힘 버그 수정](2026-09-05 사용자 지시) 참고: use-backdrop-dismiss.ts
+  const backdropDismiss = useBackdropDismiss(onClose);
   const [standardName, setStandardName] = useState(group.members[0]?.name ?? '');
   const [serviceCategoryId, setServiceCategoryId] = useState('');
   const [blogUrl, setBlogUrl] = useState('');
@@ -94,7 +97,7 @@ export function GroupDetailModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-[70] flex items-end md:items-center justify-center" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 z-[70] flex items-end md:items-center justify-center" {...backdropDismiss}>
       <div
         className="w-full md:w-[640px] max-h-[85vh] overflow-y-auto bg-white rounded-t-2xl md:rounded-2xl shadow-xl p-5"
         onClick={(e) => e.stopPropagation()}

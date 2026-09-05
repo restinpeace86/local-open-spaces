@@ -34,6 +34,12 @@ export type SpotForCuration = {
   service_category_id: string | null;
 };
 
+// [블로그 큐레이션 전체 본문 보기](2026-09-05 사용자 지시): "가져온 내용자체도
+// 짧게하고 잘려서.." — 링크별로 전체 본문 조회 상태를 캐시한다. text가 있으면 그걸
+// 우선 보여주고, 없으면(로딩 중이거나 네이버 블로그가 아니거나 실패) 기존 요약
+// 스니펫(description)으로 조용히 폴백한다 — 어느 경우에도 화면이 비어 보이지 않는다.
+export type BlogBodyState = { text: string | null; isLoading: boolean; error: string | null };
+
 export function useSpotCurationForm(spot: SpotForCuration) {
   // 검색어는 스팟명 기준으로 기본 채우되, 이름이 흔해 결과가 부정확할 수 있어
   // 관리자가 직접 수정 후 다시 검색할 수 있게 편집 가능한 입력으로 둔다(요구사항에
@@ -52,6 +58,9 @@ export function useSpotCurationForm(spot: SpotForCuration) {
   const [serviceCategoryId, setServiceCategoryId] = useState(spot.service_category_id ?? '');
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // [블로그 큐레이션 전체 본문 보기](2026-09-05 사용자 지시) — 링크별 전체 본문 캐시.
+  const [bodyByLink, setBodyByLink] = useState<Record<string, BlogBodyState>>({});
 
   function runSearch(query: string) {
     setIsSearching(true);
@@ -89,6 +98,54 @@ export function useSpotCurationForm(spot: SpotForCuration) {
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spot.id]);
+
+  // [블로그 큐레이션 전체 본문 보기](2026-09-05 사용자 지시): 현재 탭의 블로그가
+  // 바뀔 때마다(검색 결과가 새로 오거나, 관리자가 다른 탭을 클릭할 때) 그 링크의
+  // 전체 본문을 한 번만 시도한다 — 이미 시도한 링크(성공/실패 무관)는 다시 요청하지
+  // 않는다. 네이버 블로그가 아니거나 실패하면 조용히 요약 스니펫으로 남는다.
+  useEffect(() => {
+    const activeLink = blogItems?.[activeTab]?.link;
+    if (!activeLink || bodyByLink[activeLink]) return;
+
+    setBodyByLink((prev) => ({ ...prev, [activeLink]: { text: null, isLoading: true, error: null } }));
+    fetch(`/api/admin/spot-curations/blog-body?url=${encodeURIComponent(activeLink)}`)
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? '본문을 가져오지 못했습니다.');
+        setBodyByLink((prev) => ({ ...prev, [activeLink]: { text: data.text ?? null, isLoading: false, error: null } }));
+      })
+      .catch((err) => {
+        setBodyByLink((prev) => ({
+          ...prev,
+          [activeLink]: { text: null, isLoading: false, error: err instanceof Error ? err.message : '본문 조회 실패' },
+        }));
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, blogItems]);
+
+  // [블로그 자동검색 결과가 실제와 다를 때 수동 교체](2026-09-05 사용자 지시): "가져오는데
+  // 네이버 블로그 관련도순 검색했을때 이거아니야.." — 네이버 검색 API의 관련도 순위가
+  // 실제 라이브 사이트와 다르거나 품질이 낮은 결과(스팸성 블로그 등)를 상위로 올리는
+  // 경우가 실측으로 확인됐다(Naver 쪽 데이터 품질 문제 — 우리 쪽에서 순위 자체를
+  // 바로잡을 방법은 없음). 관리자가 직접 찾은 정확한 블로그 URL로 현재 탭의 슬롯을
+  // 바꿔치기할 수 있게 한다 — 저장 시 이 URL이 그대로 blog_url_N에 들어간다.
+  function overrideActiveUrl(url: string) {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    setBlogItems((prev) => {
+      if (!prev || !prev[activeTab]) return prev;
+      const next = [...prev];
+      next[activeTab] = {
+        title: '(관리자가 직접 입력한 URL)',
+        link: trimmed,
+        description: '',
+        bloggername: '',
+        postdate: '',
+        isRecent: true,
+      };
+      return next;
+    });
+  }
 
   function toggleBadge(key: string) {
     setSelectedBadges((prev) => {
@@ -148,6 +205,9 @@ export function useSpotCurationForm(spot: SpotForCuration) {
     }
   }
 
+  const activeLink = blogItems?.[activeTab]?.link;
+  const activeBody = activeLink ? bodyByLink[activeLink] : undefined;
+
   return {
     searchQuery,
     setSearchQuery,
@@ -159,6 +219,8 @@ export function useSpotCurationForm(spot: SpotForCuration) {
     isSearching,
     activeTab,
     setActiveTab,
+    activeBody,
+    overrideActiveUrl,
     existingCuration,
     selectedBadges,
     toggleBadge,

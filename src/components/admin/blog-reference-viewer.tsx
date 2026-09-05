@@ -1,13 +1,20 @@
 'use client';
 
+import { useState } from 'react';
 import { highlightKeywords } from '@/lib/admin/curation-badges';
-import { BlogSearchItem } from '@/lib/admin/use-spot-curation-form';
+import { BlogBodyState, BlogSearchItem } from '@/lib/admin/use-spot-curation-form';
 
 // [All-in-One 모바일 큐레이션 워크벤치](2026-09-05 사용자 지시)를 만들면서
 // BlogCurationModal의 "블로그 탭 + 원문 링크 + 하이라이팅 뷰어 + 1년 룰 경고" 렌더링을
 // 이 프레젠테이션 컴포넌트로 뽑아냈다 — 워크벤치와 모달이 완전히 동일한 UI를
 // 그대로 재사용한다(제5장 제4조 기존 구조 우선). 상태는 useSpotCurationForm이 갖고
 // 있고, 이 컴포넌트는 순수하게 props만 받아 그린다.
+//
+// [전체 본문 보기 + 수동 URL 교체](2026-09-05 사용자 지시): "가져온 내용자체도 짧게
+// 하고 잘려서.." / "네이버 블로그 관련도순 검색했을때 이거아니야.." 두 가지를 함께
+// 반영한다 — activeBody.text가 있으면(네이버 블로그 전체 본문 추출 성공) 그걸
+// 요약 대신 보여주고, "다른 URL로 바꾸기"로 관리자가 직접 찾은 URL로 현재 탭을
+// 교체할 수 있게 한다.
 const RECENT_WINDOW_WARNING = '⚠️ 최근 1년간 후기 없음 - 폐업/방치 검토';
 
 function formatPostdate(postdate: string): string {
@@ -26,6 +33,8 @@ export function BlogReferenceViewer({
   hasNoResults,
   activeTab,
   onActiveTabChange,
+  activeBody,
+  onOverrideUrl,
 }: {
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
@@ -37,8 +46,23 @@ export function BlogReferenceViewer({
   hasNoResults: boolean;
   activeTab: number;
   onActiveTabChange: (index: number) => void;
+  activeBody?: BlogBodyState;
+  onOverrideUrl?: (url: string) => void;
 }) {
   const activeItem = blogItems?.[activeTab] ?? null;
+  const [isEditingUrl, setIsEditingUrl] = useState(false);
+  const [urlDraft, setUrlDraft] = useState('');
+
+  function startEditingUrl() {
+    setUrlDraft(activeItem?.link ?? '');
+    setIsEditingUrl(true);
+  }
+
+  function applyUrlOverride() {
+    if (!urlDraft.trim() || !onOverrideUrl) return;
+    onOverrideUrl(urlDraft);
+    setIsEditingUrl(false);
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -77,11 +101,14 @@ export function BlogReferenceViewer({
           <div className="flex items-center gap-1.5 flex-wrap" role="tablist">
             {blogItems.map((item, i) => (
               <button
-                key={item.link}
+                key={`${item.link}-${i}`}
                 type="button"
                 role="tab"
                 aria-selected={activeTab === i}
-                onClick={() => onActiveTabChange(i)}
+                onClick={() => {
+                  onActiveTabChange(i);
+                  setIsEditingUrl(false);
+                }}
                 className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
                   activeTab === i ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
@@ -94,25 +121,84 @@ export function BlogReferenceViewer({
 
           {activeItem && (
             <>
-              <div className="flex items-center justify-between text-xs text-gray-500">
-                <span>
-                  {activeItem.bloggername} · {formatPostdate(activeItem.postdate)}
+              <div className="flex items-center justify-between text-xs text-gray-500 gap-2">
+                <span className="truncate">
+                  {activeItem.bloggername ? `${activeItem.bloggername} · ` : ''}
+                  {formatPostdate(activeItem.postdate)}
                 </span>
-                <a
-                  href={activeItem.link}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="font-semibold text-blue-600 hover:underline"
-                >
-                  원문 보기 ↗
-                </a>
+                <div className="flex items-center gap-2 shrink-0">
+                  <a
+                    href={activeItem.link}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-semibold text-blue-600 hover:underline"
+                  >
+                    원문 보기 ↗
+                  </a>
+                  {/* [수동 URL 교체](사용자 지시 원문): "가져오는데.. 이거아니야.." —
+                      자동 검색 결과가 실제 스팟과 다를 때 관리자가 직접 찾은 URL로
+                      바꿀 수 있는 탈출구. */}
+                  {onOverrideUrl && !isEditingUrl && (
+                    <button
+                      type="button"
+                      onClick={startEditingUrl}
+                      className="text-gray-400 hover:text-gray-700 underline"
+                    >
+                      다른 URL로 바꾸기
+                    </button>
+                  )}
+                </div>
               </div>
+
+              {isEditingUrl && onOverrideUrl && (
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={urlDraft}
+                    onChange={(e) => setUrlDraft(e.target.value)}
+                    placeholder="https://blog.naver.com/..."
+                    className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs"
+                  />
+                  <button
+                    type="button"
+                    onClick={applyUrlOverride}
+                    disabled={!urlDraft.trim()}
+                    className="shrink-0 rounded-full bg-gray-900 text-white px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+                  >
+                    적용
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsEditingUrl(false)}
+                    className="shrink-0 text-xs text-gray-500 hover:text-gray-800"
+                  >
+                    취소
+                  </button>
+                </div>
+              )}
+
               <p className="font-medium text-sm text-gray-900">{activeItem.title}</p>
 
-              {/* [핵심 기능: 자동 형광펜 하이라이팅](사용자 지시 원문) */}
-              <div className="max-h-40 overflow-y-auto rounded-lg bg-gray-50 p-3 text-xs leading-relaxed text-gray-700">
-                {highlightKeywords(activeItem.description)}
+              {/* [핵심 기능: 자동 형광펜 하이라이팅](사용자 지시 원문) +
+                  [전체 본문 보기](2026-09-05 사용자 지시): 네이버 블로그면 요약 대신
+                  전체 본문을 시도한다 — 실패/미지원 출처는 요약으로 조용히 폴백한다. */}
+              <div className="max-h-64 overflow-y-auto rounded-lg bg-gray-50 p-3 text-xs leading-relaxed text-gray-700">
+                {activeBody?.text
+                  ? highlightKeywords(activeBody.text)
+                  : activeBody?.isLoading
+                    ? (
+                        <>
+                          {activeItem.description ? highlightKeywords(activeItem.description) : null}
+                          <p className="mt-2 text-[11px] text-gray-400">전체 본문 불러오는 중...</p>
+                        </>
+                      )
+                    : activeItem.description
+                      ? highlightKeywords(activeItem.description)
+                      : '(요약을 가져오지 못했습니다 — 원문 보기로 확인해주세요.)'}
               </div>
+              {activeBody?.text && (
+                <p className="text-[11px] text-gray-400">✓ 전체 본문 표시 중(저장되지 않고 화면에만 표시됩니다)</p>
+              )}
             </>
           )}
         </>

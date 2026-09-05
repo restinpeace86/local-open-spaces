@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useBackdropDismiss } from '@/lib/admin/use-backdrop-dismiss';
 
 // [카테고리 정제 & 어드민 확장](2026-08-26): "[카테고리 키워드 규칙 관리]" 모달 — 49종 표준
 // 중분류별 키워드를 칩으로 조회하고, 관리자가 직접 추가/삭제하며, 최신 규칙으로 미분류 행을
@@ -29,6 +30,8 @@ function groupRules(rules: CategoryRule[]) {
 }
 
 export function CategoryRulesModal({ onClose }: { onClose: () => void }) {
+  // [드래그 시 팝업 닫힘 버그 수정](2026-09-05 사용자 지시) 참고: use-backdrop-dismiss.ts
+  const backdropDismiss = useBackdropDismiss(onClose);
   const [targetTable, setTargetTable] = useState<'open_spaces' | 'events'>('open_spaces');
   const [rules, setRules] = useState<CategoryRule[] | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -112,7 +115,7 @@ export function CategoryRulesModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center" {...backdropDismiss}>
       <div
         className="w-full md:w-[820px] max-h-[85vh] overflow-y-auto bg-white rounded-t-2xl md:rounded-2xl shadow-xl"
         onClick={(e) => e.stopPropagation()}

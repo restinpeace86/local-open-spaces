@@ -69,6 +69,8 @@ export function BlogCurationModal({
           hasNoResults={form.hasNoResults}
           activeTab={form.activeTab}
           onActiveTabChange={form.setActiveTab}
+          activeBody={form.activeBody}
+          onOverrideUrl={form.overrideActiveUrl}
         />
 
         <CurationBadgeForm

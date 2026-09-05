@@ -23,11 +23,20 @@ function mockFetchByUrl(handlers: {
   existingCuration?: unknown;
   categoryMappingOk?: boolean;
   curationSaveOk?: boolean;
+  // [전체 본문 보기](2026-09-05 사용자 지시): 기본값은 "네이버 블로그가 아님/실패"로
+  // 422를 돌려줘 기존 테스트들이 요약 스니펫 폴백 그대로 통과하게 한다.
+  blogBodyText?: string | null;
 }) {
   return vi.fn((url: string, init?: RequestInit) => {
     if (url.includes('/api/admin/spot-curations/blog-search')) {
       const body = handlers.blogSearch ?? { items: [], hasRecentReview: false, hasNoResults: true };
       return Promise.resolve({ ok: !('error' in body), json: () => Promise.resolve(body) } as Response);
+    }
+    if (url.includes('/api/admin/spot-curations/blog-body')) {
+      if (handlers.blogBodyText) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ text: handlers.blogBodyText }) } as Response);
+      }
+      return Promise.resolve({ ok: false, json: () => Promise.resolve({ error: '네이버 블로그가 아닙니다.' }) } as Response);
     }
     if (url.includes('/api/admin/open-spaces/bulk-category-mapping')) {
       const ok = handlers.categoryMappingOk !== false;
@@ -228,6 +237,74 @@ describe('BlogCurationModal', () => {
       );
       expect(patchCall).toBeDefined();
       expect(JSON.parse((patchCall![1] as RequestInit).body as string).id).toBe('existing-1');
+    });
+  });
+
+  // [전체 본문 보기](2026-09-05 사용자 지시): "가져온 내용자체도 짧게하고 잘려서.."
+  describe('전체 본문 보기(blog-body)', () => {
+    it('네이버 블로그 전체 본문을 가져오면 요약 대신 전체 본문을 보여준다', async () => {
+      const fetchMock = mockFetchByUrl({
+        blogSearch: { items: [makeBlogItem({ description: '짧은 요약' })], hasRecentReview: true, hasNoResults: false },
+        blogBodyText: '이것은 훨씬 더 긴 전체 본문입니다. 상세한 후기가 이어집니다.',
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(
+        <BlogCurationModal spot={SPOT} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+      );
+
+      expect(await screen.findByText('이것은 훨씬 더 긴 전체 본문입니다. 상세한 후기가 이어집니다.')).toBeInTheDocument();
+      expect(screen.queryByText('짧은 요약')).not.toBeInTheDocument();
+      expect(screen.getByText('✓ 전체 본문 표시 중(저장되지 않고 화면에만 표시됩니다)')).toBeInTheDocument();
+    });
+
+    it('전체 본문을 가져오지 못하면(네이버 블로그가 아니거나 실패) 기존 요약 스니펫으로 폴백한다', async () => {
+      const fetchMock = mockFetchByUrl({
+        blogSearch: { items: [makeBlogItem({ description: '짧은 요약' })], hasRecentReview: true, hasNoResults: false },
+        // blogBodyText 미지정 → 422 폴백
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(
+        <BlogCurationModal spot={SPOT} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+      );
+
+      expect(await screen.findByText('짧은 요약')).toBeInTheDocument();
+      expect(screen.queryByText('✓ 전체 본문 표시 중(저장되지 않고 화면에만 표시됩니다)')).not.toBeInTheDocument();
+    });
+  });
+
+  // [수동 URL 교체](2026-09-05 사용자 지시): "네이버 블로그 관련도순 검색했을때
+  // 이거아니야.." — 자동 검색 결과가 틀렸을 때 관리자가 직접 URL을 바꿀 수 있다.
+  describe('수동 URL 교체', () => {
+    it('"다른 URL로 바꾸기"로 URL을 바꾸면 저장 시 그 URL이 사용된다', async () => {
+      const fetchMock = mockFetchByUrl({
+        blogSearch: {
+          items: [makeBlogItem({ link: 'https://blog.naver.com/wrong/1' })],
+          hasRecentReview: true,
+          hasNoResults: false,
+        },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(
+        <BlogCurationModal spot={SPOT} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+      );
+
+      await screen.findByText('행복키즈카페 다녀왔어요');
+      fireEvent.click(screen.getByText('다른 URL로 바꾸기'));
+      fireEvent.change(screen.getByPlaceholderText('https://blog.naver.com/...'), {
+        target: { value: 'https://blog.naver.com/yjsjhs/223844311455' },
+      });
+      fireEvent.click(screen.getByText('적용'));
+      fireEvent.click(screen.getByText('저장 및 완료'));
+
+      const saveCall = await vi.waitFor(() => {
+        const call = fetchMock.mock.calls.find(
+          (c) => (c[0] as string) === '/api/admin/spot-curations' && (c[1] as RequestInit)?.method === 'POST'
+        );
+        expect(call).toBeDefined();
+        return call!;
+      });
+      const body = JSON.parse((saveCall[1] as RequestInit).body as string);
+      expect(body.blog_url_1).toBe('https://blog.naver.com/yjsjhs/223844311455');
     });
   });
 });

@@ -215,6 +215,8 @@ export function MobileCurationWorkbench({
             hasNoResults={form.hasNoResults}
             activeTab={form.activeTab}
             onActiveTabChange={form.setActiveTab}
+            activeBody={form.activeBody}
+            onOverrideUrl={form.overrideActiveUrl}
           />
         </section>
 

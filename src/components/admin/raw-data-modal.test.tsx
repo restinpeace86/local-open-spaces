@@ -214,3 +214,33 @@ describe('RawDataModal — 블로그 큐레이션 트리거', () => {
     expect(screen.queryByText('🔍 블로그로 큐레이션 (뱃지/노출 중분류 빠르게 채우기)')).not.toBeInTheDocument();
   });
 });
+
+// [드래그 시 팝업 닫힘 버그 수정](2026-09-05 사용자 지시): "마우스로 살짝 드래그&드롭
+// 하면 팝업창이 그냥 꺼져버려.." — RawDataModal의 배경 클릭 닫기가 useBackdropDismiss로
+// 교체됐는지, 기존 "배경을 눌러 닫는" 정상 동작은 그대로 유지되는지 함께 검증한다.
+describe('RawDataModal — 배경 클릭/드래그 닫힘 동작', () => {
+  it('배경을 직접 클릭(mousedown+click)하면 닫힌다(기존 동작 유지)', () => {
+    const onClose = vi.fn();
+    const row = buildRow();
+    const { container } = render(<RawDataModal table="open_spaces" row={row} categoryMinOptions={[]} onClose={onClose} />);
+    const backdrop = container.firstElementChild as HTMLElement;
+
+    fireEvent.mouseDown(backdrop, { target: backdrop });
+    fireEvent.click(backdrop, { target: backdrop });
+
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('콘텐츠 카드 안에서 드래그를 시작했다면(텍스트 선택 등) 배경으로 흘러나가도 닫히지 않는다', () => {
+    const onClose = vi.fn();
+    const row = buildRow();
+    const { container } = render(<RawDataModal table="open_spaces" row={row} categoryMinOptions={[]} onClose={onClose} />);
+    const backdrop = container.firstElementChild as HTMLElement;
+    const card = backdrop.firstElementChild as HTMLElement;
+
+    fireEvent.mouseDown(card); // 드래그 시작 지점: 카드 안
+    fireEvent.click(backdrop, { target: backdrop }); // 드래그로 흘러나가 배경에서 mouseup
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+});

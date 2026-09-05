@@ -5,6 +5,7 @@ import { AdminTable, AdminRow, AdminOpenSpaceRow, AdminEventRow, AdminRawIngestR
 import { MigrateToEventModal } from '@/components/admin/migrate-to-event-modal';
 import { ServiceCategory } from '@/lib/admin/service-category';
 import { BlogCurationModal } from '@/components/admin/blog-curation-modal';
+import { useBackdropDismiss } from '@/lib/admin/use-backdrop-dismiss';
 
 // [개편] 행 클릭 시 해당 행의 전체 원천 컬럼(구조화된 값) + raw_data/raw_payload 원문 JSON을
 // 함께 보여주는 Read-Only 뷰어. 3개 탭(open_spaces/events/raw_ingest_data) 행 형태가 서로
@@ -384,11 +385,13 @@ export function RawDataModal({
   const prettyJson = JSON.stringify(raw ?? null, null, 2);
   const [isMigrateModalOpen, setIsMigrateModalOpen] = useState(false);
   const [isBlogCurationModalOpen, setIsBlogCurationModalOpen] = useState(false);
+  // [드래그 시 팝업 닫힘 버그 수정](2026-09-05 사용자 지시) 참고: use-backdrop-dismiss.ts
+  const backdropDismiss = useBackdropDismiss(onClose);
 
   const structuredEntries = Object.entries(row).filter(([key]) => key !== 'raw_data' && key !== 'raw_payload');
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center" {...backdropDismiss}>
       <div
         className="w-full md:w-[720px] max-h-[85vh] md:max-h-[80vh] overflow-y-auto bg-white rounded-t-2xl md:rounded-2xl shadow-xl"
         onClick={(e) => e.stopPropagation()}

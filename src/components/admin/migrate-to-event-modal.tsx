@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useBackdropDismiss } from '@/lib/admin/use-backdrop-dismiss';
 import { AdminOpenSpaceRow } from '@/components/admin/data-grid-client';
 import { CATEGORY_MAJ_OPTIONS } from '@/lib/spaces/category-maj-meta';
 import { getTargetAudienceLabel } from '@/lib/spaces/target-audience-meta';
@@ -45,6 +46,8 @@ export function MigrateToEventModal({
   onMigrated: (id: string) => void;
 }) {
   const mounted = useIsMounted();
+  // [드래그 시 팝업 닫힘 버그 수정](2026-09-05 사용자 지시) 참고: use-backdrop-dismiss.ts
+  const backdropDismiss = useBackdropDismiss(onClose);
   const [categoryMaj, setCategoryMaj] = useState(CATEGORY_MAJ_OPTIONS[0].maj);
   const currentMajOption = CATEGORY_MAJ_OPTIONS.find((opt) => opt.maj === categoryMaj) ?? CATEGORY_MAJ_OPTIONS[0];
   const [categoryMin, setCategoryMin] = useState(currentMajOption.minorCategories[0]);
@@ -90,7 +93,7 @@ export function MigrateToEventModal({
   if (!mounted) return null;
 
   return createPortal(
-    <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 z-[60] flex items-center justify-center" {...backdropDismiss}>
       <div
         className="w-full max-w-md rounded-2xl bg-white shadow-xl p-5 mx-4"
         onClick={(e) => e.stopPropagation()}

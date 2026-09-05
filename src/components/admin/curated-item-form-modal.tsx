@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useBackdropDismiss } from '@/lib/admin/use-backdrop-dismiss';
 
 // [관리자 화면(/admin/data-grid) 기능 고도화 및 범용 제휴 상품 테이블 개편](2026-08-30
 // 사용자 지시) 요구사항 2: "[+ 신규 상품 등록]"/각 행의 "[수정]"이 여는 팝업 폼. 신규
@@ -34,6 +35,8 @@ export function CuratedItemFormModal({
   onSaved: (item: CuratedItemFormValue) => void;
 }) {
   const isEdit = Boolean(initial);
+  // [드래그 시 팝업 닫힘 버그 수정](2026-09-05 사용자 지시) 참고: use-backdrop-dismiss.ts
+  const backdropDismiss = useBackdropDismiss(onClose);
   const [title, setTitle] = useState(initial?.title ?? '');
   const [imageUrl, setImageUrl] = useState(initial?.image_url ?? '');
   const [bookingUrl, setBookingUrl] = useState(initial?.booking_url ?? '');
@@ -97,7 +100,7 @@ export function CuratedItemFormModal({
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-[70] flex items-end md:items-center justify-center" onClick={onClose}>
+    <div className="fixed inset-0 bg-black/50 z-[70] flex items-end md:items-center justify-center" {...backdropDismiss}>
       <div
         className="w-full md:w-[440px] max-h-[85vh] overflow-y-auto bg-white rounded-t-2xl md:rounded-2xl shadow-xl p-5"
         onClick={(e) => e.stopPropagation()}
