@@ -101,8 +101,10 @@ describe('EventCard 키즈/어린이 뱃지 제거 (2026-09-04)', () => {
 // 나뉘는지 검증한다(사용자 확인: 중분류 태그·상태 라벨·마감임박 배너는 이미지 위
 // 오버레이로 그대로 유지).
 describe('EventCard 이미지:텍스트 5:5 포션 (2026-09-03)', () => {
-  it('이미지 영역과 텍스트 영역이 flex-[5]/flex-[5]로 동일하게 고정된다', () => {
-    render(<EventCard item={makeEventItem()} onSelect={() => {}} />);
+  it('썸네일이 있으면 이미지 영역과 텍스트 영역이 flex-[5]/flex-[5]로 동일하게 고정된다', () => {
+    render(
+      <EventCard item={makeEventItem({ thumbnail_url: 'https://example.com/thumb.jpg' })} onSelect={() => {}} />
+    );
 
     const title = screen.getByText('도시농업 체험');
     const textArea = title.parentElement!;
@@ -112,6 +114,21 @@ describe('EventCard 이미지:텍스트 5:5 포션 (2026-09-03)', () => {
     expect(textArea).toHaveClass('flex-[5]');
   });
 
+  // [이미지 없는 카드 텍스트 잘림 수정](2026-09-05 사용자 지시): "체험학습장같은경우
+  // 이미지 없을때 카드가 텍스트영역이랑 5:5하려고 해서.. 텍스트 있어도 짤리더라" —
+  // 썸네일이 없으면(open_spaces 연동 카드 등, 항상 thumbnail_url null) 이미지 영역을
+  // 줄이고(flex-[2]) 텍스트 영역을 늘린다(flex-[8]).
+  it('썸네일이 없으면 이미지 영역을 flex-[2]로 줄이고 텍스트 영역을 flex-[8]로 늘린다', () => {
+    render(<EventCard item={makeEventItem({ thumbnail_url: null })} onSelect={() => {}} />);
+
+    const title = screen.getByText('도시농업 체험');
+    const textArea = title.parentElement!;
+    const imageArea = textArea.previousElementSibling!;
+
+    expect(imageArea).toHaveClass('flex-[2]');
+    expect(textArea).toHaveClass('flex-[8]');
+  });
+
   // [카드 내 이미지/텍스트 영역 비율 불일치 진짜 원인](2026-08-30 사용자 재확인): 이미지
   // 영역에 min-h-0이 없으면, flex 아이템 기본값(min-height:auto)이 <img>의
   // min-content 크기(원본 이미지 가로세로 비율을 폭에 대입한 높이)를 존중해 버려 썸네일마다
@@ -119,9 +136,11 @@ describe('EventCard 이미지:텍스트 5:5 포션 (2026-09-03)', () => {
   // 버그 자체를 유닛 테스트로 재현할 수는 없다 — Playwright로 실제 브라우저 렌더링 높이를
   // 실측해 8장 전부 92px:162px로 고정됨을 확인했다, 구현 기록 참고 — 4:6이던 당시 실측값이며
   // 5:5로 바뀐 지금은 비율만 다를 뿐 원리는 동일하다). 이 테스트는 최소한 그 수정에 필요한
-  // min-h-0 클래스가 유지되는지만 회귀 방지한다.
-  it('이미지 영역에 min-h-0이 있어 원본 이미지 비율과 무관하게 flex-[5] 높이가 강제된다', () => {
-    render(<EventCard item={makeEventItem()} onSelect={() => {}} />);
+  // min-h-0 클래스가 유지되는지만 회귀 방지한다(썸네일 유무와 무관하게 항상 있어야 함).
+  it('이미지 영역에 min-h-0이 있어 원본 이미지 비율과 무관하게 flex 높이가 강제된다', () => {
+    render(
+      <EventCard item={makeEventItem({ thumbnail_url: 'https://example.com/thumb.jpg' })} onSelect={() => {}} />
+    );
 
     const title = screen.getByText('도시농업 체험');
     const imageArea = title.parentElement!.previousElementSibling!;
@@ -256,17 +275,18 @@ describe('EventCard dateBanner가 있어도 이미지:텍스트 비율이 항상
     );
 
     const button = container.querySelector('button')!;
-    // 버튼의 최상위 자식은 이미지 영역(flex-[5])/텍스트 영역(flex-[5]) 단 둘뿐이어야 한다 —
-    // 배너가 셋째 자식(별도 flex 행)으로 끼어들면 분할 비율이 배너 유무에 따라 달라진다.
+    // 버튼의 최상위 자식은 이미지 영역/텍스트 영역 단 둘뿐이어야 한다 — 배너가 셋째
+    // 자식(별도 flex 행)으로 끼어들면 분할 비율이 배너 유무에 따라 달라진다. 이 픽스처는
+    // thumbnail_url이 없어(기본값) flex-[2]/flex-[8]이 적용된다.
     expect(button.children.length).toBe(2);
-    expect(button.children[0]).toHaveClass('flex-[5]');
-    expect(button.children[1]).toHaveClass('flex-[5]');
+    expect(button.children[0]).toHaveClass('flex-[2]');
+    expect(button.children[1]).toHaveClass('flex-[8]');
 
     const banner = screen.getByText('⚡ 오늘 한정');
     expect(button.children[0]).toContainElement(banner);
   });
 
-  it('배너가 있는 카드와 없는 카드 모두 이미지 영역이 동일하게 flex-[5]이다', () => {
+  it('배너 유무와 무관하게(썸네일 유무가 같다면) 이미지 영역 비율은 동일하다', () => {
     const today = localTodayStr();
     const withoutBanner = render(<EventCard item={makeEventItem()} onSelect={() => {}} />);
     const imageAreaWithout = withoutBanner.container.querySelector('button')!.children[0];

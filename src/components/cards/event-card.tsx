@@ -102,6 +102,17 @@ export function EventCard({
   const period = formatDateRange(item.start_date, item.end_date);
   // Task 9-1-3: "[장소명] · [시/군/구]" (예: "율동공원 야외무대 · 성남시 분당구")
   const venueLine = formatVenueLine(item.address, item.sigungu_name);
+  // [이미지 없는 카드 텍스트 잘림 수정](2026-09-05 사용자 지시): "체험학습장같은경우
+  // 이미지 없을때 카드가 텍스트영역이랑 5:5하려고 해서 그런지.. 텍스트 있어도
+  // 짤리더라." — 위 5:5 비율은 실제 썸네일이 있는 카드를 기준으로 정한 값인데,
+  // open_spaces 연동 카드(체험학습장/캠핑장 등, get-home-feed.ts toSpaceItem 참고)는
+  // thumbnail_url이 항상 null이라 이미지 영역에 아무 정보 없는 placeholder
+  // 이모지(🖼️)만 뜨면서도 카드 높이의 절반을 그대로 차지해, 남은 절반(텍스트 영역)에
+  // 제목+장소+거리+기간까지 다 넣기엔 좁아 잘렸다. 실제 이미지가 없을 때는 이미지
+  // 영역을 훨씬 작게(2:8) 줄이고 텍스트 영역에 더 많은 공간을 준다 — 중분류/무료·유료/
+  // 실내야외 뱃지는 여전히 이 축소된 이미지 영역 안에 오버레이로 남아(자리만 좁아질
+  // 뿐 내용은 그대로), 정보 손실은 없다.
+  const hasThumbnail = Boolean(item.thumbnail_url);
 
   return (
     <button
@@ -109,7 +120,7 @@ export function EventCard({
       onClick={() => onSelect(item)}
       className="h-full text-left rounded-2xl border border-gray-200 bg-white overflow-hidden hover:shadow-md transition-shadow flex flex-col"
     >
-      <div className="relative flex-[5] min-h-0 bg-gray-100">
+      <div className={`relative min-h-0 bg-gray-100 ${hasThumbnail ? 'flex-[5]' : 'flex-[2]'}`}>
         {dateBanner && (
           <div
             className={`absolute top-0 left-0 right-0 z-10 px-2 py-1 text-[11px] font-bold text-white text-center ${
@@ -171,7 +182,7 @@ export function EventCard({
         )}
       </div>
 
-      <div className="p-3 flex-[5] min-h-0 overflow-hidden flex flex-col gap-1.5">
+      <div className={`p-3 min-h-0 overflow-hidden flex flex-col gap-1.5 ${hasThumbnail ? 'flex-[5]' : 'flex-[8]'}`}>
         <p className="text-sm font-medium text-gray-900 line-clamp-2 min-h-[2.5rem]">{item.name}</p>
         {venueLine && <p className="text-xs text-gray-400 line-clamp-1">{venueLine}</p>}
         {/* [개선사항1](2026-09-04 사용자 지시): 상세 페이지를 열지 않고도 목록 카드 단계에서
