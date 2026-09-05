@@ -13,6 +13,16 @@ const nextConfig: NextConfig = {
   // 등록하면 이 패키지를 번들링하지 않고 런타임에 그대로 require하게 해 이 문제를
   // 피한다(sharp/canvas 등 네이티브·동적 require 패키지에 흔히 쓰는 표준 해법).
   serverExternalPackages: ['jsdom'],
+  // [추가 조치 — serverExternalPackages만으로는 불충분함을 실측 확인](2026-09-06):
+  // 위 fix를 배포하고 10분 넘게 기다린 뒤 프로덕션을 다시 호출했지만 여전히 0.4초
+  // 만에 500이 났다 — serverExternalPackages는 "번들링하지 말라"는 지시일 뿐,
+  // 그 패키지 파일 자체를 서버리스 함수 결과물에 실제로 포함시키는 것은 별개다.
+  // Turbopack의 정적 트레이싱이 jsdom의 동적 require를 여전히 놓치고 있을
+  // 가능성이 높아, outputFileTracingIncludes로 이 라우트에 jsdom 전체 디렉터리를
+  // 명시적으로 강제 포함시킨다(트레이싱 추측에 의존하지 않는 확실한 방법).
+  outputFileTracingIncludes: {
+    '/api/admin/spot-curations/blog-body': ['./node_modules/jsdom/**/*'],
+  },
   images: {
     remotePatterns: [
       {
