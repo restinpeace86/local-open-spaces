@@ -428,7 +428,7 @@ export function SpotDedupPanel() {
                   <button
                     type="button"
                     onClick={() => handleOpenGroup(group)}
-                    className="flex-1 text-left text-sm text-gray-800 hover:underline"
+                    className="flex-1 min-w-0 truncate text-left text-sm text-gray-800 hover:underline"
                   >
                     {formatDedupGroupLabel(group)}
                   </button>
@@ -492,7 +492,7 @@ export function SpotDedupPanel() {
                 >
                   {pending.status === 'in_progress' ? '진행중' : '무시됨'}
                 </span>
-                <span className="flex-1 text-sm text-gray-800">
+                <span className="flex-1 min-w-0 truncate text-sm text-gray-800">
                   {pending.members[0]?.name ?? '(삭제된 스팟)'} 외 {pending.members.length - 1}건
                 </span>
                 {pending.status === 'in_progress' && (

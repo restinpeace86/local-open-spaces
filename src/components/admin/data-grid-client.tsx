@@ -814,7 +814,10 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
       <div className="shrink-0 p-4 border-b border-gray-100 flex flex-col gap-3">
         <TodayBatchSummary />
         <IngestRerunPanel />
-        <div className="flex items-center justify-between gap-3">
+        {/* [관리자 화면 모바일 점검](2026-09-05 사용자 지시): 제목+버튼 2개가
+            justify-between + nowrap이라 좁은 화면에서 버튼이 잘릴 여지가 있어
+            flex-wrap을 추가한다(줄바꿈되면 gap-y로 자연스럽게 간격이 생김). */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="text-sm font-bold text-gray-900">Admin Data Grid</h1>
           <div className="flex items-center gap-3">
             <button
@@ -831,13 +834,22 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
         </div>
 
         {/* 2. 탭 구성 */}
-        <div className="flex gap-1.5 border-b border-gray-100 -mb-3 pb-3">
+        {/* [관리자 화면 모바일 점검](2026-09-05 사용자 지시): "관리자 화면 모바일에서도
+            잘 동작하도록 점검해줘" 실측으로 확인한 버그 — 탭이 이제 8개(오늘
+            category_mapping 추가로 늘어남)라 모바일 폭(예: 375px)에서 한 줄에 다
+            들어가지 않는데, 이 컨테이너에 가로 스크롤이 전혀 없고(overflow-x-auto
+            없음) 바깥 조상(위 return의 `overflow-hidden`)이 넘치는 부분을 그냥
+            잘라버려 뒤쪽 탭("🗂️ 노출 중분류 매핑" 등)을 아예 누를 방법이 없었다 —
+            SpotCategoryFilter 등 이 프로젝트의 다른 가로 칩 목록과 동일하게
+            overflow-x-auto로 가로 스와이프가 가능하게 한다(각 탭 버튼은 shrink-0로
+            줄어들어 텍스트가 찌그러지지 않게 한다). */}
+        <div className="flex gap-1.5 overflow-x-auto border-b border-gray-100 -mb-3 pb-3">
           {(Object.keys(TAB_LABEL) as AdminTable[]).map((t) => (
             <button
               key={t}
               type="button"
               onClick={() => switchTab(t)}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-t-lg transition-colors ${
+              className={`shrink-0 px-3 py-1.5 text-xs font-semibold rounded-t-lg transition-colors ${
                 tab === t ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
