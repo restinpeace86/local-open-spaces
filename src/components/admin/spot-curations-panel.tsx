@@ -552,7 +552,9 @@ export function SpotCurationsPanel() {
   const modalPresetSpot = modalTarget && 'presetSpot' in modalTarget ? modalTarget.presetSpot : undefined;
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    // [관리자 대시보드 모바일 레이아웃/스크롤 버그 긴급 수정](2026-09-05 사용자
+    // 지시): data-grid-client.tsx 루트와 동일한 이유로 min-h-0 추가.
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       <div className="shrink-0 p-4 border-b border-gray-100 flex flex-col gap-3">
         {/* [todo.md 개선사항 9](2026-09-03): "등록" 버튼(자유 검색)을 없애고, 이 검색창은
             이제 아래 후보 리스트 자체를 좁히는 용도다 — 원하는 식당을 찾아 바로 클릭하면
@@ -566,7 +568,7 @@ export function SpotCurationsPanel() {
         />
       </div>
 
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex-1 min-h-0 overflow-auto p-4">
         {!hasLoaded && (
           <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
             <p className="text-sm text-gray-500">키즈친화 식당 목록을 불러와 주세요.</p>

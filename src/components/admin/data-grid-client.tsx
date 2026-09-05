@@ -840,7 +840,17 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
   }, [tab, currentOptions]);
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    // [관리자 대시보드 모바일 레이아웃/스크롤 버그 긴급 수정](2026-09-05 사용자
+    // 지시): "리스트 영역이 짤리고 스크롤이 안 내려간다" — 실제 원인은 body의
+    // overflow-hidden(src/app/layout.tsx, 앱 전체가 고정 뷰포트+내부 스크롤 구조를
+    // 쓰기 위한 의도된 설계) 자체가 아니라, 그 아래 이 루트 div가 flex-1이면서
+    // min-h-0가 없었던 것이다 — flex 아이템의 기본 min-height는 auto라, 내용이
+    // 뷰포트보다 길어지면 이 div가 줄어들지 않고 내용 높이만큼 계속 커지고, 그
+    // 초과분을 body의 overflow-hidden이 그냥 잘라버려(스크롤 불가) "리스트가 거의
+    // 안 보이고 스크롤도 안 되는" 증상으로 나타났다. min-h-0를 추가해 이 div가
+    // 항상 부모(body)가 준 높이 안으로 정확히 눌리도록 하고, 아래 각 탭의 콘텐츠
+    // 영역(overflow-y-auto)이 실제로 그 안에서 스크롤되게 한다.
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       <div className="shrink-0 p-4 border-b border-gray-100 flex flex-col gap-3">
         <TodayBatchSummary />
         <IngestRerunPanel />
@@ -1093,7 +1103,10 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
           움직여 부자연스러웠다. 세로 스크롤은 여기(overflow-y-auto)에서만 담당하고,
           가로 스크롤은 아래 테이블 전용 래퍼(overflow-x-auto)로 분리한다 — 표준
           반응형 테이블 패턴. */}
-      <div className="flex-1 overflow-y-auto p-4">
+      {/* [관리자 대시보드 모바일 레이아웃/스크롤 버그 긴급 수정](2026-09-05 사용자
+          지시): 위 루트 div와 동일한 이유로 min-h-0 추가 — 이 div 자체도 flex-1
+          아이템이라 min-h-0 없이는 overflow-y-auto가 실제로 작동하지 않는다. */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-4">
         {/* [관리자 페이지 성능 최적화](2026-08-30 사용자 지시) 요구사항 3: 탭 진입/전환
             직후에는 조회를 자동 실행하지 않고 빈 뼈대(필터 UI)만 보여준다 — 이 버튼을
             눌러야 그 탭의 첫 조회가 실행된다. raw_ingest_data는 대용량 로데이터라 특히

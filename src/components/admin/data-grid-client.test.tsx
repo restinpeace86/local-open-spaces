@@ -86,3 +86,33 @@ describe('AdminDataGridClient — curated_items 탭 통합', () => {
     expect(screen.queryByPlaceholderText('제목/시설명, 주소 키워드 검색')).not.toBeInTheDocument();
   });
 });
+
+// [관리자 대시보드 모바일 레이아웃/스크롤 버그 긴급 수정](2026-09-05 사용자 지시):
+// "모바일 환경에서 리스트 영역이 짤리고 스크롤이 안 내려가는 레이아웃 버그" — 실제
+// 원인은 body의 overflow-hidden(의도된 고정 뷰포트 설계) 자체가 아니라, 그 아래
+// flex-1 컨테이너들에 min-h-0가 빠져 있어 overflow-y-auto가 작동하지 않던 것이었다
+// (min-height:auto 기본값 때문에 flex 아이템이 내용 높이만큼 계속 커져 부모의
+// overflow-hidden에 그냥 잘렸다). 이 클래스가 되돌아가지 않도록 고정한다.
+describe('AdminDataGridClient — 모바일 레이아웃/스크롤 회귀 방지', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('루트 컨테이너와 테이블 영역 모두 flex-1과 함께 min-h-0를 갖는다(스크롤이 실제로 작동하기 위한 전제조건)', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ rows: [], total: 0 }) } as Response)));
+
+    const { container } = render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+
+    const root = container.firstElementChild as HTMLElement;
+    expect(root.className).toContain('flex-1');
+    expect(root.className).toContain('min-h-0');
+    expect(root.className).toContain('overflow-hidden');
+
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    const emptyMessage = await screen.findByText('조건에 맞는 데이터가 없습니다.');
+    const tableScrollArea = emptyMessage.parentElement as HTMLElement;
+    expect(tableScrollArea.className).toContain('flex-1');
+    expect(tableScrollArea.className).toContain('min-h-0');
+    expect(tableScrollArea.className).toContain('overflow-y-auto');
+  });
+});

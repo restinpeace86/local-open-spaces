@@ -70,7 +70,12 @@ export function MomPickPostsPanel() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <div className="flex flex-col gap-3 p-4">
+    // [관리자 대시보드 모바일 레이아웃/스크롤 버그 긴급 수정](2026-09-05 사용자
+    // 지시): 다른 자기완결 패널(SpotCurationsPanel/CuratedItemsPanel/SpotDedupPanel/
+    // CategoryMappingPanel)과 달리 이 패널은 애초에 자체 스크롤 컨테이너가 없어
+    // 목록이 길어지면 부모(overflow-hidden)에 그대로 잘렸다 — flex-1 min-h-0
+    // overflow-y-auto를 추가해 동일하게 내부 스크롤이 되도록 맞춘다.
+    <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-3 p-4">
       <div className="flex items-center gap-3">
         <button
           type="button"

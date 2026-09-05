@@ -7,6 +7,11 @@ import { createElement, Fragment, type ReactNode } from 'react';
 // 제5조) 사용자가 실제로 나열한 12개를 그대로 구현한다.
 export type CurationBadgeGroup = '이동/편의' | '식사/아기' | '공간/놀이' | '운영';
 
+// [All-in-One 모바일 큐레이션 워크벤치](2026-09-05 사용자 지시): 뱃지 그룹을
+// 순서대로 나열해야 하는 곳(BlogCurationModal, CurationBadgeForm)이 두 곳이 돼
+// 여기 한 곳에 상수화한다(제5장 제4조 기존 구조 우선 — 값 중복 방지).
+export const CURATION_BADGE_GROUPS: CurationBadgeGroup[] = ['이동/편의', '식사/아기', '공간/놀이', '운영'];
+
 export type CurationBadgeOption = {
   key: string;
   label: string;

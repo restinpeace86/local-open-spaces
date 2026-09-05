@@ -1186,6 +1186,10 @@ export type Database = {
         | { Args: { table_name: string }; Returns: string }
       enablelongtransactions: { Args: never; Returns: string }
       equals: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
+      find_nearby_open_spaces: {
+        Args: { p_limit?: number; p_radius_meters?: number; p_spot_id: string }
+        Returns: Json
+      }
       find_spot_dedup_candidates: {
         Args: { p_after_key?: string; p_limit?: number }
         Returns: Json

@@ -25,6 +25,18 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+/* [관리자 대시보드 모바일 레이아웃/스크롤 버그 긴급 수정](2026-09-05 사용자 지시):
+   내부 스크롤 영역(overflow-y-auto/overflow-auto/overflow-x-auto)에
+   -webkit-overflow-scrolling: touch를 적용해 iOS/구형 WebView에서도 부드러운
+   터치 관성 스크롤이 보장되도록 한다. Tailwind에는 대응 유틸리티가 없어 실제로
+   쓰이는 스크롤 유틸리티 클래스에 전역으로 한 번만 적용한다(다른 화면에도 부작용
+   없이 스크롤 매끄러움만 더해주는 안전한 확장이다). */
+.overflow-y-auto,
+.overflow-auto,
+.overflow-x-auto {
+  -webkit-overflow-scrolling: touch;
+}
+
 /* implementation/todo.md Phase 2: 내 위치 전용 펄스 마커 (Kakao CustomOverlay content) */
 .user-location-pulse {
   position: relative;

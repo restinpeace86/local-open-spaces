@@ -162,7 +162,9 @@ export function CuratedItemsPanel() {
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
+    // [관리자 대시보드 모바일 레이아웃/스크롤 버그 긴급 수정](2026-09-05 사용자
+    // 지시): data-grid-client.tsx 루트와 동일한 이유로 min-h-0 추가.
+    <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       <div className="shrink-0 p-4 border-b border-gray-100 flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-sm font-bold text-gray-900">🏷️ 큐레이션/제휴 상품 (curated_items)</h2>
@@ -255,7 +257,7 @@ export function CuratedItemsPanel() {
 
       {/* [관리자 화면 모바일 테이블 스크롤 최적화](2026-09-05 사용자 지시): data-grid-
           client.tsx와 동일한 이유 — 세로 스크롤과 가로 스크롤을 분리한다. */}
-      <div className="flex-1 overflow-y-auto p-4">
+      <div className="flex-1 min-h-0 overflow-y-auto p-4">
         {!hasLoaded && (
           <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
             <p className="text-sm text-gray-500">필터를 설정한 뒤 불러오기를 눌러주세요.</p>

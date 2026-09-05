@@ -36,7 +36,12 @@ const AGE_GROUP_OPTIONS = [
   { value: '기타', label: '기타 (비노출용)' },
 ];
 
-function GroupDetailModal({
+// [All-in-One 모바일 큐레이션 워크벤치](2026-09-05 사용자 지시)의 "중복 장소 검수
+// 배너 → 합치기" 버튼이 이 모달을 그대로 재사용한다(제5장 제4조 기존 구조 우선 —
+// 병합 폼을 새로 만들지 않는다) — 그래서 export가 필요해졌다. 워크벤치는 스팟
+// 하나 + 반경 내 유사 스팟 하나로 구성된 2건짜리 DedupGroup을 즉석에서 만들어
+// 넘긴다.
+export function GroupDetailModal({
   group,
   serviceCategories,
   onClose,
@@ -387,7 +392,10 @@ export function SpotDedupPanel() {
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-6">
+    // [관리자 대시보드 모바일 레이아웃/스크롤 버그 긴급 수정](2026-09-05 사용자
+    // 지시): 이 div도 부모(AdminDataGridClient 루트)의 flex-1 자리를 그대로
+    // 차지하는 flex-1 아이템이라 min-h-0 없이는 overflow-y-auto가 작동하지 않는다.
+    <div className="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-6">
       {/* [관리자 페이지 성능 최적화](2026-08-30 사용자 지시) 관례 그대로 — 탭 진입 시
           자동으로 조회하지 않고, 관리자가 각 영역의 "불러오기"를 눌러야 조회한다
           (CuratedItemsPanel/SpotCurationsPanel/MomPickPostsPanel과 동일한 원칙). */}

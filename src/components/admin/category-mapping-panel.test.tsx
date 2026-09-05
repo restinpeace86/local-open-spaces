@@ -331,4 +331,69 @@ describe('CategoryMappingPanel', () => {
       expect(screen.getByText('선택 0건 적용')).toBeDisabled();
     });
   });
+
+  // [All-in-One 모바일 큐레이션 워크벤치](2026-09-05 사용자 지시): "리스트에 렌더링된
+  // 특정 장소 카드/아이템을 클릭하면.. 워크벤치 화면으로 부드럽게 진입함." 워크벤치
+  // 내부 동작 자체는 mobile-curation-workbench.test.tsx가 담당하고, 여기서는 진입
+  // 연결만 확인한다.
+  describe('워크벤치 진입 (All-in-One 모바일 큐레이션 워크벤치)', () => {
+    function mockFetchWithWorkbenchDeps() {
+      return vi.fn((url: string) => {
+        if (url.includes('/api/admin/data-grid')) {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                rows: [
+                  { id: 'row-1', name: '행복놀이터', address: '경기도 성남시', category_min: '공원', service_category_id: null },
+                ],
+                total: 1,
+                page: 1,
+                pageSize: 50,
+              }),
+          } as Response);
+        }
+        if (url.includes('/api/admin/spot-dedup/nearby')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [] }) } as Response);
+        }
+        if (url.includes('/api/admin/spot-curations/blog-search')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [], hasRecentReview: false, hasNoResults: true }) } as Response);
+        }
+        if (url.includes('/api/admin/spot-curations')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ item: null }) } as Response);
+        }
+        return Promise.reject(new Error(`unexpected fetch: ${url}`));
+      });
+    }
+
+    it('행 이름을 클릭하면 큐레이션 워크벤치가 열린다', async () => {
+      vi.stubGlobal('fetch', mockFetchWithWorkbenchDeps());
+      renderPanel();
+
+      const selects = screen.getAllByText('원본 중분류 선택').map((el) => el.closest('select'));
+      fireEvent.change(selects[1]!, { target: { value: '공원' } });
+      fireEvent.click(screen.getByText('조회'));
+      await screen.findByText('행복놀이터');
+
+      fireEvent.click(screen.getByText('행복놀이터'));
+
+      expect(await screen.findByText('🧰 큐레이션 워크벤치')).toBeInTheDocument();
+    });
+
+    it('워크벤치를 닫으면 목록 화면으로 돌아온다', async () => {
+      vi.stubGlobal('fetch', mockFetchWithWorkbenchDeps());
+      renderPanel();
+
+      const selects = screen.getAllByText('원본 중분류 선택').map((el) => el.closest('select'));
+      fireEvent.change(selects[1]!, { target: { value: '공원' } });
+      fireEvent.click(screen.getByText('조회'));
+      await screen.findByText('행복놀이터');
+      fireEvent.click(screen.getByText('행복놀이터'));
+      await screen.findByText('🧰 큐레이션 워크벤치');
+
+      fireEvent.click(screen.getByLabelText('닫기'));
+
+      await waitFor(() => expect(screen.queryByText('🧰 큐레이션 워크벤치')).not.toBeInTheDocument());
+    });
+  });
 });

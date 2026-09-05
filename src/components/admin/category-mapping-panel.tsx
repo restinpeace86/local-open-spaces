@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { ServiceCategory, NULL_CATEGORY_MIN_TOKEN } from '@/lib/admin/service-category';
+import { MobileCurationWorkbench, CurationQueueItem } from '@/components/admin/mobile-curation-workbench';
 
 // [노출 중분류 매핑/중복 스팟 검수 탭 분리](2026-09-05 사용자 지시): "중분류 매핑과
 // 중복 스팟 검수 탭을 분리해라" — 기존 SpotDedupPanel 하나에 몰려 있던 "노출 중분류
@@ -17,7 +18,18 @@ const PARENT_CATEGORY_OPTIONS = ['키즈/놀이시설', '농장/체험', '자연
 // 원본 중분류 하나를 고르면 그 중분류에 속한 행을 목록(페이지 단위)으로 보여주고,
 // 관리자가 체크박스로 원하는 행만 골라 노출 중분류를 적용한다(카테고리 전체가 아니라
 // 그중 일부만).
-type AdminOpenSpaceRowLite = { id: string; name: string; address: string | null; category_min: string | null };
+// [All-in-One 모바일 큐레이션 워크벤치](2026-09-05 사용자 지시): "Open Spaces 중분류
+// 조회 리스트와 워크벤치를 자연스럽게 연결" — 이 목록이 이미 "특정 중분류를 선택해
+// 필터링된 장소 리스트를 조회"하는 화면이라, 행을 클릭하면 워크벤치가 열리도록
+// service_category_id를 추가로 받는다(기존 대량 매핑에는 쓰이지 않던 값이지만,
+// /api/admin/data-grid 응답에는 이미 포함돼 있다 — 새 조회 없이 타입만 넓힌다).
+type AdminOpenSpaceRowLite = {
+  id: string;
+  name: string;
+  address: string | null;
+  category_min: string | null;
+  service_category_id: string | null;
+};
 const ROW_PICKER_PAGE_SIZE = 50;
 
 function RowPicker({ categoryMinOptions, serviceCategories }: { categoryMinOptions: string[]; serviceCategories: ServiceCategory[] }) {
@@ -32,6 +44,8 @@ function RowPicker({ categoryMinOptions, serviceCategories }: { categoryMinOptio
   const [rowServiceCategoryId, setRowServiceCategoryId] = useState('');
   const [isApplyingRows, setIsApplyingRows] = useState(false);
   const [rowsResultMessage, setRowsResultMessage] = useState<string | null>(null);
+  // [All-in-One 모바일 큐레이션 워크벤치] 진입 상태 — 어떤 스팟을 워크벤치로 열었는지.
+  const [workbenchSpotId, setWorkbenchSpotId] = useState<string | null>(null);
 
   // [기존 구조 우선] /admin/data-grid가 이미 category_min 필터 + 페이지네이션을
   // 지원하므로(data-grid-client.tsx가 쓰는 것과 동일한 라우트), 행 목록 조회를 위한
@@ -153,6 +167,10 @@ function RowPicker({ categoryMinOptions, serviceCategories }: { categoryMinOptio
             <p className="text-[11px] text-gray-400">
               전체 {total.toLocaleString()}건 중 {page}/{totalPages}페이지 · 선택 {selectedIds.size}건
             </p>
+            {/* [All-in-One 모바일 큐레이션 워크벤치](2026-09-05 사용자 지시): "리스트에
+                렌더링된 특정 장소 카드/아이템을 클릭하면.. 워크벤치 화면으로 부드럽게
+                진입함." 체크박스(기존 대량 매핑용)는 그대로 두고, 이름을 누르면 그
+                한 건에 대한 워크벤치가 열리도록 별도 클릭 영역을 추가한다. */}
             <ul className="max-h-64 overflow-y-auto flex flex-col divide-y divide-gray-100 rounded-lg border border-gray-100">
               {rows.map((row) => (
                 <li key={row.id} className="flex items-center gap-2 px-2 py-1.5">
@@ -163,7 +181,14 @@ function RowPicker({ categoryMinOptions, serviceCategories }: { categoryMinOptio
                     aria-label={`${row.name} 선택`}
                     className="h-3.5 w-3.5 shrink-0"
                   />
-                  <span className="flex-1 min-w-0 truncate text-xs text-gray-800">{row.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => setWorkbenchSpotId(row.id)}
+                    className="flex-1 min-w-0 text-left"
+                    title="큐레이션 워크벤치 열기"
+                  >
+                    <span className="block truncate text-xs text-gray-800 hover:underline">{row.name}</span>
+                  </button>
                   <span className="shrink-0 text-[11px] text-gray-400 truncate max-w-[40%]">{row.address ?? '-'}</span>
                 </li>
               ))}
@@ -214,6 +239,25 @@ function RowPicker({ categoryMinOptions, serviceCategories }: { categoryMinOptio
 
         {rowsResultMessage && <p className="text-xs text-emerald-600">{rowsResultMessage}</p>}
       </div>
+
+      {workbenchSpotId &&
+        (() => {
+          const workbenchSpot = rows.find((r) => r.id === workbenchSpotId);
+          if (!workbenchSpot) return null;
+          return (
+            <MobileCurationWorkbench
+              key={workbenchSpot.id}
+              spot={workbenchSpot}
+              serviceCategories={serviceCategories}
+              queue={rows as CurationQueueItem[]}
+              onClose={() => setWorkbenchSpotId(null)}
+              onAdvance={(nextId) => setWorkbenchSpotId(nextId)}
+              onServiceCategoryUpdated={(id, next) => {
+                setRows((prev) => prev.map((r) => (r.id === id ? { ...r, service_category_id: next } : r)));
+              }}
+            />
+          );
+        })()}
     </section>
   );
 }
@@ -351,7 +395,11 @@ export function CategoryMappingPanel({ categoryMinOptions }: { categoryMinOption
   }
 
   return (
-    <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-6">
+    // [관리자 대시보드 모바일 레이아웃/스크롤 버그 긴급 수정](2026-09-05 사용자
+    // 지시): 이 div도 부모(AdminDataGridClient 루트)의 flex-1 자리를 그대로
+    // 차지하는 flex-1 아이템이라 min-h-0 없이는 overflow-y-auto가 작동하지 않는다
+    // — "리스트가 짤리고 스크롤이 안 내려간다"는 증상의 실제 원인이었다.
+    <div className="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-6">
       {/* [관리자 페이지 성능 최적화](2026-08-30 사용자 지시) 관례 그대로 — 탭 진입 시
           자동으로 조회하지 않고, 관리자가 각 영역의 "불러오기"를 눌러야 조회한다. */}
       <section className="rounded-xl border border-gray-200 p-4">
