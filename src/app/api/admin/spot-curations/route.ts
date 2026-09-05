@@ -23,10 +23,25 @@ type SpotCurationRow = {
   menu_items: unknown;
   naver_booking_url: string | null;
   curation_note: string | null;
+  // [관리자용 블로그 큐레이션 모달](2026-09-05 사용자 지시, Decision 021): 블로그
+  // 본문은 저장하지 않고 URL 3개와 체크된 뱃지 키 목록만 저장한다.
+  blog_url_1: string | null;
+  blog_url_2: string | null;
+  blog_url_3: string | null;
+  curation_badges: string[];
   created_at: string;
   updated_at: string;
   open_spaces: { name: string; address: string | null; category: string } | null;
 };
+
+// blog_url_N은 빈 문자열/공백을 null로 정규화한다(기존 naver_booking_url과 동일 관례).
+function normalizeUrl(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() ? value.trim() : null;
+}
+
+function normalizeBadges(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
+}
 
 export async function GET(request: NextRequest) {
   try {
@@ -112,6 +127,10 @@ export async function POST(request: NextRequest) {
         menu_items: isValidMenuItems(body.menu_items) ? body.menu_items : [],
         naver_booking_url: typeof body.naver_booking_url === 'string' && body.naver_booking_url.trim() ? body.naver_booking_url.trim() : null,
         curation_note: typeof body.curation_note === 'string' ? body.curation_note : null,
+        blog_url_1: normalizeUrl(body.blog_url_1),
+        blog_url_2: normalizeUrl(body.blog_url_2),
+        blog_url_3: normalizeUrl(body.blog_url_3),
+        curation_badges: normalizeBadges(body.curation_badges),
       })
       .select('*, open_spaces(name, address, category)')
       .single();
@@ -155,6 +174,10 @@ export async function PATCH(request: NextRequest) {
       menu_items: Array<{ name: string; price: number }>;
       naver_booking_url: string | null;
       curation_note: string | null;
+      blog_url_1: string | null;
+      blog_url_2: string | null;
+      blog_url_3: string | null;
+      curation_badges: string[];
     }> = { updated_at: new Date().toISOString() };
     if (typeof body.is_active === 'boolean') updates.is_active = body.is_active;
     if ('image_url' in body) updates.image_url = typeof body.image_url === 'string' && body.image_url.trim() ? body.image_url.trim() : null;
@@ -169,6 +192,10 @@ export async function PATCH(request: NextRequest) {
       updates.naver_booking_url = typeof body.naver_booking_url === 'string' && body.naver_booking_url.trim() ? body.naver_booking_url.trim() : null;
     }
     if ('curation_note' in body) updates.curation_note = typeof body.curation_note === 'string' ? body.curation_note : null;
+    if ('blog_url_1' in body) updates.blog_url_1 = normalizeUrl(body.blog_url_1);
+    if ('blog_url_2' in body) updates.blog_url_2 = normalizeUrl(body.blog_url_2);
+    if ('blog_url_3' in body) updates.blog_url_3 = normalizeUrl(body.blog_url_3);
+    if ('curation_badges' in body) updates.curation_badges = normalizeBadges(body.curation_badges);
 
     if (Object.keys(updates).length === 1) {
       return NextResponse.json({ error: '수정할 필드가 없습니다.' }, { status: 400 });

@@ -175,3 +175,42 @@ describe('RawDataModal — 노출 중분류(ServiceCategoryEditor)', () => {
     });
   });
 });
+
+// [관리자용 블로그 큐레이션 모달](2026-09-05 사용자 지시, Decision 021): "관리자가
+// 장소 상세 페이지에서 버튼을 누르면.." — 이 버튼이 open_spaces 탭에서만 노출되고
+// 누르면 BlogCurationModal이 열리는지 확인한다(모달 내부 동작은
+// blog-curation-modal.test.tsx가 별도로 검증).
+describe('RawDataModal — 블로그 큐레이션 트리거', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('open_spaces 탭에서 버튼을 누르면 BlogCurationModal이 열린다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [], hasRecentReview: false, hasNoResults: true }) } as Response))
+    );
+    const row = buildRow();
+    render(
+      <RawDataModal
+        table="open_spaces"
+        row={row}
+        categoryMinOptions={[]}
+        serviceCategories={[]}
+        onServiceCategoryUpdated={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText('🔍 블로그로 큐레이션 (뱃지/노출 중분류 빠르게 채우기)'));
+
+    expect(await screen.findByText('🔍 블로그로 큐레이션')).toBeInTheDocument();
+  });
+
+  it('events 탭에는 이 버튼이 없다', () => {
+    const row = buildRow();
+    render(<RawDataModal table="events" row={row as unknown as AdminOpenSpaceRow} categoryMinOptions={[]} onClose={vi.fn()} />);
+
+    expect(screen.queryByText('🔍 블로그로 큐레이션 (뱃지/노출 중분류 빠르게 채우기)')).not.toBeInTheDocument();
+  });
+});

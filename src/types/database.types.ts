@@ -733,10 +733,14 @@ export type Database = {
       }
       spot_curations: {
         Row: {
+          blog_url_1: string | null
+          blog_url_2: string | null
+          blog_url_3: string | null
           break_end: string | null
           break_start: string | null
           close_time: string | null
           created_at: string
+          curation_badges: string[]
           curation_note: string | null
           id: string
           image_url: string | null
@@ -750,10 +754,14 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          blog_url_1?: string | null
+          blog_url_2?: string | null
+          blog_url_3?: string | null
           break_end?: string | null
           break_start?: string | null
           close_time?: string | null
           created_at?: string
+          curation_badges?: string[]
           curation_note?: string | null
           id?: string
           image_url?: string | null
@@ -767,10 +775,14 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          blog_url_1?: string | null
+          blog_url_2?: string | null
+          blog_url_3?: string | null
           break_end?: string | null
           break_start?: string | null
           close_time?: string | null
           created_at?: string
+          curation_badges?: string[]
           curation_note?: string | null
           id?: string
           image_url?: string | null

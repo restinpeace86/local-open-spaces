@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { AdminTable, AdminRow, AdminOpenSpaceRow, AdminEventRow, AdminRawIngestRow, extractLngLat } from '@/components/admin/data-grid-client';
 import { MigrateToEventModal } from '@/components/admin/migrate-to-event-modal';
 import { ServiceCategory } from '@/lib/admin/service-category';
+import { BlogCurationModal } from '@/components/admin/blog-curation-modal';
 
 // [개편] 행 클릭 시 해당 행의 전체 원천 컬럼(구조화된 값) + raw_data/raw_payload 원문 JSON을
 // 함께 보여주는 Read-Only 뷰어. 3개 탭(open_spaces/events/raw_ingest_data) 행 형태가 서로
@@ -382,6 +383,7 @@ export function RawDataModal({
   const { title, subtitle, raw } = getModalContent(table, row);
   const prettyJson = JSON.stringify(raw ?? null, null, 2);
   const [isMigrateModalOpen, setIsMigrateModalOpen] = useState(false);
+  const [isBlogCurationModalOpen, setIsBlogCurationModalOpen] = useState(false);
 
   const structuredEntries = Object.entries(row).filter(([key]) => key !== 'raw_data' && key !== 'raw_payload');
 
@@ -427,6 +429,18 @@ export function RawDataModal({
               serviceCategories={serviceCategories}
               onUpdated={onServiceCategoryUpdated}
             />
+          )}
+
+          {/* [관리자용 블로그 큐레이션 모달](2026-09-05 사용자 지시, Decision 021):
+              "관리자가 장소 상세 페이지에서 버튼을 누르면.." — 이 버튼이 그 트리거다. */}
+          {table === 'open_spaces' && onServiceCategoryUpdated && (
+            <button
+              type="button"
+              onClick={() => setIsBlogCurationModalOpen(true)}
+              className="mt-3 w-full rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+            >
+              🔍 블로그로 큐레이션 (뱃지/노출 중분류 빠르게 채우기)
+            </button>
           )}
 
           {/* [todo.md 개선사항 5](2026-09-03): 스팟픽에 잘못 분류돼 있던 데이터(예: 실제로는
@@ -500,6 +514,20 @@ export function RawDataModal({
             setIsMigrateModalOpen(false);
             onMigratedToEvent(id);
           }}
+        />
+      )}
+
+      {isBlogCurationModalOpen && table === 'open_spaces' && onServiceCategoryUpdated && (
+        <BlogCurationModal
+          spot={{
+            id: (row as AdminOpenSpaceRow).id,
+            name: (row as AdminOpenSpaceRow).name,
+            address: (row as AdminOpenSpaceRow).address,
+            service_category_id: (row as AdminOpenSpaceRow).service_category_id,
+          }}
+          serviceCategories={serviceCategories}
+          onClose={() => setIsBlogCurationModalOpen(false)}
+          onServiceCategoryUpdated={onServiceCategoryUpdated}
         />
       )}
     </div>
