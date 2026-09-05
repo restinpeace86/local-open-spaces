@@ -100,6 +100,28 @@ describe('SpotCategoryFilter', () => {
   // [표준 중분류 동기화](2026-09-05 사용자 지시): 어드민 정의(category-min-groups.ts)
   // 기준으로 캠핑장은 자연/공원, 체험학습장은 키즈/놀이시설로 재배정돼 농장/체험에는
   // 체험휴양마을/교육농장 2종만 남는다(spot-category-groups.ts 상단 코멘트 참고).
+  // [대분류 바텀시트가 '주변 목록 보기' 시트에 가려지는 문제 수정](2026-09-05 사용자
+  // 지시): "대분류들도 누르면 또다른 바텀시트가 생기면서 겹쳐.." 실측으로 확인한 원인 —
+  // 모바일에서 이 컴포넌트는 map-explorer.tsx의 `absolute` + `z-index`(스택 컨텍스트를
+  // 새로 만듦) 플로팅 헤더 안에 중첩된다. 그 안에서는 이 시트의 `z-50`이 전역이 아니라
+  // 그 스택 컨텍스트 안에서만 유효해, DOM상 나중에 나오는 형제(주변 목록 보기 바텀시트)가
+  // 위로 올라와 버렸다 — createPortal로 document.body에 직접 렌더링해 어떤 조상이
+  // 스택 컨텍스트를 만들어도 영향받지 않게 했다. 이 테스트는 그 상황을 그대로 재현한다
+  // (조상에 스택 컨텍스트를 만드는 absolute+z-index를 직접 씌워서 검증).
+  it('스택 컨텍스트를 만드는 조상 안에 있어도, 바텀시트는 document.body로 포탈 렌더링돼 갇히지 않는다', () => {
+    render(
+      <div data-testid="fake-stacking-context-wrapper" style={{ position: 'absolute', zIndex: 10 }}>
+        <SpotCategoryFilter selectedCategoryId={null} onSelectCategory={vi.fn()} onSelectAiRecommend={vi.fn()} />
+      </div>
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '자연/공원' }));
+
+    const sheet = screen.getByTestId('spot-category-sheet');
+    expect(sheet.closest('[data-testid="fake-stacking-context-wrapper"]')).toBeNull();
+    expect(sheet.parentElement).toBe(document.body);
+  });
+
   it('농장/체험 대분류 바텀시트에는 체험휴양마을/교육농장이 노출된다', () => {
     render(<SpotCategoryFilter selectedCategoryId={null} onSelectCategory={vi.fn()} onSelectAiRecommend={vi.fn()} />);
 

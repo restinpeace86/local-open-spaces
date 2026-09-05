@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   CORE_SPOT_CATEGORIES,
   SPOT_MAJOR_CATEGORY_OPTIONS,
@@ -126,12 +127,28 @@ export function SpotCategoryFilter({
         {SPOT_MAJOR_CATEGORY_OPTIONS.slice(2).map(renderMajorChip)}
       </div>
 
-      {openMajorId && openMajorOption && (
-        <div
-          data-testid="spot-category-sheet"
-          className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center"
-          onClick={() => setOpenMajorId(null)}
-        >
+      {/* [대분류 바텀시트가 '주변 목록 보기' 시트에 가려지는 문제 수정](2026-09-05
+          사용자 지시): "대분류들도 누르면 또다른 바텀시트가 생기면서 겹쳐.." 실측으로
+          확인한 원인 — 모바일에서 이 컴포넌트는 map-explorer.tsx의 `absolute z-10`
+          플로팅 헤더 안에 중첩돼 렌더링된다. `position:absolute` + 명시적 `z-index`는
+          CSS 스택 컨텍스트(stacking context)를 새로 만드는데, 그 안에 있는 이 시트의
+          `z-50`은 "그 스택 컨텍스트 안에서만" z-50일 뿐 전역 z-50이 아니다 — 화면
+          최하단에 항상 떠 있는 "주변 N건 목록 보기" 바텀시트(map-explorer.tsx, DOM상
+          형제 위치, 역시 `z-10`이지만 스택 컨텍스트에 갇혀 있지 않음)와 비교하면, 둘 다
+          "z-10 스택 컨텍스트" 선상에서 경쟁하게 돼 DOM 순서상 나중에 나오는 그 바텀시트가
+          이 시트 위로 올라와 버렸다(추측이 아니라 CSS 스펙대로 재현되는 문제 — 같은
+          이유로 이미 이 프로젝트의 다른 모달들(location-onboarding-modal.tsx 등)도
+          `createPortal`로 이 문제를 우회하고 있다). `document.body` 바로 아래로 포탈
+          렌더링해 어떤 조상이 스택 컨텍스트를 만들어도 전역 z-50이 실제로 적용되게
+          한다. */}
+      {openMajorId &&
+        openMajorOption &&
+        createPortal(
+          <div
+            data-testid="spot-category-sheet"
+            className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center"
+            onClick={() => setOpenMajorId(null)}
+          >
           <div
             className="w-full md:w-[480px] max-h-[70vh] md:max-h-[60vh] flex flex-col bg-white rounded-t-2xl md:rounded-2xl shadow-xl"
             onClick={(e) => e.stopPropagation()}
@@ -209,8 +226,9 @@ export function SpotCategoryFilter({
               </div>
             )}
           </div>
-        </div>
-      )}
+        </div>,
+          document.body
+        )}
     </>
   );
 }
