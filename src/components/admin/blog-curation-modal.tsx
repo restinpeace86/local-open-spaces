@@ -11,6 +11,10 @@ import { CurationBadgeForm } from '@/components/admin/curation-badge-form';
 // "버튼을 누른" 시점이라 마운트 시 바로 검색을 호출한다(다른 자기완결 패널들의
 // "탭 진입 시 자동 조회 금지" 관례와는 다르다 — 이 모달은 열리는 행위 자체가 그
 // 명시적 트리거다).
+// [정렬 기준 변경](2026-09-06, Decision 021 8항): 위 "정확도순(sort=sim)"은 사용자
+// 지시 원문이지만, 실측 결과 지금 NAVER API HUB의 sort=sim이 스팸성 결과를 상위로
+// 올리는 것을 확인해 사용자 확인 후 실제 호출은 sort=date로 바뀌었다 — 실제 파라미터는
+// src/app/api/admin/spot-curations/blog-search/route.ts 참고.
 //
 // [저장/폐기 정책](사용자 지시 원문): "블로그 본문 텍스트는.. 일시적인 참고용
 // (Scratchpad)으로만 사용하고, DB에 절대 저장하지 않고 메모리상에서 즉시 폐기함."
