@@ -240,6 +240,41 @@ describe('GgCultureEventsAdapter', () => {
       expect(geocode).toHaveBeenCalledWith('경기아트센터');
     });
 
+    // [지오코딩 실/층 단위 정규화 누락 수정](2026-09-05 사용자 지시): "고고학체험실 같은건
+    // 정규화를 통해서 제거되고 전곡선사박물관만 지오코딩으로 던져야 할텐데?" 실측으로
+    // 확인한 버그 — 원문(건물명+실/층 단위)을 그대로 지오코딩에 던지기만 하고, 실패해도
+    // 실/층 단위를 제거한 이름으로 재시도하지 않고 있었다. gg-culture-location-
+    // enrichment.mjs가 API1 보완에 쓰던 정규화(normalizeVenueText)를 재사용해, 원문이
+    // 실패하면 실/층 단위를 제거한 이름으로 한 번 더 시도해야 한다.
+    it('LOC_NM에 실/층 단위가 붙어 원문 지오코딩이 실패하면, 그 단위를 제거한 이름으로 재시도한다', async () => {
+      geocode.mockResolvedValueOnce(null); // 원문("전곡선사박물관 고고학체험실") 1차 시도 실패
+      geocode.mockResolvedValueOnce(GEOCODE_RESULT); // 정규화된 이름("전곡선사박물관") 2차 시도 성공
+      const adapter = new GgCultureEventsAdapter();
+      const rows = await adapter.transform({
+        cultureEventItems: [],
+        foundationEventItems: [{ ...FOUNDATION_EVENT_ITEM, TITLE_NM: 'AI 로봇오페라', LOC_NM: '전곡선사박물관 고고학체험실' }],
+      });
+
+      expect(geocode).toHaveBeenNthCalledWith(1, '전곡선사박물관 고고학체험실');
+      expect(geocode).toHaveBeenNthCalledWith(2, '전곡선사박물관');
+      expect(rows).toHaveLength(1);
+      expect(rows[0].location).toBeTruthy();
+    });
+
+    it('LOC_NM이 "내외부"로 끝나면(사용자가 지적한 실제 사례) 제거한 이름으로 재시도한다', async () => {
+      geocode.mockResolvedValueOnce(null); // 원문("백남준아트센터 내외부") 1차 시도 실패
+      geocode.mockResolvedValueOnce(GEOCODE_RESULT);
+      const adapter = new GgCultureEventsAdapter();
+      const rows = await adapter.transform({
+        cultureEventItems: [],
+        foundationEventItems: [{ ...FOUNDATION_EVENT_ITEM, TITLE_NM: '개관 17주년 기념 축제', LOC_NM: '백남준아트센터 내외부' }],
+      });
+
+      expect(geocode).toHaveBeenNthCalledWith(1, '백남준아트센터 내외부');
+      expect(geocode).toHaveBeenNthCalledWith(2, '백남준아트센터');
+      expect(rows).toHaveLength(1);
+    });
+
     it('지오코딩 결과가 없으면(장소명뿐이라 주소로 인식 못하는 경우 등) 해당 항목을 건너뛴다', async () => {
       geocode.mockResolvedValueOnce(null);
       const adapter = new GgCultureEventsAdapter();

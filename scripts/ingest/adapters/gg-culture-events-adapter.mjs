@@ -50,6 +50,19 @@ import { cleanText, classifyEventTypeWithAI, deriveBookingStatus, deriveParental
 import { geocode, hasVworldApiKey } from './lib/vworld-geocoder.mjs';
 import { fetchWithTimeout } from '../lib/fetch-with-timeout.mjs';
 import { settleGroupFetches } from '../lib/settle-group-fetches.mjs';
+// [지오코딩 실/층 단위 정규화 누락 수정](2026-09-05 사용자 지시): "고고학체험실 같은건
+// 정규화를 통해서 제거되고... 지오코딩으로 던져야 할텐데?" — 실측 확인 결과 API2
+// (GGCULFOUEVENSTM) 최초 수집(transformFoundationEvents)은 gg-culture-location-
+// enrichment.mjs(API1 보완 전용, 이 파일 아래에서 원본 좌표가 없는 경우에만 나중에
+// 실행)와 별개의 코드 경로라 애초에 이 정규화를 한 번도 거치지 않았다 — LOC_NM 원문을
+// ("전곡선사박물관 고고학체험실"/"백남준아트센터 내외부"처럼 실/층 단위가 붙은 그대로)
+// 곧장 지오코딩에 던지고 있었다(진짜 버그, 아래 transformFoundationEvents 참고). 이미
+// 검증된 정규화 함수(순수 문자열 함수, 부작용 없음)를 그대로 재사용한다 — 이 두 파일은
+// 서로를 import하는 순환 참조가 되지만(gg-culture-location-enrichment.mjs도 이 파일의
+// GYEONGGI_BOUNDS/isWithinGyeonggiBounds를 가져간다), 양쪽 다 모듈 최상단이 아니라
+// 함수 본문 안에서만 참조해 실행 시점(두 모듈이 이미 전부 로드된 뒤)에는 문제가 없다
+// (ESM 순환 참조의 잘 알려진 안전 패턴 — 실제로 테스트 스위트 통과로 재확인했다).
+import { normalizeVenueText } from './gg-culture-location-enrichment.mjs';
 
 const CULTURE_EVENT_BASE_URL = 'https://openapi.gg.go.kr/GGCULTUREVENTSTUS';
 const FOUNDATION_EVENT_BASE_URL = 'https://openapi.gg.go.kr/GGCULFOUEVENSTM';
@@ -362,7 +375,16 @@ export class GgCultureEventsAdapter extends BaseCollectorAdapter {
         const primaryLocation = item.LOC_NM?.split(',')[0]?.trim();
         if (!primaryLocation) continue;
 
-        const coords = await this.geocodeOrSkip(title, primaryLocation);
+        // [지오코딩 실/층 단위 정규화 누락 수정](2026-09-05 사용자 지시): 원문을 먼저
+        // 그대로 시도한다(건물명+실 전체가 하나의 POI로 등록돼 카카오 키워드 검색이
+        // 성공하는 경우도 실측으로 있었음 — gg-culture-location-enrichment.mjs와 동일한
+        // "원문 우선, 실패 시 정규화 재시도" 순서를 그대로 따른다). 실패하면 "고고학체험실"/
+        // "내외부"처럼 원문에 남아있던 실/층/홀 단위를 제거한 이름으로 한 번 더 시도한다.
+        let coords = await this.geocodeOrSkip(title, primaryLocation);
+        if (!coords) {
+          const normalized = normalizeVenueText(primaryLocation);
+          if (normalized) coords = await this.geocodeOrSkip(title, normalized);
+        }
         if (!coords) continue;
 
         const tags = deriveParentalTags(JSON.stringify(item));
