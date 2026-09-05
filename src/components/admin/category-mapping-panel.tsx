@@ -225,6 +225,11 @@ export function CategoryMappingPanel({ categoryMinOptions }: { categoryMinOption
   const [newParentCategory, setNewParentCategory] = useState(PARENT_CATEGORY_OPTIONS[0]);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [isCreatingCategory, setIsCreatingCategory] = useState(false);
+  // [노출 중분류 삭제](2026-09-05 사용자 지시): "노출 중분류 기존거 삭제도 가능하도록
+  // 해줘.. 동물 먹이주기 체험농장하고 자연 체험장 분류하기 어렵네" — 시드 데이터로
+  // 들어간 애매한 중분류를 관리자가 직접 정리할 수 있게 한다.
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const [bulkCategoryMin, setBulkCategoryMin] = useState('');
   const [bulkServiceCategoryId, setBulkServiceCategoryId] = useState('');
@@ -266,6 +271,25 @@ export function CategoryMappingPanel({ categoryMinOptions }: { categoryMinOption
     } finally {
       setIsCreatingCategory(false);
     }
+  }
+
+  // 삭제 대상이 open_spaces/spot_dedup_groups에서 참조 중이면 서버가 409로 거부하고
+  // 몇 건이 참조 중인지 알려준다(서버가 이미 그 판단을 하므로 여기서 미리 추측해
+  // 막지 않는다 — 실제로 참조가 있는지는 서버가 실시간으로 확인해야 정확하다).
+  function handleDeleteCategory(category: ServiceCategory) {
+    const confirmed = window.confirm(`"${category.parent_category} > ${category.category_name}"을(를) 삭제할까요?`);
+    if (!confirmed) return;
+
+    setDeletingId(category.id);
+    setDeleteError(null);
+    fetch(`/api/admin/service-categories?id=${encodeURIComponent(category.id)}`, { method: 'DELETE' })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? '삭제에 실패했습니다.');
+        setServiceCategories((prev) => prev.filter((c) => c.id !== category.id));
+      })
+      .catch((err) => setDeleteError(err instanceof Error ? err.message : '삭제에 실패했습니다.'))
+      .finally(() => setDeletingId(null));
   }
 
   function handlePreviewBulk() {
@@ -371,6 +395,7 @@ export function CategoryMappingPanel({ categoryMinOptions }: { categoryMinOption
           </button>
         </form>
         {categoriesError && <p className="text-xs text-red-600 mb-2">{categoriesError}</p>}
+        {deleteError && <p className="text-xs text-red-600 mb-2">{deleteError}</p>}
         {!hasLoadedCategories ? (
           <button
             type="button"
@@ -382,8 +407,22 @@ export function CategoryMappingPanel({ categoryMinOptions }: { categoryMinOption
         ) : (
           <div className="flex flex-wrap gap-1.5">
             {serviceCategories.map((c) => (
-              <span key={c.id} className="rounded-full bg-gray-100 px-2.5 py-1 text-[11px] text-gray-600">
-                {c.parent_category} &gt; {c.category_name}
+              <span
+                key={c.id}
+                className="flex items-center gap-1 rounded-full bg-gray-100 pl-2.5 pr-1.5 py-1 text-[11px] text-gray-600"
+              >
+                <span>
+                  {c.parent_category} &gt; {c.category_name}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleDeleteCategory(c)}
+                  disabled={deletingId === c.id}
+                  aria-label={`${c.parent_category} > ${c.category_name} 삭제`}
+                  className="shrink-0 rounded-full w-4 h-4 flex items-center justify-center text-gray-400 hover:bg-gray-200 hover:text-red-600 disabled:opacity-40"
+                >
+                  ✕
+                </button>
               </span>
             ))}
           </div>

@@ -23,6 +23,56 @@ export async function GET() {
   }
 }
 
+// [노출 중분류 삭제](2026-09-05 사용자 지시): "노출 중분류 기존거 삭제도 가능하도록
+// 해줘.. 동물 먹이주기 체험농장하고 자연 체험장 분류하기 어렵네" — 시드 데이터로 들어간
+// "동물 먹이주기 체험농장"/"흙/자연 체험장"처럼 구분이 애매한 중분류를 관리자가 직접
+// 정리할 수 있어야 한다는 지적. open_spaces.service_category_id와 spot_dedup_groups.
+// service_category_id 둘 다 이 테이블을 FK로 참조하는데 ON DELETE 절이 없어(기본값
+// NO ACTION) 참조 중인 행이 있으면 그냥 DELETE는 실패한다 — 실패 자체를 안전장치로
+// 삼되(추측으로 참조를 임의로 NULL 처리하지 않음), 몇 건이 참조 중인지 먼저 조회해
+// 관리자에게 명확한 이유와 함께 안내한다(왜 삭제가 막혔는지 모른 채 원인불명 에러만
+// 보는 것을 방지).
+export async function DELETE(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    if (!id) {
+      return NextResponse.json({ error: 'id가 필요합니다.' }, { status: 400 });
+    }
+
+    const admin = createAdminClient();
+
+    const [openSpacesCount, dedupGroupsCount] = await Promise.all([
+      admin.from('open_spaces').select('id', { count: 'exact', head: true }).eq('service_category_id', id),
+      admin.from('spot_dedup_groups').select('id', { count: 'exact', head: true }).eq('service_category_id', id),
+    ]);
+    if (openSpacesCount.error) return NextResponse.json({ error: openSpacesCount.error.message }, { status: 500 });
+    if (dedupGroupsCount.error) return NextResponse.json({ error: dedupGroupsCount.error.message }, { status: 500 });
+
+    const referencedCount = (openSpacesCount.count ?? 0) + (dedupGroupsCount.count ?? 0);
+    if (referencedCount > 0) {
+      return NextResponse.json(
+        {
+          error: `이 노출 중분류를 참조하는 데이터가 ${referencedCount.toLocaleString()}건 있어 삭제할 수 없습니다(open_spaces ${openSpacesCount.count ?? 0}건, 중복 그룹 이력 ${dedupGroupsCount.count ?? 0}건). 먼저 해당 데이터를 다른 노출 중분류로 옮기거나 매핑을 해제해주세요.`,
+        },
+        { status: 409 }
+      );
+    }
+
+    const { error } = await admin.from('service_categories').delete().eq('id', id);
+    if (error) {
+      // 위 사전 확인 이후에도(경합 등으로) FK 위반이 나면 마지막 안전망으로 명확한 문구를 준다.
+      const message = error.code === '23503' ? '이 노출 중분류를 참조하는 데이터가 있어 삭제할 수 없습니다.' : error.message;
+      return NextResponse.json({ error: message }, { status: 409 });
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : '서비스 중분류 삭제 실패';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
