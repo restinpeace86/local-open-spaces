@@ -57,6 +57,14 @@ describe('SpotCategoryFilter', () => {
     expect(labels.indexOf('🌱 농장/체험')).toBeLessThan(labels.indexOf('🌳 자연/공원'));
     expect(labels.indexOf('🌳 자연/공원')).toBeLessThan(labels.indexOf('🏛️ 문화시설'));
 
+    // [스팟픽 첫 진입 시 AI 추천 오탭 방지](2026-09-05 사용자 지시): "AI 추천을 2번째나
+    // 3번째로 미루고" — 맨 앞(1번째)이 아니라 대분류 2개 뒤인 3번째 자리에 있어야 한다.
+    const aiIndex = labels.findIndex((l) => l?.includes('AI 추천'));
+    expect(aiIndex).toBe(2);
+    expect(labels.indexOf('🧸 키즈/놀이시설')).toBeLessThan(aiIndex);
+    expect(labels.indexOf('🌱 농장/체험')).toBeLessThan(aiIndex);
+    expect(aiIndex).toBeLessThan(labels.indexOf('🌳 자연/공원'));
+
     // 바텀시트를 열기 전에는 중분류 칩이 화면에 없다.
     expect(screen.queryByText('놀이터')).not.toBeInTheDocument();
     expect(screen.queryByText('도서관')).not.toBeInTheDocument();

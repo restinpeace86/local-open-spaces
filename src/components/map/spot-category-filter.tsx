@@ -108,7 +108,14 @@ export function SpotCategoryFilter({
       {/* [개선사항5] 시트가 열려 있으면 내부에도 같은 대분류 탭이 다시 나타나(아래
           renderInnerMajorTab) 같은 라벨이 화면에 중복 등장할 수 있다 — 테스트가 "닫혀
           있을 때 상시 노출되는 바깥 탭"만 정확히 짚어 찾을 수 있도록 testid로 구분한다. */}
+      {/* [스팟픽 첫 진입 시 AI 추천 오탭 방지](2026-09-05 사용자 지시): "AI 추천을 2번째나
+          3번째로 미루고.. default로 가져오게 하지마 눌렀을때만 가져오게 해" — AI 추천이
+          맨 앞(첫 번째)에 있으면 지도 화면에 처음 진입해 이 칩 행을 훑을 때 무의식적으로
+          가장 먼저 짚이는 위치라 의도치 않게 눌려 바텀시트가 "자꾸 뜨는" 것처럼 느껴질 수
+          있다 — 대분류 탭 2개(키즈/놀이시설, 농장/체험) 뒤, 3번째 자리로 옮겨 우발적 탭을
+          줄인다(대분류 4개 사이의 상대 순서 자체는 변경 없음 — 요구사항 원문 순서 유지). */}
       <div data-testid="spot-category-tabs" className="flex gap-1.5 overflow-x-auto pb-0.5">
+        {SPOT_MAJOR_CATEGORY_OPTIONS.slice(0, 2).map(renderMajorChip)}
         <button
           type="button"
           onClick={onSelectAiRecommend}
@@ -116,8 +123,7 @@ export function SpotCategoryFilter({
         >
           ✨ AI 추천
         </button>
-
-        {SPOT_MAJOR_CATEGORY_OPTIONS.map(renderMajorChip)}
+        {SPOT_MAJOR_CATEGORY_OPTIONS.slice(2).map(renderMajorChip)}
       </div>
 
       {openMajorId && openMajorOption && (

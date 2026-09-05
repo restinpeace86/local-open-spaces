@@ -218,9 +218,18 @@ export function MapExplorer() {
     setSelectedCategoryId((prev) => (prev === id ? null : id));
   }, []);
 
-  const handleOpenAiRecommend = useCallback(() => setIsAiRecommendOpen(true), []);
-
-  const aiRecommendedItems = useMemo(() => rankAiRecommendedSpots(items), [items]);
+  // [스팟픽 첫 진입 시 AI 추천 오탭 방지](2026-09-05 사용자 지시): "default로 가져오게
+  // 하지마 눌렀을때만 가져오게 해" — rankAiRecommendedSpots 자체는 순수 클라이언트 연산
+  // (실제 LLM 호출이나 네트워크 요청이 아니다 — ai-recommend.ts 상단 주석 참고)이지만,
+  // 기존엔 useMemo로 items가 바뀔 때마다(지도를 드래그해 반경이 갱신될 때마다) AI 추천
+  // 시트를 열어본 적이 없어도 매번 재계산하고 있었다. 클릭한 시점의 items로 딱 한 번만
+  // 계산해 상태에 담아두는 방식으로 바꿔 "누르기 전엔 아무 것도 계산하지 않는다"를
+  // 문자 그대로 지킨다.
+  const [aiRecommendedItems, setAiRecommendedItems] = useState<NearbyItem[]>([]);
+  const handleOpenAiRecommend = useCallback(() => {
+    setAiRecommendedItems(rankAiRecommendedSpots(items));
+    setIsAiRecommendOpen(true);
+  }, [items]);
 
   const handleSelectFromAiRecommend = useCallback((item: NearbyItem) => {
     setIsAiRecommendOpen(false);

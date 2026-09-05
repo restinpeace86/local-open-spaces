@@ -26,6 +26,7 @@ vi.mock('@/lib/supabase/client', () => ({
 // 검증하므로 매 테스트 전에 초기화해 서로 영향을 주지 않게 한다.
 beforeEach(() => {
   rpcMock.mockClear();
+  vi.mocked(rankAiRecommendedSpots).mockClear();
 });
 
 // implementation/todo.md: 재검색 버튼 테스트는 dragend를 트리거하는 것이 목적이므로
@@ -42,6 +43,16 @@ vi.mock('next/navigation', () => ({
 // 위해 items/onSelectItem도 노출한다 — 각 item마다 "마커 클릭 시뮬레이션" 버튼을 만들어
 // onSelectItem(item)을 직접 호출할 수 있게 한다(실제 Kakao 마커 렌더링/좌표 변환은
 // 이 프로젝트의 다른 단위 테스트 대상이 아님, 기존 관례 그대로).
+// [스팟픽 첫 진입 시 AI 추천 오탭 방지](2026-09-05 사용자 지시): "default로 가져오게
+// 하지마 눌렀을때만 가져오게 해" — rankAiRecommendedSpots가 AI 추천 칩을 누르기 전에는
+// 전혀 호출되지 않는지(지도 데이터가 바뀔 때마다 미리 계산해두지 않는지) 검증하려면 실제
+// 구현을 감싼 스파이가 필요하다.
+vi.mock('@/lib/spaces/ai-recommend', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/spaces/ai-recommend')>();
+  return { ...actual, rankAiRecommendedSpots: vi.fn(actual.rankAiRecommendedSpots) };
+});
+const { rankAiRecommendedSpots } = await import('@/lib/spaces/ai-recommend');
+
 vi.mock('@/components/map/kakao-map-view', () => ({
   KakaoMapView: ({
     items,
@@ -337,6 +348,19 @@ describe('MapExplorer 대분류 탭 + 중분류 바텀시트 필터 (2026-09-03,
     render(<MapExplorer />);
     fireEvent.click(screen.getAllByText(/AI 추천/)[0]);
     expect(screen.getByText(/AI가 추천하는 나들이 장소/)).toBeInTheDocument();
+  });
+
+  // [스팟픽 첫 진입 시 AI 추천 오탭 방지](2026-09-05 사용자 지시): "default로 가져오게
+  // 하지마 눌렀을때만 가져오게 해" — AI 추천 칩을 누르기 전까지는 랭킹 계산 자체가 한
+  // 번도 호출되지 않아야 한다(지도 데이터가 바뀔 때마다 미리 계산해두는 낭비 금지).
+  it('AI 추천 칩을 누르기 전에는 추천 랭킹을 계산하지 않고, 누르면 그 시점에 한 번만 계산한다', () => {
+    render(<MapExplorer />);
+
+    expect(rankAiRecommendedSpots).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getAllByText(/AI 추천/)[0]);
+
+    expect(rankAiRecommendedSpots).toHaveBeenCalledTimes(1);
   });
 });
 
