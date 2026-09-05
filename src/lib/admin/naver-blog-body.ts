@@ -12,10 +12,22 @@
 // DB에 저장하지 않고, 관리자가 보는 동안만 메모리에 있다가 모달/워크벤치가 닫히면
 // 폐기된다.
 //
-// 이 파일은 jsdom(무거운 Node 전용 파서)을 가져오므로 서버 전용 코드(API 라우트)에서만
-// import한다 — 'use client' 컴포넌트에서 절대 import하지 않는다(admin.ts의 서비스
-// 롤 키 파일과 동일한 관례).
-import { JSDOM } from 'jsdom';
+// [파서를 jsdom → node-html-parser로 교체](2026-09-06, 프로덕션 500 오류 실측 수정):
+// 처음엔 jsdom을 썼는데, 로컬 dev/build/start에서는 정상이었지만 배포된 Vercel
+// 함수에서만 즉시 500이 났다. 사용자가 실제 함수 로그를 확인해준 덕분에 정확한
+// 원인을 알았다 —
+//   Error [ERR_REQUIRE_ESM]: require() of ES Module
+//   .../node_modules/@exodus/bytes/encoding-lite.js from
+//   .../node_modules/html-encoding-sniffer/lib/html-encoding-sniffer.js not supported.
+// jsdom이 의존하는 html-encoding-sniffer가 @exodus/bytes의 ESM 전용 파일을
+// require()로 불러오려다 실패하는, jsdom 자체 의존성 그래프의 CJS/ESM 비호환
+// 문제였다(Next.js 설정으로 해결 가능한 번들링/트레이싱 문제가 아니었다 —
+// serverExternalPackages/outputFileTracingIncludes 두 가지 시도 모두 무의미했던
+// 이유). 이 작업이 필요한 건 "특정 class의 텍스트만 뽑아내기"뿐이라 무거운
+// 전체 DOM/브라우저 에뮬레이션(jsdom)이 애초에 과했다 — 가볍고 순수 CJS인
+// node-html-parser로 교체했다(같은 실제 페이지로 재검증: 출력 완전히 동일한
+// 1,317자, 파싱 시간은 오히려 600ms대 → 11ms로 대폭 개선).
+import { parse } from 'node-html-parser';
 
 // 실제 응답에서 문단 사이에 반복적으로 섞여 있던 제로폭 공백(스마트에디터가 자동
 // 삽입) — 정리하지 않으면 highlightKeywords의 문자열 비교가 어색해질 수 있어 제거한다.
@@ -48,20 +60,16 @@ export function toMobileNaverBlogUrl(url: string): string | null {
 // (비공개 글, 삭제된 글, 알 수 없는 새 형식 등) 추측하지 않고 null을 반환해 호출부가
 // 기존 요약 스니펫으로 자연스럽게 폴백하게 한다.
 export function extractBlogBodyText(html: string): string | null {
-  let dom: JSDOM;
-  try {
-    dom = new JSDOM(html);
-  } catch {
-    return null;
-  }
-
-  const doc = dom.window.document;
-  const container = doc.querySelector('.se-main-container') ?? doc.querySelector('#postViewArea');
+  const root = parse(html);
+  const container = root.querySelector('.se-main-container') ?? root.querySelector('#postViewArea');
   if (!container) return null;
 
   container.querySelectorAll('script, style').forEach((node) => node.remove());
 
-  const text = (container.textContent ?? '').replace(ZERO_WIDTH_SPACE, '').replace(/\s+/g, ' ').trim();
+  // structuredText는 블록 요소 사이에 개행을 넣어준다(순수 .text는 <p> 태그
+  // 사이에 실제 공백이 없으면 단어가 그대로 붙어버린다) — 그 뒤 제로폭 공백 제거와
+  // 공백 정리는 기존과 동일하게 적용한다.
+  const text = container.structuredText.replace(ZERO_WIDTH_SPACE, '').replace(/\s+/g, ' ').trim();
   if (!text) return null;
 
   return text.length > MAX_BLOG_BODY_LENGTH ? `${text.slice(0, MAX_BLOG_BODY_LENGTH)}...` : text;
