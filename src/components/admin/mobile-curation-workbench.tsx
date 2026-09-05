@@ -217,6 +217,8 @@ export function MobileCurationWorkbench({
             onActiveTabChange={form.setActiveTab}
             activeBody={form.activeBody}
             onOverrideUrl={form.overrideActiveUrl}
+            sortOption={form.sortOption}
+            onSortOptionChange={form.setSortOption}
           />
         </section>
 

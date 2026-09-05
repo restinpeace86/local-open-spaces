@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { highlightKeywords } from '@/lib/admin/curation-badges';
-import { BlogBodyState, BlogSearchItem } from '@/lib/admin/use-spot-curation-form';
+import { BlogBodyState, BlogSearchItem, BlogSortOption } from '@/lib/admin/use-spot-curation-form';
 
 // [All-in-One 모바일 큐레이션 워크벤치](2026-09-05 사용자 지시)를 만들면서
 // BlogCurationModal의 "블로그 탭 + 원문 링크 + 하이라이팅 뷰어 + 1년 룰 경고" 렌더링을
@@ -35,6 +35,8 @@ export function BlogReferenceViewer({
   onActiveTabChange,
   activeBody,
   onOverrideUrl,
+  sortOption,
+  onSortOptionChange,
 }: {
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
@@ -48,6 +50,12 @@ export function BlogReferenceViewer({
   onActiveTabChange: (index: number) => void;
   activeBody?: BlogBodyState;
   onOverrideUrl?: (url: string) => void;
+  // [정렬 기준을 화면에서 전환](2026-09-06 사용자 지시): "내가 화면에서 sim/date
+  // 기준 변경해서도 호출할 수 있게.. default는 date로." 둘 다 없으면(기존
+  // 호출부 호환) 정렬 토글을 숨긴다 — 이 컴포넌트를 쓰는 다른 곳이 생겨도 깨지지
+  // 않도록 optional로 둔다.
+  sortOption?: BlogSortOption;
+  onSortOptionChange?: (next: BlogSortOption) => void;
 }) {
   const activeItem = blogItems?.[activeTab] ?? null;
   const [isEditingUrl, setIsEditingUrl] = useState(false);
@@ -90,6 +98,33 @@ export function BlogReferenceViewer({
           {isSearching ? '검색 중...' : '다시 검색'}
         </button>
       </div>
+
+      {/* [정렬 기준 전환](2026-09-06 사용자 지시) — 바꾸는 즉시 재검색된다. */}
+      {sortOption && onSortOptionChange && (
+        <div className="flex items-center gap-1.5">
+          <span className="text-[11px] text-gray-400">정렬</span>
+          <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+            {(
+              [
+                { value: 'date' as const, label: '최신순' },
+                { value: 'sim' as const, label: '정확도순' },
+              ]
+            ).map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => onSortOptionChange(opt.value)}
+                disabled={isSearching}
+                className={`px-2.5 py-1 text-[11px] font-medium transition-colors disabled:opacity-50 ${
+                  sortOption === opt.value ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {searchError && <p className="text-xs text-red-600">{searchError}</p>}
 

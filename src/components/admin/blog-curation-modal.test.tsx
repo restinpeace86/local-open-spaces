@@ -307,4 +307,43 @@ describe('BlogCurationModal', () => {
       expect(body.blog_url_1).toBe('https://blog.naver.com/yjsjhs/223844311455');
     });
   });
+
+  // [정렬 기준을 화면에서 전환](2026-09-06 사용자 지시): "나중에는 sim 기준으로도
+  // 변경할수있도록.. 화면에서 sim/date 기준 변경해서도 호출할수 있게.. default는
+  // date로."
+  describe('정렬 기준 전환(sim/date)', () => {
+    it('기본값은 최신순(date)으로 검색한다', async () => {
+      const fetchMock = mockFetchByUrl({
+        blogSearch: { items: [makeBlogItem()], hasRecentReview: true, hasNoResults: false },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(
+        <BlogCurationModal spot={SPOT} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+      );
+
+      await waitFor(() => {
+        const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/blog-search'));
+        expect(call).toBeDefined();
+        expect(call![0] as string).toContain('sort=date');
+      });
+    });
+
+    it('"정확도순"을 누르면 즉시 sort=sim으로 다시 검색한다', async () => {
+      const fetchMock = mockFetchByUrl({
+        blogSearch: { items: [makeBlogItem()], hasRecentReview: true, hasNoResults: false },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(
+        <BlogCurationModal spot={SPOT} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+      );
+
+      await screen.findByText('행복키즈카페 다녀왔어요');
+      fireEvent.click(screen.getByText('정확도순'));
+
+      await waitFor(() => {
+        const calls = fetchMock.mock.calls.filter((c) => (c[0] as string).includes('/blog-search'));
+        expect(calls.some((c) => (c[0] as string).includes('sort=sim'))).toBe(true);
+      });
+    });
+  });
 });

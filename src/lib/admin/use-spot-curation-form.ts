@@ -9,6 +9,13 @@ import { useEffect, useState } from 'react';
 // 만들지 않고 이미 검증된 로직을 재사용). 렌더링(JSX)은 두 컴포넌트가 각자의
 // 레이아웃에 맞게 따로 갖는다 — 이 훅은 상태와 fetch/저장 로직만 담당한다.
 
+// [정렬 기준을 화면에서 전환 가능하게](2026-09-06 사용자 지시): "나중에는 sim
+// 기준으로도 변경할수있도록.. 아니면 내가 화면에서 sim/date 기준 변경해서도
+// 호출할수 있게.. default는 date로" — 기본은 date(실측상 지금 더 정확함,
+// Decision 021 8항)로 두되, 관리자가 필요하면 sim으로 즉시 바꿔 다시 검색할 수
+// 있게 한다.
+export type BlogSortOption = 'sim' | 'date';
+
 export type BlogSearchItem = {
   title: string;
   link: string;
@@ -46,6 +53,8 @@ export function useSpotCurationForm(spot: SpotForCuration) {
   // 명시되진 않았지만, "정확도순 상위 3개"가 실제로 이 스팟을 가리키게 하려면
   // 필요한 최소한의 보조 장치 — 저장 데이터 구조에는 영향 없음).
   const [searchQuery, setSearchQuery] = useState(spot.name);
+  // [정렬 기준 전환](2026-09-06 사용자 지시): 기본값 date.
+  const [sortOption, setSortOptionState] = useState<BlogSortOption>('date');
   const [blogItems, setBlogItems] = useState<BlogSearchItem[] | null>(null);
   const [hasRecentReview, setHasRecentReview] = useState(true);
   const [hasNoResults, setHasNoResults] = useState(false);
@@ -62,10 +71,14 @@ export function useSpotCurationForm(spot: SpotForCuration) {
   // [블로그 큐레이션 전체 본문 보기](2026-09-05 사용자 지시) — 링크별 전체 본문 캐시.
   const [bodyByLink, setBodyByLink] = useState<Record<string, BlogBodyState>>({});
 
-  function runSearch(query: string) {
+  // sort를 명시하지 않으면 현재 선택된 정렬 기준(sortOption)을 그대로 쓴다 —
+  // "다시 검색" 버튼처럼 검색어만 바뀌는 경우 정렬 선택은 유지돼야 하기 때문이다.
+  // 정렬 자체를 바꾸는 경우(setSortOption)는 상태 갱신이 비동기라 값을 직접
+  // 넘겨받아야 최신 값으로 즉시 재검색할 수 있다.
+  function runSearch(query: string, sort: BlogSortOption = sortOption) {
     setIsSearching(true);
     setSearchError(null);
-    fetch(`/api/admin/spot-curations/blog-search?query=${encodeURIComponent(query)}`)
+    fetch(`/api/admin/spot-curations/blog-search?query=${encodeURIComponent(query)}&sort=${sort}`)
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? '블로그 검색에 실패했습니다.');
@@ -76,6 +89,13 @@ export function useSpotCurationForm(spot: SpotForCuration) {
       })
       .catch((err) => setSearchError(err instanceof Error ? err.message : '블로그 검색에 실패했습니다.'))
       .finally(() => setIsSearching(false));
+  }
+
+  // [정렬 기준을 화면에서 전환](2026-09-06 사용자 지시): 정렬을 바꾸면 그 즉시
+  // 현재 검색어로 다시 검색한다(관리자가 별도로 "다시 검색"을 또 누르지 않아도 됨).
+  function setSortOption(next: BlogSortOption) {
+    setSortOptionState(next);
+    runSearch(searchQuery, next);
   }
 
   // [On-Demand](사용자 지시 원문): 모달/워크벤치를 여는 것 자체가 "버튼을 누른"
@@ -211,6 +231,8 @@ export function useSpotCurationForm(spot: SpotForCuration) {
   return {
     searchQuery,
     setSearchQuery,
+    sortOption,
+    setSortOption,
     runSearch,
     blogItems,
     hasRecentReview,

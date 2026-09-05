@@ -4,6 +4,20 @@
 // 관례가 없다 — 로직은 순수 함수로 빼서 테스트하고, 라우트는 그 함수를 그대로 쓴다).
 export const RECENT_WINDOW_DAYS = 365;
 
+// [정렬 기준을 화면에서 전환](2026-09-06 사용자 지시): "화면에서 sim/date 기준
+// 변경해서도 호출할 수 있게.. default는 date로." 클라이언트가 넘긴 sort 값이
+// 정해진 두 값(sim/date) 중 하나가 아니면(오타/누락/알 수 없는 값) 추측하지
+// 않고 안전한 기본값(date)으로 되돌린다.
+export const ALLOWED_BLOG_SORTS = ['sim', 'date'] as const;
+export type BlogSortOption = (typeof ALLOWED_BLOG_SORTS)[number];
+export const DEFAULT_BLOG_SORT: BlogSortOption = 'date';
+
+export function resolveBlogSort(requested: string | null): BlogSortOption {
+  return (ALLOWED_BLOG_SORTS as readonly string[]).includes(requested ?? '')
+    ? (requested as BlogSortOption)
+    : DEFAULT_BLOG_SORT;
+}
+
 // 네이버 검색 API는 매칭 키워드에 자체 <b>/</b> 태그를 씌우고 HTML 엔티티로
 // 이스케이프해 돌려준다 — 이 프로젝트가 직접 하이라이팅을 다시 입히므로 네이버 쪽
 // <b> 태그는 제거하고, 일반 텍스트로 되돌린다.

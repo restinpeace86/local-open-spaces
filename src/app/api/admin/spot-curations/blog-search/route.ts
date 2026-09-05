@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { cleanNaverText, isWithinRecentWindow } from '@/lib/admin/naver-blog-search';
+import { cleanNaverText, isWithinRecentWindow, resolveBlogSort } from '@/lib/admin/naver-blog-search';
 
 // [관리자용 블로그 큐레이션 모달](2026-09-05 사용자 지시, Decision 021) — "관리자가
 // 장소 상세 페이지에서 버튼을 누르면, 네이버 블로그 검색 API를 정확도순(sort=sim)으로
@@ -17,15 +17,18 @@ import { cleanNaverText, isWithinRecentWindow } from '@/lib/admin/naver-blog-sea
 const NAVER_BLOG_SEARCH_URL = 'https://naverapihub.apigw.ntruss.com/search/v1/blog';
 const DISPLAY_COUNT = 3;
 
-// [정렬 기준 sim → date 교체](2026-09-06 사용자 지시): 사용자 지시 원문은 "정확도순
-// (sort=sim)"이었으나, 사용자가 제시한 실제 사례("호박터숯불촌")로 재현 테스트한
+// [정렬 기준 sim → date 교체 + 화면에서 전환 가능](2026-09-06 사용자 지시): 사용자
+// 지시 원문은 "정확도순(sort=sim)"이었으나, "호박터숯불촌" 실제 사례로 재현 테스트한
 // 결과 지금 NAVER API HUB의 sort=sim 랭킹이 스팸성 블로그를 상위로 올리는 것을
 // 확인했다. 같은 요청에서 sort 값만 date로 바꿔보니 실제로 그 식당을 다룬 최근
 // 글들이 정확히 상위에 나왔다 — sim만 유독 품질이 나쁘고 date는 정상 동작함을
 // 직접 비교 확인했다(project/decision-log.md Decision 021 8항 참고). 이 기능
 // 자체가 "최근 1년 이내 후기가 있는지" 확인하는 것이 목적이라 date(최신순)가
-// 오히려 기능 취지에도 더 맞아, 사용자 확인을 거쳐 기본 정렬을 date로 바꿨다.
-const SORT = 'date';
+// 오히려 기능 취지에도 더 맞아 기본값으로 삼는다. 다만 사용자가 "나중에는 sim
+// 기준으로도 변경할 수 있게.. 화면에서 sim/date 전환"을 요청해, 클라이언트가
+// ?sort= 로 넘긴 값을 그대로 네이버에 전달한다 — 검증/기본값 로직은
+// naver-blog-search.ts의 resolveBlogSort()로 뺐다(순수 함수로 단위 테스트하기
+// 위함 — 이 프로젝트는 route.ts를 직접 테스트하지 않는 관례).
 
 // [실측 확인 — "본문 텍스트" 범위](2026-09-05): 네이버 블로그 검색 API는 전체 본문이
 // 아니라 description(약 200자 요약 스니펫, 매칭 키워드에 <b> 태그 포함)만 제공한다.
@@ -48,6 +51,7 @@ export async function GET(request: NextRequest) {
     if (!query) {
       return NextResponse.json({ error: '검색어(query)가 필요합니다.' }, { status: 400 });
     }
+    const sort = resolveBlogSort(searchParams.get('sort'));
 
     const clientId = process.env.NAVER_CLIENT_ID;
     const clientSecret = process.env.NAVER_CLIENT_SECRET;
@@ -61,7 +65,7 @@ export async function GET(request: NextRequest) {
     const url = `${NAVER_BLOG_SEARCH_URL}?${new URLSearchParams({
       query,
       display: String(DISPLAY_COUNT),
-      sort: SORT,
+      sort,
     }).toString()}`;
 
     // [NAVER API HUB 이관] 인증 헤더 이름이 X-Naver-Client-Id/Secret →

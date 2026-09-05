@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanNaverText, parsePostdate, isWithinRecentWindow } from './naver-blog-search';
+import { cleanNaverText, parsePostdate, isWithinRecentWindow, resolveBlogSort } from './naver-blog-search';
 
 // [관리자용 블로그 큐레이션 모달](2026-09-05 사용자 지시, Decision 021) 단위 테스트.
 describe('cleanNaverText', () => {
@@ -52,5 +52,20 @@ describe('isWithinRecentWindow', () => {
 
   it('형식이 잘못된 postdate는 최신으로 추측하지 않고 false', () => {
     expect(isWithinRecentWindow('', now)).toBe(false);
+  });
+});
+
+// [정렬 기준을 화면에서 전환](2026-09-06 사용자 지시): "내가 화면에서 sim/date
+// 기준 변경해서도 호출할 수 있게.. default는 date로."
+describe('resolveBlogSort', () => {
+  it('sim/date는 그대로 통과시킨다', () => {
+    expect(resolveBlogSort('sim')).toBe('sim');
+    expect(resolveBlogSort('date')).toBe('date');
+  });
+
+  it('값이 없거나(null) 알 수 없는 값이면 추측하지 않고 기본값(date)으로 되돌린다', () => {
+    expect(resolveBlogSort(null)).toBe('date');
+    expect(resolveBlogSort('')).toBe('date');
+    expect(resolveBlogSort('relevance')).toBe('date');
   });
 });
