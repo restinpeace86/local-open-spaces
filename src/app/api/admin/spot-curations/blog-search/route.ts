@@ -6,20 +6,22 @@ import { cleanNaverText, isWithinRecentWindow } from '@/lib/admin/naver-blog-sea
 // 호출하여 상위 최신 글 3개를 가져옴." 서버에서만 호출한다 — NAVER_CLIENT_ID/SECRET을
 // 클라이언트에 절대 노출하지 않기 위한 프록시 라우트다.
 //
-// [실측 확인](2026-09-05): 이 라우트를 만들며 실제로 호출해본 결과 현재
-// .env.local의 키로는 401 "NID AUTH Result Invalid"가 발생한다 — 네이버 개발자센터
-// 애플리케이션에 "검색 > 블로그" API가 활성화돼 있지 않거나 키 자체가 유효하지 않은
-// 것으로 보인다(코드 문제가 아니라 계정/키 설정 문제, project/decision-log.md
-// Decision 021 참고). 아래 에러 핸들링이 이 케이스를 관리자가 이해할 수 있는
-// 문구로 그대로 전달한다.
-//
+// [NAVER API HUB 이관](2026-09-05 사용자 제공 공지 + 실측 확인): 네이버가 2026-06-25
+// 부터 검색 API를 기존 개발자센터(openapi.naver.com)에서 NAVER Cloud Platform의
+// "NAVER API HUB"로 이관했다 — 신규 애플리케이션은 이제 이 새 콘솔에서만 발급받을
+// 수 있다. 처음엔 기존 엔드포인트/헤더로 호출해 401이 나서 "키/앱 설정 문제"로
+// 오판했었는데, 사용자가 이 이관 공지를 제공해줘서 실제로는 엔드포인트와 인증
+// 헤더 이름 자체가 바뀐 것이었음을 확인했다(같은 .env.local 키로 아래 새 엔드포인트
+// 호출 시 200 응답 + 실제 검색 결과 확인 완료). 응답 JSON 필드(title/link/
+// description/bloggername/postdate)는 기존과 동일해 파싱 로직은 그대로 둔다.
+const NAVER_BLOG_SEARCH_URL = 'https://naverapihub.apigw.ntruss.com/search/v1/blog';
+const DISPLAY_COUNT = 3;
+
 // [실측 확인 — "본문 텍스트" 범위](2026-09-05): 네이버 블로그 검색 API는 전체 본문이
 // 아니라 description(약 200자 요약 스니펫, 매칭 키워드에 <b> 태그 포함)만 제공한다.
 // 실제 블로그 페이지는 대부분 iframe 안에 본문이 렌더링돼 있어 안정적으로 크롤링할
 // 수 없다(추측 금지) — 이번 구현은 검색 API가 실제로 제공하는 이 스니펫을 정제해
 // 보여준다(전체 본문 스크래핑은 범위 밖, Decision 021 참고).
-const NAVER_BLOG_SEARCH_URL = 'https://openapi.naver.com/v1/search/blog.json';
-const DISPLAY_COUNT = 3;
 
 type NaverBlogItem = {
   title: string;
@@ -52,17 +54,19 @@ export async function GET(request: NextRequest) {
       sort: 'sim',
     }).toString()}`;
 
+    // [NAVER API HUB 이관] 인증 헤더 이름이 X-Naver-Client-Id/Secret →
+    // X-NCP-APIGW-API-KEY-ID/X-NCP-APIGW-API-KEY로 바뀌었다(위 주석 참고).
     const res = await fetch(url, {
-      headers: { 'X-Naver-Client-Id': clientId, 'X-Naver-Client-Secret': clientSecret },
+      headers: { 'X-NCP-APIGW-API-KEY-ID': clientId, 'X-NCP-APIGW-API-KEY': clientSecret },
     });
 
     if (!res.ok) {
       const text = await res.text();
-      // 실측으로 확인한 흔한 실패(401 NID AUTH Result Invalid)를 관리자가 바로
-      // 이해할 수 있는 문구로 안내한다 — Decision 021 참고.
+      // 401은 이제 "블로그 API 미활성화"보다 NAVER API HUB 콘솔에서 이 Application에
+      // 검색 API가 연결돼 있지 않거나 키가 잘못됐을 가능성을 먼저 안내한다.
       const hint =
         res.status === 401
-          ? ' (네이버 개발자센터에서 이 애플리케이션에 "검색 > 블로그" API가 활성화돼 있는지, 키가 유효한지 확인해주세요.)'
+          ? ' (NAVER API HUB 콘솔에서 이 Application에 검색 API가 연결돼 있는지, Client ID/Secret이 정확한지 확인해주세요.)'
           : '';
       return NextResponse.json(
         { error: `네이버 블로그 검색 실패 (HTTP ${res.status})${hint}: ${text.slice(0, 300)}` },

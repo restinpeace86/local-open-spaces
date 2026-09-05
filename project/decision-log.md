@@ -377,13 +377,20 @@ Decision 019(맘스픽 등급 체계 도입) 9항 "명시적 비목표"에서 "�
    (text[], 11(실측 12)종 중 다중 선택)를 추가한다. "노출 중분류"는 이미 존재하는
    `open_spaces.service_category_id`를 그대로 재사용한다(제5장 제4조 기존 구조 우선 —
    spot_curations에 중복 컬럼을 새로 만들지 않음).
-5. **실측으로 확인한 제약(정직하게 기록)**: 현재 `.env.local`의
-   `NAVER_CLIENT_ID`/`NAVER_CLIENT_SECRET`로 실제 블로그 검색 API를 호출해보니
-   `401 NID AUTH Result Invalid`로 인증 자체가 거부됐다 — 네이버 개발자센터
-   애플리케이션에 "검색 &gt; 블로그" API가 활성화돼 있지 않거나 키가 유효하지 않은
-   것으로 보인다(코드 문제가 아니라 계정/키 설정 문제로 판단). 코드는 정상 스펙대로
-   구현하되, 사용자가 네이버 개발자센터에서 키/API 활성화 상태를 확인해야 실제
-   동작한다.
+5. **[정정] 인증 실패 원인(당초 오판 → 재확인)**: 최초 구현 시 `.env.local`의
+   `NAVER_CLIENT_ID`/`NAVER_CLIENT_SECRET`로 옛 엔드포인트
+   (`openapi.naver.com/v1/search/blog.json` + `X-Naver-Client-Id/Secret` 헤더)를
+   호출해 `401 NID AUTH Result Invalid`가 났고, 이를 "키/앱 설정 문제"로 오판해
+   기록했었다. 이후 사용자가 네이버 개발자센터의 공식 공지(2026-06-29 게시, 2026-
+   06-25부로 검색 API가 NAVER Cloud Platform의 "NAVER API HUB"로 이관됨 — 신규
+   애플리케이션은 옛 콘솔에서 더 이상 발급 불가)를 제공해, 실제 원인이 키가 아니라
+   **엔드포인트/인증 헤더 자체가 바뀐 것**임을 재확인했다. 같은 `.env.local` 키로
+   새 엔드포인트(`https://naverapihub.apigw.ntruss.com/search/v1/blog`, 헤더
+   `X-NCP-APIGW-API-KEY-ID`/`X-NCP-APIGW-API-KEY`)를 호출하니 200과 함께 실제
+   검색 결과가 왔다(2026-09-05 재검증). 응답 JSON 필드 구조(title/link/description/
+   bloggername/postdate)는 기존과 동일해 파싱 로직은 변경하지 않았다 —
+   `src/app/api/admin/spot-curations/blog-search/route.ts`만 엔드포인트/헤더를
+   교체했다. **현재 실제로 정상 동작한다.**
 6. **"본문 텍스트" 범위 조정(실측 기반)**: 네이버 블로그 검색 API는 전체 본문이
    아니라 `description`(약 200자 요약 스니펫, 매칭 키워드에 자체 `<b>` 태그 포함)만
    제공한다 — 실제 블로그 페이지(`link`) 전체 본문은 대부분 iframe 안에 렌더링돼
