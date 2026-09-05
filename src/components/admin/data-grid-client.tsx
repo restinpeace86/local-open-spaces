@@ -16,6 +16,7 @@ import { SpotCurationsPanel } from '@/components/admin/spot-curations-panel';
 import { MomPickPostsPanel } from '@/components/admin/mom-pick-posts-panel';
 import { SpotDedupPanel } from '@/components/admin/spot-dedup-panel';
 import { CategoryMappingPanel } from '@/components/admin/category-mapping-panel';
+import { ServiceCategory } from '@/lib/admin/service-category';
 
 // [관리자 화면(/admin/data-grid) 기능 고도화 및 범용 제휴 상품 테이블 개편](2026-08-30
 // 사용자 지시): 'curated_items'를 네 번째 탭으로 추가한다. 아래 나머지 탭 3개(open_spaces/
@@ -51,6 +52,9 @@ export type AdminOpenSpaceRow = {
   category: string;
   category_min: string | null;
   category_min_source: string | null;
+  // [노출 중분류 개별 행 수정](2026-09-05 사용자 지시): "노출 중분류 변경할 수
+  // 있도록 해줘 open_spaces쪽에서" — events에는 없는 open_spaces 전용 컬럼이다.
+  service_category_id: string | null;
   address: string;
   location: unknown;
   location_precision: string;
@@ -673,6 +677,12 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     pendingCategoryMin.join(',') !== appliedCategoryMin.join(',') ||
     pendingTargetAudience.join(',') !== appliedTargetAudience.join(',');
   const [isRulesModalOpen, setIsRulesModalOpen] = useState(false);
+  // [노출 중분류 개별 행 수정](2026-09-05 사용자 지시): "노출 중분류 변경할 수
+  // 있도록 해줘 open_spaces쪽에서" — 상세 모달의 ServiceCategoryEditor가 선택지로
+  // 쓸 목록. 관리자 페이지 성능 최적화 관례(자동 조회 금지) 그대로, open_spaces
+  // 행을 실제로 열 때(handleOpenOpenSpaceRow) 처음 한 번만 조용히 가져온다.
+  const [serviceCategories, setServiceCategories] = useState<ServiceCategory[]>([]);
+  const [hasLoadedServiceCategories, setHasLoadedServiceCategories] = useState(false);
   // [0순위 우선 요청](2026-08-26): "기본 조회 조건에 WHERE is_active = true를 적용" — 다른
   // tri-state 필터와 달리 기본값이 'all'이 아니라 'true'다(비활성 만료 데이터가 기본적으로
   // 섞여 나오지 않도록). events 탭에만 의미가 있다(open_spaces에는 is_active 컬럼이 없음).
@@ -708,6 +718,26 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     spot_dedup: false,
     category_mapping: false,
   });
+
+  // [노출 중분류 개별 행 수정](2026-09-05 사용자 지시) 참고: open_spaces 행을 열 때만
+  // (events/raw_ingest_data는 이 컬럼이 없어 필요 없음) 노출 중분류 목록을 처음 한
+  // 번만 조용히 가져온다. 이 핸들러 자체는 open_spaces/events 테이블 행 클릭에 공용으로
+  // 쓰이므로(아래 호출부), tab으로 한 번 더 좁힌다.
+  function handleOpenDataRow(row: AdminRow) {
+    setSelectedRow(row);
+    if (tab === 'open_spaces' && !hasLoadedServiceCategories) {
+      setHasLoadedServiceCategories(true);
+      fetch('/api/admin/service-categories')
+        .then(async (res) => {
+          const data = await res.json();
+          if (res.ok) setServiceCategories(data.items ?? []);
+        })
+        .catch(() => {
+          // 조용한 부가 조회 실패는 화면 흐름을 막지 않는다 — 옵션이 비어 보일 뿐,
+          // 상세 모달 자체나 다른 기능에는 영향 없다.
+        });
+    }
+  }
 
   const resetFilters = () => {
     setQ('');
@@ -1151,7 +1181,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                 return (
                   <tr
                     key={r.id}
-                    onClick={() => setSelectedRow(row)}
+                    onClick={() => handleOpenDataRow(row)}
                     className={`border-b border-gray-100 hover:bg-blue-50 cursor-pointer ${zebraClass}`}
                   >
                     <td className="py-2 pr-3 font-mono text-[11px] text-gray-500 max-w-[140px] truncate">{r.external_id}</td>
@@ -1259,6 +1289,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
           row={selectedRow}
           categoryMinOptions={currentOptions && 'categoryMins' in currentOptions ? currentOptions.categoryMins : []}
           targetAudienceOptions={tab === 'events' ? [...TARGET_AUDIENCE_TAGS] : []}
+          serviceCategories={tab === 'open_spaces' ? serviceCategories : []}
           onClose={() => setSelectedRow(null)}
           onCategoryMinUpdated={(id, nextCategoryMin, nextSource) => {
             setRows((prev) =>
@@ -1294,6 +1325,14 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
             );
             setSelectedRow((prev) =>
               prev && 'id' in prev && prev.id === id ? { ...prev, location: nextLocation, location_precision: nextPrecision } : prev
+            );
+          }}
+          onServiceCategoryUpdated={(id, nextServiceCategoryId) => {
+            setRows((prev) =>
+              prev.map((row) => ('id' in row && row.id === id ? { ...row, service_category_id: nextServiceCategoryId } : row))
+            );
+            setSelectedRow((prev) =>
+              prev && 'id' in prev && prev.id === id ? { ...prev, service_category_id: nextServiceCategoryId } : prev
             );
           }}
           onMigratedToEvent={(id) => {

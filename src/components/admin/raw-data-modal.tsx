@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { AdminTable, AdminRow, AdminOpenSpaceRow, AdminEventRow, AdminRawIngestRow, extractLngLat } from '@/components/admin/data-grid-client';
 import { MigrateToEventModal } from '@/components/admin/migrate-to-event-modal';
+import { ServiceCategory } from '@/lib/admin/service-category';
 
 // [개편] 행 클릭 시 해당 행의 전체 원천 컬럼(구조화된 값) + raw_data/raw_payload 원문 JSON을
 // 함께 보여주는 Read-Only 뷰어. 3개 탭(open_spaces/events/raw_ingest_data) 행 형태가 서로
@@ -108,6 +109,83 @@ function CategoryMinEditor({
           className="rounded-full bg-purple-600 text-white text-xs font-semibold px-3 py-1.5 disabled:opacity-40 hover:bg-purple-700"
         >
           {isSaving ? '저장 중...' : '저장(MANUAL)'}
+        </button>
+      </div>
+      {errorMessage && <p className="mt-1.5 text-xs text-red-500">{errorMessage}</p>}
+    </div>
+  );
+}
+
+// [노출 중분류 개별 행 수정](2026-09-05 사용자 지시): "노출 중분류 변경할 수 있도록
+// 해줘 open_spaces쪽에서" — open_spaces 전용(events에는 service_category_id 컬럼
+// 자체가 없음). 새 PATCH 엔드포인트를 만들지 않고, 이미 있는 대량/선택 매핑
+// 라우트(POST /api/admin/open-spaces/bulk-category-mapping)를 `ids: [row.id]`
+// 하나짜리로 재사용한다(제5장 제4조 기존 구조 우선) — 그 라우트가 이미 이 경로에서
+// service_category_id를 명시적으로 null(선택 해제)까지 허용하도록 확장돼 있다.
+function ServiceCategoryEditor({
+  row,
+  serviceCategories,
+  onUpdated,
+}: {
+  row: AdminOpenSpaceRow;
+  serviceCategories: ServiceCategory[];
+  onUpdated: (id: string, nextServiceCategoryId: string | null) => void;
+}) {
+  const [value, setValue] = useState(row.service_category_id ?? '');
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const currentCategory = serviceCategories.find((c) => c.id === row.service_category_id);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setErrorMessage(null);
+    try {
+      const res = await fetch('/api/admin/open-spaces/bulk-category-mapping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [row.id], service_category_id: value || null }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? '수동 수정 실패');
+      onUpdated(row.id, value || null);
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : '수동 수정 실패');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-4 rounded-xl border border-gray-200 p-3">
+      <h3 className="text-xs font-semibold text-gray-500 mb-2">
+        노출 중분류(service_category_id) 수동 수정
+        {currentCategory && (
+          <span className="ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
+            현재: {currentCategory.parent_category} &gt; {currentCategory.category_name}
+          </span>
+        )}
+      </h3>
+      <div className="flex items-center gap-2">
+        <select
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs flex-1"
+        >
+          <option value="">(선택 안 함)</option>
+          {serviceCategories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.parent_category} &gt; {c.category_name}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={isSaving}
+          className="rounded-full bg-purple-600 text-white text-xs font-semibold px-3 py-1.5 disabled:opacity-40 hover:bg-purple-700"
+        >
+          {isSaving ? '저장 중...' : '저장'}
         </button>
       </div>
       {errorMessage && <p className="mt-1.5 text-xs text-red-500">{errorMessage}</p>}
@@ -278,20 +356,25 @@ export function RawDataModal({
   row,
   categoryMinOptions,
   targetAudienceOptions = [],
+  serviceCategories = [],
   onClose,
   onCategoryMinUpdated,
   onTargetAudienceUpdated,
   onLocationUpdated,
+  onServiceCategoryUpdated,
   onMigratedToEvent,
 }: {
   table: AdminTable;
   row: AdminRow;
   categoryMinOptions: string[];
   targetAudienceOptions?: string[];
+  // [노출 중분류 개별 행 수정](2026-09-05 사용자 지시): open_spaces 탭에서만 쓰인다.
+  serviceCategories?: ServiceCategory[];
   onClose: () => void;
   onCategoryMinUpdated?: (id: string, nextCategoryMin: string | null, nextSource: string | null) => void;
   onTargetAudienceUpdated?: (id: string, nextTargetAudience: string | null, nextSource: string | null) => void;
   onLocationUpdated?: (id: string, nextLocation: unknown, nextPrecision: string) => void;
+  onServiceCategoryUpdated?: (id: string, nextServiceCategoryId: string | null) => void;
   // [todo.md 개선사항 5](2026-09-03): open_spaces 탭에서만 전달된다 — 이관 성공 시 부모가
   // 목록에서 이 행을 제거하고 상세 모달을 닫는다(원본이 실제로 삭제됐으므로).
   onMigratedToEvent?: (id: string) => void;
@@ -337,6 +420,14 @@ export function RawDataModal({
           )}
 
           {table === 'events' && onLocationUpdated && <LocationEditor row={row as AdminEventRow} onUpdated={onLocationUpdated} />}
+
+          {table === 'open_spaces' && onServiceCategoryUpdated && (
+            <ServiceCategoryEditor
+              row={row as AdminOpenSpaceRow}
+              serviceCategories={serviceCategories}
+              onUpdated={onServiceCategoryUpdated}
+            />
+          )}
 
           {/* [todo.md 개선사항 5](2026-09-03): 스팟픽에 잘못 분류돼 있던 데이터(예: 실제로는
               기간이 있는 행사·체험 프로그램)를 이벤트픽 테이블로 옮기는 액션. open_spaces

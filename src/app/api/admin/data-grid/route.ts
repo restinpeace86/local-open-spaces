@@ -121,8 +121,12 @@ function applyCreatedAtRange<Q extends { gte: (c: string, v: string) => Q; lt: (
   return next;
 }
 
+// [노출 중분류 개별 행 수정](2026-09-05 사용자 지시): "노출 중분류 변경할 수 있도록
+// 해줘 open_spaces쪽에서" — 상세 모달에서 현재 값을 보여주고 고치려면 service_category_id를
+// 이 목록 조회 시점에 함께 받아와야 한다(지금까지는 대량/선택 매핑 API만 이 값을
+// 갱신했을 뿐, 조회 응답에는 아예 없었다).
 const OPEN_SPACES_COLUMNS =
-  'id, external_id, source_type, source, name, category, category_min, category_min_source, address, location, location_precision, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, raw_data, sigungu_name, created_at, updated_at';
+  'id, external_id, source_type, source, name, category, category_min, category_min_source, service_category_id, address, location, location_precision, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, raw_data, sigungu_name, created_at, updated_at';
 
 const EVENTS_COLUMNS =
   'id, external_id, source, title, event_type, category_maj, category_min, category_min_source, target_audience, target_audience_source, venue_name, sigungu_name, start_date, end_date, location, location_precision, is_reservation_required, reservation_url, reservation_start_date, reservation_end_date, is_free, thumbnail_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, is_active, raw_data, created_at';

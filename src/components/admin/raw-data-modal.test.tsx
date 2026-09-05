@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RawDataModal } from './raw-data-modal';
 import { AdminOpenSpaceRow } from './data-grid-client';
 
@@ -15,6 +15,7 @@ function buildRow(overrides: Partial<AdminOpenSpaceRow> = {}): AdminOpenSpaceRow
     category: 'CULTURE',
     category_min: null,
     category_min_source: null,
+    service_category_id: null,
     address: '서울시 종로구',
     location: null,
     location_precision: 'EXACT',
@@ -60,5 +61,117 @@ describe('RawDataModal URL/이미지 렌더링', () => {
 
     expect(screen.getAllByText('테스트 공간').length).toBeGreaterThan(0);
     expect(screen.getByText('서울시 종로구')).toBeInTheDocument();
+  });
+});
+
+// [노출 중분류 개별 행 수정](2026-09-05 사용자 지시): "노출 중분류 변경할 수 있도록
+// 해줘 open_spaces쪽에서" — 상세 모달에서 개별 행의 service_category_id를 직접
+// 수정할 수 있는지 검증한다.
+describe('RawDataModal — 노출 중분류(ServiceCategoryEditor)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const SERVICE_CATEGORIES = [
+    { id: 'svc-1', parent_category: '자연/공원', category_name: '대형 근린공원 / 잔디광장' },
+    { id: 'svc-2', parent_category: '키즈/놀이시설', category_name: '키즈카페 / 실내놀이터' },
+  ];
+
+  it('open_spaces 탭에서만 노출되고, events 탭에는 노출되지 않는다', () => {
+    const row = buildRow();
+    const { rerender } = render(
+      <RawDataModal
+        table="open_spaces"
+        row={row}
+        categoryMinOptions={[]}
+        serviceCategories={SERVICE_CATEGORIES}
+        onServiceCategoryUpdated={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+    expect(screen.getByText('노출 중분류(service_category_id) 수동 수정')).toBeInTheDocument();
+
+    rerender(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminOpenSpaceRow}
+        categoryMinOptions={[]}
+        serviceCategories={SERVICE_CATEGORIES}
+        onServiceCategoryUpdated={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+    expect(screen.queryByText('노출 중분류(service_category_id) 수동 수정')).not.toBeInTheDocument();
+  });
+
+  it('현재 매핑된 노출 중분류가 있으면 배지로 보여준다', () => {
+    const row = buildRow({ service_category_id: 'svc-2' });
+    render(
+      <RawDataModal
+        table="open_spaces"
+        row={row}
+        categoryMinOptions={[]}
+        serviceCategories={SERVICE_CATEGORIES}
+        onServiceCategoryUpdated={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+    expect(screen.getByText('현재: 키즈/놀이시설 > 키즈카페 / 실내놀이터')).toBeInTheDocument();
+  });
+
+  it('값을 바꿔 저장하면 ids:[row.id]로 bulk-category-mapping을 호출하고 onServiceCategoryUpdated를 부른다', async () => {
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve({ updated_count: 1 }) } as Response)
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const onServiceCategoryUpdated = vi.fn();
+    const row = buildRow({ service_category_id: null });
+    render(
+      <RawDataModal
+        table="open_spaces"
+        row={row}
+        categoryMinOptions={[]}
+        serviceCategories={SERVICE_CATEGORIES}
+        onServiceCategoryUpdated={onServiceCategoryUpdated}
+        onClose={vi.fn()}
+      />
+    );
+
+    fireEvent.change(screen.getByDisplayValue('(선택 안 함)'), { target: { value: 'svc-1' } });
+    fireEvent.click(screen.getByText('저장'));
+
+    await waitFor(() => expect(onServiceCategoryUpdated).toHaveBeenCalledWith('row-1', 'svc-1'));
+    expect(fetchMock).toHaveBeenCalledWith(
+      '/api/admin/open-spaces/bulk-category-mapping',
+      expect.objectContaining({ method: 'POST' })
+    );
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body).toEqual({ ids: ['row-1'], service_category_id: 'svc-1' });
+  });
+
+  it('"(선택 안 함)"으로 되돌려 저장하면 service_category_id: null로 호출한다(선택 해제)', async () => {
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve({ updated_count: 1 }) } as Response)
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const row = buildRow({ service_category_id: 'svc-1' });
+    render(
+      <RawDataModal
+        table="open_spaces"
+        row={row}
+        categoryMinOptions={[]}
+        serviceCategories={SERVICE_CATEGORIES}
+        onServiceCategoryUpdated={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    fireEvent.change(screen.getByDisplayValue('자연/공원 > 대형 근린공원 / 잔디광장'), { target: { value: '' } });
+    fireEvent.click(screen.getByText('저장'));
+
+    await waitFor(() => {
+      const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+      expect(body).toEqual({ ids: ['row-1'], service_category_id: null });
+    });
   });
 });

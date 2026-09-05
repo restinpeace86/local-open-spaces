@@ -66,12 +66,6 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-
-    const serviceCategoryId = body.service_category_id;
-    if (!isNonEmptyString(serviceCategoryId)) {
-      return NextResponse.json({ error: '노출 중분류(service_category_id)를 선택해주세요.' }, { status: 400 });
-    }
-
     const admin = createAdminClient();
 
     // [노출 중분류 매핑/중복 스팟 검수 탭 분리](2026-09-05 사용자 지시): "원본 중분류의
@@ -86,6 +80,17 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: '선택된 항목이 없습니다.' }, { status: 400 });
       }
 
+      // [노출 중분류 개별 행 수정](2026-09-05 사용자 지시): "노출 중분류 변경할 수
+      // 있도록 해줘 open_spaces쪽에서" — 상세 모달의 단일 행 수정은 이 ids 경로를
+      // ids: [rowId] 하나짜리로 재사용한다(새 엔드포인트 없음, 제5장 제4조). 다만
+      // 이 경로만 명시적으로 null(선택 해제)도 허용한다 — category_min 전체 일괄
+      // 경로는 대상이 몇만 건일 수 있어 실수로 전부 해제하는 사고를 막기 위해
+      // 계속 값 필수로 남겨둔다(아래).
+      const serviceCategoryId = body.service_category_id === null ? null : body.service_category_id;
+      if (serviceCategoryId !== null && !isNonEmptyString(serviceCategoryId)) {
+        return NextResponse.json({ error: '노출 중분류(service_category_id)를 선택해주세요.' }, { status: 400 });
+      }
+
       const { error, count } = await admin
         .from('open_spaces')
         .update({ service_category_id: serviceCategoryId }, { count: 'exact' })
@@ -93,6 +98,11 @@ export async function POST(request: NextRequest) {
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
       return NextResponse.json({ updated_count: count ?? 0 });
+    }
+
+    const serviceCategoryId = body.service_category_id;
+    if (!isNonEmptyString(serviceCategoryId)) {
+      return NextResponse.json({ error: '노출 중분류(service_category_id)를 선택해주세요.' }, { status: 400 });
     }
 
     const categoryMinRaw = body.category_min;
