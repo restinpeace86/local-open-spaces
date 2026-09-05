@@ -32,6 +32,7 @@ export type SpotCurationItem = {
   blog_url_2: string | null;
   blog_url_3: string | null;
   curation_badges: string[];
+  curation_note: string | null;
 };
 
 export type SpotForCuration = {
@@ -67,6 +68,11 @@ export function useSpotCurationForm(spot: SpotForCuration) {
   const [serviceCategoryId, setServiceCategoryId] = useState(spot.service_category_id ?? '');
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // [큐레이션 메모 입력란](2026-09-06 사용자 지시): "내가 입력란에 좀.. 붙여넣을
+  // 수 있게.. 입력가능한 란도 하나 만들어줘" — 새 필드를 만들지 않고, 기존
+  // spot_curations.curation_note("큐레이션 메모(선택)", SpotCurationsPanel에서
+  // 이미 쓰던 자유 입력 필드)를 그대로 재사용한다(제5장 제4조).
+  const [curationNote, setCurationNote] = useState('');
 
   // [블로그 큐레이션 전체 본문 보기](2026-09-05 사용자 지시) — 링크별 전체 본문 캐시.
   const [bodyByLink, setBodyByLink] = useState<Record<string, BlogBodyState>>({});
@@ -110,6 +116,7 @@ export function useSpotCurationForm(spot: SpotForCuration) {
           const item = data.item as SpotCurationItem;
           setExistingCuration(item);
           setSelectedBadges(new Set(item.curation_badges ?? []));
+          setCurationNote(item.curation_note ?? '');
         }
       })
       .catch(() => {
@@ -202,6 +209,7 @@ export function useSpotCurationForm(spot: SpotForCuration) {
         blog_url_2: blogItems?.[1]?.link ?? null,
         blog_url_3: blogItems?.[2]?.link ?? null,
         curation_badges: [...selectedBadges],
+        curation_note: curationNote.trim() || null,
       };
       const res = existingCuration
         ? await fetch('/api/admin/spot-curations', {
@@ -246,6 +254,8 @@ export function useSpotCurationForm(spot: SpotForCuration) {
     existingCuration,
     selectedBadges,
     toggleBadge,
+    curationNote,
+    setCurationNote,
     serviceCategoryId,
     setServiceCategoryId,
     isSaving,

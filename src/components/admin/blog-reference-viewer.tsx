@@ -216,8 +216,15 @@ export function BlogReferenceViewer({
 
               {/* [핵심 기능: 자동 형광펜 하이라이팅](사용자 지시 원문) +
                   [전체 본문 보기](2026-09-05 사용자 지시): 네이버 블로그면 요약 대신
-                  전체 본문을 시도한다 — 실패/미지원 출처는 요약으로 조용히 폴백한다. */}
-              <div className="max-h-64 overflow-y-auto rounded-lg bg-gray-50 p-3 text-xs leading-relaxed text-gray-700">
+                  전체 본문을 시도한다 — 실패/미지원 출처는 요약으로 조용히 폴백한다.
+                  [스크롤 트랩 제거](2026-09-06 사용자 지시): "글이 잘려서 얼마 안
+                  보인다니깐?" — 실측 확인해보니 전체 본문은 정상적으로 다 불러와지고
+                  있었는데, 이 박스가 max-h-64 + overflow-y-auto로 자기 안에 별도
+                  스크롤을 갖고 있어서(모달/워크벤치 자체도 이미 스크롤되는 중이라
+                  "스크롤 안의 스크롤"이 됨) 처음 몇 줄만 보이고 그 안에서 또 스크롤
+                  해야 나머지가 보이는 걸 못 알아챈 것이었다 — max-h/overflow를 없애
+                  부모(모달/워크벤치)의 스크롤 하나로 전체가 자연스럽게 이어지게 한다. */}
+              <div className="rounded-lg bg-gray-50 p-3 text-xs leading-relaxed text-gray-700">
                 {activeBody?.text
                   ? highlightKeywords(activeBody.text)
                   : activeBody?.isLoading

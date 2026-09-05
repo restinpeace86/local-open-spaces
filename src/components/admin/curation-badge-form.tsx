@@ -13,12 +13,20 @@ export function CurationBadgeForm({
   serviceCategories,
   selectedBadges,
   onToggleBadge,
+  curationNote,
+  onCurationNoteChange,
 }: {
   serviceCategoryId: string;
   onServiceCategoryChange: (value: string) => void;
   serviceCategories: ServiceCategory[];
   selectedBadges: Set<string>;
   onToggleBadge: (key: string) => void;
+  // [큐레이션 메모 입력란](2026-09-06 사용자 지시): "내가 입력란에 좀.. 붙여넣을
+  // 수 있게.. 입력가능한 란도 하나 만들어줘" — 태그/키워드/자유 메모 등 무엇이든
+  // 붙여넣을 수 있는 자유 입력란. 기존 SpotCurationsPanel의 "큐레이션 메모(선택)"
+  // (spot_curations.curation_note)를 그대로 재사용한다(제5장 제4조).
+  curationNote?: string;
+  onCurationNoteChange?: (value: string) => void;
 }) {
   return (
     <div className="flex flex-col gap-3">
@@ -61,6 +69,19 @@ export function CurationBadgeForm({
           </div>
         ))}
       </div>
+
+      {onCurationNoteChange && (
+        <div className="flex flex-col gap-1 text-sm">
+          <span className="font-medium text-gray-700">큐레이션 메모(선택)</span>
+          <textarea
+            value={curationNote ?? ''}
+            onChange={(e) => onCurationNoteChange(e.target.value)}
+            placeholder="예: #호박터숯불촌 #호박터숯불촌신월성점 처럼 참고용 태그/메모를 자유롭게 붙여넣으세요"
+            rows={3}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -85,6 +85,8 @@ export function BlogCurationModal({
           serviceCategories={serviceCategories}
           selectedBadges={form.selectedBadges}
           onToggleBadge={form.toggleBadge}
+          curationNote={form.curationNote}
+          onCurationNoteChange={form.setCurationNote}
         />
 
         {form.saveError && <p className="text-xs text-red-600">{form.saveError}</p>}

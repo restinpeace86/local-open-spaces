@@ -198,6 +198,8 @@ export function MobileCurationWorkbench({
             serviceCategories={serviceCategories}
             selectedBadges={form.selectedBadges}
             onToggleBadge={form.toggleBadge}
+            curationNote={form.curationNote}
+            onCurationNoteChange={form.setCurationNote}
           />
         </section>
 

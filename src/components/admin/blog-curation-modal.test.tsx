@@ -183,6 +183,7 @@ describe('BlogCurationModal', () => {
       blog_url_2: 'https://blog.naver.com/2',
       blog_url_3: 'https://blog.naver.com/3',
       curation_badges: ['parking', 'stroller'],
+      curation_note: null,
     });
     // 본문(description)은 어디에도 전송되지 않는다(저장/폐기 정책).
     expect(JSON.stringify(body)).not.toContain('주차장이 넓고');
@@ -344,6 +345,58 @@ describe('BlogCurationModal', () => {
         const calls = fetchMock.mock.calls.filter((c) => (c[0] as string).includes('/blog-search'));
         expect(calls.some((c) => (c[0] as string).includes('sort=sim'))).toBe(true);
       });
+    });
+  });
+
+  // [큐레이션 메모 입력란](2026-09-06 사용자 지시): "내가 입력란에 좀.. 붙여넣을
+  // 수 있게.. 입력가능한 란도 하나 만들어줘" — 기존 spot_curations.curation_note
+  // 재사용.
+  describe('큐레이션 메모 입력란', () => {
+    it('메모를 입력하고 저장하면 curation_note로 전송된다', async () => {
+      const fetchMock = mockFetchByUrl({
+        blogSearch: { items: [makeBlogItem()], hasRecentReview: true, hasNoResults: false },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(
+        <BlogCurationModal spot={SPOT} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+      );
+
+      await screen.findByText('행복키즈카페 다녀왔어요');
+      fireEvent.change(screen.getByPlaceholderText(/참고용 태그\/메모를 자유롭게 붙여넣으세요/), {
+        target: { value: '#호박터숯불촌 #호박터숯불촌신월성점 #대구월성동맛집' },
+      });
+      fireEvent.click(screen.getByText('저장 및 완료'));
+
+      const saveCall = await vi.waitFor(() => {
+        const call = fetchMock.mock.calls.find(
+          (c) => (c[0] as string) === '/api/admin/spot-curations' && (c[1] as RequestInit)?.method === 'POST'
+        );
+        expect(call).toBeDefined();
+        return call!;
+      });
+      const body = JSON.parse((saveCall[1] as RequestInit).body as string);
+      expect(body.curation_note).toBe('#호박터숯불촌 #호박터숯불촌신월성점 #대구월성동맛집');
+    });
+
+    it('기존 큐레이션의 메모가 있으면 프리필한다', async () => {
+      const fetchMock = mockFetchByUrl({
+        blogSearch: { items: [makeBlogItem()], hasRecentReview: true, hasNoResults: false },
+        existingCuration: {
+          id: 'existing-1',
+          spot_id: 'spot-1',
+          blog_url_1: null,
+          blog_url_2: null,
+          blog_url_3: null,
+          curation_badges: [],
+          curation_note: '기존 메모입니다',
+        },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(
+        <BlogCurationModal spot={SPOT} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+      );
+
+      expect(await screen.findByDisplayValue('기존 메모입니다')).toBeInTheDocument();
     });
   });
 });
