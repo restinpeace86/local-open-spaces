@@ -659,6 +659,15 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
   // 있도록" — 나머지 필터(출처 2종/카테고리/원천 중분류/이벤트 전용 필터)를 이
   // 접이식 영역 하나로 몰아 기본은 접어 두고, 목록이 화면을 더 넓게 쓰게 한다.
   const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
+  // [관리자 화면 모바일 필터 영역 재수정](2026-09-06 사용자 지시): "여전히 거의
+  // 안보여 검색조건쪽이 90% 차지" — 1차 수정(필터 바에 max-h-[45vh])만으로는
+  // 부족했다. 실측 원인: (1) vh는 화면 전체 뷰포트 기준이라, 전역 하단 탭바
+  // (BottomTabs, src/app/layout.tsx)가 이미 떼어간 만큼을 반영하지 못해 실제
+  // 남은 영역보다 큰 값으로 계산됐고, (2) 필터 바 위의 이 헤더 블록(오늘 반영
+  // 현황 + 재수집 도구)도 캡이 전혀 없어 둘을 합치면 여전히 화면 대부분을
+  // 차지했다. 오늘 반영 현황/재수집 도구는 검수 작업의 핵심이 아닌 보조 도구라,
+  // 기본은 접어 두고 필요할 때만 펼치게 한다("상세 필터 더보기"와 동일 관례).
+  const [isOpsToolsExpanded, setIsOpsToolsExpanded] = useState(false);
   const [sourceTypes, setSourceTypes] = useState<string[]>([]);
   const [sources, setSources] = useState<string[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
@@ -860,8 +869,19 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     // 영역(overflow-y-auto)이 실제로 그 안에서 스크롤되게 한다.
     <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
       <div className="shrink-0 p-4 border-b border-gray-100 flex flex-col gap-3">
-        <TodayBatchSummary />
-        <IngestRerunPanel />
+        <button
+          type="button"
+          onClick={() => setIsOpsToolsExpanded((v) => !v)}
+          className="self-start text-xs font-medium text-blue-600 hover:underline"
+        >
+          {isOpsToolsExpanded ? '▴ 오늘 반영 현황 / 재수집 도구 접기' : '▾ 오늘 반영 현황 / 재수집 도구 보기'}
+        </button>
+        {isOpsToolsExpanded && (
+          <>
+            <TodayBatchSummary />
+            <IngestRerunPanel />
+          </>
+        )}
         {/* [관리자 화면 모바일 점검](2026-09-05 사용자 지시): 제목+버튼 2개가
             justify-between + nowrap이라 좁은 화면에서 버튼이 잘릴 여지가 있어
             flex-wrap을 추가한다(줄바꿈되면 gap-y로 자연스럽게 간격이 생김). */}
@@ -924,15 +944,17 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
         <CategoryMappingPanel categoryMinOptions={filterOptions.open_spaces.categoryMins} />
       ) : (
       <>
-      {/* [관리자 화면 모바일 필터 영역 축소](2026-09-06 사용자 지시): "중분류나
+      {/* [관리자 화면 모바일 필터 영역 축소](2026-09-06 사용자 지시, 2차 수정): "중분류나
           등록일등의 조건이 화면영역의 90%를 차지... 조회하기 누르면 하단에 검색된
           데이터 나오는데 이 영역이 너무 작아서 목록 리스트 한건정도 밖에 안보여" —
-          이 블록이 shrink-0인데 높이 상한이 없어, 좁은 화면에서 체크박스/버튼들이
-          여러 줄로 줄바꿈될수록 이 블록 자체가 계속 커지고 그만큼 아래 결과 목록
-          (flex-1)이 줄어들었다. max-h+overflow-y-auto로 이 블록의 높이를 뷰포트의
-          45%로 못박아, 필터가 아무리 길어져도 이 안에서만 자체 스크롤되고 결과
-          목록은 항상 남은 절반 이상을 확보하게 한다. */}
-      <div className="shrink-0 max-h-[45vh] overflow-y-auto p-4 border-b border-gray-100 flex flex-col gap-3">
+          1차로 max-h-[45vh]를 넣었지만 "여전히 90%"라는 재확인을 받았다. vh는 화면
+          전체 뷰포트 기준값이라 전역 하단 탭바(BottomTabs)가 이미 떼어간 공간을
+          반영하지 못해 실제 가용 영역보다 크게 계산됐다 — % 단위(이 블록의 부모인
+          위 return의 flex-1 컨테이너, 실제 남은 높이를 갖는 요소 기준으로 계산됨)로
+          바꿔 하단 탭바와 무관하게 항상 정확한 비율로 캡이 걸리게 한다. 위 헤더의
+          오늘 반영 현황/재수집 도구도 기본 접힘으로 바꿔(바로 위 커밋) 이 블록과
+          합쳐도 결과 목록이 항상 남은 절반 이상을 확보하게 한다. */}
+      <div className="shrink-0 max-h-[42%] overflow-y-auto p-4 border-b border-gray-100 flex flex-col gap-3">
         {/* 3. 필터 및 검색 바 */}
         <input
           type="text"

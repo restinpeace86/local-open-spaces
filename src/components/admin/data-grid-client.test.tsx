@@ -116,23 +116,51 @@ describe('AdminDataGridClient — 모바일 레이아웃/스크롤 회귀 방지
     expect(tableScrollArea.className).toContain('overflow-y-auto');
   });
 
-  // [관리자 화면 모바일 필터 영역 축소](2026-09-06 사용자 지시): "중분류나
+  // [관리자 화면 모바일 필터 영역 축소](2026-09-06 사용자 지시, 2차 수정): "중분류나
   // 등록일등의 조건이 화면영역의 90%를 차지하고 있어... 조회하기 누르면 하단에
   // 검색된 데이터 나오는데 이 영역이 너무 작아서 목록 리스트 한건정도 밖에
-  // 안보여" — 필터 바(shrink-0)에 높이 상한이 없어 좁은 화면에서 체크박스/버튼이
-  // 여러 줄로 줄바꿈될수록 이 블록이 한없이 커지고 그만큼 결과 목록(flex-1)이
-  // 줄어들던 문제. 필터 바에 max-h-[45vh]+overflow-y-auto를 고정해 결과 목록이
-  // 항상 최소한의 공간을 확보하게 한다.
-  it('필터 바(검색/중분류/등록일 등)에 최대 높이 제한과 자체 스크롤이 있어 결과 목록 영역을 밀어내지 않는다', () => {
+  // 안보여" — 1차로 max-h-[45vh]를 넣었지만 "여전히 90%"라는 재확인을 받았다.
+  // vh는 전역 하단 탭바(BottomTabs)가 이미 떼어간 공간을 반영 못해 실제보다
+  // 크게 계산되므로, 부모(flex-1로 실제 남은 높이를 갖는 요소) 기준 %로 바꿨다.
+  it('필터 바(검색/중분류/등록일 등)에 최대 높이 제한(부모 기준 %)과 자체 스크롤이 있어 결과 목록 영역을 밀어내지 않는다', () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ rows: [], total: 0 }) } as Response)));
 
     render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
 
     const searchInput = screen.getByPlaceholderText('제목/시설명, 주소 키워드 검색');
     const filterBar = searchInput.parentElement as HTMLElement;
-    expect(filterBar.className).toContain('max-h-[45vh]');
+    expect(filterBar.className).toContain('max-h-[42%]');
     expect(filterBar.className).toContain('overflow-y-auto');
     expect(filterBar.className).toContain('shrink-0');
+  });
+
+  // [관리자 화면 모바일 필터 영역 재수정](2026-09-06 사용자 지시) 후속: 필터 바
+  // 위 헤더의 "오늘 반영 현황"/"재수집 도구"도 캡이 없어 필터 바와 합치면 여전히
+  // 화면 대부분을 차지했다 — 검수 작업의 핵심이 아닌 보조 도구라 기본은 접어
+  // 두고, 토글을 누르면 펼쳐지게 한다.
+  it('"오늘 반영 현황"/"재수집 도구"는 기본적으로 접혀 있고, 토글을 누르면 펼쳐진다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/admin/data-grid/summary')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ open_spaces_created_today: 1, events_created_today: 2 }) } as Response);
+        }
+        if (url.includes('/api/admin/ingest/rerun')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ daily: [], monthly: [] }) } as Response);
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ rows: [], total: 0 }) } as Response);
+      })
+    );
+
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+
+    expect(screen.queryByText(/오늘 신규 반영/)).not.toBeInTheDocument();
+    expect(screen.queryByText('🔁 개별 소스 수동 재수집')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('▾ 오늘 반영 현황 / 재수집 도구 보기'));
+
+    expect(await screen.findByText(/오늘 신규 반영/)).toBeInTheDocument();
+    expect(screen.getByText('🔁 개별 소스 수동 재수집')).toBeInTheDocument();
   });
 });
 
