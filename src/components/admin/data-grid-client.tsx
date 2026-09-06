@@ -924,7 +924,15 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
         <CategoryMappingPanel categoryMinOptions={filterOptions.open_spaces.categoryMins} />
       ) : (
       <>
-      <div className="shrink-0 p-4 border-b border-gray-100 flex flex-col gap-3">
+      {/* [관리자 화면 모바일 필터 영역 축소](2026-09-06 사용자 지시): "중분류나
+          등록일등의 조건이 화면영역의 90%를 차지... 조회하기 누르면 하단에 검색된
+          데이터 나오는데 이 영역이 너무 작아서 목록 리스트 한건정도 밖에 안보여" —
+          이 블록이 shrink-0인데 높이 상한이 없어, 좁은 화면에서 체크박스/버튼들이
+          여러 줄로 줄바꿈될수록 이 블록 자체가 계속 커지고 그만큼 아래 결과 목록
+          (flex-1)이 줄어들었다. max-h+overflow-y-auto로 이 블록의 높이를 뷰포트의
+          45%로 못박아, 필터가 아무리 길어져도 이 안에서만 자체 스크롤되고 결과
+          목록은 항상 남은 절반 이상을 확보하게 한다. */}
+      <div className="shrink-0 max-h-[45vh] overflow-y-auto p-4 border-b border-gray-100 flex flex-col gap-3">
         {/* 3. 필터 및 검색 바 */}
         <input
           type="text"

@@ -115,6 +115,25 @@ describe('AdminDataGridClient — 모바일 레이아웃/스크롤 회귀 방지
     expect(tableScrollArea.className).toContain('min-h-0');
     expect(tableScrollArea.className).toContain('overflow-y-auto');
   });
+
+  // [관리자 화면 모바일 필터 영역 축소](2026-09-06 사용자 지시): "중분류나
+  // 등록일등의 조건이 화면영역의 90%를 차지하고 있어... 조회하기 누르면 하단에
+  // 검색된 데이터 나오는데 이 영역이 너무 작아서 목록 리스트 한건정도 밖에
+  // 안보여" — 필터 바(shrink-0)에 높이 상한이 없어 좁은 화면에서 체크박스/버튼이
+  // 여러 줄로 줄바꿈될수록 이 블록이 한없이 커지고 그만큼 결과 목록(flex-1)이
+  // 줄어들던 문제. 필터 바에 max-h-[45vh]+overflow-y-auto를 고정해 결과 목록이
+  // 항상 최소한의 공간을 확보하게 한다.
+  it('필터 바(검색/중분류/등록일 등)에 최대 높이 제한과 자체 스크롤이 있어 결과 목록 영역을 밀어내지 않는다', () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ rows: [], total: 0 }) } as Response)));
+
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+
+    const searchInput = screen.getByPlaceholderText('제목/시설명, 주소 키워드 검색');
+    const filterBar = searchInput.parentElement as HTMLElement;
+    expect(filterBar.className).toContain('max-h-[45vh]');
+    expect(filterBar.className).toContain('overflow-y-auto');
+    expect(filterBar.className).toContain('shrink-0');
+  });
 });
 
 // [노출 중분류 미지정만 보기](2026-09-06 사용자 지시): "노출중분류가 null 인거에
