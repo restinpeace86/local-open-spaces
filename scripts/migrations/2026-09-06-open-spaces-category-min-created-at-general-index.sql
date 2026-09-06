@@ -1,0 +1,27 @@
+-- [키즈/놀이시설 > 어린이놀이시설(실내) 뒤쪽 페이지 데이터 없음/타임아웃 수정](2026-09-06
+-- 사용자 지시): "내가 키즈/놀이시설의 어린이 놀이시설(실내) 했는데 .. 총 1900건
+-- 38페이지로 나와... 근데 뒤에쪽보면 33페이지부터 38페이지까지는 데이터가 아예없는데?"
+--
+-- 원인 실측(EXPLAIN analyze, buffers): open_spaces에는 category_min 단독 인덱스
+-- (idx_open_spaces_category_min)와 category_min+created_at "부분" 인덱스
+-- (idx_open_spaces_category_min_created_at_unmapped, service_category_id IS NULL
+-- 조건부)만 있고, 이 화면이 실제로 쓰는 "category_min 필터 + created_at DESC 정렬 +
+-- LIMIT"에 맞는 일반 복합 인덱스가 없었다. 그 결과 플래너가 idx_open_spaces_created_at
+-- (created_at 단독 인덱스)를 선택해 정렬 순서대로 훑으며 일치하지 않는 행을 최대
+-- 68,575건 걸러내다 18초(=admin API의 statement timeout 초과)가 걸렸다 — 이게 사용자가
+-- 본 "뒤쪽 페이지에 데이터가 아예 없음"의 실체다(빈 데이터가 아니라 타임아웃으로 빈
+-- 응답이 온 것). 부수적으로 이 카테고리의 통계(reltuples 추정치)가 어제 실행한
+-- 재분류 마이그레이션(2026-09-06-add-daycare-kindergarten-category-min.sql, 293건
+-- 이동) 이후 갱신되지 않아 "총 1900건"이라는 부정확한 추정 카운트까지 겹쳤다
+-- (VACUUM (ANALYZE) open_spaces로 별도 실행해 1900 → 1364로 실측치에 근접하게 보정,
+-- 이 부분은 count:'estimated' 특성상 남는 약간의 오차는 기존에 이미 용인된 범위).
+--
+-- 조치:
+-- 1) VACUUM (ANALYZE) open_spaces; -- 별도 세션에서 트랜잭션 밖에 단독 실행(기존 관례)
+-- 2) 아래 일반 복합 인덱스 추가 — category_min 필터가 있는 모든 open_spaces 관리자
+--    그리드 조회(only_unmapped/only_mapped 여부와 무관하게)에 공통으로 적용된다.
+--
+-- 실측 개선: category_min='어린이놀이시설(실내)' + created_at desc + limit 50 offset 0
+-- 18,014ms → 11ms. offset 1400(뒤쪽 페이지) 361ms로 정상 응답.
+create index if not exists idx_open_spaces_category_min_created_at
+  on public.open_spaces (category_min, created_at desc nulls last);
