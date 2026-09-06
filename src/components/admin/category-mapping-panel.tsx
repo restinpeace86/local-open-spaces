@@ -47,6 +47,12 @@ function RowPicker({ categoryMinOptions, serviceCategories }: { categoryMinOptio
   // [open_spaces 삭제 기능](2026-09-06 사용자 지시): "내가 불필요하다고 생각하는건
   // 관리자 화면에서 삭제하는게 더 좋을까?" → 개별(RawDataModal) + 일괄(여기) 둘 다.
   const [isDeletingRows, setIsDeletingRows] = useState(false);
+  // [노출 중분류 미지정만 조회](2026-09-06 사용자 지시): "노출 중분류가 null인 것
+  // 체크해서 볼수 있게해줘 표준 중분류 선택하고 노출중분류 채운것은 안나오게" —
+  // 기본값을 true로 둬(관리자가 이 목록을 여는 주된 목적이 "아직 안 채운 것부터
+  // 처리"이므로) 매번 체크할 필요 없게 한다. 아래 "노출 중분류 대량 매핑" 섹션의
+  // bulkOnlyUnmapped와 같은 의미지만, RowPicker는 독립된 조회라 별도 상태로 둔다.
+  const [onlyUnmapped, setOnlyUnmapped] = useState(true);
   // [All-in-One 모바일 큐레이션 워크벤치] 진입 상태 — 어떤 스팟을 워크벤치로 열었는지.
   const [workbenchSpotId, setWorkbenchSpotId] = useState<string | null>(null);
 
@@ -63,6 +69,7 @@ function RowPicker({ categoryMinOptions, serviceCategories }: { categoryMinOptio
       page: String(targetPage),
       page_size: String(ROW_PICKER_PAGE_SIZE),
     });
+    if (onlyUnmapped) params.set('only_unmapped', 'true');
     fetch(`/api/admin/data-grid?${params.toString()}`)
       .then(async (res) => {
         const data = await res.json();
@@ -217,6 +224,18 @@ function RowPicker({ categoryMinOptions, serviceCategories }: { categoryMinOptio
             {isLoadingRows ? '조회 중...' : '조회'}
           </button>
         </div>
+
+        {/* [노출 중분류 미지정만 조회](2026-09-06 사용자 지시): "노출 중분류가 null인
+            것 체크해서 볼수 있게해줘.. 노출중분류 채운것은 안나오게" */}
+        <label className="flex items-center gap-1.5 text-xs text-gray-600">
+          <input
+            type="checkbox"
+            checked={onlyUnmapped}
+            onChange={(e) => setOnlyUnmapped(e.target.checked)}
+            className="h-3.5 w-3.5"
+          />
+          노출 중분류가 아직 없는 행만 보기(이미 채운 행은 목록에서 제외)
+        </label>
 
         {rowsError && <p className="text-xs text-red-600">{rowsError}</p>}
 

@@ -226,6 +226,14 @@ async function queryOpenSpaces(supabase: Ctx, searchParams: URLSearchParams, pag
   const isKidsFriendly = parseBoolFilter(searchParams.get('is_kids_friendly'));
   const missingLocation = searchParams.get('missing_location') === 'true';
   const missingFee = searchParams.get('missing_fee') === 'true';
+  // [노출 중분류 미지정만 조회](2026-09-06 사용자 지시): "노출 중분류가 null인 것
+  // 체크해서 볼수 있게해줘 표준 중분류 선택하고 노출중분류 채운것은 안나오게" —
+  // RowPicker(category-mapping-panel.tsx)가 이 플래그로 이미 노출 중분류가
+  // 채워진(service_category_id가 NULL이 아닌) 행을 걸러낼 수 있게 한다. 기존
+  // "노출 중분류 대량 매핑" 섹션의 only_unmapped(bulk-category-mapping 라우트)와
+  // 같은 의미의 필터를 이 목록 조회 라우트에도 동일한 이름으로 추가한다(제5장
+  // 제4조 — 새 이름을 만들지 않고 이미 쓰는 관례를 그대로 따름).
+  const onlyUnmapped = searchParams.get('only_unmapped') === 'true';
   const createdFrom = parseDateFilter(searchParams.get('created_from'));
   const createdTo = parseDateFilter(searchParams.get('created_to'));
 
@@ -285,6 +293,7 @@ async function queryOpenSpaces(supabase: Ctx, searchParams: URLSearchParams, pag
   if (isKidsFriendly !== null) query = query.eq('is_kids_friendly', isKidsFriendly);
   if (missingLocation) query = query.is('location', null);
   if (missingFee) query = query.is('is_free', null);
+  if (onlyUnmapped) query = query.is('service_category_id', null);
   query = applyCreatedAtRange(query, createdFrom, createdTo);
 
   const from = (page - 1) * pageSize;

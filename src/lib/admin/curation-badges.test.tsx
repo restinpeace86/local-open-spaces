@@ -3,12 +3,12 @@ import { render } from '@testing-library/react';
 import { CURATION_BADGE_OPTIONS, highlightKeywords, isKnownCurationBadgeKey } from './curation-badges';
 
 // [관리자용 블로그 큐레이션 모달](2026-09-05 사용자 지시, Decision 021) 단위 테스트.
+// [뱃지 목록 정정](2026-09-06 사용자 지시): "룸/개별 공간 있음"을 room/private_space
+// 둘로 분리하고, "예약 가능"(reservation_possible)을 "예약 필수"와 별도로 추가해
+// 12개 → 14개가 됐다.
 describe('CURATION_BADGE_OPTIONS', () => {
-  // 사용자 요구사항 원문은 "다중 선택 11개"라 썼지만 실제로 나열한 항목은 12개다 —
-  // 어느 항목을 뺄지 추측하지 않고 실제로 나열된 12개를 그대로 구현했다(구현
-  // 기록에 정직하게 남김). 이 테스트는 그 12개가 정확히 존재하는지 고정한다.
-  it('사용자가 나열한 12개 뱃지가 정확히 존재한다', () => {
-    expect(CURATION_BADGE_OPTIONS).toHaveLength(12);
+  it('정정 반영 후 14개 뱃지가 정확히 존재한다', () => {
+    expect(CURATION_BADGE_OPTIONS).toHaveLength(14);
     expect(CURATION_BADGE_OPTIONS.map((o) => o.label)).toEqual([
       '주차 완비',
       '유모차 가능',
@@ -18,10 +18,12 @@ describe('CURATION_BADGE_OPTIONS', () => {
       '유아 식기',
       '키즈 메뉴',
       '좌식/온돌 있음',
-      '룸/개별 공간 있음',
+      '룸 있음',
+      '개별 공간 있음',
       '키즈존/놀이방',
       '야외 마당/테라스',
       '예약 필수',
+      '예약 가능',
     ]);
   });
 
@@ -30,11 +32,15 @@ describe('CURATION_BADGE_OPTIONS', () => {
       acc[o.group] = (acc[o.group] ?? 0) + 1;
       return acc;
     }, {});
-    expect(groupCounts).toEqual({ '이동/편의': 4, '식사/아기': 5, '공간/놀이': 2, 운영: 1 });
+    expect(groupCounts).toEqual({ '이동/편의': 4, '식사/아기': 6, '공간/놀이': 2, 운영: 2 });
   });
 
   it('isKnownCurationBadgeKey는 실제 키만 true를 반환한다', () => {
     expect(isKnownCurationBadgeKey('parking')).toBe(true);
+    expect(isKnownCurationBadgeKey('room')).toBe(true);
+    expect(isKnownCurationBadgeKey('private_space')).toBe(true);
+    expect(isKnownCurationBadgeKey('reservation_possible')).toBe(true);
+    expect(isKnownCurationBadgeKey('private_room')).toBe(false); // 옛 통합 키는 더 이상 없음
     expect(isKnownCurationBadgeKey('완전히새로운키')).toBe(false);
   });
 });

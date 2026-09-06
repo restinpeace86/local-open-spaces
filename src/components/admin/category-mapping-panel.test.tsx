@@ -297,6 +297,46 @@ describe('CategoryMappingPanel', () => {
       expect(screen.getByText('동네공원')).toBeInTheDocument();
     });
 
+    // [노출 중분류 미지정만 조회](2026-09-06 사용자 지시): "노출 중분류가 null인 것
+    // 체크해서 볼수 있게해줘 표준 중분류 선택하고 노출중분류 채운것은 안나오게"
+    it('기본값은 "노출 중분류 없는 행만 보기"가 체크돼 있어 only_unmapped=true로 조회한다', async () => {
+      const fetchMock = mockFetchByUrl({
+        dataGridRows: { rows: [], total: 0, page: 1, pageSize: 50 },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      renderPanel();
+
+      const selects = screen.getAllByText('원본 중분류 선택').map((el) => el.closest('select'));
+      fireEvent.change(selects[1]!, { target: { value: '공원' } });
+      expect(screen.getByLabelText('노출 중분류가 아직 없는 행만 보기(이미 채운 행은 목록에서 제외)')).toBeChecked();
+      fireEvent.click(screen.getByText('조회'));
+
+      await waitFor(() => {
+        const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/data-grid'));
+        expect(call).toBeDefined();
+        expect(call![0] as string).toContain('only_unmapped=true');
+      });
+    });
+
+    it('체크를 해제하면 only_unmapped 파라미터 없이 조회한다(이미 채운 행도 포함)', async () => {
+      const fetchMock = mockFetchByUrl({
+        dataGridRows: { rows: [], total: 0, page: 1, pageSize: 50 },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      renderPanel();
+
+      const selects = screen.getAllByText('원본 중분류 선택').map((el) => el.closest('select'));
+      fireEvent.change(selects[1]!, { target: { value: '공원' } });
+      fireEvent.click(screen.getByLabelText('노출 중분류가 아직 없는 행만 보기(이미 채운 행은 목록에서 제외)'));
+      fireEvent.click(screen.getByText('조회'));
+
+      await waitFor(() => {
+        const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/data-grid'));
+        expect(call).toBeDefined();
+        expect(call![0] as string).not.toContain('only_unmapped');
+      });
+    });
+
     it('행을 선택하고 노출 중분류를 골라 적용하면 확인 후 ids로 API를 호출한다', async () => {
       const fetchMock = mockFetchByUrl({
         categories: { items: [{ id: 'svc-1', parent_category: '자연/공원', category_name: '대형 근린공원 / 잔디광장' }] },

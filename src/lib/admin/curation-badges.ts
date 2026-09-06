@@ -4,7 +4,19 @@ import { createElement, Fragment, type ReactNode } from 'react';
 // 제시한 뱃지 목록/하이라이트 키워드를 그대로 상수화한다. 사용자 요구사항 원문은
 // "다중 선택 11개"라고 썼지만 실제로 나열한 항목을 세어 보면 12개다(이동/편의 4 +
 // 식사/아기 5 + 공간/놀이 2 + 운영 1 = 12) — 어느 항목을 뺄지 추측하지 않고(제3장
-// 제5조) 사용자가 실제로 나열한 12개를 그대로 구현한다.
+// 제5조) 사용자가 실제로 나열한 12개를 그대로 구현했다.
+//
+// [뱃지 목록 정정](2026-09-06 사용자 지시): 그 12개 중 2가지를 사용자가 실사용
+// 관점에서 다시 지적했다.
+// 1. "룸/개별 공간 있음"(private_room) 하나로 묶여 있었는데, "룸과 개별공간만
+//    있는건 아니고 공존하는거잖아" — 한 장소에 "룸"과 "개별 공간(룸이 아닌 칸막이
+//    좌석 등)"이 서로 독립적으로 있을 수도, 둘 다 있을 수도 있어 하나의 뱃지로
+//    묶으면 표현할 수 없다 — room/private_space 두 개로 분리한다.
+// 2. "운영에 예약 필수만 있는데.. 룸같은데는 보통 예약해서 가긴 하는데.. 예약
+//    가능이지 필수 아니잖아" — "예약 없이는 입장 자체가 안 됨(필수)"과 "예약하면
+//    좋지만 워크인도 가능(가능)"은 실제로 다른 의미라 별도 뱃지로 추가한다
+//    (기존 reservation_required는 그대로 두고 reservation_possible을 새로 추가 —
+//    기존 데이터에 이미 골라둔 reservation_required 값은 그대로 유효하다).
 export type CurationBadgeGroup = '이동/편의' | '식사/아기' | '공간/놀이' | '운영';
 
 // [All-in-One 모바일 큐레이션 워크벤치](2026-09-05 사용자 지시): 뱃지 그룹을
@@ -27,10 +39,12 @@ export const CURATION_BADGE_OPTIONS: CurationBadgeOption[] = [
   { key: 'kids_tableware', label: '유아 식기', group: '식사/아기' },
   { key: 'kids_menu', label: '키즈 메뉴', group: '식사/아기' },
   { key: 'floor_seating', label: '좌식/온돌 있음', group: '식사/아기' },
-  { key: 'private_room', label: '룸/개별 공간 있음', group: '식사/아기' },
+  { key: 'room', label: '룸 있음', group: '식사/아기' },
+  { key: 'private_space', label: '개별 공간 있음', group: '식사/아기' },
   { key: 'kids_zone', label: '키즈존/놀이방', group: '공간/놀이' },
   { key: 'outdoor_yard', label: '야외 마당/테라스', group: '공간/놀이' },
   { key: 'reservation_required', label: '예약 필수', group: '운영' },
+  { key: 'reservation_possible', label: '예약 가능', group: '운영' },
 ];
 
 export function isKnownCurationBadgeKey(key: string): boolean {
