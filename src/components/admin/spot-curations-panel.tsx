@@ -419,7 +419,14 @@ function CurationFormModal({
 // 응답 행 모양 — /api/admin/data-grid?table=open_spaces가 내려주는 실제 컬럼 중 이
 // 리스트가 필요로 하는 것만 뽑아 쓴다(전체 AdminOpenSpaceRow 타입을 그대로 끌어오면
 // 이 파일이 data-grid-client.tsx의 세부 구현에 과하게 결합된다).
-type CandidateSpotRow = { id: string; name: string; address: string };
+// [노출중분류 있는것/없는것 따로 보기](2026-09-06 사용자 지시): "스팟 큐레이션 탭에
+// 노출중분류 된거랑 안된거 따로도 볼수 있게해줘 기본적으로 노출중분류가 분류된
+// 식당에 대하여 스팟 큐레이션에서 메뉴작업할꺼라.. 아닐수도 있고.. 하여튼 일단은
+// 노출중분류 있는것만도 볼수있어야돼" — /api/admin/data-grid의 only_unmapped/
+// only_mapped를 그대로 재사용한다(제5장 제4조 — 어제 이미 추가된 필터).
+type ServiceCategoryFilter = 'all' | 'mapped' | 'unmapped';
+
+type CandidateSpotRow = { id: string; name: string; address: string; service_category_id: string | null };
 
 // 모달을 "기존 큐레이션 수정" 또는 "리스트에서 고른 신규 스팟으로 등록" 중 하나로 연다.
 // 자유 검색으로 등록하는 경로는 더 이상 없다 — 리스트의 검색창이 그 역할을 대신한다.
@@ -428,6 +435,11 @@ type ModalTarget = SpotCurationItem | { presetSpot: SpotSearchResult } | null;
 export function SpotCurationsPanel() {
   const [q, setQ] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
+  // [노출중분류 있는것/없는것 따로 보기](2026-09-06 사용자 지시): 기본값은 "노출
+  // 중분류 있음" — 사용자가 "기본적으로 노출중분류가 분류된 식당에 대하여
+  // 스팟 큐레이션에서 메뉴작업할꺼라"고 밝힌 주된 작업 흐름에 맞춘다. 언제든
+  // "전체"/"없음"으로 바꿔 볼 수 있다.
+  const [serviceCategoryFilter, setServiceCategoryFilter] = useState<ServiceCategoryFilter>('mapped');
   const [page, setPage] = useState(1);
   const [rows, setRows] = useState<CandidateSpotRow[]>([]);
   const [total, setTotal] = useState(0);
@@ -452,7 +464,7 @@ export function SpotCurationsPanel() {
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedQ]);
+  }, [debouncedQ, serviceCategoryFilter]);
 
   // [todo.md 개선사항 9](2026-09-03): "불러오기"를 누른 최초 한 번만 전체 큐레이션 맵을
   // 채운다 — 이후 등록/수정은 handleSaved가 맵을 직접 갱신하므로 재조회가 필요 없다.
@@ -493,6 +505,8 @@ export function SpotCurationsPanel() {
     params.set('table', 'open_spaces');
     params.set('category_min', KIDS_RESTAURANT_CATEGORY_MIN);
     if (debouncedQ) params.set('q', debouncedQ);
+    if (serviceCategoryFilter === 'mapped') params.set('only_mapped', 'true');
+    if (serviceCategoryFilter === 'unmapped') params.set('only_unmapped', 'true');
     params.set('page', String(page));
     params.set('page_size', String(PAGE_SIZE));
 
@@ -517,7 +531,7 @@ export function SpotCurationsPanel() {
     return () => {
       cancelled = true;
     };
-  }, [hasLoaded, debouncedQ, page]);
+  }, [hasLoaded, debouncedQ, serviceCategoryFilter, page]);
 
   async function handleToggle(curation: SpotCurationItem) {
     setTogglingId(curation.id);
@@ -566,6 +580,33 @@ export function SpotCurationsPanel() {
           placeholder="키즈친화 식당 이름/주소 검색"
           className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
         />
+
+        {/* [노출중분류 있는것/없는것 따로 보기](2026-09-06 사용자 지시): "스팟 큐레이션
+            탭에 노출중분류 된거랑 안된거 따로도 볼수 있게해줘.. 일단은 노출중분류
+            있는것만도 볼수있어야돼" */}
+        <div className="flex items-center gap-1.5">
+          <span className="text-xs text-gray-500 shrink-0">노출 중분류</span>
+          <div className="flex rounded-lg border border-gray-300 overflow-hidden">
+            {(
+              [
+                { value: 'mapped' as const, label: '있음' },
+                { value: 'unmapped' as const, label: '없음' },
+                { value: 'all' as const, label: '전체' },
+              ]
+            ).map((opt) => (
+              <button
+                key={opt.value}
+                type="button"
+                onClick={() => setServiceCategoryFilter(opt.value)}
+                className={`px-2.5 py-1 text-xs font-medium transition-colors ${
+                  serviceCategoryFilter === opt.value ? 'bg-gray-900 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="flex-1 min-h-0 overflow-auto p-4">
@@ -610,6 +651,18 @@ export function SpotCurationsPanel() {
                         ) : (
                           <span className="mr-1.5 inline-block align-middle text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-500">
                             미등록
+                          </span>
+                        )}
+                        {/* [노출중분류 있는것/없는것 따로 보기](2026-09-06 사용자
+                            지시): 필터로 걸러 보는 것과 별개로, 행 하나하나에도
+                            바로 눈에 띄게 표시한다. */}
+                        {spot.service_category_id ? (
+                          <span className="mr-1.5 inline-block align-middle text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                            노출중분류 있음
+                          </span>
+                        ) : (
+                          <span className="mr-1.5 inline-block align-middle text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                            노출중분류 없음
                           </span>
                         )}
                         <span>{spot.name}</span>

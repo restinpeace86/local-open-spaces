@@ -142,3 +142,78 @@ describe('SpotCurationsPanel — 리스트 기반 등록/수정 (2026-09-03)', (
     expect(screen.getByRole('switch')).toBeInTheDocument();
   });
 });
+
+// [노출중분류 있는것/없는것 따로 보기](2026-09-06 사용자 지시): "스팟 큐레이션 탭에
+// 노출중분류 된거랑 안된거 따로도 볼수 있게해줘 기본적으로 노출중분류가 분류된
+// 식당에 대하여 스팟 큐레이션에서 메뉴작업할꺼라.. 일단은 노출중분류 있는것만도
+// 볼수있어야돼"
+describe('SpotCurationsPanel — 노출중분류 있는것/없는것 따로 보기', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('기본값은 "있음"이 선택돼 있어 처음 불러올 때부터 only_mapped=true로 조회한다', async () => {
+    const fetchMock = mockFetchByUrl({ dataGrid: { rows: [], total: 0 } });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<SpotCurationsPanel />);
+
+    fireEvent.click(screen.getByText('📥 불러오기'));
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/data-grid'));
+      expect(call).toBeDefined();
+      expect(decodeURIComponent(call![0] as string)).toContain('only_mapped=true');
+    });
+  });
+
+  it('"없음"을 누르면 only_unmapped=true로, "전체"를 누르면 필터 없이 조회한다', async () => {
+    const fetchMock = mockFetchByUrl({ dataGrid: { rows: [], total: 0 } });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<SpotCurationsPanel />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(0));
+    fetchMock.mockClear();
+
+    fireEvent.click(screen.getByText('없음'));
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/data-grid'));
+      expect(call).toBeDefined();
+      const url = decodeURIComponent(call![0] as string);
+      expect(url).toContain('only_unmapped=true');
+      expect(url).not.toContain('only_mapped');
+    });
+    fetchMock.mockClear();
+
+    fireEvent.click(screen.getByText('전체'));
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/data-grid'));
+      expect(call).toBeDefined();
+      const url = decodeURIComponent(call![0] as string);
+      expect(url).not.toContain('only_mapped');
+      expect(url).not.toContain('only_unmapped');
+    });
+  });
+
+  it('행마다 service_category_id 유무에 따라 "노출중분류 있음/없음" 뱃지를 보여준다', async () => {
+    await (async () => {
+      vi.stubGlobal(
+        'fetch',
+        mockFetchByUrl({
+          dataGrid: {
+            rows: [
+              { id: 'spot-1', name: '노출중분류 있는 식당', address: '서울', service_category_id: 'svc-1' },
+              { id: 'spot-2', name: '노출중분류 없는 식당', address: '서울', service_category_id: null },
+            ],
+            total: 2,
+          },
+        })
+      );
+      render(<SpotCurationsPanel />);
+      fireEvent.click(screen.getByText('📥 불러오기'));
+    })();
+
+    await screen.findByText('노출중분류 있는 식당');
+    expect(screen.getAllByText('노출중분류 있음').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('노출중분류 없음').length).toBeGreaterThan(0);
+  });
+});

@@ -234,6 +234,10 @@ async function queryOpenSpaces(supabase: Ctx, searchParams: URLSearchParams, pag
   // 같은 의미의 필터를 이 목록 조회 라우트에도 동일한 이름으로 추가한다(제5장
   // 제4조 — 새 이름을 만들지 않고 이미 쓰는 관례를 그대로 따름).
   const onlyUnmapped = searchParams.get('only_unmapped') === 'true';
+  // [스팟 큐레이션 탭 — 노출중분류 있는 것/없는 것 따로 보기](2026-09-06 사용자
+  // 지시): "노출중분류 된거랑 안된거 따로도 볼수 있게해줘.. 일단은 노출중분류
+  // 있는것만도 볼수있어야돼" — 반대 방향(이미 채워진 행만)도 필요해 대칭으로 추가한다.
+  const onlyMapped = searchParams.get('only_mapped') === 'true';
   const createdFrom = parseDateFilter(searchParams.get('created_from'));
   const createdTo = parseDateFilter(searchParams.get('created_to'));
 
@@ -294,6 +298,7 @@ async function queryOpenSpaces(supabase: Ctx, searchParams: URLSearchParams, pag
   if (missingLocation) query = query.is('location', null);
   if (missingFee) query = query.is('is_free', null);
   if (onlyUnmapped) query = query.is('service_category_id', null);
+  if (onlyMapped) query = query.not('service_category_id', 'is', null);
   query = applyCreatedAtRange(query, createdFrom, createdTo);
 
   const from = (page - 1) * pageSize;
