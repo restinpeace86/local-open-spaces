@@ -1,0 +1,21 @@
+-- [/admin/data-grid 재차 지연](2026-09-06 사용자 지시): "또 관리자 화면 오래걸리는데?
+-- 왜이러지? 어제 배큠 청소하지않았어?"
+--
+-- 실측 확인: open_spaces는 어제 조치(2026-09-05-open-spaces-vacuum-and-autovacuum-
+-- tuning.sql) 덕분에 건강하다(dead tuple 0.72%, 타임아웃 없음) — 재발이 아니다.
+-- 대신 어제는 손대지 않았던 **다른 두 테이블**이 정확히 같은 패턴으로 새로
+-- 문제가 됐다:
+--
+--   events:           dead 15.28%(4,846/26,874), 기본 임계값(20%)에 근접
+--   raw_ingest_data:  dead 12.37%(25,940/183,742), 계속 상승 중
+--
+-- 두 테이블 다 last_autovacuum이 어제 저녁(2026-09-05 19~20시경, 일일 배치
+-- 수집 직후로 추정)이지만 그 이후로도 쓰기가 계속 쌓여 다시 기본 임계값에
+-- 다가가고 있다 — /admin/data-grid의 get_events_filter_options(3.6초),
+-- get_raw_ingest_data_filter_options(2.4초) RPC가 눈에 띄게 느려진 원인과 정확히
+-- 일치한다. open_spaces와 완전히 동일한 원인(배치 적재로 쓰기가 잦은 테이블인데
+-- 기본 20% 임계값이 너무 느슨함)이라 동일한 조치를 적용한다 — 하나씩 터질 때마다
+-- 대응하는 대신, 이 세 테이블(모두 일일/월간 배치 수집 대상이자 admin 필터
+-- 옵션 RPC가 매번 전체 스캔하는 테이블)을 한 번에 정리한다.
+vacuum (analyze) public.events;
+vacuum (analyze) public.raw_ingest_data;
