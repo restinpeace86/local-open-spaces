@@ -267,7 +267,21 @@ async function queryOpenSpaces(supabase: Ctx, searchParams: URLSearchParams, pag
 
   // MINCLASSNM/SVCSTATNM 필터가 없으면 일반 쿼리 빌더 경로를 쓴다 — 실측상 raw_data JSONB를
   // 건드리지 않는 일반 컬럼 필터는 이 테이블에서도 문제없이 빠르다.
-  let query = supabase.from('open_spaces').select(OPEN_SPACES_COLUMNS, { count: 'estimated' });
+  //
+  // [총 건수가 재분류 중에도 안 바뀌는 문제](2026-09-06 사용자 지시): "키즈/놀이시설
+  // 대분류의 어린이놀이시설(실내) 중분류에서 많은 건수에 대하여 기타 혹은 놀이방식당으로
+  // 변경하고 있는데... 페이징에서 총 1364건 1/28페이지가 변하지 않아 이건 왜그런거야?" —
+  // count: 'estimated'(Postgres 플래너 통계 기반 추정치, 이 파일에서 성능 목적으로 채택한
+  // 기존 관례)는 마지막 ANALYZE 시점의 스냅샷이라, autovacuum이 재분류로 바뀐 소량(전체
+  // 141,815행 대비 0.05 scale factor 임계치에 못 미치는 수준)을 반영해 통계를 다시 갱신할
+  // 때까지는 사용자가 지금처럼 계속 값을 바꿔도 화면의 총 건수가 그대로 멈춰 있는 것처럼
+  // 보인다. 실측(EXPLAIN analyze): category_min 필터가 있을 때 정확한 COUNT(*)는
+  // idx_open_spaces_category_min_created_at 인덱스를 그대로 타 0.66ms(=estimated와 체감
+  // 차이 없음)인 반면, 필터가 전혀 없는 전체 카운트는 612ms(테이블 전체 스캔)다 — 그래서
+  // category_min으로 좁힌 경우에만 'exact'를 쓰고, 필터 없는 "전체" 조회는 기존
+  // 'estimated'를 그대로 유지해 그 611ms 비용을 새로 추가하지 않는다.
+  const categoryMinNarrowsRows = Boolean(searchParams.get('category_min'));
+  let query = supabase.from('open_spaces').select(OPEN_SPACES_COLUMNS, { count: categoryMinNarrowsRows ? 'exact' : 'estimated' });
 
   // [검색창/지도 검색 키워드 유연성 대폭 개선](2026-08-30 사용자 지시): 검색어 전체를
   // 하나의 ILIKE 패턴으로 걸면 "용인 어린이상상"처럼 띄어 쓴 검색어가 "용인어린이상상의숲"
