@@ -244,3 +244,118 @@ describe('RawDataModal — 배경 클릭/드래그 닫힘 동작', () => {
     expect(onClose).not.toHaveBeenCalled();
   });
 });
+
+// [open_spaces 삭제 기능](2026-09-06 사용자 지시): "내가 불필요하다고 생각하는건
+// 관리자 화면에서 삭제하는게 더 좋을까?" → 개별 삭제(RawDataModal).
+describe('RawDataModal — open_spaces 개별 삭제', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    // window.confirm은 vi.spyOn으로 매 테스트마다 새로 씌우는데, mockRestore 없이
+    // 두면 같은 spy 객체가 테스트 전체에 걸쳐 호출을 계속 누적한다 — 그 상태로
+    // .mock.calls[0]을 확인하면 이전 테스트의 호출을 잘못 읽게 된다(실측으로 확인한
+    // 케이스). 매 테스트 후 원상복구해 다음 테스트가 깨끗한 상태에서 시작하게 한다.
+    vi.restoreAllMocks();
+  });
+
+  function mockFetchByUrl(handlers: { impact?: Record<string, number>; deleteOk?: boolean; deleteError?: string }) {
+    return vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/api/admin/open-spaces') && (!init || init.method === undefined)) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              impact: {
+                events: 0,
+                reservations: 0,
+                spot_curations: 0,
+                spot_weather_caches: 0,
+                mom_pick_posts: 0,
+                user_bookmarks: 0,
+                ...handlers.impact,
+              },
+            }),
+        } as Response);
+      }
+      if (url.includes('/api/admin/open-spaces') && init?.method === 'DELETE') {
+        const ok = handlers.deleteOk !== false;
+        return Promise.resolve({
+          ok,
+          json: () => Promise.resolve(ok ? { deleted_count: 1 } : { error: handlers.deleteError ?? '삭제 실패' }),
+        } as Response);
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+  }
+
+  it('삭제 버튼을 눌러 확인하면 영향 범위를 먼저 조회하고, 확인 후 DELETE를 호출해 onDeleted를 부른다', async () => {
+    const fetchMock = mockFetchByUrl({});
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const onDeleted = vi.fn();
+    const row = buildRow();
+    render(<RawDataModal table="open_spaces" row={row} categoryMinOptions={[]} onClose={vi.fn()} onDeleted={onDeleted} />);
+
+    fireEvent.click(screen.getByText('🗑 이 스팟 삭제'));
+
+    await waitFor(() => expect(onDeleted).toHaveBeenCalledWith('row-1'));
+    const previewCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('ids=row-1') && !(c[1] as RequestInit)?.method);
+    expect(previewCall).toBeDefined();
+    const deleteCall = fetchMock.mock.calls.find((c) => (c[1] as RequestInit)?.method === 'DELETE');
+    expect(deleteCall).toBeDefined();
+    expect(JSON.parse((deleteCall![1] as RequestInit).body as string)).toEqual({ ids: ['row-1'] });
+  });
+
+  it('예약/북마크가 있으면 확인창 문구에 경고로 포함한다', async () => {
+    const fetchMock = mockFetchByUrl({ impact: { reservations: 2, user_bookmarks: 5 } });
+    vi.stubGlobal('fetch', fetchMock);
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const row = buildRow();
+    render(<RawDataModal table="open_spaces" row={row} categoryMinOptions={[]} onClose={vi.fn()} onDeleted={vi.fn()} />);
+
+    fireEvent.click(screen.getByText('🗑 이 스팟 삭제'));
+
+    await waitFor(() => expect(confirmSpy).toHaveBeenCalled());
+    const message = confirmSpy.mock.calls[0][0] as string;
+    expect(message).toContain('실제 예약 2건');
+    expect(message).toContain('사용자 북마크 5건');
+  });
+
+  it('확인창에서 취소하면 DELETE를 호출하지 않는다', async () => {
+    const fetchMock = mockFetchByUrl({});
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const row = buildRow();
+    render(<RawDataModal table="open_spaces" row={row} categoryMinOptions={[]} onClose={vi.fn()} onDeleted={vi.fn()} />);
+
+    fireEvent.click(screen.getByText('🗑 이 스팟 삭제'));
+
+    await waitFor(() => {
+      const previewCall = fetchMock.mock.calls.find((c) => !(c[1] as RequestInit)?.method);
+      expect(previewCall).toBeDefined();
+    });
+    expect(fetchMock.mock.calls.find((c) => (c[1] as RequestInit)?.method === 'DELETE')).toBeUndefined();
+  });
+
+  it('실제 예약이 있어 서버가 거부하면(409) 에러 문구를 보여준다', async () => {
+    const fetchMock = mockFetchByUrl({
+      impact: { reservations: 1 },
+      deleteOk: false,
+      deleteError: '실제 예약 1건이 걸려있어 삭제할 수 없습니다.',
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const row = buildRow();
+    render(<RawDataModal table="open_spaces" row={row} categoryMinOptions={[]} onClose={vi.fn()} onDeleted={vi.fn()} />);
+
+    fireEvent.click(screen.getByText('🗑 이 스팟 삭제'));
+
+    expect(await screen.findByText('실제 예약 1건이 걸려있어 삭제할 수 없습니다.')).toBeInTheDocument();
+  });
+
+  it('events 탭에는 삭제 버튼이 없다', () => {
+    const row = buildRow();
+    render(<RawDataModal table="events" row={row as unknown as AdminOpenSpaceRow} categoryMinOptions={[]} onClose={vi.fn()} />);
+
+    expect(screen.queryByText('🗑 이 스팟 삭제')).not.toBeInTheDocument();
+  });
+});

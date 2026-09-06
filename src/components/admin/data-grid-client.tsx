@@ -1355,6 +1355,13 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
             setTotal((prev) => Math.max(0, prev - 1));
             setSelectedRow(null);
           }}
+          onDeleted={(id) => {
+            // [open_spaces 삭제 기능](2026-09-06 사용자 지시): 삭제 성공 시 목록/총건수/
+            // 상세 모달에서도 즉시 제거한다(위 이관과 동일한 관례).
+            setRows((prev) => prev.filter((row) => !('id' in row) || row.id !== id));
+            setTotal((prev) => Math.max(0, prev - 1));
+            setSelectedRow(null);
+          }}
         />
       )}
       {selectedRow && tab === 'raw_ingest_data' && (

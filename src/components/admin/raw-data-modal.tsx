@@ -365,6 +365,7 @@ export function RawDataModal({
   onLocationUpdated,
   onServiceCategoryUpdated,
   onMigratedToEvent,
+  onDeleted,
 }: {
   table: AdminTable;
   row: AdminRow;
@@ -380,13 +381,71 @@ export function RawDataModal({
   // [todo.md 개선사항 5](2026-09-03): open_spaces 탭에서만 전달된다 — 이관 성공 시 부모가
   // 목록에서 이 행을 제거하고 상세 모달을 닫는다(원본이 실제로 삭제됐으므로).
   onMigratedToEvent?: (id: string) => void;
+  // [open_spaces 삭제 기능](2026-09-06 사용자 지시): open_spaces 탭에서만 전달된다 —
+  // 삭제 성공 시 부모가 목록에서 이 행을 제거하고 상세 모달을 닫는다.
+  onDeleted?: (id: string) => void;
 }) {
   const { title, subtitle, raw } = getModalContent(table, row);
   const prettyJson = JSON.stringify(raw ?? null, null, 2);
   const [isMigrateModalOpen, setIsMigrateModalOpen] = useState(false);
   const [isBlogCurationModalOpen, setIsBlogCurationModalOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   // [드래그 시 팝업 닫힘 버그 수정](2026-09-05 사용자 지시) 참고: use-backdrop-dismiss.ts
   const backdropDismiss = useBackdropDismiss(onClose);
+
+  // [open_spaces 삭제 기능](2026-09-06 사용자 지시): "내가 불필요하다고 생각하는건
+  // 관리자 화면에서 삭제하는게 더 좋을까?" → "open_spaces쪽의 데이터" 삭제.
+  // 실측 확인(src/app/api/admin/open-spaces/route.ts 주석 참고): open_spaces는
+  // service_categories와 달리 대부분 CASCADE/SET NULL로 참조돼 있어 DB가 삭제를
+  // 막아주지 않는다 — 삭제 전 영향 범위(예약/북마크/큐레이션 등)를 먼저 조회해
+  // 관리자가 실제 건수를 보고 판단하게 한다. 실제 예약이 있으면 서버가 자체적으로
+  // 삭제를 거부한다(아래 catch에서 그 에러 문구를 그대로 보여준다).
+  async function handleDelete() {
+    setDeleteError(null);
+    const spotId = (row as AdminOpenSpaceRow).id;
+    try {
+      const previewRes = await fetch(`/api/admin/open-spaces?ids=${encodeURIComponent(spotId)}`);
+      const previewData = await previewRes.json();
+      if (!previewRes.ok) throw new Error(previewData.error ?? '삭제 영향 범위 조회에 실패했습니다.');
+
+      const impact = previewData.impact as {
+        events: number;
+        reservations: number;
+        spot_curations: number;
+        spot_weather_caches: number;
+        mom_pick_posts: number;
+        user_bookmarks: number;
+      };
+      const impactLines = [
+        impact.reservations > 0 ? `⚠️ 실제 예약 ${impact.reservations}건` : null,
+        impact.user_bookmarks > 0 ? `⚠️ 사용자 북마크 ${impact.user_bookmarks}건` : null,
+        impact.spot_curations > 0 ? `스팟 큐레이션 ${impact.spot_curations}건(함께 삭제됨)` : null,
+        impact.events > 0 ? `연결된 행사 ${impact.events}건(위치 연결만 해제됨)` : null,
+        impact.mom_pick_posts > 0 ? `맘스픽 게시글 ${impact.mom_pick_posts}건(위치 연결만 해제됨)` : null,
+      ].filter((line): line is string => Boolean(line));
+      const confirmMessage =
+        impactLines.length > 0
+          ? `이 스팟을 삭제하면:\n${impactLines.join('\n')}\n\n정말 삭제하시겠습니까?`
+          : '이 스팟을 삭제할까요? 연결된 데이터는 없습니다.';
+      if (!window.confirm(confirmMessage)) return;
+
+      setIsDeleting(true);
+      const res = await fetch('/api/admin/open-spaces', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [spotId] }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? '삭제에 실패했습니다.');
+
+      onDeleted?.(spotId);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : '삭제에 실패했습니다.');
+    } finally {
+      setIsDeleting(false);
+    }
+  }
 
   const structuredEntries = Object.entries(row).filter(([key]) => key !== 'raw_data' && key !== 'raw_payload');
 
@@ -463,6 +522,23 @@ export function RawDataModal({
               </button>
             </div>
           )}
+
+          {/* [open_spaces 삭제 기능](2026-09-06 사용자 지시): "내가 불필요하다고
+              생각하는건 관리자 화면에서 삭제하는게 더 좋을까?" */}
+          {table === 'open_spaces' && (
+            <div className="mt-3 rounded-xl border border-red-200 bg-red-50/60 p-3 flex items-center justify-between gap-3">
+              <p className="text-xs text-red-800">불필요하거나 잘못 등록된 데이터인가요?</p>
+              <button
+                type="button"
+                onClick={handleDelete}
+                disabled={isDeleting}
+                className="shrink-0 rounded-full bg-red-600 text-white text-xs font-semibold px-3 py-1.5 hover:bg-red-700 disabled:opacity-50"
+              >
+                {isDeleting ? '삭제 중...' : '🗑 이 스팟 삭제'}
+              </button>
+            </div>
+          )}
+          {deleteError && <p className="mt-1.5 text-xs text-red-600">{deleteError}</p>}
 
           <h3 className="mt-4 text-xs font-semibold text-gray-500">전체 컬럼</h3>
           <div className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">

@@ -44,6 +44,9 @@ function RowPicker({ categoryMinOptions, serviceCategories }: { categoryMinOptio
   const [rowServiceCategoryId, setRowServiceCategoryId] = useState('');
   const [isApplyingRows, setIsApplyingRows] = useState(false);
   const [rowsResultMessage, setRowsResultMessage] = useState<string | null>(null);
+  // [open_spaces 삭제 기능](2026-09-06 사용자 지시): "내가 불필요하다고 생각하는건
+  // 관리자 화면에서 삭제하는게 더 좋을까?" → 개별(RawDataModal) + 일괄(여기) 둘 다.
+  const [isDeletingRows, setIsDeletingRows] = useState(false);
   // [All-in-One 모바일 큐레이션 워크벤치] 진입 상태 — 어떤 스팟을 워크벤치로 열었는지.
   const [workbenchSpotId, setWorkbenchSpotId] = useState<string | null>(null);
 
@@ -115,6 +118,65 @@ function RowPicker({ categoryMinOptions, serviceCategories }: { categoryMinOptio
       })
       .catch((err) => setRowsError(err instanceof Error ? err.message : '적용에 실패했습니다.'))
       .finally(() => setIsApplyingRows(false));
+  }
+
+  // [open_spaces 삭제 기능](2026-09-06 사용자 지시): 실측 확인(src/app/api/admin/
+  // open-spaces/route.ts 주석 참고) — open_spaces는 대부분 CASCADE/SET NULL로
+  // 참조돼 있어 DB가 삭제를 막아주지 않는다. 삭제 전 영향 범위(예약/북마크/
+  // 큐레이션 등)를 먼저 조회해 실제 건수를 보여준 뒤에만 확인창을 띄운다 — 실제
+  // 예약이 있으면 서버가 자체적으로 거부한다(그 에러 문구를 그대로 보여줌).
+  async function handleDeleteSelected() {
+    if (selectedIds.size === 0) {
+      setRowsError('선택된 항목이 없습니다.');
+      return;
+    }
+    setRowsError(null);
+    setRowsResultMessage(null);
+    const ids = [...selectedIds];
+    try {
+      const previewRes = await fetch(`/api/admin/open-spaces?ids=${ids.map(encodeURIComponent).join(',')}`);
+      const previewData = await previewRes.json();
+      if (!previewRes.ok) throw new Error(previewData.error ?? '삭제 영향 범위 조회에 실패했습니다.');
+
+      const impact = previewData.impact as {
+        events: number;
+        reservations: number;
+        spot_curations: number;
+        spot_weather_caches: number;
+        mom_pick_posts: number;
+        user_bookmarks: number;
+      };
+      const impactLines = [
+        impact.reservations > 0 ? `⚠️ 실제 예약 ${impact.reservations}건` : null,
+        impact.user_bookmarks > 0 ? `⚠️ 사용자 북마크 ${impact.user_bookmarks}건` : null,
+        impact.spot_curations > 0 ? `스팟 큐레이션 ${impact.spot_curations}건(함께 삭제됨)` : null,
+        impact.events > 0 ? `연결된 행사 ${impact.events}건(위치 연결만 해제됨)` : null,
+        impact.mom_pick_posts > 0 ? `맘스픽 게시글 ${impact.mom_pick_posts}건(위치 연결만 해제됨)` : null,
+      ].filter((line): line is string => Boolean(line));
+      const confirmMessage =
+        impactLines.length > 0
+          ? `선택한 ${ids.length}건을 삭제하면:\n${impactLines.join('\n')}\n\n정말 삭제하시겠습니까?`
+          : `선택한 ${ids.length}건을 삭제할까요? 연결된 데이터는 없습니다.`;
+      if (!window.confirm(confirmMessage)) return;
+
+      setIsDeletingRows(true);
+      const res = await fetch('/api/admin/open-spaces', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? '삭제에 실패했습니다.');
+
+      setRowsResultMessage(`${data.deleted_count}건을 삭제했습니다.`);
+      setRows((prev) => prev.filter((r) => !selectedIds.has(r.id)));
+      setTotal((prev) => Math.max(0, prev - (data.deleted_count ?? 0)));
+      setSelectedIds(new Set());
+    } catch (err) {
+      setRowsError(err instanceof Error ? err.message : '삭제에 실패했습니다.');
+    } finally {
+      setIsDeletingRows(false);
+    }
   }
 
   const totalPages = Math.max(1, Math.ceil(total / ROW_PICKER_PAGE_SIZE));
@@ -232,6 +294,20 @@ function RowPicker({ categoryMinOptions, serviceCategories }: { categoryMinOptio
                 className="rounded-full bg-gray-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-700 disabled:opacity-50"
               >
                 {isApplyingRows ? '적용 중...' : `선택 ${selectedIds.size}건 적용`}
+              </button>
+            </div>
+
+            {/* [open_spaces 삭제 기능](2026-09-06 사용자 지시): "내가 불필요하다고
+                생각하는건 관리자 화면에서 삭제하는게 더 좋을까?" — 노출 중분류
+                매핑과 별개로, 선택한 행을 그냥 삭제만 할 수도 있다. */}
+            <div className="flex items-center gap-2 pt-1 border-t border-gray-100 mt-1">
+              <button
+                type="button"
+                onClick={handleDeleteSelected}
+                disabled={isDeletingRows || selectedIds.size === 0}
+                className="rounded-full bg-red-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {isDeletingRows ? '삭제 중...' : `🗑 선택 ${selectedIds.size}건 삭제`}
               </button>
             </div>
           </>

@@ -20,6 +20,10 @@ function mockFetchByUrl(handlers: {
   rowsApply?: unknown; // POST /api/admin/open-spaces/bulk-category-mapping { ids } 응답
   deleteOk?: boolean; // DELETE /api/admin/service-categories 성공 여부(기본 true)
   deleteError?: string; // deleteOk가 false일 때 응답 error 문구
+  // [open_spaces 삭제 기능](2026-09-06 사용자 지시) — GET/DELETE /api/admin/open-spaces
+  spotImpact?: Record<string, number>;
+  spotDeleteOk?: boolean;
+  spotDeleteError?: string;
 }) {
   return vi.fn((url: string, init?: RequestInit) => {
     if (url.includes('/api/admin/service-categories')) {
@@ -36,6 +40,33 @@ function mockFetchByUrl(handlers: {
       return Promise.resolve({
         ok: true,
         json: () => Promise.resolve(handlers.dataGridRows ?? { table: 'open_spaces', rows: [], total: 0, page: 1, pageSize: 50 }),
+      } as Response);
+    }
+    // bulk-category-mapping보다 먼저 잡히지 않도록 그쪽 URL은 명시적으로 제외한다
+    // (둘 다 '/api/admin/open-spaces'를 접두사로 공유).
+    if (url.includes('/api/admin/open-spaces') && !url.includes('bulk-category-mapping')) {
+      if (init?.method === 'DELETE') {
+        const ok = handlers.spotDeleteOk !== false;
+        const ids = JSON.parse((init.body as string) ?? '{}').ids ?? [];
+        return Promise.resolve({
+          ok,
+          json: () => Promise.resolve(ok ? { deleted_count: ids.length } : { error: handlers.spotDeleteError ?? '삭제 실패' }),
+        } as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            impact: {
+              events: 0,
+              reservations: 0,
+              spot_curations: 0,
+              spot_weather_caches: 0,
+              mom_pick_posts: 0,
+              user_bookmarks: 0,
+              ...handlers.spotImpact,
+            },
+          }),
       } as Response);
     }
     if (url.includes('/api/admin/open-spaces/bulk-category-mapping')) {
@@ -55,6 +86,10 @@ function mockFetchByUrl(handlers: {
 describe('CategoryMappingPanel', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
+    // window.confirm을 vi.spyOn으로 테스트마다 새로 씌우는데, mockRestore 없이 두면
+    // 같은 spy 객체가 파일 전체에 걸쳐 호출을 누적한다 — .mock.calls를 인덱스로
+    // 확인하는 테스트가 이전 테스트의 호출을 잘못 읽는 사고를 방지한다(실측 확인).
+    vi.restoreAllMocks();
   });
 
   it('진입 시 자동으로 조회하지 않고, "불러오기"를 눌러야 노출 중분류 목록이 조회된다', () => {
@@ -329,6 +364,116 @@ describe('CategoryMappingPanel', () => {
       await screen.findByText('행복놀이터');
 
       expect(screen.getByText('선택 0건 적용')).toBeDisabled();
+    });
+  });
+
+  // [open_spaces 삭제 기능](2026-09-06 사용자 지시): "내가 불필요하다고 생각하는건
+  // 관리자 화면에서 삭제하는게 더 좋을까?" → 일괄 삭제(RowPicker).
+  describe('선택 항목 삭제 (RowPicker)', () => {
+    function searchAndSelectRow() {
+      const selects = screen.getAllByText('원본 중분류 선택').map((el) => el.closest('select'));
+      fireEvent.change(selects[1]!, { target: { value: '공원' } });
+      fireEvent.click(screen.getByText('조회'));
+    }
+
+    it('선택 후 삭제를 눌러 확인하면 영향 범위를 조회하고 DELETE를 호출해 목록에서 제거한다', async () => {
+      const fetchMock = mockFetchByUrl({
+        dataGridRows: {
+          rows: [
+            { id: 'row-1', name: '행복놀이터', address: '경기도 성남시', category_min: '공원' },
+            { id: 'row-2', name: '동네공원', address: '경기도 용인시', category_min: '공원' },
+          ],
+          total: 2,
+          page: 1,
+          pageSize: 50,
+        },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      renderPanel();
+
+      searchAndSelectRow();
+      await screen.findByText('행복놀이터');
+      fireEvent.click(screen.getByLabelText('행복놀이터 선택'));
+      fireEvent.click(screen.getByText('🗑 선택 1건 삭제'));
+
+      expect(await screen.findByText('1건을 삭제했습니다.')).toBeInTheDocument();
+      expect(screen.queryByText('행복놀이터')).not.toBeInTheDocument();
+      expect(screen.getByText('동네공원')).toBeInTheDocument();
+
+      const deleteCall = fetchMock.mock.calls.find((c) => (c[1] as RequestInit)?.method === 'DELETE');
+      expect(deleteCall).toBeDefined();
+      expect(JSON.parse((deleteCall![1] as RequestInit).body as string)).toEqual({ ids: ['row-1'] });
+    });
+
+    it('연결된 큐레이션/행사가 있으면 확인창 문구에 안내로 포함한다', async () => {
+      const fetchMock = mockFetchByUrl({
+        dataGridRows: {
+          rows: [{ id: 'row-1', name: '행복놀이터', address: null, category_min: '공원' }],
+          total: 1,
+          page: 1,
+          pageSize: 50,
+        },
+        spotImpact: { spot_curations: 3, events: 2 },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+      renderPanel();
+
+      searchAndSelectRow();
+      await screen.findByText('행복놀이터');
+      fireEvent.click(screen.getByLabelText('행복놀이터 선택'));
+      fireEvent.click(screen.getByText('🗑 선택 1건 삭제'));
+
+      await waitFor(() => expect(confirmSpy).toHaveBeenCalled());
+      const message = confirmSpy.mock.calls[confirmSpy.mock.calls.length - 1][0] as string;
+      expect(message).toContain('스팟 큐레이션 3건');
+      expect(message).toContain('연결된 행사 2건');
+    });
+
+    it('실제 예약이 있어 서버가 거부하면(409) 에러 문구를 보여주고 목록은 그대로 남는다', async () => {
+      const fetchMock = mockFetchByUrl({
+        dataGridRows: {
+          rows: [{ id: 'row-1', name: '행복놀이터', address: null, category_min: '공원' }],
+          total: 1,
+          page: 1,
+          pageSize: 50,
+        },
+        spotImpact: { reservations: 1 },
+        spotDeleteOk: false,
+        spotDeleteError: '실제 예약 1건이 걸려있어 삭제할 수 없습니다.',
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      vi.spyOn(window, 'confirm').mockReturnValue(true);
+      renderPanel();
+
+      searchAndSelectRow();
+      await screen.findByText('행복놀이터');
+      fireEvent.click(screen.getByLabelText('행복놀이터 선택'));
+      fireEvent.click(screen.getByText('🗑 선택 1건 삭제'));
+
+      expect(await screen.findByText('실제 예약 1건이 걸려있어 삭제할 수 없습니다.')).toBeInTheDocument();
+      expect(screen.getByText('행복놀이터')).toBeInTheDocument();
+    });
+
+    it('선택 없이 삭제 버튼을 누를 수 없다(비활성화)', async () => {
+      vi.stubGlobal(
+        'fetch',
+        mockFetchByUrl({
+          dataGridRows: {
+            rows: [{ id: 'row-1', name: '행복놀이터', address: null, category_min: '공원' }],
+            total: 1,
+            page: 1,
+            pageSize: 50,
+          },
+        })
+      );
+      renderPanel();
+
+      searchAndSelectRow();
+      await screen.findByText('행복놀이터');
+
+      expect(screen.getByText('🗑 선택 0건 삭제')).toBeDisabled();
     });
   });
 
