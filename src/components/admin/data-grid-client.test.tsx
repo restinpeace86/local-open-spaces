@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AdminDataGridClient } from './data-grid-client';
 
@@ -114,5 +114,44 @@ describe('AdminDataGridClient — 모바일 레이아웃/스크롤 회귀 방지
     expect(tableScrollArea.className).toContain('flex-1');
     expect(tableScrollArea.className).toContain('min-h-0');
     expect(tableScrollArea.className).toContain('overflow-y-auto');
+  });
+});
+
+// [노출 중분류 미지정만 보기](2026-09-06 사용자 지시): "노출중분류가 null 인거에
+// 대하여 어디서 체크할수있도록 해놓은거야? open_spaces.에 안보이는데?"
+describe('AdminDataGridClient — 노출 중분류 미지정만 보기', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('open_spaces 탭에 체크박스가 보이고, 체크하면 only_unmapped=true로 조회한다', async () => {
+    const fetchMock = vi.fn((_url: string) => Promise.resolve({ ok: true, json: () => Promise.resolve({ rows: [], total: 0 }) } as Response));
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+
+    const checkbox = screen.getByLabelText('노출 중분류(service_category_id)가 아직 없는 행만 보기');
+    expect(checkbox).not.toBeChecked();
+
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await screen.findByText('조건에 맞는 데이터가 없습니다.');
+    fetchMock.mockClear();
+
+    fireEvent.click(checkbox);
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/data-grid'));
+      expect(call).toBeDefined();
+      expect(call![0] as string).toContain('only_unmapped=true');
+    });
+  });
+
+  it('events 탭에는 이 체크박스가 없다(open_spaces 전용 컬럼)', () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ rows: [], total: 0 }) } as Response)));
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+
+    fireEvent.click(screen.getByText('events (행사·체험)'));
+
+    expect(screen.queryByLabelText('노출 중분류(service_category_id)가 아직 없는 행만 보기')).not.toBeInTheDocument();
   });
 });

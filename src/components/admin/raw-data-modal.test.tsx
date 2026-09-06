@@ -359,3 +359,46 @@ describe('RawDataModal — open_spaces 개별 삭제', () => {
     expect(screen.queryByText('🗑 이 스팟 삭제')).not.toBeInTheDocument();
   });
 });
+
+// [원문 JSON 필드를 HTML로 보기](2026-09-06 사용자 지시): "DTLCONT 같은 컬럼에는
+// 글이 쫙 있긴한데.. html로 되어있는거 같아.. 해당 컬럼만 좀 눌러서 다시
+// 팝업띄워서 html로 보고 닫을수 있는 기능달던가해줘"
+describe('RawDataModal — 원문 JSON 필드를 HTML로 보기', () => {
+  it('HTML 태그가 들어있는 필드에 "HTML로 보기" 버튼이 뜨고, 누르면 렌더링된 팝업이 뜬다', () => {
+    const row = buildRow({ raw_data: { DTLCONT: '<p>공공시설 <b>예약</b> 안내</p>', PLAINFIELD: '그냥 텍스트' } });
+    render(<RawDataModal table="open_spaces" row={row} categoryMinOptions={[]} onClose={vi.fn()} />);
+
+    const openButton = screen.getByText('🔍 DTLCONT HTML로 보기');
+    expect(openButton).toBeInTheDocument();
+    // 태그가 없는 필드는 버튼이 생기지 않는다.
+    expect(screen.queryByText('🔍 PLAINFIELD HTML로 보기')).not.toBeInTheDocument();
+
+    fireEvent.click(openButton);
+
+    expect(screen.getByText('DTLCONT (HTML 미리보기)')).toBeInTheDocument();
+    // dangerouslySetInnerHTML로 렌더링돼 <b> 태그는 실제 요소가 되고 텍스트만 보인다.
+    expect(screen.getByText('예약').tagName).toBe('B');
+  });
+
+  it('닫기 버튼을 누르면 팝업이 사라진다', () => {
+    const row = buildRow({ raw_data: { DTLCONT: '<p>본문</p>' } });
+    render(<RawDataModal table="open_spaces" row={row} categoryMinOptions={[]} onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByText('🔍 DTLCONT HTML로 보기'));
+    expect(screen.getByText('DTLCONT (HTML 미리보기)')).toBeInTheDocument();
+
+    // 메인 모달과 HTML 미리보기 팝업 둘 다 "닫기" 버튼이 있어(aria-label 동일),
+    // 나중에 렌더링된(문서 순서상 뒤에 오는) 팝업 쪽 버튼을 정확히 짚는다.
+    const closeButtons = screen.getAllByLabelText('닫기');
+    fireEvent.click(closeButtons[closeButtons.length - 1]);
+
+    expect(screen.queryByText('DTLCONT (HTML 미리보기)')).not.toBeInTheDocument();
+  });
+
+  it('HTML처럼 보이는 필드가 없으면 버튼 자체를 보여주지 않는다', () => {
+    const row = buildRow({ raw_data: { NAME: '그냥 이름', COUNT: 3 } });
+    render(<RawDataModal table="open_spaces" row={row} categoryMinOptions={[]} onClose={vi.fn()} />);
+
+    expect(screen.queryByText(/HTML로 보기/)).not.toBeInTheDocument();
+  });
+});

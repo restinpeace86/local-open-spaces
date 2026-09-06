@@ -23,6 +23,17 @@ function isImageUrlField(key: string, value: string): boolean {
   return /\.(jpe?g|png|gif|webp|svg|avif)(\?.*)?$/i.test(value);
 }
 
+// [원문 JSON 필드를 HTML로 보기](2026-09-06 사용자 지시): "events에서 raw_data
+// 원문보면.. DTLCONT 같은 컬럼에는 글이 쫙 있긴한데.. 이게 html로 되어있는거
+// 같아.. 해당 컬럼만 좀 눌러서 다시 팝업띄워서 html로 보고 닫을수 있는 기능" —
+// 원천 API(raw_data/raw_payload)의 특정 필드값이 HTML 태그를 포함하는지 감지한다.
+// <br>처럼 닫는 태그가 없는 경우도 있어 여는 태그 하나만 있어도 HTML로 간주하는
+// 넓은 휴리스틱을 쓴다 — 오탐이 있어도 무해하다(관리자가 버튼을 눌러야만
+// 렌더링을 시도한다).
+function looksLikeHtml(value: unknown): value is string {
+  return typeof value === 'string' && /<[a-z][^>]*>/i.test(value);
+}
+
 function getModalContent(table: AdminTable, row: AdminRow): { title: string; subtitle: string; raw: unknown } {
   if (table === 'raw_ingest_data') {
     const r = row as AdminRawIngestRow;
@@ -391,8 +402,18 @@ export function RawDataModal({
   const [isBlogCurationModalOpen, setIsBlogCurationModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  // [원문 JSON 필드를 HTML로 보기](2026-09-06 사용자 지시) — 어떤 필드를 HTML로
+  // 열었는지 저장한다(null이면 팝업 닫힘).
+  const [htmlPreviewField, setHtmlPreviewField] = useState<{ key: string; value: string } | null>(null);
   // [드래그 시 팝업 닫힘 버그 수정](2026-09-05 사용자 지시) 참고: use-backdrop-dismiss.ts
   const backdropDismiss = useBackdropDismiss(onClose);
+
+  // raw가 평범한 객체일 때만 상위 필드를 훑어 HTML처럼 보이는 문자열 필드를 찾는다
+  // (배열/문자열/숫자 등 다른 모양의 raw_data도 있어 방어적으로 확인한다).
+  const htmlLikeFields: [string, string][] =
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? Object.entries(raw as Record<string, unknown>).filter((entry): entry is [string, string] => looksLikeHtml(entry[1]))
+      : [];
 
   // [open_spaces 삭제 기능](2026-09-06 사용자 지시): "내가 불필요하다고 생각하는건
   // 관리자 화면에서 삭제하는게 더 좋을까?" → "open_spaces쪽의 데이터" 삭제.
@@ -579,11 +600,34 @@ export function RawDataModal({
           <h3 className="mt-4 text-xs font-semibold text-gray-500">
             {table === 'raw_ingest_data' ? 'raw_payload (원문 JSON)' : 'raw_data (원문 JSON)'}
           </h3>
+
+          {/* [원문 JSON 필드를 HTML로 보기](2026-09-06 사용자 지시): "DTLCONT 같은
+              컬럼에는 글이 쫙 있긴한데.. html로 되어있는거 같아.. 해당 컬럼만 좀
+              눌러서 다시 팝업띄워서 html로 보고 닫을수 있는 기능달던가해줘" */}
+          {htmlLikeFields.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {htmlLikeFields.map(([key, value]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setHtmlPreviewField({ key, value })}
+                  className="rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[11px] font-medium text-blue-700 hover:bg-blue-100"
+                >
+                  🔍 {key} HTML로 보기
+                </button>
+              ))}
+            </div>
+          )}
+
           <pre className="mt-1.5 rounded-lg bg-gray-900 text-gray-100 text-xs p-3 overflow-x-auto whitespace-pre-wrap break-words">
             {prettyJson}
           </pre>
         </div>
       </div>
+
+      {htmlPreviewField && (
+        <HtmlFieldPreviewModal field={htmlPreviewField} onClose={() => setHtmlPreviewField(null)} />
+      )}
 
       {isMigrateModalOpen && table === 'open_spaces' && onMigratedToEvent && (
         <MigrateToEventModal
@@ -609,6 +653,38 @@ export function RawDataModal({
           onServiceCategoryUpdated={onServiceCategoryUpdated}
         />
       )}
+    </div>
+  );
+}
+
+// [원문 JSON 필드를 HTML로 보기](2026-09-06 사용자 지시): raw_data/raw_payload의
+// 특정 필드(예: 서울시 공공 예약 API의 DTLCONT — 상세 안내문이 HTML로 인코딩돼
+// 있음)를 실제 HTML로 렌더링해서 읽기 좋게 보여준다. 이 값은 우리 파이프라인이
+// 이미 원천 그대로 수집해 DB(raw_data)에 저장해둔, 관리자만 보는 디버그용
+// 데이터라 dangerouslySetInnerHTML을 쓴다 — 목적 자체가 "HTML을 HTML로 보기"이며
+// (블로그 큐레이션의 외부 크롤링 텍스트처럼 그대로 렌더링하면 안 되는 경우와
+// 다르다), 일반 사용자에게 노출되는 화면이 아니다.
+function HtmlFieldPreviewModal({ field, onClose }: { field: { key: string; value: string }; onClose: () => void }) {
+  const backdropDismiss = useBackdropDismiss(onClose);
+  return (
+    <div className="fixed inset-0 bg-black/50 z-[80] flex items-end md:items-center justify-center" {...backdropDismiss}>
+      <div
+        className="w-full md:w-[640px] max-h-[85vh] overflow-y-auto bg-white rounded-t-2xl md:rounded-2xl shadow-xl p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-bold text-gray-900">{field.key} (HTML 미리보기)</h2>
+          <button type="button" onClick={onClose} aria-label="닫기" className="text-gray-400 hover:text-gray-600">
+            ✕
+          </button>
+        </div>
+        <div
+          className="rounded-lg border border-gray-200 p-3 text-sm leading-relaxed text-gray-800 [&_p]:mb-2"
+          style={{ whiteSpace: 'pre-wrap' }}
+          // eslint-disable-next-line react/no-danger
+          dangerouslySetInnerHTML={{ __html: field.value }}
+        />
+      </div>
     </div>
   );
 }

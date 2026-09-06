@@ -687,6 +687,12 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
   // tri-state 필터와 달리 기본값이 'all'이 아니라 'true'다(비활성 만료 데이터가 기본적으로
   // 섞여 나오지 않도록). events 탭에만 의미가 있다(open_spaces에는 is_active 컬럼이 없음).
   const [isActive, setIsActive] = useState<TriState>('true');
+  // [노출 중분류 미지정만 보기](2026-09-06 사용자 지시): "노출중분류가 null 인거에
+  // 대하여 어디서 체크할수있도록 해놓은거야? open_spaces.에 안보이는데?" — 이전에
+  // CategoryMappingPanel의 RowPicker에만 이 필터를 넣었는데, 관리자가 실제로
+  // open_spaces 탭 자체에서 이 필터를 기대하고 있었다 — 여기(메인 목록)에도
+  // 추가한다. open_spaces에만 있는 컬럼이라 이 탭에서만 의미가 있다.
+  const [onlyUnmapped, setOnlyUnmapped] = useState(false);
   // 요구사항 2: 단축 필터([오늘 등록건 보기]/[최근 3일건 보기]) + 달력 기간 조회. 다른 즉시
   // 반영 필터(검색어/칩 등)와 같은 관례로, 값이 바뀌면 바로 쿼리가 나간다(체크박스 필터만
   // pending/applied 2단계인 것과 다름 — 날짜는 오조작 빈도가 낮고 즉시 반영이 자연스럽다).
@@ -750,6 +756,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     setPendingTargetAudience([]);
     setAppliedTargetAudience([]);
     setIsActive('true');
+    setOnlyUnmapped(false);
     setCreatedFrom(todayDateStr());
     setCreatedTo(todayDateStr());
   };
@@ -797,6 +804,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     if (appliedCategoryMin.length > 0) params.set('category_min', appliedCategoryMin.join(','));
     if (tab === 'events' && appliedTargetAudience.length > 0) params.set('target_audience', appliedTargetAudience.join(','));
     if (tab === 'events') params.set('is_active', isActive);
+    if (tab === 'open_spaces' && onlyUnmapped) params.set('only_unmapped', 'true');
     if (tab !== 'raw_ingest_data' && createdFrom) params.set('created_from', createdFrom);
     if (tab !== 'raw_ingest_data' && createdTo) params.set('created_to', createdTo);
     params.set('page', String(page));
@@ -824,7 +832,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, hasLoaded, debouncedQ, sourceTypes, sources, categories, minClassName, appliedCategoryMin, appliedTargetAudience, isActive, createdFrom, createdTo, page, pageSize]);
+  }, [tab, hasLoaded, debouncedQ, sourceTypes, sources, categories, minClassName, appliedCategoryMin, appliedTargetAudience, isActive, onlyUnmapped, createdFrom, createdTo, page, pageSize]);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
   const currentOptions = filterOptions[tab];
@@ -942,6 +950,22 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
               setPendingCategoryMin((prev) => (prev.includes(v) ? prev.filter((x) => x !== v) : [...prev, v]))
             }
           />
+        )}
+
+        {/* [노출 중분류 미지정만 보기](2026-09-06 사용자 지시): "노출중분류가 null 인거에
+            대하여 어디서 체크할수있도록 해놓은거야? open_spaces.에 안보이는데?" —
+            open_spaces 전용 컬럼이라 이 탭에서만 보여준다. 체크박스라 즉시 반영한다
+            (표준 중분류처럼 별도 "조회하기" 클릭을 요구하지 않음 — isActive와 동일 관례). */}
+        {tab === 'open_spaces' && (
+          <label className="flex items-center gap-1.5 text-xs text-gray-600">
+            <input
+              type="checkbox"
+              checked={onlyUnmapped}
+              onChange={(e) => setOnlyUnmapped(e.target.checked)}
+              className="h-3.5 w-3.5"
+            />
+            노출 중분류(service_category_id)가 아직 없는 행만 보기
+          </label>
         )}
 
         {/* 요구사항 2: 단축 필터 + 달력 기간 조회(created_at 기준) — 조회하기 버튼도 이 줄에 함께 둔다 */}

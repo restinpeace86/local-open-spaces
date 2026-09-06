@@ -16,6 +16,7 @@ type MockHandlers = {
   blogSearch?: unknown;
   existingCurationBySpotId?: Record<string, unknown>;
   curationSaveOk?: boolean;
+  applyOk?: boolean;
 };
 
 function mockFetchByUrl(handlers: MockHandlers) {
@@ -47,6 +48,13 @@ function mockFetchByUrl(handlers: MockHandlers) {
     }
     if (url.includes('/api/admin/open-spaces/bulk-category-mapping')) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ updated_count: 1 }) } as Response);
+    }
+    if (url.includes('/api/admin/spot-dedup/apply')) {
+      const ok = handlers.applyOk !== false;
+      return Promise.resolve({
+        ok,
+        json: () => Promise.resolve(ok ? { group_id: 'group-1', updated_count: 2 } : { error: '병합 실패' }),
+      } as Response);
     }
     return Promise.reject(new Error(`unexpected fetch: ${url}`));
   });
@@ -208,5 +216,28 @@ describe('MobileCurationWorkbench', () => {
     fireEvent.click(screen.getByText('합치기'));
 
     expect(await screen.findByText('중복 의심 그룹 검수 (2건)')).toBeInTheDocument();
+  });
+
+  // [합치기 완료 확인](2026-09-06 사용자 지시): "중복 스팟 검수쪽은 모달팝업에서
+  // 합쳐진거 못봤는데 합쳐진거 맞지?" — 저장 성공 시 명시적인 완료 문구가 떠야 한다.
+  it('합치기 저장을 완료하면 완료 문구를 보여주고 배너가 사라진다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      mockFetchByUrl({
+        nearby: { items: [{ id: 'near-1', name: '행복키즈카페 분점', category: 'CULTURE', category_min: '키즈카페', address: '바로 옆', distance_m: 12 }] },
+      })
+    );
+    render(
+      <MobileCurationWorkbench spot={SPOT} serviceCategories={SERVICE_CATEGORIES} queue={QUEUE} onClose={vi.fn()} onAdvance={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+    );
+
+    await screen.findByText(/유사 장소 발견/);
+    fireEvent.click(screen.getByText('합치기'));
+    await screen.findByText('중복 의심 그룹 검수 (2건)');
+
+    fireEvent.click(screen.getByText(/저장 및 일괄 적용/));
+
+    expect(await screen.findByText('✅ "행복키즈카페"과(와) "행복키즈카페 분점"을(를) 하나로 합쳤습니다.')).toBeInTheDocument();
+    expect(screen.queryByText(/유사 장소 발견/)).not.toBeInTheDocument();
   });
 });

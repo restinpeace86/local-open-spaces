@@ -69,6 +69,12 @@ export function MobileCurationWorkbench({
   const [nearbyError, setNearbyError] = useState<string | null>(null);
   const [dismissedNearbyIds, setDismissedNearbyIds] = useState<Set<string>>(new Set());
   const [mergeTarget, setMergeTarget] = useState<NearbySpot | null>(null);
+  // [합치기 완료 확인](2026-09-06 사용자 지시): "중복 스팟 검수쪽은 모달팝업에서
+  // 합쳐진거 못봤는데 합쳐진거 맞지?" — 합치기 저장 성공 시 경고 배너가 조용히
+  // 사라지는 것 말고는 아무 확인 표시가 없었다(기존 SpotDedupPanel도 같은 관례—
+  // 목록에서 항목이 사라지는 것 자체가 "확인"이었는데, 이 작은 워크벤치 화면에서는
+  // 그 변화가 훨씬 눈에 덜 띈다). 명시적인 완료 문구를 추가한다.
+  const [mergeSuccessMessage, setMergeSuccessMessage] = useState<string | null>(null);
   const [isAdvancing, setIsAdvancing] = useState(false);
   const [advanceMessage, setAdvanceMessage] = useState<string | null>(null);
 
@@ -164,6 +170,11 @@ export function MobileCurationWorkbench({
           세로 스크롤되게 한다. */}
       <div className="flex-1 min-h-0 overflow-y-auto p-4 flex flex-col gap-5">
         {/* 1단: 중복 장소 검수 배너 */}
+        {mergeSuccessMessage && (
+          <p className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-xs font-semibold text-emerald-700">
+            {mergeSuccessMessage}
+          </p>
+        )}
         {nearbyError && <p className="text-xs text-red-600">{nearbyError}</p>}
         {visibleNearby.map((n) => (
           <div key={n.id} className="rounded-xl border border-amber-300 bg-amber-50 p-3 flex flex-col gap-2">
@@ -272,6 +283,7 @@ export function MobileCurationWorkbench({
           onClose={() => setMergeTarget(null)}
           onSaved={() => {
             setDismissedNearbyIds((prev) => new Set(prev).add(mergeTarget.id));
+            setMergeSuccessMessage(`✅ "${spot.name}"과(와) "${mergeTarget.name}"을(를) 하나로 합쳤습니다.`);
             setMergeTarget(null);
           }}
         />
