@@ -49,6 +49,10 @@ GitHub Actions cron으로 직접 표현할 수 없다는 사실을 확인했다 
 
 | 실행 일시 | 수집 권역 | RAW 적재 건수 | Service 적재 건수 | 파싱 에러 | 상태 | 비고 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 2026-09-07 05:03 | SEOUL_YEYAK | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed (원인: UND_ERR_CONNECT_TIMEOUT: Connect Timeout Error (attempted address: openapi.seoul.go.kr:8088, timeout: 10000ms)) |
+| 2026-09-07 05:00 | GG_CULTURE_EVENTS | - | 0 | N/A | 🚨 [CRITICAL] | GG_CULTURE_EVENTS: 전체(GGCULTUREVENTSTUS(문화행사), GGCULFOUEVENSTM(문화재단행사)) 수집 실패 — GGCULTUREVENTSTUS(문화행사):fetch failed (원인: UND_ERR_CONNECT_TIMEOUT: Connect Timeout Error (attempted address: openapi.gg.go.kr:443, timeout: 10000ms)) | GGCULFOUEVENSTM(문화재단행사):fetch failed (원인: UND_ERR_CONNECT_TIMEOUT: Connect Timeout Error (attempted address: openapi.gg.go.kr:443, timeout: 10000ms)) |
+| 2026-09-07 04:39 | SEOUL_YEYAK | - | 0 | N/A | 🚨 [CRITICAL] | fetch failed (원인: UND_ERR_CONNECT_TIMEOUT: Connect Timeout Error (attempted address: openapi.seoul.go.kr:8088, timeout: 10000ms)) |
+| 2026-09-07 04:36 | GG_CULTURE_EVENTS | - | 0 | N/A | 🚨 [CRITICAL] | GG_CULTURE_EVENTS: 전체(GGCULTUREVENTSTUS(문화행사), GGCULFOUEVENSTM(문화재단행사)) 수집 실패 — GGCULTUREVENTSTUS(문화행사):fetch failed (원인: UND_ERR_CONNECT_TIMEOUT: Connect Timeout Error (attempted address: openapi.gg.go.kr:443, timeout: 10000ms)) | GGCULFOUEVENSTM(문화재단행사):fetch failed (원인: UND_ERR_CONNECT_TIMEOUT: Connect Timeout Error (attempted address: openapi.gg.go.kr:443, timeout: 10000ms)) |
 | 2026-09-06 05:16 | SEOUL_YEYAK | 2544 | 2544 | 29 | ✅ [OK] |  |
 | 2026-09-06 05:06 | GG_CULTURE_EVENTS | - | 0 | N/A | 🚨 [CRITICAL] | events upsert 실패: new row for relation "events" violates check constraint "events_location_precision_consistency_check" |
 | 2026-09-06 04:46 | SEOUL_YEYAK | 2544 | 2544 | 29 | ✅ [OK] |  |
@@ -990,3 +994,41 @@ The server returned an invalid or incomplete response.
 | REFRESH_SIGUNGU_OPTIONS_CACHE | - | 0 | 0 | 0 | - | ❌ 실행 실패: sigungu_options_cache 갱신 실패: canceling statement due to statement timeout |
 
 **검증**: 전체 RAW 수신 22341건(일부 소스 실패/미확인 — 완전한 대조 불가) vs DB 적재 21765건 (+에러 547건 +범위제외 29건)
+
+## [2026-09-07 04:43:54] [Daily Events Batch] Ingestion Log
+
+| API 출처 식별자 (`source`) | RAW 수신 건수 | events 적재 건수 | open_spaces 적재 건수 | Safe Merge 건수 | 에러 건수 | 비고 |
+| :--- | ---: | ---: | ---: | ---: | ---: | :--- |
+| GG_CULTURE_EVENTS | - | 0 | 0 | 0 | - | ❌ 실행 실패: GG_CULTURE_EVENTS: 전체(GGCULTUREVENTSTUS(문화행사), GGCULFOUEVENSTM(문화재단행사)) 수집 실패 — GGCULTUREVENTSTUS(문화행사):fetch failed (원인: UND_ERR_CONNECT_TIMEOUT: Connect Timeout Error (attempted address: openapi.gg.go.kr:443, timeout: 10000ms)) | GGCULFOUEVENSTM(문화재단행사):fetch failed (원인: UND_ERR_CONNECT_TIMEOUT: Connect Timeout Error (attempted address: openapi.gg.go.kr:443, timeout: 10000ms)) |
+| SEOUL_CULTURE_EVENTS | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed (원인: UND_ERR_CONNECT_TIMEOUT: Connect Timeout Error (attempted address: openapi.seoul.go.kr:8088, timeout: 10000ms)) |
+| tourapi_4.0 | 265 | 265 | 0 | 265 | 0 |  |
+| SEOUL_YEYAK | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed (원인: UND_ERR_CONNECT_TIMEOUT: Connect Timeout Error (attempted address: openapi.seoul.go.kr:8088, timeout: 10000ms)) |
+| gg_public | - | 0 | 0 | 0 | - | ❌ 실행 실패: GG_CULTURE_EVENTS 실패로 건너뜀 |
+| CATEGORY_RULES_APPLICATION | 17511 | 2 | 0 | 0 | 0 | category_min 신규 룰 매칭 후처리(신규 적재 아님) — open_spaces 2/2090건, events 0/15421건 |
+| DETAILED_CATEGORY_FALLBACK | 0 | 0 | 0 | 0 | 0 | 세부 중분류 미분류 잔여를 '기타'로 안전 적재(8개 대상 source_type 한정) — 0/0건 |
+| LEGACY_SOURCE_CATEGORY_MAPPING | 0 | 0 | 0 | 0 | 0 | docs/null-category-analysis.md 적용 범위(어린이놀이시설/수영장/키즈카페/바닥분수·물놀이시설) 매핑 — 0건, 내역: {} |
+| DEACTIVATE_EXPIRED_EVENTS | 56 | 56 | 0 | 0 | 0 | end_date < 2026-09-06 이면서 is_active=true였던 행 56건을 false로 전환(신규 적재 아닌 만료 정리 후처리) |
+| DEDUPE_OPEN_SPACES | 0 | 0 | 0 | 0 | 0 | 교차 출처 중복 정제 완료 — 0개 그룹, survivor 병합 0건, 삭제 0건 |
+| ANALYZE_OPEN_SPACES | 0 | 0 | 0 | 0 | 0 | open_spaces 플래너 통계 갱신 완료(신규 적재 아닌 유지보수 후처리) — statement timeout 재발 방지 |
+| REFRESH_SIGUNGU_OPTIONS_CACHE | - | 0 | 0 | 0 | - | ❌ 실행 실패: sigungu_options_cache 갱신 실패: canceling statement due to statement timeout |
+
+**검증**: 전체 RAW 수신 265건(일부 소스 실패/미확인 — 완전한 대조 불가) vs DB 적재 265건 (+에러 0건 +범위제외 0건)
+
+## [2026-09-07 05:07:49] [Daily Events Batch] Ingestion Log
+
+| API 출처 식별자 (`source`) | RAW 수신 건수 | events 적재 건수 | open_spaces 적재 건수 | Safe Merge 건수 | 에러 건수 | 비고 |
+| :--- | ---: | ---: | ---: | ---: | ---: | :--- |
+| GG_CULTURE_EVENTS | - | 0 | 0 | 0 | - | ❌ 실행 실패: GG_CULTURE_EVENTS: 전체(GGCULTUREVENTSTUS(문화행사), GGCULFOUEVENSTM(문화재단행사)) 수집 실패 — GGCULTUREVENTSTUS(문화행사):fetch failed (원인: UND_ERR_CONNECT_TIMEOUT: Connect Timeout Error (attempted address: openapi.gg.go.kr:443, timeout: 10000ms)) | GGCULFOUEVENSTM(문화재단행사):fetch failed (원인: UND_ERR_CONNECT_TIMEOUT: Connect Timeout Error (attempted address: openapi.gg.go.kr:443, timeout: 10000ms)) |
+| SEOUL_CULTURE_EVENTS | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed (원인: UND_ERR_CONNECT_TIMEOUT: Connect Timeout Error (attempted address: openapi.seoul.go.kr:8088, timeout: 10000ms)) |
+| tourapi_4.0 | 265 | 265 | 0 | 265 | 0 |  |
+| SEOUL_YEYAK | - | 0 | 0 | 0 | - | ❌ 실행 실패: fetch failed (원인: UND_ERR_CONNECT_TIMEOUT: Connect Timeout Error (attempted address: openapi.seoul.go.kr:8088, timeout: 10000ms)) |
+| gg_public | - | 0 | 0 | 0 | - | ❌ 실행 실패: GG_CULTURE_EVENTS 실패로 건너뜀 |
+| CATEGORY_RULES_APPLICATION | 17509 | 0 | 0 | 0 | 0 | category_min 신규 룰 매칭 후처리(신규 적재 아님) — open_spaces 0/2088건, events 0/15421건 |
+| DETAILED_CATEGORY_FALLBACK | 0 | 0 | 0 | 0 | 0 | 세부 중분류 미분류 잔여를 '기타'로 안전 적재(8개 대상 source_type 한정) — 0/0건 |
+| LEGACY_SOURCE_CATEGORY_MAPPING | 0 | 0 | 0 | 0 | 0 | docs/null-category-analysis.md 적용 범위(어린이놀이시설/수영장/키즈카페/바닥분수·물놀이시설) 매핑 — 0건, 내역: {} |
+| DEACTIVATE_EXPIRED_EVENTS | 0 | 0 | 0 | 0 | 0 | end_date < 2026-09-06 이면서 is_active=true였던 행 0건을 false로 전환(신규 적재 아닌 만료 정리 후처리) |
+| DEDUPE_OPEN_SPACES | 0 | 0 | 0 | 0 | 0 | 교차 출처 중복 정제 완료 — 0개 그룹, survivor 병합 0건, 삭제 0건 |
+| ANALYZE_OPEN_SPACES | 0 | 0 | 0 | 0 | 0 | open_spaces 플래너 통계 갱신 완료(신규 적재 아닌 유지보수 후처리) — statement timeout 재발 방지 |
+| REFRESH_SIGUNGU_OPTIONS_CACHE | - | 0 | 0 | 0 | - | ❌ 실행 실패: sigungu_options_cache 갱신 실패: canceling statement due to statement timeout |
+
+**검증**: 전체 RAW 수신 265건(일부 소스 실패/미확인 — 완전한 대조 불가) vs DB 적재 265건 (+에러 0건 +범위제외 0건)
