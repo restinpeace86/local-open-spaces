@@ -68,7 +68,18 @@ export function extractSigunguCoreName(sigunguName: string | null | undefined): 
   return last;
 }
 
+// [지역명 중복 방지](2026-09-07 사용자 지시): "임성근국가공인진갈비 김포점.. 여기에
+// 김포를 뒤에 붙여서 임성근국가공인진갈비 김포점 김포로.. 호출중인거 같더라.. 이
+// 경우는 임성근국가공인진갈비 김포 이렇게 조회 호출하도록 해" — 실측 확인된 버그:
+// 상호명 자체가 이미 "[지역명]점"으로 끝나는 경우(예: "OO 김포점")에도 무조건
+// 지역명을 또 붙여 "OO 김포점 김포"라는 중복 검색어가 만들어지고 있었다. 원래
+// todo.md의 "'쿠우쿠우 명월점'과 같이 되었을경우 쿠우쿠우 명월로 던질 것" 사례를
+// 이번에 실제로 구현한다 — 상호명이 이미 "[지역명]점"으로 끝나면 지역명을 추가로
+// 붙이지 않고 "점"만 뗀다.
 export function buildSmartBlogQuery(name: string, sigunguName: string | null | undefined): string {
   const core = extractSigunguCoreName(sigunguName);
-  return core ? `${name} ${core}` : name;
+  if (!core) return name;
+  const trimmed = name.trim();
+  if (trimmed.endsWith(`${core}점`)) return trimmed.slice(0, -1);
+  return `${trimmed} ${core}`;
 }
