@@ -105,6 +105,38 @@ function isEmptyValue(value) {
   return value === null || value === undefined || value === '';
 }
 
+// [GG_CULTURE_EVENTS 반복 upsert 실패 수정](2026-09-07): "events upsert 실패: new row
+// for relation "events" violates check constraint
+// "events_location_precision_consistency_check"" — 2026-09-06/09-07 배치 로그에서
+// 반복 재현된 것을 실측 확인. 근본 원인: location과 location_precision은
+// (open_spaces/events 둘 다) "UNKNOWN이면 location이 반드시 NULL, 그 외에는 반드시
+// NOT NULL"이라는 쌍(pair) 정합성 제약이 있는데(2026-08-23/2026-08-25 마이그레이션),
+// 위 컬럼별 독립 병합(모든 키를 하나씩 "값 있는 쪽 채택")은 이 두 컬럼을 서로 다른
+// 소스에서 따로 가져올 수 있다 — 예: 기존 행이 location_precision='UNKNOWN'
+// (location=NULL, 둘 다 자체적으로는 정합적)인 상태에서 새로 들어온 행이
+// location_precision='CITY_APPROX'(location=유효 좌표, 역시 자체적으로 정합적)이면,
+// 컬럼별 병합은 location_precision은 "값 있음"인 기존 'UNKNOWN' 문자열을 채택하면서
+// location은 "값 없음(NULL)"인 기존 것 대신 새 행의 유효 좌표를 채택해버려 —
+// location_precision='UNKNOWN' + location=유효좌표라는, 제약을 위반하는 조합이
+// 만들어진다. 두 컬럼을 절대 따로 떼어 병합하면 안 되고 항상 같은 출처(둘 다 기존,
+// 또는 둘 다 신규)에서 함께 가져와야 한다 — 정밀도가 더 나은(EXACT > CITY_APPROX >
+// UNKNOWN) 쪽의 두 값을 통째로 채택한다(같으면 기존 값 유지, 안정적인 기본값).
+const LOCATION_PRECISION_RANK = { EXACT: 2, CITY_APPROX: 1, UNKNOWN: 0 };
+
+function hasLocationPrecisionPair(row) {
+  return Object.prototype.hasOwnProperty.call(row, 'location_precision') && Object.prototype.hasOwnProperty.call(row, 'location');
+}
+
+// existing/incoming 두 후보 중 location_precision이 더 나은(랭크가 높은) 쪽의
+// {location, location_precision} 쌍을 통째로 돌려준다. 랭크를 알 수 없는 값(예상 밖
+// 문자열)은 가장 낮은 취급으로 방어한다.
+function pickBetterLocationPair(existing, incoming) {
+  const existingRank = LOCATION_PRECISION_RANK[existing.location_precision] ?? -1;
+  const incomingRank = LOCATION_PRECISION_RANK[incoming.location_precision] ?? -1;
+  const winner = incomingRank > existingRank ? incoming : existing;
+  return { location: winner.location, location_precision: winner.location_precision };
+}
+
 function dedupeByExternalIdMergeNulls(rows) {
   const byId = new Map();
   let duplicateCount = 0;
@@ -123,6 +155,9 @@ function dedupeByExternalIdMergeNulls(rows) {
       if (isEmptyValue(merged[key]) && !isEmptyValue(existing[key])) {
         merged[key] = existing[key];
       }
+    }
+    if (hasLocationPrecisionPair(existing) && hasLocationPrecisionPair(row)) {
+      Object.assign(merged, pickBetterLocationPair(existing, row));
     }
     byId.set(row.external_id, merged);
   }
@@ -186,6 +221,11 @@ export async function upsertRowsSafeMerge(client, table, rows) {
         if (existing[key] !== null && existing[key] !== undefined) {
           merged[key] = existing[key];
         }
+      }
+      // location/location_precision 쌍 정합성 보호 — dedupeByExternalIdMergeNulls
+      // 위쪽의 상세 주석 참고. 여기서도 동일하게 두 컬럼을 절대 따로 병합하지 않는다.
+      if (hasLocationPrecisionPair(existing) && hasLocationPrecisionPair(row)) {
+        Object.assign(merged, pickBetterLocationPair(existing, row));
       }
       return merged;
     });

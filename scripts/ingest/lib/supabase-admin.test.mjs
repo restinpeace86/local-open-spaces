@@ -199,6 +199,49 @@ describe('upsertRowsSafeMerge', () => {
     expect(inFn.mock.calls.every(([, ids]) => ids.length <= 200)).toBe(true);
     expect(result).toEqual({ count: 1200, duplicateWithinBatch: 0, mergedWithExisting: 0 });
   });
+
+  // [GG_CULTURE_EVENTS 반복 upsert 실패 수정](2026-09-07): 실제 운영에서 반복 재현된
+  // "events_location_precision_consistency_check" 위반 — location/location_precision을
+  // 컬럼별로 독립 병합하면 서로 다른 소스에서 값을 가져와 "UNKNOWN인데 location이 채워짐"
+  // 같은 제약 위반 조합이 만들어졌다. 두 컬럼은 항상 함께(더 나은 정밀도 쪽으로) 병합돼야
+  // 한다.
+  describe('location/location_precision 쌍 정합성', () => {
+    it('기존 행이 UNKNOWN(location=null)이고 incoming이 더 나은 정밀도(CITY_APPROX+좌표)면 incoming 쌍을 통째로 채택한다', async () => {
+      const { client, upsert } = makeSafeMergeMockClient({
+        existingRows: [{ external_id: 'A', location: null, location_precision: 'UNKNOWN' }],
+      });
+
+      await upsertRowsSafeMerge(client, 'events', [
+        { external_id: 'A', location: 'SRID=4326;POINT(127 37)', location_precision: 'CITY_APPROX' },
+      ]);
+
+      const [sentRows] = upsert.mock.calls[0];
+      expect(sentRows).toEqual([{ external_id: 'A', location: 'SRID=4326;POINT(127 37)', location_precision: 'CITY_APPROX' }]);
+    });
+
+    it('기존 행이 이미 더 나은 정밀도(EXACT)면 incoming이 UNKNOWN이어도 기존 쌍을 그대로 유지한다', async () => {
+      const { client, upsert } = makeSafeMergeMockClient({
+        existingRows: [{ external_id: 'A', location: 'SRID=4326;POINT(127 37)', location_precision: 'EXACT' }],
+      });
+
+      await upsertRowsSafeMerge(client, 'events', [{ external_id: 'A', location: null, location_precision: 'UNKNOWN' }]);
+
+      const [sentRows] = upsert.mock.calls[0];
+      expect(sentRows).toEqual([{ external_id: 'A', location: 'SRID=4326;POINT(127 37)', location_precision: 'EXACT' }]);
+    });
+
+    it('배치 내 동일 external_id 중복도 location/location_precision을 항상 같은 쪽에서 함께 가져온다', async () => {
+      const { client, upsert } = makeSafeMergeMockClient({ existingRows: [] });
+
+      await upsertRowsSafeMerge(client, 'open_spaces', [
+        { external_id: 'A', location: null, location_precision: 'UNKNOWN' },
+        { external_id: 'A', location: 'SRID=4326;POINT(127 37)', location_precision: 'CITY_APPROX' },
+      ]);
+
+      const [sentRows] = upsert.mock.calls[0];
+      expect(sentRows).toEqual([{ external_id: 'A', location: 'SRID=4326;POINT(127 37)', location_precision: 'CITY_APPROX' }]);
+    });
+  });
 });
 
 // [긴급 아키텍처 개편] RAW 레이어 — upsertRows와 동일한 배치/중복 방어 로직을 재사용하지만,
