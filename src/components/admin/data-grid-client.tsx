@@ -828,6 +828,13 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
       }
 
       const idSet = new Set(ids);
+      // [수정/적재일 클라이언트 즉시 반영](2026-09-08 사용자 지시): "여전히 수정
+      // 적재일자 안바뀌는거 같은데" — DB의 updated_at은 서버에서 이미 정확히
+      // 갱신되지만(Step 65), 이 화면의 로컬 state는 성공 후에도 updated_at을 갱신하지
+      // 않아 새로고침 전까지 예전 날짜가 그대로 보였다. 서버가 실제로 기록한 시각과
+      // 초 단위까지 같을 필요는 없다 — 화면에는 날짜만 표시되므로(toLocaleDateString)
+      // 지금 시각을 그대로 반영한다.
+      const nowIso = new Date().toISOString();
       setRows((prev) =>
         prev.map((row) => {
           if (!('id' in row) || !idSet.has(row.id)) return row;
@@ -837,6 +844,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
             updated.category_min_source = 'MANUAL';
           }
           if (bulkServiceCategoryId) updated.service_category_id = bulkServiceCategoryId;
+          updated.updated_at = nowIso;
           return updated;
         })
       );
@@ -1566,16 +1574,31 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
           serviceCategories={tab === 'open_spaces' ? serviceCategories : []}
           onClose={() => setSelectedRow(null)}
           onCategoryMinUpdated={(id, nextCategoryMin, nextSource) => {
+            // [수정/적재일 클라이언트 즉시 반영](2026-09-08 사용자 지시): "여전히 수정
+            // 적재일자 안바뀌는거 같은데" — 서버는 open_spaces만 updated_at을 채운다
+            // (events는 이 컬럼 자체가 없음, category-min/route.ts 참고). tab이
+            // 'open_spaces'일 때만 로컬 state의 updated_at도 함께 갱신한다.
+            const nowIso = new Date().toISOString();
             setRows((prev) =>
               prev.map((row) =>
                 'id' in row && row.id === id
-                  ? { ...row, category_min: nextCategoryMin, category_min_source: nextSource }
+                  ? {
+                      ...row,
+                      category_min: nextCategoryMin,
+                      category_min_source: nextSource,
+                      ...(tab === 'open_spaces' ? { updated_at: nowIso } : {}),
+                    }
                   : row
               )
             );
             setSelectedRow((prev) =>
               prev && 'id' in prev && prev.id === id
-                ? { ...prev, category_min: nextCategoryMin, category_min_source: nextSource }
+                ? {
+                    ...prev,
+                    category_min: nextCategoryMin,
+                    category_min_source: nextSource,
+                    ...(tab === 'open_spaces' ? { updated_at: nowIso } : {}),
+                  }
                 : prev
             );
           }}
@@ -1602,11 +1625,21 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
             );
           }}
           onServiceCategoryUpdated={(id, nextServiceCategoryId) => {
+            // [수정/적재일 클라이언트 즉시 반영](2026-09-08): 노출 중분류 단일 수정도
+            // bulk-category-mapping 라우트가 open_spaces의 updated_at을 함께 채우므로
+            // (이 편집기는 open_spaces 전용) 로컬 state도 함께 갱신한다.
+            const nowIso = new Date().toISOString();
             setRows((prev) =>
-              prev.map((row) => ('id' in row && row.id === id ? { ...row, service_category_id: nextServiceCategoryId } : row))
+              prev.map((row) =>
+                'id' in row && row.id === id
+                  ? { ...row, service_category_id: nextServiceCategoryId, updated_at: nowIso }
+                  : row
+              )
             );
             setSelectedRow((prev) =>
-              prev && 'id' in prev && prev.id === id ? { ...prev, service_category_id: nextServiceCategoryId } : prev
+              prev && 'id' in prev && prev.id === id
+                ? { ...prev, service_category_id: nextServiceCategoryId, updated_at: nowIso }
+                : prev
             );
           }}
           onMigratedToEvent={(id) => {
