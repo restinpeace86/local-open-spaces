@@ -64,7 +64,7 @@ export function MobileCurationWorkbench({
   onAdvance: (nextId: string | null) => void;
   onServiceCategoryUpdated: (id: string, next: string | null) => void;
 }) {
-  const form = useSpotCurationForm(spot);
+  const form = useSpotCurationForm(spot, serviceCategories);
 
   const [nearby, setNearby] = useState<NearbySpot[] | null>(null);
   const [nearbyError, setNearbyError] = useState<string | null>(null);
@@ -208,6 +208,8 @@ export function MobileCurationWorkbench({
             serviceCategoryId={form.serviceCategoryId}
             onServiceCategoryChange={form.setServiceCategoryId}
             serviceCategories={serviceCategories}
+            badgeGroups={form.badgeGroups}
+            badgeOptions={form.badgeOptions}
             selectedBadges={form.selectedBadges}
             onToggleBadge={form.toggleBadge}
             curationNote={form.curationNote}
@@ -235,6 +237,7 @@ export function MobileCurationWorkbench({
             onSortOptionChange={form.setSortOption}
             regionKeyword={form.regionKeyword}
             hasRegionMismatchWarning={form.hasRegionMismatchWarning}
+            curationCategoryId={form.curationCategoryId}
           />
         </section>
 

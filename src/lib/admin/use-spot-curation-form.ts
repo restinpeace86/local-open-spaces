@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { buildSmartBlogQuery, extractSigunguCoreName } from './naver-blog-search';
-import { matchBadgeKeysFromText } from './curation-badges';
+import { getBadgeGroupsForCategory, getBadgeOptionsForCategory, matchBadgeKeysFromText, resolveCurationCategoryId } from './curation-badges';
+import { ServiceCategory } from './service-category';
 
 // [All-in-One 모바일 큐레이션 워크벤치](2026-09-05 사용자 지시)를 만들면서
 // BlogCurationModal(작은 팝업)이 이미 갖고 있던 "블로그 검색 + 뱃지/노출 중분류
@@ -55,7 +56,14 @@ export type SpotForCuration = {
 // 스니펫(description)으로 조용히 폴백한다 — 어느 경우에도 화면이 비어 보이지 않는다.
 export type BlogBodyState = { text: string | null; isLoading: boolean; error: string | null };
 
-export function useSpotCurationForm(spot: SpotForCuration) {
+// [카테고리별 뱃지/룰 완전 독립 Config 구조](2026-09-07, implementation/todo.md
+// 개선사항4 — 사용자 지시): "노출 중분류에 대하여 적용시 [전부] 같이 가도록" —
+// 이 훅이 "노출 중분류"(serviceCategoryId) 선택값과 serviceCategories 목록을 보고
+// 현재 활성 뱃지 카테고리(curationCategoryId)를 계산해, 그 카테고리의 뱃지
+// 목록/키워드로만 동작하게 한다. serviceCategories는 두 호출부(BlogCurationModal/
+// MobileCurationWorkbench)가 이미 props로 받고 있던 값을 그대로 넘겨받는다(제5장
+// 제4조 — 이 훅이 별도로 다시 조회하지 않음).
+export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: ServiceCategory[]) {
   // 검색어는 스팟명 기준으로 기본 채우되, 이름이 흔해 결과가 부정확할 수 있어
   // 관리자가 직접 수정 후 다시 검색할 수 있게 편집 가능한 입력으로 둔다(요구사항에
   // 명시되진 않았지만, "정확도순 상위 3개"가 실제로 이 스팟을 가리키게 하려면
@@ -78,7 +86,26 @@ export function useSpotCurationForm(spot: SpotForCuration) {
   const [hasCheckedExistingCuration, setHasCheckedExistingCuration] = useState(false);
   const [hasAutoCheckedBadges, setHasAutoCheckedBadges] = useState(false);
   const [selectedBadges, setSelectedBadges] = useState<Set<string>>(new Set());
-  const [serviceCategoryId, setServiceCategoryId] = useState(spot.service_category_id ?? '');
+  const [serviceCategoryId, setServiceCategoryIdState] = useState(spot.service_category_id ?? '');
+
+  // [카테고리별 뱃지/룰 완전 독립 Config 구조](2026-09-07 개선사항4): "노출 중분류"가
+  // 가리키는 category_name으로 현재 활성 뱃지 config를 찾는다. 순수 파생값이라 별도
+  // state 없이 매 렌더마다 계산한다.
+  const activeExposureCategoryName = serviceCategories.find((c) => c.id === serviceCategoryId)?.category_name ?? null;
+  const curationCategoryId = resolveCurationCategoryId(activeExposureCategoryName);
+  const badgeGroups = getBadgeGroupsForCategory(curationCategoryId);
+  const badgeOptions = getBadgeOptionsForCategory(curationCategoryId);
+
+  // 관리자가 콤보박스로 노출 중분류를 바꾸면, 이전 카테고리에서만 유효했던 뱃지
+  // 선택이 새 카테고리엔 존재하지 않는 키일 수 있어 그대로 남기지 않고 걸러낸다
+  // (예: 식당 카테고리에서 고른 "좌식/온돌"은 키즈카페 카테고리로 바꾸면 사라짐).
+  function setServiceCategoryId(nextServiceCategoryId: string) {
+    setServiceCategoryIdState(nextServiceCategoryId);
+    const nextCategoryName = serviceCategories.find((c) => c.id === nextServiceCategoryId)?.category_name ?? null;
+    const nextCurationCategoryId = resolveCurationCategoryId(nextCategoryName);
+    const validKeys = new Set(getBadgeOptionsForCategory(nextCurationCategoryId).map((opt) => opt.key));
+    setSelectedBadges((prev) => new Set([...prev].filter((key) => validKeys.has(key))));
+  }
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   // [큐레이션 메모 입력란](2026-09-06 사용자 지시): "내가 입력란에 좀.. 붙여넣을
@@ -184,9 +211,9 @@ export function useSpotCurationForm(spot: SpotForCuration) {
     const activeLink = blogItems?.[activeTab]?.link;
     const text = activeLink ? bodyByLink[activeLink]?.text : null;
     if (!text) return;
-    setSelectedBadges(matchBadgeKeysFromText(text));
+    setSelectedBadges(matchBadgeKeysFromText(text, curationCategoryId));
     setHasAutoCheckedBadges(true);
-  }, [hasCheckedExistingCuration, existingCuration, hasAutoCheckedBadges, activeTab, blogItems, bodyByLink]);
+  }, [hasCheckedExistingCuration, existingCuration, hasAutoCheckedBadges, activeTab, blogItems, bodyByLink, curationCategoryId]);
 
   // [블로그 자동검색 결과가 실제와 다를 때 수동 교체](2026-09-05 사용자 지시): "가져오는데
   // 네이버 블로그 관련도순 검색했을때 이거아니야.." — 네이버 검색 API의 관련도 순위가
@@ -307,6 +334,9 @@ export function useSpotCurationForm(spot: SpotForCuration) {
     setCurationNote,
     serviceCategoryId,
     setServiceCategoryId,
+    curationCategoryId,
+    badgeGroups,
+    badgeOptions,
     isSaving,
     saveError,
     save,

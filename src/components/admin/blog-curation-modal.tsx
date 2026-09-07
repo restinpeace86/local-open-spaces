@@ -40,7 +40,7 @@ export function BlogCurationModal({
   onClose: () => void;
   onServiceCategoryUpdated: (id: string, nextServiceCategoryId: string | null) => void;
 }) {
-  const form = useSpotCurationForm(spot);
+  const form = useSpotCurationForm(spot, serviceCategories);
 
   async function handleSave() {
     const ok = await form.save();
@@ -79,12 +79,15 @@ export function BlogCurationModal({
           onSortOptionChange={form.setSortOption}
           regionKeyword={form.regionKeyword}
           hasRegionMismatchWarning={form.hasRegionMismatchWarning}
+          curationCategoryId={form.curationCategoryId}
         />
 
         <CurationBadgeForm
           serviceCategoryId={form.serviceCategoryId}
           onServiceCategoryChange={form.setServiceCategoryId}
           serviceCategories={serviceCategories}
+          badgeGroups={form.badgeGroups}
+          badgeOptions={form.badgeOptions}
           selectedBadges={form.selectedBadges}
           onToggleBadge={form.toggleBadge}
           curationNote={form.curationNote}

@@ -524,4 +524,56 @@ describe('BlogCurationModal', () => {
       expect(screen.getByLabelText('수유실 있음')).not.toBeChecked();
     });
   });
+
+  // [카테고리별 뱃지/룰 완전 독립 Config 구조](2026-09-07 사용자 지시, implementation/
+  // todo.md 개선사항4): "노출 중분류에 대하여 적용시 [전부] 같이 가도록 적용해야지"
+  describe('노출 중분류별 독립 뱃지 Config(개선사항4)', () => {
+    it('기본(노출 중분류 미선택)은 식당용 13개 뱃지를 보여준다', async () => {
+      vi.stubGlobal('fetch', mockFetchByUrl({ blogSearch: { items: [], hasRecentReview: false, hasNoResults: true } }));
+      render(
+        <BlogCurationModal spot={SPOT} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+      );
+
+      await screen.findByLabelText('주차 완비');
+      expect(screen.getByLabelText('좌식/온돌 있음')).toBeInTheDocument();
+      expect(screen.queryByLabelText('트램폴린/방방')).not.toBeInTheDocument();
+    });
+
+    it('노출 중분류를 "키즈카페 / 실내놀이터"로 바꾸면 뱃지 목록이 즉시(서버 재요청 없이) 키즈카페 전용으로 바뀐다', async () => {
+      const fetchMock = mockFetchByUrl({ blogSearch: { items: [], hasRecentReview: false, hasNoResults: true } });
+      vi.stubGlobal('fetch', fetchMock);
+      render(
+        <BlogCurationModal spot={SPOT} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+      );
+
+      await screen.findByLabelText('좌식/온돌 있음');
+      const callCountBeforeSwitch = fetchMock.mock.calls.length;
+
+      fireEvent.change(screen.getByDisplayValue('(선택 안 함)'), { target: { value: 'svc-1' } });
+
+      expect(await screen.findByLabelText('트램폴린/방방')).toBeInTheDocument();
+      expect(screen.queryByLabelText('좌식/온돌 있음')).not.toBeInTheDocument();
+      // 서버 재요청 없이 클라이언트에서만 즉시 바뀌었는지 확인.
+      expect(fetchMock.mock.calls.length).toBe(callCountBeforeSwitch);
+    });
+
+    it('식당 전용 뱃지를 체크한 뒤 키즈카페로 바꾸면 그 선택이 사라진다(다른 카테고리엔 없는 키라 유지할 수 없음)', async () => {
+      vi.stubGlobal('fetch', mockFetchByUrl({ blogSearch: { items: [], hasRecentReview: false, hasNoResults: true } }));
+      render(
+        <BlogCurationModal spot={SPOT} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+      );
+
+      await screen.findByLabelText('좌식/온돌 있음');
+      fireEvent.click(screen.getByLabelText('좌식/온돌 있음'));
+      expect(screen.getByLabelText('좌식/온돌 있음')).toBeChecked();
+
+      fireEvent.change(screen.getByDisplayValue('(선택 안 함)'), { target: { value: 'svc-1' } });
+
+      await screen.findByLabelText('트램폴린/방방');
+      expect(screen.queryByLabelText('좌식/온돌 있음')).not.toBeInTheDocument();
+      // 다시 식당으로 돌아가도 방금 지워진 선택은 복구되지 않는다(되돌리기 기능 없음).
+      fireEvent.change(screen.getByDisplayValue('키즈/놀이시설 > 키즈카페 / 실내놀이터'), { target: { value: '' } });
+      expect(await screen.findByLabelText('좌식/온돌 있음')).not.toBeChecked();
+    });
+  });
 });

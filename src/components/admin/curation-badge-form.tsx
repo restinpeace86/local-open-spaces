@@ -1,7 +1,7 @@
 'use client';
 
 import { ServiceCategory } from '@/lib/admin/service-category';
-import { CURATION_BADGE_GROUPS, CURATION_BADGE_OPTIONS } from '@/lib/admin/curation-badges';
+import { CurationBadgeOption } from '@/lib/admin/curation-badges';
 
 // [All-in-One 모바일 큐레이션 워크벤치](2026-09-05 사용자 지시)를 만들면서
 // BlogCurationModal의 "노출 중분류 선택 + 뱃지 다중 선택" 폼을 이 프레젠테이션
@@ -11,6 +11,12 @@ export function CurationBadgeForm({
   serviceCategoryId,
   onServiceCategoryChange,
   serviceCategories,
+  // [카테고리별 뱃지/룰 완전 독립 Config 구조](2026-09-07 개선사항4): 뱃지
+  // 그룹/옵션을 이 컴포넌트가 직접 import하지 않고 호출부(useSpotCurationForm이
+  // 계산한 "현재 노출 중분류에 맞는" 값)로부터 받는다 — 콤보박스를 바꾸면
+  // 호출부가 새 값을 내려줘 이 컴포넌트는 그대로 다시 그리기만 하면 된다.
+  badgeGroups,
+  badgeOptions,
   selectedBadges,
   onToggleBadge,
   curationNote,
@@ -19,6 +25,8 @@ export function CurationBadgeForm({
   serviceCategoryId: string;
   onServiceCategoryChange: (value: string) => void;
   serviceCategories: ServiceCategory[];
+  badgeGroups: string[];
+  badgeOptions: CurationBadgeOption[];
   selectedBadges: Set<string>;
   onToggleBadge: (key: string) => void;
   // [큐레이션 메모 입력란](2026-09-06 사용자 지시): "내가 입력란에 좀.. 붙여넣을
@@ -47,11 +55,11 @@ export function CurationBadgeForm({
       </div>
 
       <div className="flex flex-col gap-2">
-        {CURATION_BADGE_GROUPS.map((group) => (
+        {badgeGroups.map((group) => (
           <div key={group} className="flex flex-col gap-1">
             <span className="text-[11px] font-semibold text-gray-400">{group}</span>
             <div className="flex flex-wrap gap-1.5">
-              {CURATION_BADGE_OPTIONS.filter((opt) => opt.group === group).map((opt) => {
+              {badgeOptions.filter((opt) => opt.group === group).map((opt) => {
                 const checked = selectedBadges.has(opt.key);
                 return (
                   <label

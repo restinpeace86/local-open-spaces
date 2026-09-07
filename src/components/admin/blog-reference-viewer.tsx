@@ -39,6 +39,7 @@ export function BlogReferenceViewer({
   onSortOptionChange,
   regionKeyword,
   hasRegionMismatchWarning,
+  curationCategoryId,
 }: {
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
@@ -64,6 +65,11 @@ export function BlogReferenceViewer({
   // 없으면(기존 호출부 호환) 아무 동작도 하지 않는다.
   regionKeyword?: string;
   hasRegionMismatchWarning?: boolean;
+  // [카테고리별 뱃지/룰 완전 독립 Config 구조](2026-09-07 개선사항4): "노출
+  // 중분류" 콤보박스가 가리키는 카테고리의 키워드로만 하이라이트한다. 안 넘기면
+  // (기존 호출부 호환) 식당 기준 기본값을 쓴다 — highlightKeywords 자체의 기본값과
+  // 동일하게 유지.
+  curationCategoryId?: string;
 }) {
   const activeItem = blogItems?.[activeTab] ?? null;
   const [isEditingUrl, setIsEditingUrl] = useState(false);
@@ -243,16 +249,18 @@ export function BlogReferenceViewer({
 
               <div className="rounded-lg bg-gray-50 p-3 text-xs leading-relaxed text-gray-700">
                 {activeBody?.text
-                  ? highlightKeywords(activeBody.text, regionKeyword ? [regionKeyword] : [])
+                  ? highlightKeywords(activeBody.text, curationCategoryId, regionKeyword ? [regionKeyword] : [])
                   : activeBody?.isLoading
                     ? (
                         <>
-                          {activeItem.description ? highlightKeywords(activeItem.description, regionKeyword ? [regionKeyword] : []) : null}
+                          {activeItem.description
+                            ? highlightKeywords(activeItem.description, curationCategoryId, regionKeyword ? [regionKeyword] : [])
+                            : null}
                           <p className="mt-2 text-[11px] text-gray-400">전체 본문 불러오는 중...</p>
                         </>
                       )
                     : activeItem.description
-                      ? highlightKeywords(activeItem.description, regionKeyword ? [regionKeyword] : [])
+                      ? highlightKeywords(activeItem.description, curationCategoryId, regionKeyword ? [regionKeyword] : [])
                       : '(요약을 가져오지 못했습니다 — 원문 보기로 확인해주세요.)'}
               </div>
               {activeBody?.text && (
