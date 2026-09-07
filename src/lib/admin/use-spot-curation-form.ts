@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { buildSmartBlogQuery, extractSigunguCoreName } from './naver-blog-search';
+import { buildSmartBlogQuery, extractAllSigunguCoreNames } from './naver-blog-search';
 import { getBadgeGroupsForCategory, getBadgeOptionsForCategory, matchBadgeKeysFromText, resolveCurationCategoryId } from './curation-badges';
 import { ServiceCategory } from './service-category';
 
@@ -298,16 +298,27 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
     }
   }
 
-  const activeLink = blogItems?.[activeTab]?.link;
+  const activeItem = blogItems?.[activeTab];
+  const activeLink = activeItem?.link;
   const activeBody = activeLink ? bodyByLink[activeLink] : undefined;
 
-  // [지역/지점명 하이라이팅 + 미스매치 경고](2026-09-07 개선사항3 3번): "지역명이
-  // 불일치하는 블로그 슬롯에는 워닝 배지를 노출" — 사용자 지시대로 추가 크롤링 없이
-  // 이미 가져온 본문 텍스트만으로 판단한다. 본문이 아직 없거나(로딩/실패) 지역
-  // 키워드 자체가 없으면(sigungu_name 미제공) 판단 근거가 없어 경고하지 않는다.
-  const regionKeyword = extractSigunguCoreName(spot.sigungu_name);
+  // [지역명 하이라이팅 범위 확장](2026-09-07 사용자 지시): "인천광역시 남동구
+  // 용천로.. 시군구 이름은 인천시 남동구.. 인천하고 남동이 블로그 제목이나
+  // 본문에 포함되어있는지 확인해서.. 노란색 마커표시.. 지금까진 본문에서 남동만
+  // 찾아서 색 표시 했는데.. 이제는 블로그 제목도 포함시키고 남동뿐만아니라
+  // 인천도 색 표시해줘" — sigungu_name의 시/도+시/군/구 토큰 전부(예: "인천"과
+  // "남동")를 하이라이트 대상으로 쓰고, 판정 범위도 본문뿐 아니라 제목까지
+  // 넓힌다. 추가 크롤링 없이 이미 가져온 데이터(제목은 검색 API 응답에 이미
+  // 있고, 본문은 활성 탭 캐시)만 본다는 기존 원칙은 그대로 유지한다.
+  const regionKeywords = extractAllSigunguCoreNames(spot.sigungu_name);
   const hasRegionMismatchWarning = Boolean(
-    regionKeyword && activeBody?.text && !activeBody.text.replace(/\s+/g, '').includes(regionKeyword)
+    regionKeywords.length > 0 &&
+      activeBody?.text &&
+      !regionKeywords.some(
+        (keyword) =>
+          activeBody.text!.replace(/\s+/g, '').includes(keyword) ||
+          (activeItem?.title ?? '').replace(/\s+/g, '').includes(keyword)
+      )
   );
 
   return {
@@ -317,7 +328,7 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
     setSortOption,
     runSearch,
     blogItems,
-    regionKeyword,
+    regionKeywords,
     hasRegionMismatchWarning,
     hasRecentReview,
     hasNoResults,

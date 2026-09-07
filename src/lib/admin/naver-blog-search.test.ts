@@ -5,6 +5,7 @@ import {
   isWithinRecentWindow,
   resolveBlogSort,
   extractSigunguCoreName,
+  extractAllSigunguCoreNames,
   buildSmartBlogQuery,
 } from './naver-blog-search';
 
@@ -94,6 +95,25 @@ describe('extractSigunguCoreName', () => {
     expect(extractSigunguCoreName(null)).toBe('');
     expect(extractSigunguCoreName(undefined)).toBe('');
     expect(extractSigunguCoreName('')).toBe('');
+  });
+});
+
+// [지역명 하이라이팅 범위 확장](2026-09-07 사용자 지시): "인천광역시 남동구 용천로..
+// 시군구 이름은 인천시 남동구.. 인천하고 남동이.. 노란색 마커표시.. 남동뿐만아니라
+// 인천도 색 표시해줘" — sigungu_name의 토큰 전부에서 핵심 지역명을 뽑는다.
+describe('extractAllSigunguCoreNames', () => {
+  it('시/도 + 시/군/구 두 토큰 모두에서 접미사를 떼 전부 반환한다', () => {
+    expect(extractAllSigunguCoreNames('인천시 남동구')).toEqual(['인천', '남동']);
+    expect(extractAllSigunguCoreNames('서울시 노원구')).toEqual(['서울', '노원']);
+    // "도"는 접미사 제거 대상(시/군/구)이 아니라 그대로 남는다(extractSigunguCoreName과
+    // 동일한 stripSigunguSuffix 규칙을 그대로 공유하므로).
+    expect(extractAllSigunguCoreNames('경기도 성남시')).toEqual(['경기도', '성남']);
+  });
+
+  it('null/undefined/빈 문자열은 빈 배열을 반환한다', () => {
+    expect(extractAllSigunguCoreNames(null)).toEqual([]);
+    expect(extractAllSigunguCoreNames(undefined)).toEqual([]);
+    expect(extractAllSigunguCoreNames('')).toEqual([]);
   });
 });
 

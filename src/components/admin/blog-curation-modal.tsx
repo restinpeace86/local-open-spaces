@@ -77,7 +77,7 @@ export function BlogCurationModal({
           onOverrideUrl={form.overrideActiveUrl}
           sortOption={form.sortOption}
           onSortOptionChange={form.setSortOption}
-          regionKeyword={form.regionKeyword}
+          regionKeywords={form.regionKeywords}
           hasRegionMismatchWarning={form.hasRegionMismatchWarning}
           curationCategoryId={form.curationCategoryId}
         />

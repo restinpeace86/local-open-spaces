@@ -37,7 +37,7 @@ export function BlogReferenceViewer({
   onOverrideUrl,
   sortOption,
   onSortOptionChange,
-  regionKeyword,
+  regionKeywords,
   hasRegionMismatchWarning,
   curationCategoryId,
 }: {
@@ -59,11 +59,12 @@ export function BlogReferenceViewer({
   // 않도록 optional로 둔다.
   sortOption?: BlogSortOption;
   onSortOptionChange?: (next: BlogSortOption) => void;
-  // [지역/지점명 하이라이팅 + 미스매치 경고](2026-09-07 개선사항3 3번): 스팟의
-  // 시군구 핵심 지역명(예: "노원")을 뱃지 키워드와 함께 하이라이트하고, 이미 가져온
-  // 본문에 이 단어가 없으면 경고를 보여준다(추가 크롤링 없음 — 사용자 지시). 둘 다
-  // 없으면(기존 호출부 호환) 아무 동작도 하지 않는다.
-  regionKeyword?: string;
+  // [지역/지점명 하이라이팅 + 미스매치 경고](2026-09-07 개선사항3 3번, 2026-09-07
+  // 후속 확장): 스팟의 시군구 핵심 지역명(예: "인천", "남동")을 뱃지 키워드와
+  // 함께 제목/본문 양쪽에 하이라이트하고, 이미 가져온 데이터에 전부 없으면
+  // 경고를 보여준다(추가 크롤링 없음 — 사용자 지시). 둘 다 없으면(기존 호출부
+  // 호환) 아무 동작도 하지 않는다.
+  regionKeywords?: string[];
   hasRegionMismatchWarning?: boolean;
   // [카테고리별 뱃지/룰 완전 독립 Config 구조](2026-09-07 개선사항4): "노출
   // 중분류" 콤보박스가 가리키는 카테고리의 키워드로만 하이라이트한다. 안 넘기면
@@ -226,7 +227,12 @@ export function BlogReferenceViewer({
                 </div>
               )}
 
-              <p className="font-medium text-sm text-gray-900">{activeItem.title}</p>
+              {/* [지역명 하이라이팅 범위 확장](2026-09-07 사용자 지시): "블로그
+                  제목도 포함시키고" — 제목도 뱃지 키워드/지역명과 같은 방식으로
+                  하이라이트한다(기존엔 제목이 평문이었음). */}
+              <p className="font-medium text-sm text-gray-900">
+                {highlightKeywords(activeItem.title, curationCategoryId, regionKeywords)}
+              </p>
 
               {/* [핵심 기능: 자동 형광펜 하이라이팅](사용자 지시 원문) +
                   [전체 본문 보기](2026-09-05 사용자 지시): 네이버 블로그면 요약 대신
@@ -238,29 +244,30 @@ export function BlogReferenceViewer({
                   "스크롤 안의 스크롤"이 됨) 처음 몇 줄만 보이고 그 안에서 또 스크롤
                   해야 나머지가 보이는 걸 못 알아챈 것이었다 — max-h/overflow를 없애
                   부모(모달/워크벤치)의 스크롤 하나로 전체가 자연스럽게 이어지게 한다. */}
-              {/* [지역명 불일치 경고](2026-09-07 개선사항3 3번): "미스매치.. 워닝
-                  배지를 노출" — 이미 가져온 본문에 지역 키워드가 없을 때만 표시한다
-                  (본문 로딩 중/실패 시에는 판단 근거가 없어 표시하지 않음). */}
+              {/* [지역명 불일치 경고](2026-09-07 개선사항3 3번, 후속 확장): "미스매치..
+                  워닝 배지를 노출" — 이미 가져온 제목/본문 어디에도 지역 키워드가
+                  없을 때만 표시한다(본문 로딩 중/실패 시에는 판단 근거가 없어
+                  표시하지 않음). */}
               {hasRegionMismatchWarning && activeBody?.text && (
                 <p className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs font-semibold text-amber-700">
-                  ⚠️ 본문에서 &quot;{regionKeyword}&quot; 지역명을 찾지 못했습니다 — 다른 지점 글이 아닌지 확인해주세요.
+                  ⚠️ 제목/본문에서 &quot;{(regionKeywords ?? []).join('/')}&quot; 지역명을 찾지 못했습니다 — 다른 지점 글이 아닌지 확인해주세요.
                 </p>
               )}
 
               <div className="rounded-lg bg-gray-50 p-3 text-xs leading-relaxed text-gray-700">
                 {activeBody?.text
-                  ? highlightKeywords(activeBody.text, curationCategoryId, regionKeyword ? [regionKeyword] : [])
+                  ? highlightKeywords(activeBody.text, curationCategoryId, regionKeywords)
                   : activeBody?.isLoading
                     ? (
                         <>
                           {activeItem.description
-                            ? highlightKeywords(activeItem.description, curationCategoryId, regionKeyword ? [regionKeyword] : [])
+                            ? highlightKeywords(activeItem.description, curationCategoryId, regionKeywords)
                             : null}
                           <p className="mt-2 text-[11px] text-gray-400">전체 본문 불러오는 중...</p>
                         </>
                       )
                     : activeItem.description
-                      ? highlightKeywords(activeItem.description, curationCategoryId, regionKeyword ? [regionKeyword] : [])
+                      ? highlightKeywords(activeItem.description, curationCategoryId, regionKeywords)
                       : '(요약을 가져오지 못했습니다 — 원문 보기로 확인해주세요.)'}
               </div>
               {activeBody?.text && (

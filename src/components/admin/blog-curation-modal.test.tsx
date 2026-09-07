@@ -462,10 +462,57 @@ describe('BlogCurationModal', () => {
         />
       );
 
-      expect(await screen.findByText(/"노원" 지역명을 찾지 못했습니다/)).toBeInTheDocument();
+      expect(await screen.findByText(/"서울\/노원" 지역명을 찾지 못했습니다/)).toBeInTheDocument();
       // 이 경고 API 호출 자체가 추가 크롤링 없이 이미 받아온 blog-body 응답 하나로만
       // 판단됐는지 확인 — blog-body 호출은 활성 탭 1건에 대해서만 일어난다.
       expect(fetchMock.mock.calls.filter((c) => (c[0] as string).includes('/blog-body'))).toHaveLength(1);
+    });
+
+    // [지역명 하이라이팅 범위 확장](2026-09-07 사용자 지시): "인천광역시 남동구
+    // 용천로.. 시군구 이름은 인천시 남동구.. 인천하고 남동이 블로그 제목이나
+    // 본문에 포함되어있는지 확인해서.. 노란색 마커표시.. 지금까진 본문에서
+    // 남동만 찾아서 색 표시 했는데.. 이제는 블로그 제목도 포함시키고
+    // 남동뿐만아니라 인천도 색 표시해줘"
+    it('시군구 이름의 시/도 + 시/군/구 토큰 둘 다(예: 인천/남동)를 하이라이트 대상으로 쓴다', async () => {
+      const SPOT_INCHEON = { ...SPOT, sigungu_name: '인천시 남동구' };
+      vi.stubGlobal(
+        'fetch',
+        mockFetchByUrl({
+          blogSearch: { items: [makeBlogItem()], hasRecentReview: true, hasNoResults: false },
+          blogBodyText: '인천 남동에 있는 맛집이에요.',
+        })
+      );
+      render(
+        <BlogCurationModal spot={SPOT_INCHEON} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+      );
+
+      expect(await screen.findByText('인천')).toBeInTheDocument();
+      expect(screen.getByText('남동')).toBeInTheDocument();
+    });
+
+    it('본문이 아니라 블로그 제목에만 지역명이 있어도 하이라이트되고 미스매치 경고는 뜨지 않는다', async () => {
+      const SPOT_INCHEON = { ...SPOT, sigungu_name: '인천시 남동구' };
+      vi.stubGlobal(
+        'fetch',
+        mockFetchByUrl({
+          blogSearch: {
+            items: [makeBlogItem({ title: '인천 남동구 맛집 다녀왔어요' })],
+            hasRecentReview: true,
+            hasNoResults: false,
+          },
+          blogBodyText: '주차도 편하고 좋았어요.', // 본문엔 지역명이 없음
+        })
+      );
+      render(
+        <BlogCurationModal spot={SPOT_INCHEON} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+      );
+
+      await screen.findByText('주차');
+      // 제목 안의 "인천"/"남동"이 각각 하이라이트된다.
+      expect(screen.getByText('인천')).toBeInTheDocument();
+      expect(screen.getByText('남동')).toBeInTheDocument();
+      // 본문엔 없지만 제목에는 있으므로 미스매치 경고는 뜨지 않는다.
+      expect(screen.queryByText(/지역명을 찾지 못했습니다/)).not.toBeInTheDocument();
     });
 
     it('신규 등록(기존 큐레이션 없음)일 때 본문에서 매칭된 키워드에 해당하는 뱃지가 자동 체크된다', async () => {

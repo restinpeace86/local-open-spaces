@@ -57,15 +57,31 @@ export function isWithinRecentWindow(postdate: string, now: Date = new Date(), w
 // 마지막 토큰에서 시/군/구 접미사를 뗀 핵심 지역명만 상호명 뒤에 붙인다("노원구"가
 // 아니라 "노원"으로 검색해야 성공률이 높다는 사용자 실측 — 원본 todo.md의 "명월점이
 // 아닌 명월로 검색" 사례와 동일한 원리).
+// 2글자 이상이면서 시/군/구로 끝나야만 접미사로 보고 뗀다 — "여주시"→"여주"는
+// 맞지만, 혹시 지역명 자체가 "시"/"군"/"구" 한 글자뿐인 예외적인 경우까지
+// 잘못 잘라 빈 문자열을 만들지 않기 위한 최소한의 방어.
+function stripSigunguSuffix(token: string): string {
+  return token.length > 1 && /[시군구]$/.test(token) ? token.slice(0, -1) : token;
+}
+
 export function extractSigunguCoreName(sigunguName: string | null | undefined): string {
   if (!sigunguName) return '';
   const tokens = sigunguName.trim().split(/\s+/).filter(Boolean);
   const last = tokens[tokens.length - 1] ?? '';
-  // 2글자 이상이면서 시/군/구로 끝나야만 접미사로 보고 뗀다 — "여주시"→"여주"는
-  // 맞지만, 혹시 지역명 자체가 "시"/"군"/"구" 한 글자뿐인 예외적인 경우까지
-  // 잘못 잘라 빈 문자열을 만들지 않기 위한 최소한의 방어.
-  if (last.length > 1 && /[시군구]$/.test(last)) return last.slice(0, -1);
-  return last;
+  return stripSigunguSuffix(last);
+}
+
+// [지역명 하이라이팅 범위 확장](2026-09-07 사용자 지시): "인천광역시 남동구 용천로..
+// 시군구 이름은 인천시 남동구.. 인천하고 남동이 블로그 제목이나 본문에
+// 포함되어있는지 확인해서.. 노란색 마커표시.. 지금까진 본문에서 남동만 찾아서
+// 색 표시 했는데.. 이제는.. 남동뿐만아니라 인천도 색 표시해줘" — sigungu_name의
+// 토큰 전부(시/도 + 시/군/구, 예: "인천시"+"남동구")에서 각각 접미사를 뗀 핵심
+// 지역명을 전부 반환한다(검색 쿼리 조합에 쓰는 extractSigunguCoreName은 마지막
+// 토큰 하나만 쓰던 기존 동작 그대로 유지 — 이 함수는 하이라이팅 전용).
+export function extractAllSigunguCoreNames(sigunguName: string | null | undefined): string[] {
+  if (!sigunguName) return [];
+  const tokens = sigunguName.trim().split(/\s+/).filter(Boolean);
+  return tokens.map(stripSigunguSuffix).filter(Boolean);
 }
 
 // [지역명 중복 방지 → 재수정](2026-09-07 사용자 지시): 1차 수정은 "상호명이
