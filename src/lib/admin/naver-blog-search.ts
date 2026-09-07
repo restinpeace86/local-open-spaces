@@ -68,18 +68,18 @@ export function extractSigunguCoreName(sigunguName: string | null | undefined): 
   return last;
 }
 
-// [지역명 중복 방지](2026-09-07 사용자 지시): "임성근국가공인진갈비 김포점.. 여기에
-// 김포를 뒤에 붙여서 임성근국가공인진갈비 김포점 김포로.. 호출중인거 같더라.. 이
-// 경우는 임성근국가공인진갈비 김포 이렇게 조회 호출하도록 해" — 실측 확인된 버그:
-// 상호명 자체가 이미 "[지역명]점"으로 끝나는 경우(예: "OO 김포점")에도 무조건
-// 지역명을 또 붙여 "OO 김포점 김포"라는 중복 검색어가 만들어지고 있었다. 원래
-// todo.md의 "'쿠우쿠우 명월점'과 같이 되었을경우 쿠우쿠우 명월로 던질 것" 사례를
-// 이번에 실제로 구현한다 — 상호명이 이미 "[지역명]점"으로 끝나면 지역명을 추가로
-// 붙이지 않고 "점"만 뗀다.
+// [지역명 중복 방지 → 재수정](2026-09-07 사용자 지시): 1차 수정은 "상호명이
+// [추출한 지역명]+점으로 끝날 때만" 점을 뗐는데, 사용자가 "이유있는감자탕
+// 상인월성점처럼.. 상호명에 +점으로 끝나면 지역명 붙이지 말고.. 그대로 상인월성으로
+// 점만 빼고.. 지역명은 추가하지말고.. 이유있는감자탕과 같이 +점으로 안끝나면
+// 이유있는감자탕 달서 같이 붙여줘"라고 규칙을 다시 확정했다. "상인월성"은 시군구
+// 핵심 지역명("달서")과 무관한 지점명(동 이름 등)이라, "[추출한 지역명]+점"으로
+// 끝나는지 매칭할 필요 없이 **"점"으로 끝나는지만 보면 된다** — 점으로 끝나면
+// 지역명을 아예 붙이지 않고 "점"만 떼고, 점으로 끝나지 않으면 그때만 지역명을
+// 붙인다.
 export function buildSmartBlogQuery(name: string, sigunguName: string | null | undefined): string {
-  const core = extractSigunguCoreName(sigunguName);
-  if (!core) return name;
   const trimmed = name.trim();
-  if (trimmed.endsWith(`${core}점`)) return trimmed.slice(0, -1);
-  return `${trimmed} ${core}`;
+  if (trimmed.endsWith('점')) return trimmed.slice(0, -1);
+  const core = extractSigunguCoreName(sigunguName);
+  return core ? `${trimmed} ${core}` : trimmed;
 }
