@@ -89,6 +89,19 @@ describe('MyReviewsSection', () => {
     expect(dialog.getByText('좋았어요')).toBeInTheDocument();
   });
 
+  // [실시간 피드 조회 실패 버그 수정](2026-09-07 사용자 지시): "column events_1.name
+  // does not exist" — events 테이블은 title 컬럼만 갖고, 이벤트를 가리키는 게시글이
+  // 실제로 존재할 때만 이 코드 경로가 실행돼 지금까지 드러나지 않았던 버그였다. 이벤트를
+  // 가리키는 게시글(open_spaces가 아니라 events)도 정상적으로 이름을 보여주는지 확인한다.
+  it('이벤트를 가리키는 게시글은 events.title을 이름으로 보여준다(open_spaces.name 없음)', async () => {
+    listMyPostsMock.mockResolvedValue([
+      survivedPost({ open_spaces: null, events: { title: '가을 단풍 축제' } }),
+    ]);
+    render(<MyReviewsSection userId="user-1" />);
+
+    expect(await screen.findByText('가을 단풍 축제')).toBeInTheDocument();
+  });
+
   it('조회 실패 시 에러 메시지를 보여준다', async () => {
     listMyPostsMock.mockRejectedValue(new Error('내 활동 조회 실패: network error'));
     render(<MyReviewsSection userId="user-1" />);

@@ -30,10 +30,14 @@ export type MomPickPost = {
   is_adopted: boolean;
   created_at: string;
   open_spaces: { name: string } | null;
-  events: { name: string } | null;
+  events: { title: string } | null;
 };
 
-const POST_SELECT = '*, open_spaces(name), events(name)';
+// [실시간 피드 조회 실패 버그 수정](2026-09-07 사용자 지시): "column events_1.name
+// does not exist" — events 테이블에는 name이 아니라 title 컬럼만 있다(실측 확인).
+// mom-pick-dashboard.ts와 동일한 잠재 버그(이벤트를 가리키는 게시글이 실제로 생기기
+// 전까지 드러나지 않았음).
+const POST_SELECT = '*, open_spaces(name), events(title)';
 
 export async function createMicroReview(input: { spotId: string; rating: number; content?: string }): Promise<MomPickPost> {
   const supabase = createClient();

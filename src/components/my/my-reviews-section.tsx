@@ -21,8 +21,10 @@ import {
 // 상세 모달에서 읽을 수 있게 렌더링한다 — 과거 데이터라고 숨기지 않는다.
 const CONTENT_PREVIEW_LENGTH = 28;
 
+// [실시간 피드 조회 실패 버그 수정](2026-09-07 사용자 지시): events 테이블에는
+// name이 아니라 title 컬럼만 있다(MomPickPost.events 타입도 posts.ts에서 함께 수정).
 function spotOrEventName(post: MomPickPost): string {
-  return post.open_spaces?.name ?? post.events?.name ?? '알 수 없는 장소';
+  return post.open_spaces?.name ?? post.events?.title ?? '알 수 없는 장소';
 }
 
 function formatDate(iso: string): string {

@@ -19,8 +19,14 @@ export type DashboardAuthor = { id: string; nickname: string | null; grade: MomP
 
 // [Decision 020](2026-09-04) / spec/community/mom-pick-grades.md 2.1: 'survey_review'
 // 타입과 그 전용 필드를 추가한다. spotName은 이름 그대로 두되(호출부를 넓게 건드리지
-// 않기 위함 — 제5장 제4조), open_spaces.name 또는 events.name 중 있는 쪽을 담는다
+// 않기 위함 — 제5장 제4조), open_spaces.name 또는 events.title 중 있는 쪽을 담는다
 // (survey_review는 스팟 또는 이벤트 중 하나만 가리키므로 항상 둘 중 하나만 채워짐).
+// [실시간 피드 조회 실패 버그 수정](2026-09-07 사용자 지시): "column events_1.name
+// does not exist" — events 테이블에는 name 컬럼이 없고 title만 있다(실측 확인,
+// information_schema 직접 조회). 이 파일이 처음 작성될 때부터 events(name)으로
+// 잘못 임베드하고 있었는데, 실제로 이벤트를 가리키는 survey_review 게시글이 생기기
+// 전까지는 이 코드 경로가 한 번도 실행되지 않아(항상 open_spaces만 있었음) 지금까지
+// 드러나지 않았던 잠재 버그였다.
 export type DashboardPost = {
   id: string;
   post_type: 'micro_review' | 'checklist' | 'survey_review';
@@ -43,7 +49,7 @@ export type DashboardPost = {
 };
 
 const POST_COLUMNS =
-  'id, author_id, post_type, rating, content, checklist_answers, age_groups, visit_environment, satisfaction_points, duration_type, weather_tags, infra_tags, companion_type, photo_urls, like_count, is_adopted, created_at, open_spaces(name), events(name)';
+  'id, author_id, post_type, rating, content, checklist_answers, age_groups, visit_environment, satisfaction_points, duration_type, weather_tags, infra_tags, companion_type, photo_urls, like_count, is_adopted, created_at, open_spaces(name), events(title)';
 
 type RawPostRow = {
   id: string;
@@ -64,7 +70,7 @@ type RawPostRow = {
   is_adopted: boolean;
   created_at: string;
   open_spaces: { name: string } | null;
-  events: { name: string } | null;
+  events: { title: string } | null;
 };
 
 function fallbackAuthor(id: string): DashboardAuthor {
@@ -97,7 +103,7 @@ async function attachAuthors(rows: RawPostRow[]): Promise<DashboardPost[]> {
     like_count: row.like_count,
     is_adopted: row.is_adopted,
     created_at: row.created_at,
-    spotName: row.open_spaces?.name ?? row.events?.name ?? null,
+    spotName: row.open_spaces?.name ?? row.events?.title ?? null,
     author: authorsById.get(row.author_id) ?? fallbackAuthor(row.author_id),
   }));
 }
