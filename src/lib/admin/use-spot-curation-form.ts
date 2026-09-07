@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { buildSmartBlogQuery, extractAllSigunguCoreNames } from './naver-blog-search';
+import { buildSmartBlogQuery, buildFallbackBlogQuery, extractAllSigunguCoreNames } from './naver-blog-search';
 import { getBadgeGroupsForCategory, getBadgeOptionsForCategory, matchBadgeKeysFromText, resolveCurationCategoryId } from './curation-badges';
 import { ServiceCategory } from './service-category';
 
@@ -121,10 +121,15 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
   // "다시 검색" 버튼처럼 검색어만 바뀌는 경우 정렬 선택은 유지돼야 하기 때문이다.
   // 정렬 자체를 바꾸는 경우(setSortOption)는 상태 갱신이 비동기라 값을 직접
   // 넘겨받아야 최신 값으로 즉시 재검색할 수 있다.
-  function runSearch(query: string, sort: BlogSortOption = sortOption) {
+  // [지역명 접미사 폴백 재검색을 위한 반환값](2026-09-07 사용자 지시): "모심갈비..
+  // 남동으로 찾으면 안나와.. 모심갈비 남동구는 나오고" — 1차 쿼리가 결과 없음이면
+  // 호출부(마운트 시 최초 검색)가 폴백 쿼리로 한 번 더 재검색할 수 있도록
+  // hasNoResults를 반환한다. "다시 검색" 버튼 등 다른 호출부는 이 반환값을
+  // 그냥 무시하면 되므로 기존 사용처는 전혀 바뀌지 않는다.
+  function runSearch(query: string, sort: BlogSortOption = sortOption): Promise<{ hasNoResults: boolean }> {
     setIsSearching(true);
     setSearchError(null);
-    fetch(`/api/admin/spot-curations/blog-search?query=${encodeURIComponent(query)}&sort=${sort}`)
+    return fetch(`/api/admin/spot-curations/blog-search?query=${encodeURIComponent(query)}&sort=${sort}`)
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? '블로그 검색에 실패했습니다.');
@@ -132,8 +137,12 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
         setHasRecentReview(Boolean(data.hasRecentReview));
         setHasNoResults(Boolean(data.hasNoResults));
         setActiveTab(0);
+        return { hasNoResults: Boolean(data.hasNoResults) };
       })
-      .catch((err) => setSearchError(err instanceof Error ? err.message : '블로그 검색에 실패했습니다.'))
+      .catch((err) => {
+        setSearchError(err instanceof Error ? err.message : '블로그 검색에 실패했습니다.');
+        return { hasNoResults: false };
+      })
       .finally(() => setIsSearching(false));
   }
 
@@ -149,10 +158,20 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
   // 뱃지/블로그 URL 프리필용)도 함께 조회한다.
   // [스마트 검색 쿼리 조합](2026-09-07 사용자 지시): 상호명만이 아니라
   // buildSmartBlogQuery로 "상호명 + 시군구 핵심 지역명"을 1차 검색어로 쓴다.
+  // [지역명 접미사 폴백 재검색](2026-09-07 사용자 지시): "모심갈비.. 남동으로
+  // 찾으면 안나와.. 모심갈비 남동구는 나오고" — 지역명 접미사(구/시/군)를 뗀
+  // 1차 쿼리가 결과 없음(hasNoResults)이면, 접미사를 그대로 둔 폴백 쿼리로
+  // 딱 한 번만 자동 재검색한다(무한 재시도 방지 — 폴백은 이 한 번뿐).
   useEffect(() => {
     const smartQuery = buildSmartBlogQuery(spot.name, spot.sigungu_name);
     setSearchQuery(smartQuery);
-    runSearch(smartQuery);
+    runSearch(smartQuery).then((result) => {
+      if (!result.hasNoResults) return;
+      const fallbackQuery = buildFallbackBlogQuery(spot.name, spot.sigungu_name);
+      if (!fallbackQuery || fallbackQuery === smartQuery) return;
+      setSearchQuery(fallbackQuery);
+      runSearch(fallbackQuery);
+    });
     fetch(`/api/admin/spot-curations?spot_id=${encodeURIComponent(spot.id)}`)
       .then(async (res) => {
         const data = await res.json();

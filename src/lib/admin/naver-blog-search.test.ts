@@ -7,6 +7,7 @@ import {
   extractSigunguCoreName,
   extractAllSigunguCoreNames,
   buildSmartBlogQuery,
+  buildFallbackBlogQuery,
 } from './naver-blog-search';
 
 // [관리자용 블로그 큐레이션 모달](2026-09-05 사용자 지시, Decision 021) 단위 테스트.
@@ -141,5 +142,28 @@ describe('buildSmartBlogQuery', () => {
   it('상호명이 "점"으로 끝나지 않으면 시군구 핵심 지역명을 붙인다', () => {
     expect(buildSmartBlogQuery('이유있는감자탕', '대구광역시 달서구')).toBe('이유있는감자탕 달서');
     expect(buildSmartBlogQuery('김포공항한식뷔페', '경기도 김포시')).toBe('김포공항한식뷔페 김포');
+  });
+});
+
+// [지역명 접미사 제거가 오히려 검색을 실패시키는 사례](2026-09-07 사용자 지시):
+// "모심갈비가 지역명이 인천광역시 남동구인데 모심갈비에 남동을 붙여서 모심갈비
+// 남동으로 찾으면 안나와.. 모심갈비 남동구는 나오고" — 1차 쿼리(접미사 제거)가
+// 실패했을 때만 쓰는 폴백 쿼리(접미사 유지)를 계산한다.
+describe('buildFallbackBlogQuery', () => {
+  it('접미사를 유지한 원본 토큰으로 폴백 쿼리를 만든다', () => {
+    expect(buildFallbackBlogQuery('모심갈비', '인천시 남동구')).toBe('모심갈비 남동구');
+  });
+
+  it('상호명이 "점"으로 끝나면 폴백을 만들지 않는다(애초에 지역명을 안 씀)', () => {
+    expect(buildFallbackBlogQuery('쿠우쿠우 달서점', '대구광역시 달서구')).toBeNull();
+  });
+
+  it('sigungu_name이 없으면 폴백을 만들지 않는다', () => {
+    expect(buildFallbackBlogQuery('모심갈비', null)).toBeNull();
+    expect(buildFallbackBlogQuery('모심갈비', undefined)).toBeNull();
+  });
+
+  it('마지막 토큰에 애초에 시/군/구 접미사가 없으면(1차와 동일) 폴백을 만들지 않는다', () => {
+    expect(buildFallbackBlogQuery('모심갈비', '제주특별자치도 서귀포')).toBeNull();
   });
 });

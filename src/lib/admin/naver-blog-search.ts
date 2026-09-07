@@ -99,3 +99,27 @@ export function buildSmartBlogQuery(name: string, sigunguName: string | null | u
   const core = extractSigunguCoreName(sigunguName);
   return core ? `${trimmed} ${core}` : trimmed;
 }
+
+// [지역명 접미사 제거가 오히려 검색을 실패시키는 사례 발견](2026-09-07 사용자 지시):
+// "모심갈비가 지역명이 인천광역시 남동구인데 모심갈비에 남동을 붙여서 모심갈비
+// 남동으로 찾으면 안나와.. 모심갈비 남동구는 나오고" — "노원구"→"노원"처럼
+// 접미사를 떼야 성공률이 높은 지역명이 있는 반면, "남동구"→"남동"처럼 떼면
+// 오히려 실패하고 원래 접미사를 붙여야 성공하는 지역명도 있다는 것을 실측으로
+// 확인했다. 지역명마다 어느 쪽이 맞는지 미리 알 방법이 없으므로(사전 없이는
+// 추측 불가 — 제3장 제5조), 1차 쿼리(접미사 제거)가 결과 없음(hasNoResults)일
+// 때만 접미사를 그대로 둔 원본 토큰으로 한 번 더 재검색하는 폴백 쿼리를 만든다
+// (실제 재검색 실행/1회 제한은 useSpotCurationForm이 담당 — 이 함수는 순수하게
+// "폴백 쿼리 문자열이 무엇인지"만 계산한다). "점"으로 끝나는 상호명은 애초에
+// 지역명을 안 쓰므로 폴백 대상이 아니다.
+export function buildFallbackBlogQuery(name: string, sigunguName: string | null | undefined): string | null {
+  const trimmed = name.trim();
+  if (trimmed.endsWith('점')) return null;
+  if (!sigunguName) return null;
+  const tokens = sigunguName.trim().split(/\s+/).filter(Boolean);
+  const rawLast = tokens[tokens.length - 1] ?? '';
+  const strippedCore = extractSigunguCoreName(sigunguName);
+  // 접미사가 애초에 없었거나(예: 이미 "노원"처럼 저장된 경우) 1차 쿼리와 결과가
+  // 같으면 폴백을 만들 이유가 없다.
+  if (!rawLast || rawLast === strippedCore) return null;
+  return `${trimmed} ${rawLast}`;
+}
