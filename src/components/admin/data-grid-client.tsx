@@ -702,6 +702,12 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
   // open_spaces 탭 자체에서 이 필터를 기대하고 있었다 — 여기(메인 목록)에도
   // 추가한다. open_spaces에만 있는 컬럼이라 이 탭에서만 의미가 있다.
   const [onlyUnmapped, setOnlyUnmapped] = useState(false);
+  // [큐레이션 미완료만 보기](2026-09-07 사용자 지시): "노출 중분류가 아직
+  // 없는 행만보기 뿐만아니라 큐레이션이 아직 없는 행만보기도 추가해줘..
+  // 1차적으로 여러건에 대하여 한번에 표준중분류 노출중분류 했으면 이제
+  // 큐레이션쪽 해야지.. 뱃지다는거" — 위 onlyUnmapped와 동일한 관례
+  // (open_spaces 전용, 즉시 반영).
+  const [onlyUncurated, setOnlyUncurated] = useState(false);
   // 요구사항 2: 단축 필터([오늘 등록건 보기]/[최근 3일건 보기]) + 달력 기간 조회. 다른 즉시
   // 반영 필터(검색어/칩 등)와 같은 관례로, 값이 바뀌면 바로 쿼리가 나간다(체크박스 필터만
   // pending/applied 2단계인 것과 다름 — 날짜는 오조작 빈도가 낮고 즉시 반영이 자연스럽다).
@@ -857,6 +863,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     setAppliedTargetAudience([]);
     setIsActive('true');
     setOnlyUnmapped(false);
+    setOnlyUncurated(false);
     setCreatedFrom(todayDateStr());
     setCreatedTo(todayDateStr());
   };
@@ -909,6 +916,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     if (tab === 'events' && appliedTargetAudience.length > 0) params.set('target_audience', appliedTargetAudience.join(','));
     if (tab === 'events') params.set('is_active', isActive);
     if (tab === 'open_spaces' && onlyUnmapped) params.set('only_unmapped', 'true');
+    if (tab === 'open_spaces' && onlyUncurated) params.set('only_uncurated', 'true');
     if (tab !== 'raw_ingest_data' && createdFrom) params.set('created_from', createdFrom);
     if (tab !== 'raw_ingest_data' && createdTo) params.set('created_to', createdTo);
     params.set('page', String(page));
@@ -936,7 +944,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, hasLoaded, debouncedQ, sourceTypes, sources, categories, minClassName, appliedCategoryMin, appliedTargetAudience, isActive, onlyUnmapped, createdFrom, createdTo, page, pageSize]);
+  }, [tab, hasLoaded, debouncedQ, sourceTypes, sources, categories, minClassName, appliedCategoryMin, appliedTargetAudience, isActive, onlyUnmapped, onlyUncurated, createdFrom, createdTo, page, pageSize]);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
   const currentOptions = filterOptions[tab];
@@ -1090,6 +1098,24 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
               className="h-3.5 w-3.5"
             />
             노출 중분류(service_category_id)가 아직 없는 행만 보기
+          </label>
+        )}
+
+        {/* [큐레이션 미완료만 보기](2026-09-07 사용자 지시): "노출 중분류가 아직
+            없는 행만보기 뿐만아니라 큐레이션이 아직 없는 행만보기도 추가해줘..
+            1차적으로 여러건에 대하여 한번에 표준중분류 노출중분류 했으면 이제
+            큐레이션쪽 해야지.. 뱃지다는거" — 표준 중분류/노출 중분류를 이미
+            일괄 적용한 행들 중 아직 블로그 검색으로 뱃지를 안 단(spot_curations
+            테이블에 행이 없는) 것만 골라보는 다음 단계 작업 흐름을 지원한다. */}
+        {tab === 'open_spaces' && (
+          <label className="flex items-center gap-1.5 text-xs text-gray-600">
+            <input
+              type="checkbox"
+              checked={onlyUncurated}
+              onChange={(e) => setOnlyUncurated(e.target.checked)}
+              className="h-3.5 w-3.5"
+            />
+            큐레이션(블로그/뱃지)이 아직 없는 행만 보기
           </label>
         )}
 

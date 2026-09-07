@@ -238,6 +238,13 @@ async function queryOpenSpaces(supabase: Ctx, searchParams: URLSearchParams, pag
   // 지시): "노출중분류 된거랑 안된거 따로도 볼수 있게해줘.. 일단은 노출중분류
   // 있는것만도 볼수있어야돼" — 반대 방향(이미 채워진 행만)도 필요해 대칭으로 추가한다.
   const onlyMapped = searchParams.get('only_mapped') === 'true';
+  // [큐레이션 미완료만 보기](2026-09-07 사용자 지시): "노출 중분류가 아직 없는
+  // 행만보기 뿐만아니라 큐레이션이 아직 없는 행만보기도 추가해줘.. 1차적으로
+  // 여러건에 대하여 한번에 표준중분류 노출중분류 했으면 이제 큐레이션쪽
+  // 해야지.. 뱃지다는거" — 큐레이션(blog_url/뱃지)은 open_spaces가 아니라
+  // 별도 테이블 spot_curations에 저장되므로, 아직 그 테이블에 행이 없는
+  // open_spaces만 걸러낸다.
+  const onlyUncurated = searchParams.get('only_uncurated') === 'true';
   const createdFrom = parseDateFilter(searchParams.get('created_from'));
   const createdTo = parseDateFilter(searchParams.get('created_to'));
 
@@ -313,6 +320,18 @@ async function queryOpenSpaces(supabase: Ctx, searchParams: URLSearchParams, pag
   if (missingFee) query = query.is('is_free', null);
   if (onlyUnmapped) query = query.is('service_category_id', null);
   if (onlyMapped) query = query.not('service_category_id', 'is', null);
+  if (onlyUncurated) {
+    // spot_curations는 별도 테이블이라 JOIN 없이는 "행이 없는 것"을 open_spaces
+    // 쪽 조건절 하나로 걸 수 없다 — 이미 큐레이션된 spot_id 목록을 먼저 조회해
+    // 제외한다. 실측(2026-09-07): 전체 큐레이션 건수가 100건 안팎으로 아직
+    // 작아 이 방식으로 충분히 빠르다 — 수천 건 이상으로 늘어나면 JOIN 기반 RPC로
+    // 바꿔야 할 수 있다는 한계를 감수한다(비슷한 성격의 트레이드오프가 이미
+    // count:'estimated' 등에도 있음).
+    const { data: curatedRows, error: curatedError } = await supabase.from('spot_curations').select('spot_id');
+    if (curatedError) throw new Error(curatedError.message);
+    const curatedIds = (curatedRows ?? []).map((r) => r.spot_id).filter((id): id is string => Boolean(id));
+    if (curatedIds.length > 0) query = query.not('id', 'in', `(${curatedIds.join(',')})`);
+  }
   query = applyCreatedAtRange(query, createdFrom, createdTo);
 
   const from = (page - 1) * pageSize;
