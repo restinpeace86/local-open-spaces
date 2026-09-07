@@ -37,6 +37,8 @@ export function BlogReferenceViewer({
   onOverrideUrl,
   sortOption,
   onSortOptionChange,
+  regionKeyword,
+  hasRegionMismatchWarning,
 }: {
   searchQuery: string;
   onSearchQueryChange: (value: string) => void;
@@ -56,6 +58,12 @@ export function BlogReferenceViewer({
   // 않도록 optional로 둔다.
   sortOption?: BlogSortOption;
   onSortOptionChange?: (next: BlogSortOption) => void;
+  // [지역/지점명 하이라이팅 + 미스매치 경고](2026-09-07 개선사항3 3번): 스팟의
+  // 시군구 핵심 지역명(예: "노원")을 뱃지 키워드와 함께 하이라이트하고, 이미 가져온
+  // 본문에 이 단어가 없으면 경고를 보여준다(추가 크롤링 없음 — 사용자 지시). 둘 다
+  // 없으면(기존 호출부 호환) 아무 동작도 하지 않는다.
+  regionKeyword?: string;
+  hasRegionMismatchWarning?: boolean;
 }) {
   const activeItem = blogItems?.[activeTab] ?? null;
   const [isEditingUrl, setIsEditingUrl] = useState(false);
@@ -224,18 +232,27 @@ export function BlogReferenceViewer({
                   "스크롤 안의 스크롤"이 됨) 처음 몇 줄만 보이고 그 안에서 또 스크롤
                   해야 나머지가 보이는 걸 못 알아챈 것이었다 — max-h/overflow를 없애
                   부모(모달/워크벤치)의 스크롤 하나로 전체가 자연스럽게 이어지게 한다. */}
+              {/* [지역명 불일치 경고](2026-09-07 개선사항3 3번): "미스매치.. 워닝
+                  배지를 노출" — 이미 가져온 본문에 지역 키워드가 없을 때만 표시한다
+                  (본문 로딩 중/실패 시에는 판단 근거가 없어 표시하지 않음). */}
+              {hasRegionMismatchWarning && activeBody?.text && (
+                <p className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs font-semibold text-amber-700">
+                  ⚠️ 본문에서 &quot;{regionKeyword}&quot; 지역명을 찾지 못했습니다 — 다른 지점 글이 아닌지 확인해주세요.
+                </p>
+              )}
+
               <div className="rounded-lg bg-gray-50 p-3 text-xs leading-relaxed text-gray-700">
                 {activeBody?.text
-                  ? highlightKeywords(activeBody.text)
+                  ? highlightKeywords(activeBody.text, regionKeyword ? [regionKeyword] : [])
                   : activeBody?.isLoading
                     ? (
                         <>
-                          {activeItem.description ? highlightKeywords(activeItem.description) : null}
+                          {activeItem.description ? highlightKeywords(activeItem.description, regionKeyword ? [regionKeyword] : []) : null}
                           <p className="mt-2 text-[11px] text-gray-400">전체 본문 불러오는 중...</p>
                         </>
                       )
                     : activeItem.description
-                      ? highlightKeywords(activeItem.description)
+                      ? highlightKeywords(activeItem.description, regionKeyword ? [regionKeyword] : [])
                       : '(요약을 가져오지 못했습니다 — 원문 보기로 확인해주세요.)'}
               </div>
               {activeBody?.text && (

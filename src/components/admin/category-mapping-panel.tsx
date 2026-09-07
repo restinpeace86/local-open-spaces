@@ -29,6 +29,10 @@ type AdminOpenSpaceRowLite = {
   address: string | null;
   category_min: string | null;
   service_category_id: string | null;
+  // [스마트 검색 쿼리 조합](2026-09-07 개선사항3 1번): 워크벤치의 블로그 검색이
+  // "상호명 + 시군구 핵심 지역명"을 쓰려면 필요 — 새 조회 없이 타입만 넓힌다
+  // (OPEN_SPACES_COLUMNS에 이미 포함돼 있는 컬럼).
+  sigungu_name: string | null;
 };
 const ROW_PICKER_PAGE_SIZE = 50;
 

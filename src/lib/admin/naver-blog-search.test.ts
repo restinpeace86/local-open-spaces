@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { cleanNaverText, parsePostdate, isWithinRecentWindow, resolveBlogSort } from './naver-blog-search';
+import {
+  cleanNaverText,
+  parsePostdate,
+  isWithinRecentWindow,
+  resolveBlogSort,
+  extractSigunguCoreName,
+  buildSmartBlogQuery,
+} from './naver-blog-search';
 
 // [관리자용 블로그 큐레이션 모달](2026-09-05 사용자 지시, Decision 021) 단위 테스트.
 describe('cleanNaverText', () => {
@@ -67,5 +74,36 @@ describe('resolveBlogSort', () => {
     expect(resolveBlogSort(null)).toBe('date');
     expect(resolveBlogSort('')).toBe('date');
     expect(resolveBlogSort('relevance')).toBe('date');
+  });
+});
+
+// [스마트 검색 쿼리 조합](2026-09-07 사용자 지시): "서울시 노원구라고 하면 상호명 +
+// 노원 이런식으로" — sigungu_name 마지막 토큰에서 시/군/구 접미사만 뗀다.
+describe('extractSigunguCoreName', () => {
+  it('마지막 토큰에서 시/군/구 접미사를 뗀다', () => {
+    expect(extractSigunguCoreName('서울시 노원구')).toBe('노원');
+    expect(extractSigunguCoreName('경기도 성남시')).toBe('성남');
+    expect(extractSigunguCoreName('경기도 여주시')).toBe('여주');
+  });
+
+  it('공백이 없는(단일 토큰) 경우도 접미사만 뗀다', () => {
+    expect(extractSigunguCoreName('노원구')).toBe('노원');
+  });
+
+  it('null/undefined/빈 문자열은 빈 문자열을 반환한다(추측하지 않음)', () => {
+    expect(extractSigunguCoreName(null)).toBe('');
+    expect(extractSigunguCoreName(undefined)).toBe('');
+    expect(extractSigunguCoreName('')).toBe('');
+  });
+});
+
+describe('buildSmartBlogQuery', () => {
+  it('상호명 뒤에 시군구 핵심 지역명을 붙인다', () => {
+    expect(buildSmartBlogQuery('쿠우쿠우', '서울시 노원구')).toBe('쿠우쿠우 노원');
+  });
+
+  it('sigungu_name이 없으면 상호명만 그대로 반환한다', () => {
+    expect(buildSmartBlogQuery('쿠우쿠우', null)).toBe('쿠우쿠우');
+    expect(buildSmartBlogQuery('쿠우쿠우', undefined)).toBe('쿠우쿠우');
   });
 });

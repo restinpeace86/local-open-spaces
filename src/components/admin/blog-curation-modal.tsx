@@ -35,7 +35,7 @@ export function BlogCurationModal({
   onClose,
   onServiceCategoryUpdated,
 }: {
-  spot: { id: string; name: string; address: string | null; service_category_id: string | null };
+  spot: { id: string; name: string; address: string | null; service_category_id: string | null; sigungu_name?: string | null };
   serviceCategories: ServiceCategory[];
   onClose: () => void;
   onServiceCategoryUpdated: (id: string, nextServiceCategoryId: string | null) => void;
@@ -77,6 +77,8 @@ export function BlogCurationModal({
           onOverrideUrl={form.overrideActiveUrl}
           sortOption={form.sortOption}
           onSortOptionChange={form.setSortOption}
+          regionKeyword={form.regionKeyword}
+          hasRegionMismatchWarning={form.hasRegionMismatchWarning}
         />
 
         <CurationBadgeForm

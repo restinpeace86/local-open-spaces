@@ -49,3 +49,26 @@ export function isWithinRecentWindow(postdate: string, now: Date = new Date(), w
   const ageDays = (now.getTime() - parsed.getTime()) / (1000 * 60 * 60 * 24);
   return ageDays <= windowDays;
 }
+
+// [스마트 검색 쿼리 조합](2026-09-07, implementation/todo.md 개선사항3 1번 — 사용자
+// 지시로 세부 방식을 직접 확정): "현재 상호명가지고 검색하고 있는데.. rgnCdNm/
+// ronaAddr/lotnoAddr 등 이미 주소데이터 있지않아? 서울시 노원구라고 하면 상호명 +
+// 노원 이런식으로" — open_spaces.sigungu_name(예: "서울시 노원구", "경기도 성남시")의
+// 마지막 토큰에서 시/군/구 접미사를 뗀 핵심 지역명만 상호명 뒤에 붙인다("노원구"가
+// 아니라 "노원"으로 검색해야 성공률이 높다는 사용자 실측 — 원본 todo.md의 "명월점이
+// 아닌 명월로 검색" 사례와 동일한 원리).
+export function extractSigunguCoreName(sigunguName: string | null | undefined): string {
+  if (!sigunguName) return '';
+  const tokens = sigunguName.trim().split(/\s+/).filter(Boolean);
+  const last = tokens[tokens.length - 1] ?? '';
+  // 2글자 이상이면서 시/군/구로 끝나야만 접미사로 보고 뗀다 — "여주시"→"여주"는
+  // 맞지만, 혹시 지역명 자체가 "시"/"군"/"구" 한 글자뿐인 예외적인 경우까지
+  // 잘못 잘라 빈 문자열을 만들지 않기 위한 최소한의 방어.
+  if (last.length > 1 && /[시군구]$/.test(last)) return last.slice(0, -1);
+  return last;
+}
+
+export function buildSmartBlogQuery(name: string, sigunguName: string | null | undefined): string {
+  const core = extractSigunguCoreName(sigunguName);
+  return core ? `${name} ${core}` : name;
+}

@@ -647,6 +647,7 @@ export function RawDataModal({
             name: (row as AdminOpenSpaceRow).name,
             address: (row as AdminOpenSpaceRow).address,
             service_category_id: (row as AdminOpenSpaceRow).service_category_id,
+            sigungu_name: (row as AdminOpenSpaceRow).sigungu_name,
           }}
           serviceCategories={serviceCategories}
           onClose={() => setIsBlogCurationModalOpen(false)}

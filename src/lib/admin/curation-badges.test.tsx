@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
-import { CURATION_BADGE_OPTIONS, highlightKeywords, isKnownCurationBadgeKey } from './curation-badges';
+import { CURATION_BADGE_OPTIONS, highlightKeywords, isKnownCurationBadgeKey, matchBadgeKeysFromText } from './curation-badges';
 
 // [관리자용 블로그 큐레이션 모달](2026-09-05 사용자 지시, Decision 021) 단위 테스트.
 // [뱃지 목록 정정 → 재정정](2026-09-06 사용자 지시): "룸/개별 공간 있음"을 room/
@@ -76,5 +76,69 @@ describe('highlightKeywords', () => {
   it('빈 문자열이면 그대로 반환한다(에러 없음)', () => {
     const { container } = render(<div>{highlightKeywords('')}</div>);
     expect(container.textContent).toBe('');
+  });
+
+  // [공백 무시 매칭](2026-09-07 개선사항3 2번): "아기의자", "아기 의자", "아 기 의 자"를
+  // 전부 동일하게 매칭할 것.
+  it('키워드 사이에 공백이 끼어 있어도 매칭한다', () => {
+    const { container } = render(<div>{highlightKeywords('아기 의자가 있어요')}</div>);
+    const marks = container.querySelectorAll('mark');
+    expect(Array.from(marks).map((m) => m.textContent)).toEqual(['아기 의자']);
+  });
+
+  it('키워드 글자마다 공백이 끼어 있어도(아 기 의 자) 매칭한다', () => {
+    const { container } = render(<div>{highlightKeywords('아 기 의 자 완비')}</div>);
+    const marks = container.querySelectorAll('mark');
+    expect(Array.from(marks).map((m) => m.textContent)).toEqual(['아 기 의 자']);
+  });
+
+  // [유의어 확장](2026-09-07 개선사항3 2번): "아기의자 ↔ 유아용 의자" 등.
+  it('유의어(유아용 의자)도 매칭한다', () => {
+    const { container } = render(<div>{highlightKeywords('유아용 의자가 준비돼 있어요')}</div>);
+    const marks = container.querySelectorAll('mark');
+    expect(Array.from(marks).map((m) => m.textContent)).toEqual(['유아용 의자']);
+  });
+
+  // [지역/지점명 동시 하이라이팅](2026-09-07 개선사항3 3번): 뱃지 키워드가 아닌 임의
+  // 키워드(스팟의 지역명 등)도 함께 하이라이트할 수 있어야 한다.
+  it('extraKeywords로 넘긴 지역명도 뱃지 키워드와 함께 하이라이트한다', () => {
+    const { container } = render(<div>{highlightKeywords('노원에 있는 주차 가능한 곳', ['노원'])}</div>);
+    const marks = container.querySelectorAll('mark');
+    expect(Array.from(marks).map((m) => m.textContent)).toEqual(['노원', '주차']);
+  });
+
+  it('extraKeywords도 공백 무시 매칭이 똑같이 적용된다', () => {
+    const { container } = render(<div>{highlightKeywords('노 원 맛집이에요', ['노원'])}</div>);
+    const marks = container.querySelectorAll('mark');
+    expect(Array.from(marks).map((m) => m.textContent)).toEqual(['노 원']);
+  });
+});
+
+// [키워드 하이라이팅에 따른 뱃지 자동 체크](2026-09-07 개선사항3 4번): "시스템이
+// 자동 체크해 둔 뱃지를 눈으로 빠르게 검수하고.. 간편하게 체크를 해제할 수 있는"
+// 세미오토 검수 — 자동 체크 대상 뱃지 판정 로직만 이 함수의 책임이고, 실제 체크
+// 해제 UX는 useSpotCurationForm/CurationBadgeForm이 담당한다.
+describe('matchBadgeKeysFromText', () => {
+  it('본문에서 매칭된 키워드에 해당하는 뱃지 키를 모두 반환한다', () => {
+    const result = matchBadgeKeysFromText('주차 가능하고 유모차도 반입되고 수유실도 있어요');
+    expect(result).toEqual(new Set(['parking', 'stroller', 'nursing_room']));
+  });
+
+  it('유의어/공백 변형으로 매칭돼도 같은 뱃지 키로 귀속된다', () => {
+    const result = matchBadgeKeysFromText('아 기 의 자랑 유아용 의자 둘 다 있어요');
+    expect(result).toEqual(new Set(['kids_chair']));
+  });
+
+  it('매칭이 없으면 빈 Set을 반환한다', () => {
+    expect(matchBadgeKeysFromText('평범한 문장입니다')).toEqual(new Set());
+  });
+
+  it('빈 문자열이면 빈 Set을 반환한다', () => {
+    expect(matchBadgeKeysFromText('')).toEqual(new Set());
+  });
+
+  it('예약필수처럼 더 구체적인 문구는 예약(가능) 대신 예약필수 뱃지로만 귀속된다', () => {
+    const result = matchBadgeKeysFromText('예약필수입니다');
+    expect(result).toEqual(new Set(['reservation_required']));
   });
 });

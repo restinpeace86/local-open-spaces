@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { buildSmartBlogQuery, extractSigunguCoreName } from './naver-blog-search';
+import { matchBadgeKeysFromText } from './curation-badges';
 
 // [All-in-One 모바일 큐레이션 워크벤치](2026-09-05 사용자 지시)를 만들면서
 // BlogCurationModal(작은 팝업)이 이미 갖고 있던 "블로그 검색 + 뱃지/노출 중분류
@@ -40,6 +42,11 @@ export type SpotForCuration = {
   name: string;
   address: string | null;
   service_category_id: string | null;
+  // [스마트 검색 쿼리 조합](2026-09-07 사용자 지시): "서울시 노원구라고 하면 상호명 +
+  // 노원 이런식으로" — 1차 검색 쿼리와 지역명 하이라이팅에 쓴다. 옵셔널로 둔 이유는
+  // 호출부(SpotCurationsPanel 등)가 아직 이 필드를 안 넘겨도 기존처럼 상호명만으로
+  // 동작해야 하기 때문(점진적 적용, 기존 호출부 깨짐 방지).
+  sigungu_name?: string | null;
 };
 
 // [블로그 큐레이션 전체 본문 보기](2026-09-05 사용자 지시): "가져온 내용자체도
@@ -64,6 +71,12 @@ export function useSpotCurationForm(spot: SpotForCuration) {
   const [activeTab, setActiveTab] = useState(0);
 
   const [existingCuration, setExistingCuration] = useState<SpotCurationItem | null>(null);
+  // [키워드 하이라이팅에 따른 뱃지 자동 체크](2026-09-07 개선사항3 4번): 기존
+  // 큐레이션 조회가 끝나기 전에 본문 로딩이 먼저 끝나 자동 체크가 기존 뱃지를
+  // 덮어써 버리는 경쟁 상태를 막기 위한 플래그(둘 다 비동기 fetch라 순서가
+  // 보장되지 않음).
+  const [hasCheckedExistingCuration, setHasCheckedExistingCuration] = useState(false);
+  const [hasAutoCheckedBadges, setHasAutoCheckedBadges] = useState(false);
   const [selectedBadges, setSelectedBadges] = useState<Set<string>>(new Set());
   const [serviceCategoryId, setServiceCategoryId] = useState(spot.service_category_id ?? '');
   const [isSaving, setIsSaving] = useState(false);
@@ -107,8 +120,12 @@ export function useSpotCurationForm(spot: SpotForCuration) {
   // [On-Demand](사용자 지시 원문): 모달/워크벤치를 여는 것 자체가 "버튼을 누른"
   // 시점 — 스팟이 바뀔 때마다(마운트 시 1회) 검색한다. 기존 큐레이션(재편집 시
   // 뱃지/블로그 URL 프리필용)도 함께 조회한다.
+  // [스마트 검색 쿼리 조합](2026-09-07 사용자 지시): 상호명만이 아니라
+  // buildSmartBlogQuery로 "상호명 + 시군구 핵심 지역명"을 1차 검색어로 쓴다.
   useEffect(() => {
-    runSearch(spot.name);
+    const smartQuery = buildSmartBlogQuery(spot.name, spot.sigungu_name);
+    setSearchQuery(smartQuery);
+    runSearch(smartQuery);
     fetch(`/api/admin/spot-curations?spot_id=${encodeURIComponent(spot.id)}`)
       .then(async (res) => {
         const data = await res.json();
@@ -122,7 +139,8 @@ export function useSpotCurationForm(spot: SpotForCuration) {
       .catch(() => {
         // 기존 큐레이션 조회 실패해도 신규 등록으로 계속 진행 가능하므로 화면을
         // 막지 않는다(제5장 제11조).
-      });
+      })
+      .finally(() => setHasCheckedExistingCuration(true));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spot.id]);
 
@@ -141,6 +159,10 @@ export function useSpotCurationForm(spot: SpotForCuration) {
         if (!res.ok) throw new Error(data.error ?? '본문을 가져오지 못했습니다.');
         setBodyByLink((prev) => ({ ...prev, [activeLink]: { text: data.text ?? null, isLoading: false, error: null } }));
       })
+      // 여기가 아니라 아래 별도 effect에서 자동 체크를 수행한다 — 기존 큐레이션
+      // 조회가 아직 안 끝난 시점(hasCheckedExistingCuration=false)에 본문이 먼저
+      // 도착할 수 있어(둘 다 비동기), setBodyByLink 반영 이후 그 최신 상태를 보고
+      // 판단해야 경쟁 상태 없이 정확하다.
       .catch((err) => {
         setBodyByLink((prev) => ({
           ...prev,
@@ -149,6 +171,22 @@ export function useSpotCurationForm(spot: SpotForCuration) {
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, blogItems]);
+
+  // [키워드 하이라이팅에 따른 뱃지 자동 체크](2026-09-07 개선사항3 4번): "블로그 본문
+  // 및 키워드 데이터를 기반으로 관련 뱃지가 1차로 자동 체크(Pre-check)되도록.. 관리자는
+  // 자동 체크해 둔 뱃지를 눈으로 빠르게 검수하고.. 간편하게 체크 해제". 신규 등록(기존
+  // 큐레이션 없음)일 때만, 그리고 딱 한 번만 자동 체크한다 — 기존 큐레이션을 수정하는
+  // 중이면 관리자가 이미 고른 뱃지를 덮어쓰지 않고, 매번 body 텍스트가 바뀔 때마다
+  // (탭 전환 등) 다시 자동 체크해 방금 관리자가 수동으로 해제한 뱃지를 되살리지도
+  // 않는다(딱 첫 로딩 1회만).
+  useEffect(() => {
+    if (!hasCheckedExistingCuration || existingCuration || hasAutoCheckedBadges) return;
+    const activeLink = blogItems?.[activeTab]?.link;
+    const text = activeLink ? bodyByLink[activeLink]?.text : null;
+    if (!text) return;
+    setSelectedBadges(matchBadgeKeysFromText(text));
+    setHasAutoCheckedBadges(true);
+  }, [hasCheckedExistingCuration, existingCuration, hasAutoCheckedBadges, activeTab, blogItems, bodyByLink]);
 
   // [블로그 자동검색 결과가 실제와 다를 때 수동 교체](2026-09-05 사용자 지시): "가져오는데
   // 네이버 블로그 관련도순 검색했을때 이거아니야.." — 네이버 검색 API의 관련도 순위가
@@ -236,6 +274,15 @@ export function useSpotCurationForm(spot: SpotForCuration) {
   const activeLink = blogItems?.[activeTab]?.link;
   const activeBody = activeLink ? bodyByLink[activeLink] : undefined;
 
+  // [지역/지점명 하이라이팅 + 미스매치 경고](2026-09-07 개선사항3 3번): "지역명이
+  // 불일치하는 블로그 슬롯에는 워닝 배지를 노출" — 사용자 지시대로 추가 크롤링 없이
+  // 이미 가져온 본문 텍스트만으로 판단한다. 본문이 아직 없거나(로딩/실패) 지역
+  // 키워드 자체가 없으면(sigungu_name 미제공) 판단 근거가 없어 경고하지 않는다.
+  const regionKeyword = extractSigunguCoreName(spot.sigungu_name);
+  const hasRegionMismatchWarning = Boolean(
+    regionKeyword && activeBody?.text && !activeBody.text.replace(/\s+/g, '').includes(regionKeyword)
+  );
+
   return {
     searchQuery,
     setSearchQuery,
@@ -243,6 +290,8 @@ export function useSpotCurationForm(spot: SpotForCuration) {
     setSortOption,
     runSearch,
     blogItems,
+    regionKeyword,
+    hasRegionMismatchWarning,
     hasRecentReview,
     hasNoResults,
     searchError,

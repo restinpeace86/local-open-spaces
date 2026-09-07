@@ -42,6 +42,7 @@ type WorkbenchSpot = {
   name: string;
   address: string | null;
   service_category_id: string | null;
+  sigungu_name?: string | null;
 };
 
 export function MobileCurationWorkbench({
@@ -232,6 +233,8 @@ export function MobileCurationWorkbench({
             onOverrideUrl={form.overrideActiveUrl}
             sortOption={form.sortOption}
             onSortOptionChange={form.setSortOption}
+            regionKeyword={form.regionKeyword}
+            hasRegionMismatchWarning={form.hasRegionMismatchWarning}
           />
         </section>
 

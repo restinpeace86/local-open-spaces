@@ -399,4 +399,129 @@ describe('BlogCurationModal', () => {
       expect(await screen.findByDisplayValue('기존 메모입니다')).toBeInTheDocument();
     });
   });
+
+  // [지능형 자가 치유 및 텍스트 정규화](2026-09-07 사용자 지시, implementation/todo.md
+  // 개선사항3): "서울시 노원구라고 하면 상호명 + 노원 이런식으로" 1차 검색 + "가져온
+  // 본문 데이터에 대하여 노원 이란 단어가 포함되어있는지 확인하고 노란색 마크" +
+  // "키워드 하이라이팅에 따른 뱃지 자동 체크".
+  describe('스마트 검색 쿼리 + 지역명 하이라이팅/경고 + 뱃지 자동 체크(개선사항3)', () => {
+    const SPOT_WITH_REGION = { ...SPOT, sigungu_name: '서울시 노원구' };
+
+    it('sigungu_name이 있으면 "상호명 + 시군구 핵심 지역명"으로 1차 검색한다', async () => {
+      const fetchMock = mockFetchByUrl({
+        blogSearch: { items: [makeBlogItem()], hasRecentReview: true, hasNoResults: false },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(
+        <BlogCurationModal
+          spot={SPOT_WITH_REGION}
+          serviceCategories={SERVICE_CATEGORIES}
+          onClose={vi.fn()}
+          onServiceCategoryUpdated={vi.fn()}
+        />
+      );
+
+      await waitFor(() => {
+        const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/blog-search'));
+        expect(call).toBeDefined();
+        expect(decodeURIComponent(call![0] as string)).toContain('query=행복키즈카페 노원');
+      });
+    });
+
+    it('본문에 지역명이 포함돼 있으면 함께 노란색으로 하이라이트되고 경고는 뜨지 않는다', async () => {
+      const fetchMock = mockFetchByUrl({
+        blogSearch: { items: [makeBlogItem()], hasRecentReview: true, hasNoResults: false },
+        blogBodyText: '노원에 있는 행복키즈카페 다녀왔어요. 주차도 편해요.',
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(
+        <BlogCurationModal
+          spot={SPOT_WITH_REGION}
+          serviceCategories={SERVICE_CATEGORIES}
+          onClose={vi.fn()}
+          onServiceCategoryUpdated={vi.fn()}
+        />
+      );
+
+      expect(await screen.findByText('노원')).toBeInTheDocument();
+      expect(screen.queryByText(/지역명을 찾지 못했습니다/)).not.toBeInTheDocument();
+    });
+
+    it('본문에 지역명이 없으면 미스매치 경고를 보여준다(추가 크롤링 없이 이미 가져온 본문만으로 판단)', async () => {
+      const fetchMock = mockFetchByUrl({
+        blogSearch: { items: [makeBlogItem()], hasRecentReview: true, hasNoResults: false },
+        blogBodyText: '분당에 있는 행복키즈카페 다녀왔어요.',
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(
+        <BlogCurationModal
+          spot={SPOT_WITH_REGION}
+          serviceCategories={SERVICE_CATEGORIES}
+          onClose={vi.fn()}
+          onServiceCategoryUpdated={vi.fn()}
+        />
+      );
+
+      expect(await screen.findByText(/"노원" 지역명을 찾지 못했습니다/)).toBeInTheDocument();
+      // 이 경고 API 호출 자체가 추가 크롤링 없이 이미 받아온 blog-body 응답 하나로만
+      // 판단됐는지 확인 — blog-body 호출은 활성 탭 1건에 대해서만 일어난다.
+      expect(fetchMock.mock.calls.filter((c) => (c[0] as string).includes('/blog-body'))).toHaveLength(1);
+    });
+
+    it('신규 등록(기존 큐레이션 없음)일 때 본문에서 매칭된 키워드에 해당하는 뱃지가 자동 체크된다', async () => {
+      const fetchMock = mockFetchByUrl({
+        blogSearch: { items: [makeBlogItem()], hasRecentReview: true, hasNoResults: false },
+        existingCuration: null,
+        blogBodyText: '주차 가능하고 수유실도 있어요.',
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(
+        <BlogCurationModal
+          spot={SPOT_WITH_REGION}
+          serviceCategories={SERVICE_CATEGORIES}
+          onClose={vi.fn()}
+          onServiceCategoryUpdated={vi.fn()}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByLabelText('주차 완비')).toBeChecked();
+        expect(screen.getByLabelText('수유실 있음')).toBeChecked();
+      });
+      expect(screen.getByLabelText('유모차 가능')).not.toBeChecked();
+    });
+
+    it('기존 큐레이션을 수정하는 경우, 이미 저장된 뱃지 선택을 본문 자동 체크가 덮어쓰지 않는다', async () => {
+      const fetchMock = mockFetchByUrl({
+        blogSearch: { items: [makeBlogItem()], hasRecentReview: true, hasNoResults: false },
+        existingCuration: {
+          id: 'curation-1',
+          spot_id: SPOT_WITH_REGION.id,
+          blog_url_1: null,
+          blog_url_2: null,
+          blog_url_3: null,
+          curation_badges: ['stroller'],
+          curation_note: null,
+        },
+        blogBodyText: '주차 가능하고 수유실도 있어요.',
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(
+        <BlogCurationModal
+          spot={SPOT_WITH_REGION}
+          serviceCategories={SERVICE_CATEGORIES}
+          onClose={vi.fn()}
+          onServiceCategoryUpdated={vi.fn()}
+        />
+      );
+
+      await waitFor(() => {
+        const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/blog-body'));
+        expect(call).toBeDefined();
+      });
+      await waitFor(() => expect(screen.getByLabelText('유모차 가능')).toBeChecked());
+      expect(screen.getByLabelText('주차 완비')).not.toBeChecked();
+      expect(screen.getByLabelText('수유실 있음')).not.toBeChecked();
+    });
+  });
 });
