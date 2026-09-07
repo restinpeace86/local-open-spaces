@@ -84,10 +84,29 @@ const RESTAURANT_CONFIG: CurationCategoryConfig = {
 // 이 config가 활성화되면서 기존 17건의 "키즈카페 / 실내놀이터" 큐레이션의
 // curation_badges는 식당용 값이 섞여 있어 사용자 지시대로 전부 초기화했다
 // (별도 DB 마이그레이션, scripts/migrations/2026-09-07-reset-kidscafe-badges.sql).
+// [뱃지 확장](2026-09-08 사용자 지시): "미끄럼틀 추가해.. 체험존 같은것도..
+// 드로잉존이나 프로그램 선택가능한거.. 카페테리아는 키워드로.. 공공인지
+// 민간인지 뱃지도.. 연령대(영유아 36개월/미취학 7세이하/취학 초등학생)
+// 체크할수있는거" — 7개 신규 뱃지를 추가한다:
+// - kc_slide(미끄럼틀): 기존엔 kc_ball_pool_jungle 키워드에 '미끄럼틀'이 섞여
+//   있어 별도로 체크할 수 없었다. 전용 뱃지로 분리하고 그 키워드는 이동한다.
+// - kc_experience_zone(체험존/프로그램존): 사용자가 예로 든 "레인보우스타"처럼
+//   물감/미술/오감놀이 등 프로그램형 존이 시설 중심 키즈존과 별도로 있는
+//   경우를 표시한다.
+// - kc_food(식사 및 간식 판매) 키워드에 '카페테리아' 추가 — 신규 뱃지가
+//   아니라 기존 식음료 뱃지의 키워드 확장이다("원래 키즈카페가 음료팔기는
+//   하는데" — 이미 있는 뱃지 범위와 일치한다는 사용자 판단을 그대로 반영).
+// - kc_public_operated/kc_private_operated(공공/민간 운영): "공공/민간" 그룹.
+//   기존 "운영"(예약 관련) 그룹과 헷갈리지 않도록 그룹명을 분리했다.
+// - kc_age_infant/kc_age_preschool/kc_age_school(연령대): 체크박스 구조 자체가
+//   이미 복수 선택 가능이라(다른 뱃지들처럼 curation_badges 배열에 여러 키를
+//   같이 저장) 별도 UI 변경 없이 세 뱃지를 추가하는 것만으로 "복수선택
+//   가능"이 충족된다. 사용자가 확인한 경계값 그대로: 영유아=36개월(만 3세)
+//   이하, 미취학=7세 이하, 취학=초등학생.
 const KIDS_CAFE_CONFIG: CurationCategoryConfig = {
   categoryId: 'kids_cafe',
   exposureCategoryNames: ['키즈카페 / 실내놀이터'],
-  badgeGroups: ['이동/편의', '놀이/시설', '부대시설/보호자', '운영'],
+  badgeGroups: ['이동/편의', '놀이/시설', '부대시설/보호자', '운영', '공공/민간', '연령대'],
   badgeOptions: [
     { key: 'kc_parking', label: '주차 완비', group: '이동/편의' },
     { key: 'kc_stroller_parking', label: '유모차 보관/가능', group: '이동/편의' },
@@ -95,13 +114,20 @@ const KIDS_CAFE_CONFIG: CurationCategoryConfig = {
     { key: 'kc_diaper_table', label: '기저귀 갈이대', group: '이동/편의' },
     { key: 'kc_trampoline', label: '트램폴린/방방', group: '놀이/시설' },
     { key: 'kc_ball_pool_jungle', label: '볼풀장/정글짐', group: '놀이/시설' },
+    { key: 'kc_slide', label: '미끄럼틀', group: '놀이/시설' },
     { key: 'kc_hinoki_sandbox', label: '편백존/모래놀이', group: '놀이/시설' },
     { key: 'kc_baby_zone', label: '베이비존(영유아 전용)', group: '놀이/시설' },
+    { key: 'kc_experience_zone', label: '체험존/프로그램존(미술·오감놀이 등)', group: '놀이/시설' },
     { key: 'kc_parent_relax', label: '부모 쉼터/안마의자', group: '부대시설/보호자' },
     { key: 'kc_party_room', label: '파티룸/개별 룸', group: '부대시설/보호자' },
     { key: 'kc_food', label: '식사 및 간식 판매', group: '부대시설/보호자' },
     { key: 'kc_reservation_required', label: '예약 필수', group: '운영' },
     { key: 'kc_reservation_possible', label: '예약 가능', group: '운영' },
+    { key: 'kc_public_operated', label: '공공 운영', group: '공공/민간' },
+    { key: 'kc_private_operated', label: '민간 운영', group: '공공/민간' },
+    { key: 'kc_age_infant', label: '영유아(0~36개월)', group: '연령대' },
+    { key: 'kc_age_preschool', label: '미취학(7세 이하)', group: '연령대' },
+    { key: 'kc_age_school', label: '취학(초등학생)', group: '연령대' },
   ],
   keywordGroups: {
     kc_parking: ['주차', '주차장', '파킹', '차댈곳', '발렛'],
@@ -109,14 +135,21 @@ const KIDS_CAFE_CONFIG: CurationCategoryConfig = {
     kc_nursing_room: ['수유실', '모유수유'],
     kc_diaper_table: ['기저귀', '갈이대', '기저귀존'],
     kc_trampoline: ['트램폴린', '방방', '방방이', '점핑존', '점프'],
-    kc_ball_pool_jungle: ['볼풀', '볼풀장', '정글짐', '클라이밍', '미끄럼틀'],
+    kc_ball_pool_jungle: ['볼풀', '볼풀장', '정글짐', '클라이밍'],
+    kc_slide: ['미끄럼틀', '슬라이드'],
     kc_hinoki_sandbox: ['편백', '편백존', '편백나무', '모래놀이', '모래존'],
     kc_baby_zone: ['베이비존', '영유아존', '아기들노는곳', '돌쟁이'],
+    kc_experience_zone: ['체험존', '드로잉존', '프로그램존', '미술놀이', '오감놀이', '창의미술', '아트존'],
     kc_parent_relax: ['안마의자', '릴렉스존', '부모쉼터', '안마기', '안마'],
     kc_party_room: ['파티룸', '대관', '생일파티', '단독룸', '프라이빗룸'],
-    kc_food: ['식사', '떡볶이', '주먹밥', '식음료', '음식맛집', '매점'],
+    kc_food: ['식사', '떡볶이', '주먹밥', '식음료', '음식맛집', '매점', '카페테리아'],
     kc_reservation_required: ['예약필수', '사전예약필수', '회차별예약'],
     kc_reservation_possible: ['예약', '네이버예약', '전화예약'],
+    kc_public_operated: ['공공운영', '국공립', '시립', '구립', '공립'],
+    kc_private_operated: ['민간운영', '사설', '프랜차이즈'],
+    kc_age_infant: ['영유아', '36개월', '만3세'],
+    kc_age_preschool: ['미취학', '유치원생', '7세이하'],
+    kc_age_school: ['취학아동', '초등학생', '초등부'],
   },
 };
 

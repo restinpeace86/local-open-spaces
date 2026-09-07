@@ -94,8 +94,60 @@ describe('kids_cafe 카테고리 뱃지 — 식당과 완전히 독립적', () =
     expect(options.map((o) => o.label)).not.toContain('좌식/온돌 있음'); // 식당 전용 항목은 없음
   });
 
-  it('4개 그룹(이동/편의, 놀이/시설, 부대시설/보호자, 운영)으로 나뉜다', () => {
-    expect(getBadgeGroupsForCategory('kids_cafe')).toEqual(['이동/편의', '놀이/시설', '부대시설/보호자', '운영']);
+  it('6개 그룹(이동/편의, 놀이/시설, 부대시설/보호자, 운영, 공공/민간, 연령대)으로 나뉜다', () => {
+    expect(getBadgeGroupsForCategory('kids_cafe')).toEqual([
+      '이동/편의',
+      '놀이/시설',
+      '부대시설/보호자',
+      '운영',
+      '공공/민간',
+      '연령대',
+    ]);
+  });
+
+  // [뱃지 확장](2026-09-08 사용자 지시): "미끄럼틀 추가해.. 체험존 같은것도..
+  // 공공인지 민간인지 뱃지도.. 연령대.. 체크할수있는거"
+  it('신규 뱃지(미끄럼틀/체험존/공공·민간/연령대 3종)가 정확히 존재한다', () => {
+    const options = getBadgeOptionsForCategory('kids_cafe');
+    expect(options.map((o) => o.label)).toEqual(
+      expect.arrayContaining([
+        '미끄럼틀',
+        '체험존/프로그램존(미술·오감놀이 등)',
+        '공공 운영',
+        '민간 운영',
+        '영유아(0~36개월)',
+        '미취학(7세 이하)',
+        '취학(초등학생)',
+      ])
+    );
+    expect(options).toHaveLength(20);
+  });
+
+  it('미끄럼틀은 볼풀장/정글짐과 별개의 전용 뱃지로 매칭된다(예전엔 볼풀장 키워드에 섞여 있었음)', () => {
+    const result = matchBadgeKeysFromText('미끄럼틀이랑 볼풀장이 있어요', 'kids_cafe');
+    expect(result).toEqual(new Set(['kc_slide', 'kc_ball_pool_jungle']));
+  });
+
+  it('체험존/드로잉존 키워드는 kc_experience_zone으로 매칭된다', () => {
+    const result = matchBadgeKeysFromText('물감 놀이하는 드로잉존이 따로 있어요', 'kids_cafe');
+    expect(result).toEqual(new Set(['kc_experience_zone']));
+  });
+
+  it('카페테리아는 기존 식사/간식 판매 뱃지(kc_food)로 매칭된다(신규 뱃지 아님)', () => {
+    const result = matchBadgeKeysFromText('카페테리아에서 간단히 먹을 수 있어요', 'kids_cafe');
+    expect(result).toEqual(new Set(['kc_food']));
+  });
+
+  it('공공/민간 운영 키워드가 각각 다른 뱃지로 매칭된다', () => {
+    expect(matchBadgeKeysFromText('구립으로 운영되는 곳이에요', 'kids_cafe')).toEqual(new Set(['kc_public_operated']));
+    expect(matchBadgeKeysFromText('사설 프랜차이즈 키즈카페입니다', 'kids_cafe')).toEqual(
+      new Set(['kc_private_operated'])
+    );
+  });
+
+  it('연령대 3종(영유아/미취학/취학)은 동시에 여러 개가 매칭될 수 있다(복수 선택)', () => {
+    const result = matchBadgeKeysFromText('영유아부터 미취학, 초등학생까지 다 즐길 수 있어요', 'kids_cafe');
+    expect(result).toEqual(new Set(['kc_age_infant', 'kc_age_preschool', 'kc_age_school']));
   });
 });
 
