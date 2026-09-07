@@ -72,41 +72,99 @@
 
 ### 2. 카테고리별 설정 파일(Config / JSON) 구조 정의
 - 백엔드 코드나 프론트엔드 UI 내부에 특정 카테고리의 뱃지나 노출 중분류를 하드코딩하지 말고, 아래와 같은 **카테고리별 독립 룰셋(Config)** 구조로 분리할 것.
+  예시..
   ```json
-  [
-    {
-      "category_id": "restaurant",
-      "exposure_categories": ["키즈친화 식당", "일반 식당"],
-      "badges": [
-        { "id": "reservation_required", "name": "예약 필수" },
-        { "id": "parking", "name": "주차 완비" },
-        { "id": "baby_chair", "name": "아기의자" },
-        { "id": "nursing_room", "name": "수유실" },
-        { "id": "playroom", "name": "놀이방" }
-      ],
-      "keywords_mapping": {
-        "baby_chair": ["아기의자", "유아용 의자", "아기 의자"],
-        "playroom": ["놀이방", "키즈존", "놀이공간"],
-        "parking": ["주차", "주차장", "차댈곳", "발렛"]
+[
+  {
+    "category_id": "restaurant",
+    "exposure_categories": ["키즈친화 식당", "일반 식당"],
+    "badge_groups": [
+      {
+        "section_title": "이동/편의",
+        "badges": [
+          { "id": "parking", "name": "주차 완비", "keywords": ["주차", "주차장", "차댈곳", "발렛"] },
+          { "id": "stroller", "name": "유모차 가능", "keywords": ["유모차", "유모차 반입", "유모차 동반"] },
+          { "id": "nursing_room", "name": "수유실 있음", "keywords": ["수유실", "모유수유"] },
+          { "id": "diaper_table", "name": "기저귀 갈이대", "keywords": ["기저귀갈이대", "기저귀 교환", "기저귀대"] }
+        ]
+      },
+      {
+        "section_title": "식사/아기",
+        "badges": [
+          { "id": "baby_chair", "name": "아기의자", "keywords": ["아기의자", "유아용 의자", "아기 의자"] },
+          { "id": "baby_tableware", "name": "유아 식기", "keywords": ["유아 식기", "아기 식기", "유아용 식기", "아이 식판"] },
+          { "id": "kids_menu", "name": "키즈 메뉴", "keywords": ["키즈 메뉴", "어린이 메뉴", "아이 메뉴"] },
+          { "id": "floor_seat", "name": "좌식/온돌 있음", "keywords": ["좌식", "온돌", "마루", "좌식 테이블"] },
+          { "id": "private_room", "name": "룸/개별 공간 있음", "keywords": ["룸", "개별룸", "단독룸", "프라이빗 룸", "개별 공간"] }
+        ]
+      },
+      {
+        "section_title": "공간/놀이",
+        "badges": [
+          { "id": "kids_zone", "name": "키즈존/놀이방", "keywords": ["놀이방", "키즈존", "놀이공간", "오락실"] },
+          { "id": "outdoor", "name": "야외 마당/테라스", "keywords": ["마당", "테라스", "야외", "루프탑", "정원"] }
+        ]
+      },
+      {
+        "section_title": "운영",
+        "badges": [
+          { "id": "reservation_required", "name": "예약 필수", "keywords": ["예약 필수", "사전 예약 필수"] },
+          { "id": "reservation_available", "name": "예약 가능", "keywords": ["예약 가능", "네이버 예약", "전화 예약"] }
+        ]
       }
-    },
-    {
-      "category_id": "kids_cafe",
-      "exposure_categories": ["대형 키즈카페", "프리미엄 키즈카페", "실내 놀이터"],
-      "badges": [
-        { "id": "reservation_required", "name": "예약 필수" },
-        { "id": "parking", "name": "주차 완비" },
-        { "id": "trampoline", "name": "트램폴린" },
-        { "id": "ball_pool", "name": "볼풀장" },
-        { "id": "baby_zone", "name": "베이비존" }
-      ],
-      "keywords_mapping": {
-        "parking": ["주차", "주차장", "차댈곳"],
-        "trampoline": ["트램폴린", "방방", "점핑존"],
-        "ball_pool": ["볼풀", "볼풀장"]
-      }
-    }
-  ]
+    ]
+  },
+  {
+     "category_id": "kids_cafe",
+     "exposure_categories": ["대형 키즈카페", "프리미엄 키즈카페", "실내 놀이터"],
+     "badge_groups": [
+       {
+         "section_title": "이동/편의",
+         "badges": [
+           { "id": "parking", "name": "주차 완비", "keywords": ["주차", "주차장", "차댈곳", "발렛"] },
+           { "id": "stroller_parking", "name": "유모차 보관/가능", "keywords": ["유모차", "유모차 보관", "유모차 파킹"] },
+           { "id": "nursing_room", "name": "수유실 있음", "keywords": ["수유실", "모유수유"] },
+           { "id": "diaper_table", "name": "기저귀 갈이대", "keywords": ["기저귀갈이대", "기저귀 교환", "기저귀대"] }
+         ]
+       },
+       {
+         "section_title": "놀이/시설",
+         "badges": [
+           { "id": "trampoline", "name": "트램폴린/방방", "keywords": ["트램폴린", "방방", "방방이", "점핑존", "점프"] },
+           { "id": "ball_pool_jungle", "name": "볼풀장/정글짐", "keywords": ["볼풀", "볼풀장", "정글짐", "클라이밍", "미끄럼틀"] },
+           { "id": "hinoki_sandbox", "name": "편백존/모래놀이", "keywords": ["편백", "편백존", "편백나무", "모래놀이", "모래존"] },
+           { "id": "baby_zone", "name": "베이비존(영유아 전용)", "keywords": ["베이비존", "영유아존", "아기들 노는 곳", "돌쟁이"] }
+         ]
+       },
+       {
+         "section_title": "부대시설/보호자",
+         "badges": [
+           { "id": "parent_relax", "name": "부모 쉼터/안마의자", "keywords": ["안마의자", "릴렉스존", "부모 쉼터", "안마기", "안마"] },
+           { "id": "party_room", "name": "파티룸/개별 룸", "keywords": ["파티룸", "대관", "생일파티", "단독룸", "프라이빗 룸"] },
+           { "id": "kids_cafe_food", "name": "식사 및 간식 판매", "keywords": ["식사", "떡볶이", "주먹밥", "식음료", "음식 맛집", "매점"] }
+         ]
+       },
+       {
+         "section_title": "운영",
+         "badges": [
+           { "id": "reservation_required", "name": "예약 필수", "keywords": ["예약 필수", "사전 예약 필수", "회차별 예약"] },
+           { "id": "reservation_available", "name": "예약 가능", "keywords": ["예약 가능", "네이버 예약", "전화 예약"] }
+         ]
+       }
+     ]
+   }
+]
+
+
+. 프론트엔드: 콤보박스 연동 실시간 동적 하이라이팅 및 뱃지 스위칭 UI
+최초 모달 오픈 시: 공공데이터 원본 기반의 디폴트 카테고리(예: 식당) 기준 뱃지 체크박스와, 해당 keywords_mapping에 맞춰 노란색 배경(<mark> 등)으로 하이라이트된 블로그 텍스트를 먼저 렌더링할 것.
+
+콤보박스 변경 시 (클라이언트 사이드 동적 처리):
+
+관리자가 모달 내의 '노출 중분류' 콤보박스에서 다른 카테고리를 선택하는 순간, 서버에 API를 재요청(Refetching)하지 않고, 브라우저에 이미 로드된 블로그 원문 텍스트에 대해 새로 선택된 카테고리의 keywords_mapping 규칙으로 노란색 하이라이트를 즉시 지우고 다시 렌더링할 것.
+
+동시에, 하단의 [뱃지 체크박스 목록]도 선택한 카테고리의 전용 뱃지들로 실시간 교체될 것.
+
 
 ---
 [참고사항]
