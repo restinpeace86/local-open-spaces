@@ -91,9 +91,12 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: '노출 중분류(service_category_id)를 선택해주세요.' }, { status: 400 });
       }
 
+      // [수정/적재일이 안 바뀌는 문제 수정](2026-09-07 사용자 지시): "오늘 중분류
+      // 옮긴게 있는데 옮겨도 수정적재일이 전혀 바뀌지 않는거 같네" — open_spaces에는
+      // updated_at 자동 갱신 트리거가 없어(실측 확인) 명시적으로 채워야 한다.
       const { error, count } = await admin
         .from('open_spaces')
-        .update({ service_category_id: serviceCategoryId }, { count: 'exact' })
+        .update({ service_category_id: serviceCategoryId, updated_at: new Date().toISOString() }, { count: 'exact' })
         .in('id', ids);
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
@@ -116,7 +119,9 @@ export async function POST(request: NextRequest) {
     // (실측: category_min='어린이놀이터' 57,692건) 갱신된 행 전체를 응답 페이로드로
     // 돌려받으면 불필요하게 무겁다. 건수만 필요하다.
     const { error, count } = await applyScope(
-      admin.from('open_spaces').update({ service_category_id: serviceCategoryId }, { count: 'exact' }),
+      admin
+        .from('open_spaces')
+        .update({ service_category_id: serviceCategoryId, updated_at: new Date().toISOString() }, { count: 'exact' }),
       categoryMin,
       onlyUnmapped
     );
