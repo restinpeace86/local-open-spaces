@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { splitSearchTokens } from '@/lib/search/keyword-search';
 
 // [개편] /admin/data-grid: open_spaces/events/raw_ingest_data 3개 탭을 지원하도록 확장.
@@ -327,7 +328,16 @@ async function queryOpenSpaces(supabase: Ctx, searchParams: URLSearchParams, pag
     // 작아 이 방식으로 충분히 빠르다 — 수천 건 이상으로 늘어나면 JOIN 기반 RPC로
     // 바꿔야 할 수 있다는 한계를 감수한다(비슷한 성격의 트레이드오프가 이미
     // count:'estimated' 등에도 있음).
-    const { data: curatedRows, error: curatedError } = await supabase.from('spot_curations').select('spot_id');
+    //
+    // [필터가 아무 효과 없던 버그 수정](2026-09-07 사용자 지시): "놀이방식당
+    // 기준으로 큐레이션 아직없는행만 보기 했을때 11건인가 조금만 나와야되는데
+    // 왜 95건 다나오지?" — spot_curations는 RLS가 켜져 있고 정책이 하나도
+    // 없어(service_role 전용 테이블, /api/admin/spot-curations/route.ts와
+    // 동일 설계) 이 라우트가 쓰던 익명/쿠키 기반 클라이언트(`supabase`)로는
+    // 조회 결과가 항상 0건이라 제외 대상이 없어 필터가 통째로 무효화되고
+    // 있었다 — service_role 클라이언트로 바꿔 실제 큐레이션 목록을 읽는다.
+    const admin = createAdminClient();
+    const { data: curatedRows, error: curatedError } = await admin.from('spot_curations').select('spot_id');
     if (curatedError) throw new Error(curatedError.message);
     const curatedIds = (curatedRows ?? []).map((r) => r.spot_id).filter((id): id is string => Boolean(id));
     if (curatedIds.length > 0) query = query.not('id', 'in', `(${curatedIds.join(',')})`);
