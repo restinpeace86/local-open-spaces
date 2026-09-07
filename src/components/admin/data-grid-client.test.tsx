@@ -1,6 +1,73 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { AdminDataGridClient } from './data-grid-client';
+import { AdminDataGridClient, AdminOpenSpaceRow, AdminEventRow } from './data-grid-client';
+
+function buildOpenSpaceRow(overrides: Partial<AdminOpenSpaceRow> = {}): AdminOpenSpaceRow {
+  return {
+    id: 'row-1',
+    external_id: 'ext-1',
+    source_type: 'TEST_SOURCE',
+    source: 'test',
+    name: '테스트 공간',
+    category: 'CULTURE',
+    category_min: null,
+    category_min_source: null,
+    service_category_id: null,
+    address: '서울시 종로구',
+    location: null,
+    location_precision: 'EXACT',
+    is_free: true,
+    operating_hours: null,
+    info_url: null,
+    is_kids_friendly: false,
+    has_parking: false,
+    stroller_accessible: false,
+    facility_type: 'ETC',
+    target_age_group: null,
+    raw_data: {},
+    sigungu_name: null,
+    created_at: null,
+    updated_at: null,
+    ...overrides,
+  };
+}
+
+function buildEventRow(overrides: Partial<AdminEventRow> = {}): AdminEventRow {
+  return {
+    id: 'ev-1',
+    external_id: 'ev-ext-1',
+    source: 'test',
+    title: '테스트 행사',
+    event_type: 'PERFORMANCE_FESTIVAL',
+    category_maj: null,
+    category_min: null,
+    category_min_source: null,
+    target_audience: null,
+    target_audience_source: null,
+    venue_name: '테스트 장소',
+    sigungu_name: '서울시 종로구',
+    start_date: '2026-01-01',
+    end_date: '2026-01-02',
+    location: null,
+    location_precision: 'EXACT',
+    is_reservation_required: false,
+    reservation_url: null,
+    reservation_start_date: null,
+    reservation_end_date: null,
+    is_free: true,
+    thumbnail_url: null,
+    is_kids_friendly: false,
+    has_parking: false,
+    stroller_accessible: false,
+    facility_type: 'ETC',
+    target_age_group: null,
+    booking_status: null,
+    is_active: true,
+    raw_data: {},
+    created_at: null,
+    ...overrides,
+  };
+}
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: () => {}, refresh: () => {} }),
@@ -200,5 +267,173 @@ describe('AdminDataGridClient — 노출 중분류 미지정만 보기', () => {
     fireEvent.click(screen.getByText('events (행사·체험)'));
 
     expect(screen.queryByLabelText('노출 중분류(service_category_id)가 아직 없는 행만 보기')).not.toBeInTheDocument();
+  });
+});
+
+// [관리자 화면 목록 컬럼 정리](2026-09-07 사용자 지시): "1. ID와 출처는 비슷하니
+// 출처 컬럼만 남겨 2. 원천 대/중분류 컬럼은 안보이게 해 3. 제목/명칭 컬럼과
+// 장소/시설명 컬럼도 동일해.. 제목/명칭 컬럼만 남겨 4. 요금, 접수상태 컬럼은
+// 안보이게 해" — open_spaces 전용(events는 그대로 유지).
+describe('AdminDataGridClient — open_spaces 목록 컬럼 정리(2026-09-07)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('open_spaces 탭에는 ID/원천 대·중분류/장소·시설명(제목과 중복)/요금/접수상태 컬럼이 없다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ rows: [buildOpenSpaceRow({ raw_data: { MAXCLASSNM: '대', MINCLASSNM: '중', SVCSTATNM: '접수중' } })], total: 1 }),
+        } as Response)
+      )
+    );
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+
+    await screen.findByText('테스트 공간');
+    expect(screen.queryByText('ID')).not.toBeInTheDocument();
+    expect(screen.queryByText('원천 대/중분류')).not.toBeInTheDocument();
+    expect(screen.queryByText('장소/시설명')).not.toBeInTheDocument();
+    expect(screen.queryByText('요금')).not.toBeInTheDocument();
+    expect(screen.queryByText('접수상태')).not.toBeInTheDocument();
+    // 제목/명칭(테스트 공간)은 한 번만 렌더링된다 — 장소/시설명 컬럼이 없어졌으므로.
+    expect(screen.getAllByText('테스트 공간')).toHaveLength(1);
+    expect(screen.getByText('출처')).toBeInTheDocument();
+    expect(screen.getByText('제목/명칭')).toBeInTheDocument();
+  });
+
+  it('events 탭에는 컬럼 정리 영향 없이 ID/원천 대·중분류/장소·시설명/요금/접수상태가 그대로 보인다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ rows: [buildEventRow({ raw_data: { SVCSTATNM: '접수중' } })], total: 1 }),
+        } as Response)
+      )
+    );
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+    fireEvent.click(screen.getByText('events (행사·체험)'));
+    fireEvent.click(screen.getByText('📥 불러오기'));
+
+    await screen.findByText('테스트 행사');
+    expect(screen.getByText('ID')).toBeInTheDocument();
+    expect(screen.getByText('원천 대/중분류')).toBeInTheDocument();
+    expect(screen.getByText('장소/시설명')).toBeInTheDocument();
+    expect(screen.getByText('요금')).toBeInTheDocument();
+    expect(screen.getByText('접수상태')).toBeInTheDocument();
+    expect(screen.getByText('테스트 장소')).toBeInTheDocument(); // venue_name, title과 다른 값
+  });
+});
+
+// [open_spaces 목록 일괄 편집](2026-09-07 사용자 지시): "5. 리스트 앞에 체크박스
+// 하나 만들고 체크 박스 선택된 것들에 대하여 표준 중분류랑 노출 중분류
+// 일괄적으로 수정 가능하도록도 기능만들어줘"
+describe('AdminDataGridClient — open_spaces 목록 일괄 편집(2026-09-07)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function mockFetch(rows: AdminOpenSpaceRow[]) {
+    return vi.fn((url: string, _init?: RequestInit) => {
+      if (url.includes('/api/admin/data-grid')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ rows, total: rows.length }) } as Response);
+      }
+      if (url.includes('/api/admin/service-categories')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ items: [{ id: 'svc-1', parent_category: '키즈/놀이시설', category_name: '키즈카페 / 실내놀이터' }] }),
+        } as Response);
+      }
+      if (url.includes('/api/admin/data-grid/category-min')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ updated_count: 2 }) } as Response);
+      }
+      if (url.includes('/api/admin/open-spaces/bulk-category-mapping')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ updated_count: 2 }) } as Response);
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+  }
+
+  it('events 탭에는 체크박스 컬럼이 없다', async () => {
+    vi.stubGlobal('fetch', mockFetch([buildOpenSpaceRow()]));
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+    fireEvent.click(screen.getByText('events (행사·체험)'));
+    fireEvent.click(screen.getByText('📥 불러오기'));
+
+    await waitFor(() => expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument());
+    expect(screen.queryByLabelText('이 페이지 전체 선택')).not.toBeInTheDocument();
+  });
+
+  it('open_spaces 탭에서 행 체크박스를 선택하면 일괄 편집 바가 나타난다', async () => {
+    vi.stubGlobal('fetch', mockFetch([buildOpenSpaceRow({ id: 'row-1', name: '스팟A' })]));
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+
+    await screen.findByText('스팟A');
+    expect(screen.queryByText('1건 선택됨')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('스팟A 선택'));
+
+    expect(await screen.findByText('1건 선택됨')).toBeInTheDocument();
+  });
+
+  it('전체 선택 체크박스로 현재 페이지의 모든 행을 한 번에 선택/해제한다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      mockFetch([buildOpenSpaceRow({ id: 'row-1', name: '스팟A' }), buildOpenSpaceRow({ id: 'row-2', name: '스팟B' })])
+    );
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+
+    await screen.findByText('스팟A');
+    fireEvent.click(screen.getByLabelText('이 페이지 전체 선택'));
+    expect(await screen.findByText('2건 선택됨')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('이 페이지 전체 선택'));
+    expect(screen.queryByText('2건 선택됨')).not.toBeInTheDocument();
+  });
+
+  it('표준 중분류와 노출 중분류를 골라 일괄 적용하면 두 API를 선택된 id 목록으로 호출한다', async () => {
+    const fetchMock = mockFetch([
+      buildOpenSpaceRow({ id: 'row-1', name: '스팟A' }),
+      buildOpenSpaceRow({ id: 'row-2', name: '스팟B' }),
+    ]);
+    vi.stubGlobal('fetch', fetchMock);
+    render(<AdminDataGridClient filterOptions={{ ...EMPTY_FILTER_OPTIONS, open_spaces: { ...EMPTY_FILTER_OPTIONS.open_spaces, categoryMins: ['키즈카페'] } }} />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+
+    await screen.findByText('스팟A');
+    fireEvent.click(screen.getByLabelText('이 페이지 전체 선택'));
+    await screen.findByText('2건 선택됨');
+    // 체크 시 지연 로딩되는 서비스 카테고리 옵션이 실제로 채워질 때까지 기다린다 —
+    // 옵션이 없는 상태에서 change를 쏘면 값이 반영되지 않는다.
+    await waitFor(() => {
+      const select = screen.getByDisplayValue('노출 중분류 선택...') as HTMLSelectElement;
+      expect(select.options.length).toBeGreaterThan(1);
+    });
+
+    fireEvent.change(screen.getByDisplayValue('표준 중분류 선택...'), { target: { value: '키즈카페' } });
+    fireEvent.change(screen.getByDisplayValue('노출 중분류 선택...'), { target: { value: 'svc-1' } });
+    fireEvent.click(screen.getByText('일괄 적용'));
+
+    await waitFor(() => {
+      const categoryMinCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/data-grid/category-min'));
+      expect(categoryMinCall).toBeDefined();
+      expect(JSON.parse((categoryMinCall![1] as RequestInit).body as string)).toEqual({
+        table: 'open_spaces',
+        ids: ['row-1', 'row-2'],
+        category_min: '키즈카페',
+      });
+      const mappingCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/bulk-category-mapping'));
+      expect(mappingCall).toBeDefined();
+      expect(JSON.parse((mappingCall![1] as RequestInit).body as string)).toEqual({
+        ids: ['row-1', 'row-2'],
+        service_category_id: 'svc-1',
+      });
+    });
+    expect(await screen.findByText(/적용했습니다/)).toBeInTheDocument();
   });
 });

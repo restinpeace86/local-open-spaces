@@ -718,6 +718,14 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedRow, setSelectedRow] = useState<AdminRow | null>(null);
+  // [open_spaces 목록 일괄 편집](2026-09-07 사용자 지시): "리스트 앞에 체크박스
+  // 하나 만들고 체크 박스 선택된 것들에 대하여 표준 중분류랑 노출 중분류 일괄적으로
+  // 수정 가능하도록" — open_spaces 탭 전용(다른 탭엔 체크박스 자체가 없음).
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
+  const [bulkCategoryMin, setBulkCategoryMin] = useState('');
+  const [bulkServiceCategoryId, setBulkServiceCategoryId] = useState('');
+  const [isBulkApplying, setIsBulkApplying] = useState(false);
+  const [bulkResultMessage, setBulkResultMessage] = useState<string | null>(null);
   // [관리자 페이지 성능 최적화](2026-08-30 사용자 지시) 요구사항 3: "탭 전환 시 자동 데이터
   // 로딩 금지" — 초기 진입/탭 전환 순간에는 빈 뼈대(필터 UI)만 보여주고, 관리자가 [조회하기]를
   // 눌러야만 그 탭의 첫 조회가 나간다. 탭별로 독립된 플래그라 한 번 조회한 탭을 벗어났다
@@ -738,19 +746,102 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
   // (events/raw_ingest_data는 이 컬럼이 없어 필요 없음) 노출 중분류 목록을 처음 한
   // 번만 조용히 가져온다. 이 핸들러 자체는 open_spaces/events 테이블 행 클릭에 공용으로
   // 쓰이므로(아래 호출부), tab으로 한 번 더 좁힌다.
+  // handleOpenDataRow(상세 모달 열기)와 체크박스 선택(일괄 편집) 둘 다 노출
+  // 중분류 옵션이 필요해 이 지연 로딩을 공유한다(제5장 제4조 — 새 fetch 경로를
+  // 또 만들지 않음).
+  function ensureServiceCategoriesLoaded() {
+    if (hasLoadedServiceCategories) return;
+    setHasLoadedServiceCategories(true);
+    fetch('/api/admin/service-categories')
+      .then(async (res) => {
+        const data = await res.json();
+        if (res.ok) setServiceCategories(data.items ?? []);
+      })
+      .catch(() => {
+        // 조용한 부가 조회 실패는 화면 흐름을 막지 않는다 — 옵션이 비어 보일 뿐,
+        // 상세 모달 자체나 다른 기능에는 영향 없다.
+      });
+  }
+
   function handleOpenDataRow(row: AdminRow) {
     setSelectedRow(row);
-    if (tab === 'open_spaces' && !hasLoadedServiceCategories) {
-      setHasLoadedServiceCategories(true);
-      fetch('/api/admin/service-categories')
-        .then(async (res) => {
-          const data = await res.json();
-          if (res.ok) setServiceCategories(data.items ?? []);
-        })
-        .catch(() => {
-          // 조용한 부가 조회 실패는 화면 흐름을 막지 않는다 — 옵션이 비어 보일 뿐,
-          // 상세 모달 자체나 다른 기능에는 영향 없다.
+    if (tab === 'open_spaces') ensureServiceCategoriesLoaded();
+  }
+
+  function toggleRowSelection(id: string) {
+    ensureServiceCategoriesLoaded();
+    setBulkResultMessage(null);
+    setSelectedRowIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleSelectAllOnPage() {
+    ensureServiceCategoriesLoaded();
+    setBulkResultMessage(null);
+    const pageIds = rows.filter((r): r is AdminOpenSpaceRow => 'id' in r).map((r) => r.id);
+    const allSelected = pageIds.length > 0 && pageIds.every((id) => selectedRowIds.has(id));
+    setSelectedRowIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) pageIds.forEach((id) => next.delete(id));
+      else pageIds.forEach((id) => next.add(id));
+      return next;
+    });
+  }
+
+  // [open_spaces 목록 일괄 편집](2026-09-07 사용자 지시): 선택된 표준 중분류/노출
+  // 중분류 중 실제로 값을 고른 것만 각각 적용한다(둘 다 선택 안 하면 아무 일도
+  // 하지 않음). 기존 엔드포인트(카테고리 단일 수정 PATCH의 신규 ids 모드,
+  // bulk-category-mapping의 기존 ids 모드)를 그대로 재사용한다(제5장 제4조).
+  async function applyBulkEdit() {
+    if (selectedRowIds.size === 0 || (!bulkCategoryMin && !bulkServiceCategoryId)) return;
+    setIsBulkApplying(true);
+    setBulkResultMessage(null);
+    const ids = [...selectedRowIds];
+    try {
+      if (bulkCategoryMin) {
+        const res = await fetch('/api/admin/data-grid/category-min', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ table: 'open_spaces', ids, category_min: bulkCategoryMin }),
         });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? '표준 중분류 일괄 수정에 실패했습니다.');
+      }
+      if (bulkServiceCategoryId) {
+        const res = await fetch('/api/admin/open-spaces/bulk-category-mapping', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ids, service_category_id: bulkServiceCategoryId }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? '노출 중분류 일괄 수정에 실패했습니다.');
+      }
+
+      const idSet = new Set(ids);
+      setRows((prev) =>
+        prev.map((row) => {
+          if (!('id' in row) || !idSet.has(row.id)) return row;
+          const updated = { ...row } as AdminOpenSpaceRow;
+          if (bulkCategoryMin) {
+            updated.category_min = bulkCategoryMin;
+            updated.category_min_source = 'MANUAL';
+          }
+          if (bulkServiceCategoryId) updated.service_category_id = bulkServiceCategoryId;
+          return updated;
+        })
+      );
+      setBulkResultMessage(`✅ ${ids.length}건에 적용했습니다.`);
+      setSelectedRowIds(new Set());
+      setBulkCategoryMin('');
+      setBulkServiceCategoryId('');
+    } catch (err) {
+      setBulkResultMessage(err instanceof Error ? `❌ ${err.message}` : '❌ 일괄 수정에 실패했습니다.');
+    } finally {
+      setIsBulkApplying(false);
     }
   }
 
@@ -777,6 +868,10 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     setRows([]);
     setTotal(0);
     setHasLoaded((prev) => ({ ...prev, [next]: false }));
+    setSelectedRowIds(new Set());
+    setBulkCategoryMin('');
+    setBulkServiceCategoryId('');
+    setBulkResultMessage(null);
   };
 
   useEffect(() => {
@@ -1188,23 +1283,94 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
           <p className="text-sm text-gray-400">조건에 맞는 데이터가 없습니다.</p>
         )}
 
+        {/* [open_spaces 목록 일괄 편집](2026-09-07 사용자 지시): "체크 박스 선택된 것들에
+            대하여 표준 중분류랑 노출 중분류 일괄적으로 수정 가능하도록" — 하나라도
+            선택돼야만 나타난다. */}
+        {tab === 'open_spaces' && (selectedRowIds.size > 0 || bulkResultMessage) && (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 mb-3">
+            {selectedRowIds.size > 0 && <span className="text-xs font-semibold text-blue-800">{selectedRowIds.size}건 선택됨</span>}
+            <select
+              value={bulkCategoryMin}
+              onChange={(e) => setBulkCategoryMin(e.target.value)}
+              className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
+            >
+              <option value="">표준 중분류 선택...</option>
+              {filterOptions.open_spaces.categoryMins.map((v) => (
+                <option key={v} value={v}>
+                  {v}
+                </option>
+              ))}
+            </select>
+            <select
+              value={bulkServiceCategoryId}
+              onChange={(e) => setBulkServiceCategoryId(e.target.value)}
+              className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
+            >
+              <option value="">노출 중분류 선택...</option>
+              {serviceCategories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.parent_category} &gt; {c.category_name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={applyBulkEdit}
+              disabled={isBulkApplying || (!bulkCategoryMin && !bulkServiceCategoryId)}
+              className="rounded-full bg-blue-600 text-white text-xs font-semibold px-3 py-1.5 hover:bg-blue-700 disabled:opacity-50"
+            >
+              {isBulkApplying ? '적용 중...' : '일괄 적용'}
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedRowIds(new Set())}
+              className="text-xs text-gray-500 hover:text-gray-800 underline"
+            >
+              선택 해제
+            </button>
+            {bulkResultMessage && <span className="text-xs">{bulkResultMessage}</span>}
+          </div>
+        )}
+
         {hasLoaded[tab] && !isLoading && !errorMessage && rows.length > 0 && (
           <div className="overflow-x-auto">
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="sticky top-0 z-10 bg-white border-b-2 border-gray-200 text-left text-xs font-semibold text-gray-600 shadow-[0_1px_0_0_rgba(0,0,0,0.04)]">
-                <th className="py-2.5 pr-3">ID</th>
+                {/* [open_spaces 목록 일괄 편집](2026-09-07 사용자 지시): "리스트 앞에
+                    체크박스 하나 만들고" — open_spaces 탭에만 있다. */}
+                {tab === 'open_spaces' && (
+                  <th className="py-2.5 pr-3 w-8">
+                    <input
+                      type="checkbox"
+                      aria-label="이 페이지 전체 선택"
+                      checked={rows.length > 0 && rows.every((r) => 'id' in r && selectedRowIds.has(r.id))}
+                      onChange={toggleSelectAllOnPage}
+                      className="h-3.5 w-3.5"
+                    />
+                  </th>
+                )}
+                {/* [관리자 화면 목록 컬럼 정리](2026-09-07 사용자 지시): "ID와 출처는
+                    비슷하니 출처 컬럼만 남겨" — open_spaces에서 ID(external_id)는
+                    출처(source)와 함께 있으면 중복 정보라 이 탭에서만 숨긴다. */}
+                {tab !== 'open_spaces' && <th className="py-2.5 pr-3">ID</th>}
                 <th className="py-2.5 pr-3">출처</th>
-                {tab !== 'raw_ingest_data' && <th className="py-2.5 pr-3">원천 대/중분류</th>}
+                {/* "원천 대/중분류 컬럼은 안보이게 해" — open_spaces 전용 숨김(events는
+                    그대로 유지, 이 컬럼이 event_type 배지와 별개 정보를 담음). */}
+                {tab === 'events' && <th className="py-2.5 pr-3">원천 대/중분류</th>}
                 {tab !== 'raw_ingest_data' && <th className="py-2.5 pr-3">표준 중분류</th>}
                 {tab === 'events' && <th className="py-2.5 pr-3">타겟 연령</th>}
                 <th className="py-2.5 pr-3">{tab === 'raw_ingest_data' ? '수집 시각' : '제목/명칭'}</th>
                 {tab === 'events' && <th className="py-2.5 pr-3">행사기간(start~end)</th>}
-                {tab !== 'raw_ingest_data' && <th className="py-2.5 pr-3">장소/시설명</th>}
+                {/* "제목/명칭 컬럼과 장소/시설명 컬럼도 동일해.. 제목/명칭 컬럼만 남겨" —
+                    open_spaces는 둘 다 name이라 완전히 같은 값이었다. events는
+                    title/venue_name이 서로 다른 정보라 그대로 둔다. */}
+                {tab === 'events' && <th className="py-2.5 pr-3">장소/시설명</th>}
                 {tab !== 'raw_ingest_data' && <th className="py-2.5 pr-3">주소</th>}
                 {tab !== 'raw_ingest_data' && <th className="py-2.5 pr-3">위도/경도</th>}
-                {tab !== 'raw_ingest_data' && <th className="py-2.5 pr-3">요금</th>}
-                {tab !== 'raw_ingest_data' && <th className="py-2.5 pr-3">접수상태</th>}
+                {/* "요금, 접수상태 컬럼은 안보이게 해" — open_spaces 전용 숨김. */}
+                {tab === 'events' && <th className="py-2.5 pr-3">요금</th>}
+                {tab === 'events' && <th className="py-2.5 pr-3">접수상태</th>}
                 <th className="py-2.5 pr-3">{tab === 'raw_ingest_data' ? '' : '수정/적재일'}</th>
                 <th className="py-2.5 pr-3" />
               </tr>
@@ -1251,22 +1417,35 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                     onClick={() => handleOpenDataRow(row)}
                     className={`border-b border-gray-100 hover:bg-blue-50 cursor-pointer ${zebraClass}`}
                   >
-                    <td className="py-2 pr-3 font-mono text-[11px] text-gray-500 max-w-[140px] truncate">{r.external_id}</td>
+                    {tab === 'open_spaces' && (
+                      <td className="py-2 pr-3" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          aria-label={`${titleText} 선택`}
+                          checked={selectedRowIds.has(r.id)}
+                          onChange={() => toggleRowSelection(r.id)}
+                          className="h-3.5 w-3.5"
+                        />
+                      </td>
+                    )}
+                    {isEvent && <td className="py-2 pr-3 font-mono text-[11px] text-gray-500 max-w-[140px] truncate">{r.external_id}</td>}
                     <td className="py-2 pr-3 text-gray-600 whitespace-nowrap">{r.source ?? (isEvent ? '-' : (r as AdminOpenSpaceRow).source_type)}</td>
-                    <td className="py-2 pr-3 text-gray-600 whitespace-nowrap">
-                      {maxClass || minClass ? (
-                        <span>
-                          {maxClass ?? '-'} / {minClass ?? '-'}
-                        </span>
-                      ) : (
-                        <span
-                          className="text-xs font-semibold px-2 py-0.5 rounded-full text-white"
-                          style={{ backgroundColor: meta.color }}
-                        >
-                          {meta.label}
-                        </span>
-                      )}
-                    </td>
+                    {isEvent && (
+                      <td className="py-2 pr-3 text-gray-600 whitespace-nowrap">
+                        {maxClass || minClass ? (
+                          <span>
+                            {maxClass ?? '-'} / {minClass ?? '-'}
+                          </span>
+                        ) : (
+                          <span
+                            className="text-xs font-semibold px-2 py-0.5 rounded-full text-white"
+                            style={{ backgroundColor: meta.color }}
+                          >
+                            {meta.label}
+                          </span>
+                        )}
+                      </td>
+                    )}
                     <td className="py-2 pr-3 whitespace-nowrap">
                       <CategoryMinBadge
                         categoryMin={r.category_min}
@@ -1300,17 +1479,19 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                         )}
                       </td>
                     )}
-                    <td className="py-2 pr-3 text-gray-600 max-w-[160px] truncate">{venueText}</td>
+                    {isEvent && <td className="py-2 pr-3 text-gray-600 max-w-[160px] truncate">{venueText}</td>}
                     <td className="py-2 pr-3 text-gray-600 max-w-[200px] truncate">{addressText}</td>
                     <td className="py-2 pr-3 text-gray-500 whitespace-nowrap text-xs">
                       {coords ? `${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}` : <span className="text-red-500">미존재</span>}
                     </td>
-                    <td className="py-2 pr-3 whitespace-nowrap">
-                      {r.is_free === true && <span className="text-xs text-green-600">🎁 무료</span>}
-                      {r.is_free === false && <span className="text-xs text-gray-600">💰 유료</span>}
-                      {r.is_free === null && <span className="text-xs text-gray-300">NULL</span>}
-                    </td>
-                    <td className="py-2 pr-3 text-gray-600 whitespace-nowrap">{svcStat ?? '-'}</td>
+                    {isEvent && (
+                      <td className="py-2 pr-3 whitespace-nowrap">
+                        {r.is_free === true && <span className="text-xs text-green-600">🎁 무료</span>}
+                        {r.is_free === false && <span className="text-xs text-gray-600">💰 유료</span>}
+                        {r.is_free === null && <span className="text-xs text-gray-300">NULL</span>}
+                      </td>
+                    )}
+                    {isEvent && <td className="py-2 pr-3 text-gray-600 whitespace-nowrap">{svcStat ?? '-'}</td>}
                     <td className="py-2 pr-3 text-gray-400 whitespace-nowrap text-xs">{updatedAt ? new Date(updatedAt).toLocaleDateString('ko-KR') : '-'}</td>
                     <td className="py-2 pr-3 text-right text-xs text-blue-600">상세</td>
                   </tr>
