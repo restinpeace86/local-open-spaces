@@ -13,10 +13,16 @@ export function MarkerGroupModal({
   items,
   onSelectItem,
   onClose,
+  title,
 }: {
   items: NearbyItem[];
   onSelectItem: (item: NearbyItem) => void;
   onClose: () => void;
+  // [장소 단위 대표 1건 노출 — 그룹 펼쳐보기](2026-09-09 사용자 지시): 같은
+  // group_id로 묶인 스팟(예: 난지캠핑장의 예약 옵션들)을 펼쳐볼 때는 "겹친
+  // 마커" 문구 대신 더 정확한 문구를 쓸 수 있게 title을 선택적으로 받는다.
+  // 생략 시 기존 겹친 마커 문구를 그대로 쓴다(하위 호환).
+  title?: string;
 }) {
   useModalBackClose(onClose);
 
@@ -30,7 +36,7 @@ export function MarkerGroupModal({
         onClick={(e) => e.stopPropagation()}
       >
         <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-900">이 위치에 {items.length}건이 있어요</h2>
+          <h2 className="text-sm font-semibold text-gray-900">{title ?? `이 위치에 ${items.length}건이 있어요`}</h2>
           <button
             type="button"
             onClick={onClose}

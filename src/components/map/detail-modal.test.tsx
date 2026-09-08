@@ -553,3 +553,59 @@ describe('DetailModal hideMapSection (중복 지도 뷰 제거, 2026-09-01)', ()
     expect(screen.getByText('🗺️ 지도에서 길찾기')).toBeInTheDocument();
   });
 });
+
+// [장소 단위 대표 1건 노출 — 그룹 펼쳐보기](2026-09-09 사용자 지시): "장소기준으로는
+// 난지캠핑장 하나 아니야?" → "다건에 대하여서는 클릭시 쫙 뜨는걸로 하자" — item.group_id가
+// 있고 onExpandGroup이 넘어온 화면(map-explorer.tsx)에서만 버튼이 뜨는지 검증한다.
+describe('DetailModal 그룹 펼쳐보기(2026-09-09)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('group_id가 없으면 버튼을 보여주지 않는다', () => {
+    render(<DetailModal item={makeSpaceItem({ group_id: null })} onClose={() => {}} onExpandGroup={vi.fn()} />);
+
+    expect(screen.queryByText('🔗 이 장소의 다른 예약 옵션 보기')).not.toBeInTheDocument();
+  });
+
+  it('group_id가 있어도 onExpandGroup을 넘기지 않은 화면(대부분)에서는 버튼을 보여주지 않는다', () => {
+    render(<DetailModal item={makeSpaceItem({ group_id: 'group-1' })} onClose={() => {}} />);
+
+    expect(screen.queryByText('🔗 이 장소의 다른 예약 옵션 보기')).not.toBeInTheDocument();
+  });
+
+  it('group_id가 있고 onExpandGroup이 넘어오면 버튼을 보여주고, 클릭 시 group_id로 호출된다', () => {
+    const onExpandGroup = vi.fn();
+    render(<DetailModal item={makeSpaceItem({ group_id: 'group-1' })} onClose={() => {}} onExpandGroup={onExpandGroup} />);
+
+    fireEvent.click(screen.getByText('🔗 이 장소의 다른 예약 옵션 보기'));
+    expect(onExpandGroup).toHaveBeenCalledWith('group-1');
+  });
+
+  it('isExpandingGroup이 true면 버튼이 비활성화되고 로딩 문구로 바뀐다', () => {
+    render(
+      <DetailModal
+        item={makeSpaceItem({ group_id: 'group-1' })}
+        onClose={() => {}}
+        onExpandGroup={vi.fn()}
+        isExpandingGroup
+      />
+    );
+
+    const button = screen.getByText('불러오는 중...');
+    expect(button).toBeDisabled();
+    expect(screen.queryByText('🔗 이 장소의 다른 예약 옵션 보기')).not.toBeInTheDocument();
+  });
+
+  it('이벤트(EVENT)는 group_id가 있어도 버튼을 보여주지 않는다(개념상 그룹이 없음)', () => {
+    render(
+      <DetailModal
+        item={makeSpaceItem({ item_type: 'EVENT', group_id: 'group-1' })}
+        onClose={() => {}}
+        onExpandGroup={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByText('🔗 이 장소의 다른 예약 옵션 보기')).not.toBeInTheDocument();
+  });
+});

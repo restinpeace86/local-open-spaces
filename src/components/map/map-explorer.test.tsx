@@ -558,6 +558,80 @@ describe('MapExplorer 마커 클릭 2단계 UX (2026-09-01)', () => {
   });
 });
 
+// [장소 단위 대표 1건 노출 — 그룹 펼쳐보기](2026-09-09 사용자 지시): "장소기준으로는
+// 난지캠핑장 하나 아니야?" → "장소 단위로 묶어서 대표 1건만 노출.. 다건에 대하여서는
+// 클릭시 쫙 뜨는걸로 하자" — 상세 모달의 "다른 예약 옵션 보기" 버튼이 get_spot_group_members
+// RPC를 호출해 그룹 멤버 목록을 펼쳐 보여주고, 그중 하나를 고르면 그 멤버의 전체 상세로
+// 이어지는지 검증한다.
+describe('MapExplorer 그룹 펼쳐보기(2026-09-09)', () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/nearby/service-categories')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [], counts: {} }) } as Response);
+        }
+        // 상세 모달이 여는 스팟 큐레이션 조회 — 이 테스트 목적과 무관하니 항상 없음으로 응답한다.
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ item: null }) } as Response);
+      })
+    );
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('group_id가 있는 스팟의 상세를 열면 "다른 예약 옵션 보기" 버튼이 보인다', async () => {
+    rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow({ group_id: 'group-1' })], error: null });
+    render(<MapExplorer />);
+    await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByText('simulate-marker-click-용인어린이상상의숲'));
+    fireEvent.click(screen.getByLabelText('용인어린이상상의숲 상세보기'));
+
+    expect(await screen.findByText('🔗 이 장소의 다른 예약 옵션 보기')).toBeInTheDocument();
+  });
+
+  it('group_id가 없으면 버튼이 보이지 않는다', async () => {
+    rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow({ group_id: null })], error: null });
+    render(<MapExplorer />);
+    await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByText('simulate-marker-click-용인어린이상상의숲'));
+    fireEvent.click(screen.getByLabelText('용인어린이상상의숲 상세보기'));
+
+    await screen.findByText('주소');
+    expect(screen.queryByText('🔗 이 장소의 다른 예약 옵션 보기')).not.toBeInTheDocument();
+  });
+
+  it('버튼을 누르면 get_spot_group_members를 호출해 그룹 멤버 목록을 보여주고, 하나를 고르면 그 상세로 이어진다', async () => {
+    rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow({ group_id: 'group-1' })], error: null });
+    rpcMock.mockResolvedValueOnce({
+      data: [
+        makeSpaceRow({ id: 'space-1', name: '용인어린이상상의숲', group_id: 'group-1' }),
+        makeSpaceRow({ id: 'space-2', name: '용인어린이상상의숲 B타입', group_id: 'group-1' }),
+      ],
+      error: null,
+    });
+    render(<MapExplorer />);
+    await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByText('simulate-marker-click-용인어린이상상의숲'));
+    fireEvent.click(screen.getByLabelText('용인어린이상상의숲 상세보기'));
+    fireEvent.click(await screen.findByText('🔗 이 장소의 다른 예약 옵션 보기'));
+
+    await waitFor(() =>
+      expect(rpcMock).toHaveBeenCalledWith('get_spot_group_members', { p_group_id: 'group-1' })
+    );
+    expect(await screen.findByText('이 장소의 다른 예약 옵션')).toBeInTheDocument();
+    expect(await screen.findByText('용인어린이상상의숲 B타입')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('용인어린이상상의숲 B타입'));
+
+    expect(await screen.findByText('주소')).toBeInTheDocument();
+    expect(screen.queryByText('이 장소의 다른 예약 옵션')).not.toBeInTheDocument();
+  });
+});
+
 // [바텀시트 GPS 거리순 정렬](2026-09-08 사용자 지시, todo.md 개선사항3-1): "하단
 // 바텀시트 리스트는 유저의 '현재 GPS 위치'를 기준으로 가까운 거리순으로 정렬합니다
 // (단 하단 바텀시트 리스트는 현재 설정한 위치 기준 반경 10km 로 제한합니다.)"

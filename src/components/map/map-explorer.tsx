@@ -18,7 +18,7 @@ import { LocationOnboardingModal } from '@/components/map/location-onboarding-mo
 import { GpsSyncModal } from '@/components/map/gps-sync-modal';
 import { RecenterButton } from '@/components/map/recenter-button';
 import { MyLocationButton } from '@/components/map/my-location-button';
-import { getNearbySpacesAndEvents, getSpotsByServiceCategory, NearbyItem } from '@/lib/spaces/get-nearby';
+import { getNearbySpacesAndEvents, getSpotsByServiceCategory, getSpotGroupMembers, NearbyItem } from '@/lib/spaces/get-nearby';
 import { ServiceCategory } from '@/lib/admin/service-category';
 import { useUserLocation } from '@/hooks/use-user-location';
 import { useGpsSyncCheck } from '@/hooks/use-gps-sync-check';
@@ -142,6 +142,12 @@ export function MapExplorer() {
   const [items, setItems] = useState<NearbyItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<NearbyItem[] | null>(null);
+  // [장소 단위 대표 1건 노출 — 그룹 펼쳐보기](2026-09-09 사용자 지시): 겹친 마커 그룹
+  // (좌표 우연 일치)과 group_id 그룹(관리자가 명시적으로 같은 장소로 묶은 예약 옵션들)은
+  // 개념이 달라 모달 문구를 구분한다 — null이면 MarkerGroupModal 기본 문구를 그대로 쓴다.
+  const [groupModalTitle, setGroupModalTitle] = useState<string | null>(null);
+  const [isExpandingGroup, setIsExpandingGroup] = useState(false);
+  const [groupExpandError, setGroupExpandError] = useState<string | null>(null);
   // [스팟픽 UI/UX 개선 4종](2026-09-01 사용자 지시) 항목 1: 마커를 클릭하면 곧바로 무거운
   // 전체 상세 모달을 열지 않고, 먼저 이 "미리보기" 상태만 세팅해 가벼운 미니 카드를
   // 띄운다. 그 카드를 한 번 더 터치해야만 selectedItem으로 승격되어 전체 DetailModal이
@@ -399,13 +405,35 @@ export function MapExplorer() {
   // [겹친 마커 처리](2026-08-29 사용자 지시): 같은 좌표에 여러 건이 겹쳐 있는 마커를
   // 클릭하면 상세로 바로 들어가지 않고 먼저 목록을 보여준다.
   const handleSelectGroup = useCallback((group: NearbyItem[]) => {
+    setGroupModalTitle(null);
     setSelectedGroup(group);
   }, []);
 
   const handleSelectFromGroup = useCallback((item: NearbyItem) => {
     setSelectedGroup(null);
+    setGroupModalTitle(null);
     setPreviewItem(null);
     setSelectedItem(item);
+  }, []);
+
+  // [장소 단위 대표 1건 노출 — 그룹 펼쳐보기](2026-09-09 사용자 지시): 상세 모달에서
+  // "이 장소의 다른 예약 옵션 보기"를 누르면 같은 group_id의 전체 멤버(대표 포함)를
+  // 가져와 기존 MarkerGroupModal로 보여준다 — 그중 하나를 고르면 handleSelectFromGroup이
+  // 그대로 그 멤버의 전체 상세를 연다(겹친 마커 흐름과 동일한 마무리 경로 재사용).
+  const handleExpandGroup = useCallback(async (groupId: string) => {
+    setIsExpandingGroup(true);
+    try {
+      const members = await getSpotGroupMembers(groupId);
+      setSelectedItem(null);
+      setGroupModalTitle('이 장소의 다른 예약 옵션');
+      setSelectedGroup(members);
+    } catch {
+      // 제5장 제11조: 실패해도 서비스가 멈추지 않게 짧은 안내만 띄우고 기존 상세는 유지한다.
+      setGroupExpandError('다른 옵션을 불러오지 못했어요. 잠시 후 다시 시도해 주세요.');
+      setTimeout(() => setGroupExpandError(null), 2500);
+    } finally {
+      setIsExpandingGroup(false);
+    }
   }, []);
 
   // [스팟픽 UI/UX 개선 4종](2026-09-01 사용자 지시) 항목 1: 마커를 1단계로 클릭해
@@ -600,16 +628,28 @@ export function MapExplorer() {
           DetailModal에만 hideMapSection을 넘긴다(다른 화면은 배경이 지도가 아니라
           그대로 유지). */}
       {selectedItem && (
-        <DetailModal item={selectedItem} onClose={() => setSelectedItem(null)} hideMapSection />
+        <DetailModal
+          item={selectedItem}
+          onClose={() => setSelectedItem(null)}
+          hideMapSection
+          onExpandGroup={handleExpandGroup}
+          isExpandingGroup={isExpandingGroup}
+        />
       )}
 
       {selectedGroup && (
         <MarkerGroupModal
           items={selectedGroup}
           onSelectItem={handleSelectFromGroup}
-          onClose={() => setSelectedGroup(null)}
+          onClose={() => {
+            setSelectedGroup(null);
+            setGroupModalTitle(null);
+          }}
+          title={groupModalTitle ?? undefined}
         />
       )}
+
+      {groupExpandError && <Toast message={groupExpandError} />}
 
       {isAiRecommendOpen && (
         <AiRecommendSheet

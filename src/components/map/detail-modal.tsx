@@ -80,6 +80,8 @@ export function DetailModal({
   item,
   onClose,
   hideMapSection = false,
+  onExpandGroup,
+  isExpandingGroup = false,
 }: {
   item: NearbyItem;
   onClose: () => void;
@@ -91,6 +93,15 @@ export function DetailModal({
   // 유지한다. 이벤트는 이 값과 무관하게 항상 기존 구조를 유지한다(요구사항 "이벤트픽은
   // 기존 리스트형 상세 구조 유지").
   hideMapSection?: boolean;
+  // [장소 단위 대표 1건 노출 — 그룹 펼쳐보기](2026-09-09 사용자 지시): "장소기준으로는
+  // 난지캠핑장 하나 아니야?" → "장소 단위로 묶어서 대표 1건만 노출.. 다건에 대하여서는
+  // 클릭시 쫙 뜨는걸로 하자" — item.group_id가 있으면(관리자가 '중복 스팟 검토'로 묶은
+  // 대표 항목) 같은 그룹의 나머지 예약 옵션을 펼쳐볼 수 있는 버튼을 보여준다. 이 콜백을
+  // 넘긴 화면(map-explorer.tsx)만 버튼이 렌더링된다 — 넘기지 않으면(다른 화면) 기존과
+  // 동일하게 아무것도 표시하지 않는다(MVP 범위: 스팟픽 지도 화면 한정, 제3장 제3조).
+  onExpandGroup?: (groupId: string) => void;
+  // onExpandGroup 호출 후 결과를 기다리는 동안(부모 상태) 버튼을 잠가 중복 클릭을 막는다.
+  isExpandingGroup?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const [isMapPreviewOpen, setIsMapPreviewOpen] = useState(false);
@@ -299,6 +310,17 @@ export function DetailModal({
           </div>
           {item.distance_meters >= 0 && (
             <p className="text-sm text-gray-400">현재 위치에서 {formatDistance(item.distance_meters)}</p>
+          )}
+
+          {!isEvent && item.group_id && onExpandGroup && (
+            <button
+              type="button"
+              onClick={() => onExpandGroup(item.group_id as string)}
+              disabled={isExpandingGroup}
+              className="mt-1 text-xs font-semibold text-blue-600 hover:underline disabled:opacity-50"
+            >
+              {isExpandingGroup ? '불러오는 중...' : '🔗 이 장소의 다른 예약 옵션 보기'}
+            </button>
           )}
 
           {/* [상세보기 설명 추가](2026-08-27 사용자 지시): 제목만으로 내용을 파악하기 어려운

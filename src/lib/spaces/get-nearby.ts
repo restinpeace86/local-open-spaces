@@ -57,6 +57,15 @@ export type NearbyItem = {
   // 경우가 많아 상세 팝업에 본문 설명을 추가한다. get-home-feed.ts의 events 조회 경로만
   // 채운다(공간/RPC 경로는 이 컬럼을 조회하지 않아 undefined로 남는다).
   description?: string | null;
+  // [장소 단위 대표 1건 노출](2026-09-09 사용자 지시): "장소기준으로는 난지캠핑장
+  // 하나 아니야?" → "장소 단위로 묶어서 대표 1건만 노출.. 다건에 대하여서는
+  // 클릭시 쫙 뜨는걸로 하자" — 관리자가 '중복 스팟 검토'로 여러 open_spaces
+  // 행을 묶으면(spot_dedup_groups) 같은 group_id를 공유한다. get_nearby_spaces_
+  // and_events/get_spots_by_service_category는 이제 그룹당 대표 1건만 반환하며,
+  // 이 필드가 채워져 있으면(=그룹 소속) DetailModal이 "다른 옵션 더보기"를
+  // 노출해 getSpotGroupMembers로 나머지 멤버를 펼쳐볼 수 있게 한다. events는
+  // 그룹 개념이 없어 항상 null이다.
+  group_id?: string | null;
 };
 
 // Task 9-6-10(2026-08-23): itemType을 넘기면 RPC가 해당 타입만 반환한다(예: '/nearby' 지도는
@@ -80,6 +89,24 @@ export async function getNearbySpacesAndEvents(
 
   if (error) {
     throw new Error(`주변 공간/행사 조회 실패: ${error.message}`);
+  }
+
+  return (data ?? []) as NearbyItem[];
+}
+
+// [장소 단위 대표 1건 노출 — 그룹 펼쳐보기](2026-09-09 사용자 지시): 대표 1건만
+// 노출된 항목(item.group_id 존재)을 상세에서 "다른 옵션 N건 더보기"로 클릭했을
+// 때, 같은 group_id를 공유하는 전체 멤버(대표 포함)를 가져온다. 반경 개념이 없어
+// distance_meters는 항상 -1(sentinel, getSpotsByServiceCategory와 동일 관례)이다.
+export async function getSpotGroupMembers(groupId: string): Promise<NearbyItem[]> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase.rpc('get_spot_group_members', {
+    p_group_id: groupId,
+  });
+
+  if (error) {
+    throw new Error(`그룹 멤버 조회 실패: ${error.message}`);
   }
 
   return (data ?? []) as NearbyItem[];
