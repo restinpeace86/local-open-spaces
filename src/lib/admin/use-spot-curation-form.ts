@@ -56,6 +56,19 @@ export type SpotForCuration = {
 // 스니펫(description)으로 조용히 폴백한다 — 어느 경우에도 화면이 비어 보이지 않는다.
 export type BlogBodyState = { text: string | null; isLoading: boolean; error: string | null };
 
+// [멀티 블로그 워닝 판정 공통 로직](2026-09-08 사용자 지시, todo.md 개선사항2-3):
+// "워닝이 걸린 블로그는 키워드 분석 대상에서 제외.. 워닝 판정 기준: 제목/본문
+// 내에서 필수 지역 키워드를 찾지 못한 블로그" — 활성 탭 경고 표시와 멀티 블로그
+// 자동 체크 제외 판정이 정확히 같은 기준을 써야 하므로 하나의 함수로 공유한다.
+// 본문이 아직 없으면(로딩 중/실패) 판정을 보류(false)한다 — 없는 데이터로
+// "워닝"을 단정하지 않는다.
+function hasRegionMismatch(title: string | undefined, bodyText: string | null | undefined, regionKeywords: string[]): boolean {
+  if (regionKeywords.length === 0 || !bodyText) return false;
+  return !regionKeywords.some(
+    (keyword) => bodyText.replace(/\s+/g, '').includes(keyword) || (title ?? '').replace(/\s+/g, '').includes(keyword)
+  );
+}
+
 // [카테고리별 뱃지/룰 완전 독립 Config 구조](2026-09-07, implementation/todo.md
 // 개선사항4 — 사용자 지시): "노출 중분류에 대하여 적용시 [전부] 같이 가도록" —
 // 이 훅이 "노출 중분류"(serviceCategoryId) 선택값과 serviceCategories 목록을 보고
@@ -105,6 +118,11 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
   const curationCategoryId = resolveCurationCategoryId(activeExposureCategoryName);
   const badgeGroups = getBadgeGroupsForCategory(curationCategoryId);
   const badgeOptions = getBadgeOptionsForCategory(curationCategoryId);
+
+  // [지역명 하이라이팅 범위 확장](2026-09-07 사용자 지시) — 본문뿐 아니라 제목까지
+  // 포함해 시/도+시/군/구 토큰 전부를 하이라이트/워닝 판정 대상으로 쓴다. 아래
+  // 멀티 블로그 자동 체크 effect도 이 값을 그대로 재사용한다(제5장 제4조).
+  const regionKeywords = extractAllSigunguCoreNames(spot.sigungu_name);
 
   // 관리자가 콤보박스로 노출 중분류를 바꾸면, 이전 카테고리에서만 유효했던 뱃지
   // 선택이 새 카테고리엔 존재하지 않는 키일 수 있어 그대로 남기지 않고 걸러낸다
@@ -201,49 +219,73 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [spot.id]);
 
-  // [블로그 큐레이션 전체 본문 보기](2026-09-05 사용자 지시): 현재 탭의 블로그가
-  // 바뀔 때마다(검색 결과가 새로 오거나, 관리자가 다른 탭을 클릭할 때) 그 링크의
-  // 전체 본문을 한 번만 시도한다 — 이미 시도한 링크(성공/실패 무관)는 다시 요청하지
-  // 않는다. 네이버 블로그가 아니거나 실패하면 조용히 요약 스니펫으로 남는다.
+  // [블로그 큐레이션 전체 본문 보기 + 멀티 블로그 종합 분석](2026-09-05 사용자
+  // 지시 / 2026-09-08 todo.md 개선사항2-3 확장): 예전엔 활성 탭의 링크 하나만
+  // 지연 로딩했지만, "블로그 1, 2, 3 등 연결된 전체 블로그의 키워드 및 본문을
+  // 종합하여 뱃지를 자동 체크"하려면 아래 자동 체크 effect가 판단할 시점에 3개
+  // 블로그의 본문이 전부(가능한 한) 준비돼 있어야 한다 — 그래서 검색 결과가
+  // 도착하면 3개 링크 전부를 한꺼번에 미리 가져온다(탭을 아직 안 눌러도 됨).
+  // 이미 시도한 링크(성공/실패 무관)는 다시 요청하지 않는다. 네이버 블로그가
+  // 아니거나 실패하면 조용히 요약 스니펫으로 남는다(전체 본문 보기 UI 쪽).
   useEffect(() => {
-    const activeLink = blogItems?.[activeTab]?.link;
-    if (!activeLink || bodyByLink[activeLink]) return;
-
-    setBodyByLink((prev) => ({ ...prev, [activeLink]: { text: null, isLoading: true, error: null } }));
-    fetch(`/api/admin/spot-curations/blog-body?url=${encodeURIComponent(activeLink)}`)
-      .then(async (res) => {
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? '본문을 가져오지 못했습니다.');
-        setBodyByLink((prev) => ({ ...prev, [activeLink]: { text: data.text ?? null, isLoading: false, error: null } }));
-      })
-      // 여기가 아니라 아래 별도 effect에서 자동 체크를 수행한다 — 기존 큐레이션
-      // 조회가 아직 안 끝난 시점(hasCheckedExistingCuration=false)에 본문이 먼저
-      // 도착할 수 있어(둘 다 비동기), setBodyByLink 반영 이후 그 최신 상태를 보고
-      // 판단해야 경쟁 상태 없이 정확하다.
-      .catch((err) => {
-        setBodyByLink((prev) => ({
-          ...prev,
-          [activeLink]: { text: null, isLoading: false, error: err instanceof Error ? err.message : '본문 조회 실패' },
-        }));
-      });
+    if (!blogItems) return;
+    for (const item of blogItems) {
+      const link = item.link;
+      if (!link || bodyByLink[link]) continue;
+      setBodyByLink((prev) => ({ ...prev, [link]: { text: null, isLoading: true, error: null } }));
+      fetch(`/api/admin/spot-curations/blog-body?url=${encodeURIComponent(link)}`)
+        .then(async (res) => {
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error ?? '본문을 가져오지 못했습니다.');
+          setBodyByLink((prev) => ({ ...prev, [link]: { text: data.text ?? null, isLoading: false, error: null } }));
+        })
+        // 여기가 아니라 아래 별도 effect에서 자동 체크를 수행한다 — 기존 큐레이션
+        // 조회가 아직 안 끝난 시점(hasCheckedExistingCuration=false)에 본문이 먼저
+        // 도착할 수 있어(둘 다 비동기), setBodyByLink 반영 이후 그 최신 상태를 보고
+        // 판단해야 경쟁 상태 없이 정확하다.
+        .catch((err) => {
+          setBodyByLink((prev) => ({
+            ...prev,
+            [link]: { text: null, isLoading: false, error: err instanceof Error ? err.message : '본문 조회 실패' },
+          }));
+        });
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab, blogItems]);
+  }, [blogItems]);
 
-  // [키워드 하이라이팅에 따른 뱃지 자동 체크](2026-09-07 개선사항3 4번): "블로그 본문
-  // 및 키워드 데이터를 기반으로 관련 뱃지가 1차로 자동 체크(Pre-check)되도록.. 관리자는
-  // 자동 체크해 둔 뱃지를 눈으로 빠르게 검수하고.. 간편하게 체크 해제". 신규 등록(기존
-  // 큐레이션 없음)일 때만, 그리고 딱 한 번만 자동 체크한다 — 기존 큐레이션을 수정하는
-  // 중이면 관리자가 이미 고른 뱃지를 덮어쓰지 않고, 매번 body 텍스트가 바뀔 때마다
-  // (탭 전환 등) 다시 자동 체크해 방금 관리자가 수동으로 해제한 뱃지를 되살리지도
-  // 않는다(딱 첫 로딩 1회만).
+  // [멀티 블로그 키워드 종합 분석 및 워닝 필터링](2026-09-08 사용자 지시, todo.md
+  // 개선사항2-3): "블로그 1의 키워드만 참고하는 구조를 수정하여.. 블로그 1,2,3
+  // 등 연결된 전체 블로그의 키워드 및 본문을 종합.. 단, 워닝이 걸린 블로그는
+  // 키워드 분석 대상에서 제외" — 신규 등록(기존 큐레이션 없음)일 때만, 그리고
+  // 3개 블로그 본문 fetch가 모두 정착(성공/실패 무관)된 뒤 딱 한 번만 자동
+  // 체크한다(탭 전환 등으로 재실행되어 관리자가 수동 해제한 뱃지를 되살리지
+  // 않기 위함 — 기존 단일 탭 버전과 동일한 안전장치). 워닝 판정(지역 키워드
+  // 불일치)이 걸린 블로그는 hasRegionMismatch로 걸러 집계에서 제외한다.
   useEffect(() => {
-    if (!hasCheckedExistingCuration || existingCuration || hasAutoCheckedBadges) return;
-    const activeLink = blogItems?.[activeTab]?.link;
-    const text = activeLink ? bodyByLink[activeLink]?.text : null;
-    if (!text) return;
-    setSelectedBadges(matchBadgeKeysFromText(text, curationCategoryId));
+    if (!hasCheckedExistingCuration || existingCuration || hasAutoCheckedBadges || !blogItems || blogItems.length === 0) return;
+    const allSettled = blogItems.every((item) => {
+      const body = bodyByLink[item.link];
+      return body && !body.isLoading;
+    });
+    if (!allSettled) return;
+    // 3개 모두 크롤링 실패/네이버 블로그 아님이라 본문을 하나도 못 얻었으면
+    // 판단할 데이터 자체가 없다는 뜻 — 기존 단일 탭 버전과 동일하게 아무것도
+    // 건드리지 않고 그대로 둔다(빈 Set으로 확정 지어 관리자가 이미 수동으로
+    // 체크한 뱃지를 지워버리는 사고 방지). 관리자가 URL을 직접 교체하면
+    // blogItems가 바뀌어 이 effect가 다시 평가된다.
+    const anyTextAvailable = blogItems.some((item) => Boolean(bodyByLink[item.link]?.text));
+    if (!anyTextAvailable) return;
+
+    const aggregated = new Set<string>();
+    for (const item of blogItems) {
+      const text = bodyByLink[item.link]?.text;
+      if (!text) continue;
+      if (hasRegionMismatch(item.title, text, regionKeywords)) continue;
+      for (const key of matchBadgeKeysFromText(text, curationCategoryId)) aggregated.add(key);
+    }
+    setSelectedBadges(aggregated);
     setHasAutoCheckedBadges(true);
-  }, [hasCheckedExistingCuration, existingCuration, hasAutoCheckedBadges, activeTab, blogItems, bodyByLink, curationCategoryId]);
+  }, [hasCheckedExistingCuration, existingCuration, hasAutoCheckedBadges, blogItems, bodyByLink, curationCategoryId, regionKeywords]);
 
   // [블로그 자동검색 결과가 실제와 다를 때 수동 교체](2026-09-05 사용자 지시): "가져오는데
   // 네이버 블로그 관련도순 검색했을때 이거아니야.." — 네이버 검색 API의 관련도 순위가
@@ -333,24 +375,7 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
   const activeLink = activeItem?.link;
   const activeBody = activeLink ? bodyByLink[activeLink] : undefined;
 
-  // [지역명 하이라이팅 범위 확장](2026-09-07 사용자 지시): "인천광역시 남동구
-  // 용천로.. 시군구 이름은 인천시 남동구.. 인천하고 남동이 블로그 제목이나
-  // 본문에 포함되어있는지 확인해서.. 노란색 마커표시.. 지금까진 본문에서 남동만
-  // 찾아서 색 표시 했는데.. 이제는 블로그 제목도 포함시키고 남동뿐만아니라
-  // 인천도 색 표시해줘" — sigungu_name의 시/도+시/군/구 토큰 전부(예: "인천"과
-  // "남동")를 하이라이트 대상으로 쓰고, 판정 범위도 본문뿐 아니라 제목까지
-  // 넓힌다. 추가 크롤링 없이 이미 가져온 데이터(제목은 검색 API 응답에 이미
-  // 있고, 본문은 활성 탭 캐시)만 본다는 기존 원칙은 그대로 유지한다.
-  const regionKeywords = extractAllSigunguCoreNames(spot.sigungu_name);
-  const hasRegionMismatchWarning = Boolean(
-    regionKeywords.length > 0 &&
-      activeBody?.text &&
-      !regionKeywords.some(
-        (keyword) =>
-          activeBody.text!.replace(/\s+/g, '').includes(keyword) ||
-          (activeItem?.title ?? '').replace(/\s+/g, '').includes(keyword)
-      )
-  );
+  const hasRegionMismatchWarning = hasRegionMismatch(activeItem?.title, activeBody?.text, regionKeywords);
 
   return {
     searchQuery,

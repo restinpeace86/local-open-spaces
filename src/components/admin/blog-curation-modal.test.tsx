@@ -610,7 +610,10 @@ describe('BlogCurationModal', () => {
       const fetchMock = mockFetchByUrl({
         blogSearch: { items: [makeBlogItem()], hasRecentReview: true, hasNoResults: false },
         existingCuration: null,
-        blogBodyText: '주차 가능하고 수유실도 있어요.',
+        // [멀티 블로그 워닝 필터링](2026-09-08 개선사항2-3): 워닝(지역 키워드
+        // 불일치) 걸린 블로그는 자동 체크 집계에서 제외되므로, 본문에 지역명
+        // (노원)을 포함시켜 이 블로그가 정상(워닝 없음) 판정을 받게 한다.
+        blogBodyText: '노원에서 주차 가능하고 수유실도 있어요.',
       });
       vi.stubGlobal('fetch', fetchMock);
       render(
@@ -627,6 +630,69 @@ describe('BlogCurationModal', () => {
         expect(screen.getByLabelText('수유실 있음')).toBeChecked();
       });
       expect(screen.getByLabelText('유모차 가능')).not.toBeChecked();
+    });
+
+    // [멀티 블로그 키워드 종합 분석 및 워닝 필터링](2026-09-08 사용자 지시, todo.md
+    // 개선사항2-3): "블로그 1,2,3.. 전체 블로그의 키워드 및 본문을 종합.. 워닝이
+    // 걸린 블로그는 키워드 분석 대상에서 제외"
+    it('블로그 1,2,3 전체 본문을 종합해 뱃지를 자동 체크하되, 지역명이 없어 워닝이 걸린 블로그는 집계에서 제외한다', async () => {
+      const link1 = 'https://blog.naver.com/1';
+      const link2 = 'https://blog.naver.com/2';
+      const link3 = 'https://blog.naver.com/3';
+      const bodyTextByLink: Record<string, string> = {
+        // 블로그1: 지역명(노원) 포함 -> 정상, 주차 뱃지 기여.
+        [link1]: '노원에 있고 주차 가능해요.',
+        // 블로그2: 제목/본문 어디에도 지역명(노원) 없음 -> 워닝 -> 집계에서 제외
+        // (제외되지 않았다면 유모차/수유실 뱃지도 함께 체크됐을 것).
+        [link2]: '유모차 가능하고 수유실도 있어요.',
+        // 블로그3: 제목에 지역명(노원) 포함 -> 정상, 예약 필수 뱃지 기여.
+        [link3]: '예약 필수입니다.',
+      };
+      const fetchMock = vi.fn((url: string) => {
+        if (url.includes('/api/admin/spot-curations/blog-search')) {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                items: [
+                  makeBlogItem({ link: link1, title: '키즈카페 후기' }),
+                  makeBlogItem({ link: link2, title: '키즈카페 다녀옴' }),
+                  makeBlogItem({ link: link3, title: '노원 맛집 키즈카페' }),
+                ],
+                hasRecentReview: true,
+                hasNoResults: false,
+              }),
+          } as Response);
+        }
+        if (url.includes('/api/admin/spot-curations/blog-body')) {
+          // URLSearchParams.get()이 퍼센트 인코딩을 이미 디코딩해 준다.
+          const requestedUrl = new URL(url, 'http://localhost').searchParams.get('url') ?? '';
+          const text = bodyTextByLink[requestedUrl];
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ text }) } as Response);
+        }
+        if (url.includes('/api/admin/spot-curations')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ item: null }) } as Response);
+        }
+        return Promise.reject(new Error(`unexpected fetch: ${url}`));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(
+        <BlogCurationModal
+          spot={SPOT_WITH_REGION}
+          serviceCategories={SERVICE_CATEGORIES}
+          onClose={vi.fn()}
+          onServiceCategoryUpdated={vi.fn()}
+        />
+      );
+
+      await screen.findByText('키즈카페 후기');
+      await waitFor(() => {
+        expect(screen.getByLabelText('주차 완비')).toBeChecked(); // 블로그1(정상) 기여
+        expect(screen.getByLabelText('예약 필수')).toBeChecked(); // 블로그3(정상) 기여
+      });
+      // 블로그2는 워닝(지역명 불일치)이 걸려 제외됐으므로 그 키워드는 반영되지 않는다.
+      expect(screen.getByLabelText('유모차 가능')).not.toBeChecked();
+      expect(screen.getByLabelText('수유실 있음')).not.toBeChecked();
     });
 
     it('기존 큐레이션을 수정하는 경우, 이미 저장된 뱃지 선택을 본문 자동 체크가 덮어쓰지 않는다', async () => {
