@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { parseMenuText, parseOperatingHoursText, ParsedMenuItem } from '@/lib/admin/spot-curation-parsers';
+import { parseEntranceFeeText, parseMenuText, parseOperatingHoursText, ParsedMenuItem } from '@/lib/admin/spot-curation-parsers';
 import { CORE_SPOT_CATEGORIES } from '@/lib/spaces/spot-category-groups';
 
 // [개발 종합 요청] 스팟픽 MVP 스마트 폴백, 관리자 큐레이션 및 배치 안정화 고도화(2026-09-01)
@@ -21,6 +21,12 @@ type SpotCurationItem = {
   break_end: string | null;
   last_order: string | null;
   menu_items: ParsedMenuItem[];
+  // [가격 및 입장료 스마트 파싱](2026-09-08 사용자 지시): 원래 BlogCurationModal
+  // 쪽으로 옮겼다가 "블로그 뱃지큐레이션하고 스팟큐레이션 합쳤는데.. 다시
+  // 분리해줘"라는 지시로 여기(스팟 큐레이션 화면)로 되돌아왔다 — 대표 이미지/
+  // 영업시간/메뉴와 같은 성격(정보 등록)의 필드라 원래 있어야 할 자리다.
+  child_fee: number | null;
+  guardian_fee: number | null;
   naver_booking_url: string | null;
   curation_note: string | null;
   created_at: string;
@@ -123,6 +129,14 @@ function CurationFormModal({
   const [lastOrder, setLastOrder] = useState(initial?.last_order ?? '');
   const [menuRaw, setMenuRaw] = useState('');
   const [menuItems, setMenuItems] = useState<ParsedMenuItem[]>(initial?.menu_items ?? []);
+  // [가격 및 입장료 스마트 파싱](2026-09-08 사용자 지시): "네이버 플레이스 등의
+  // 가격 텍스트를 그대로 복사·붙여넣기할 수 있는 [가격 스마트 입력창]을 제공.. 어린이
+  // 요금, 보호자 요금 등의 필드에 숫자가 자동으로 쪼개져 매핑되도록" — feeRaw(붙여넣기
+  // 원문)는 menuRaw와 동일하게 저장 대상이 아니다(파싱 결과인 childFee/guardianFee만
+  // 저장).
+  const [feeRaw, setFeeRaw] = useState('');
+  const [childFee, setChildFee] = useState<number | null>(initial?.child_fee ?? null);
+  const [guardianFee, setGuardianFee] = useState<number | null>(initial?.guardian_fee ?? null);
   const [naverBookingUrl, setNaverBookingUrl] = useState(initial?.naver_booking_url ?? '');
   const [curationNote, setCurationNote] = useState(initial?.curation_note ?? '');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -171,6 +185,12 @@ function CurationFormModal({
     setMenuItems((prev) => prev.filter((_, i) => i !== index));
   }
 
+  function handleParseFee() {
+    const parsed = parseEntranceFeeText(feeRaw);
+    setChildFee(parsed.childFee);
+    setGuardianFee(parsed.guardianFee);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (isSaving) return;
@@ -189,6 +209,8 @@ function CurationFormModal({
         break_end: breakEnd || null,
         last_order: lastOrder || null,
         menu_items: menuItems,
+        child_fee: childFee,
+        guardian_fee: guardianFee,
         naver_booking_url: naverBookingUrl.trim() || null,
         curation_note: curationNote || null,
       };
@@ -374,6 +396,45 @@ function CurationFormModal({
                 ))}
               </ul>
             )}
+          </div>
+
+          {/* [가격 및 입장료 스마트 파싱](2026-09-08 사용자 지시): "네이버 플레이스
+              등의 가격 텍스트를 그대로 복사·붙여넣기할 수 있는 [가격 스마트
+              입력창]을 제공.. 어린이 요금, 보호자 요금 등의 필드에 숫자가 자동으로
+              쪼개져 매핑되도록" — 위 영업시간/메뉴 파서와 동일한 붙여넣기+자동
+              파싱+수동 보정 UX를 재사용한다. */}
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-gray-700">입장료(텍스트 붙여넣기 — 어린이/보호자 요금 자동 인식)</span>
+            <textarea
+              value={feeRaw}
+              onChange={(e) => setFeeRaw(e.target.value)}
+              placeholder={'예: 아동 12,000원\n보호자 5,000원'}
+              rows={3}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm resize-y focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              type="button"
+              onClick={handleParseFee}
+              className="self-start rounded-full bg-gray-900 text-white text-xs font-semibold px-3 py-1.5 hover:bg-gray-700"
+            >
+              ⚡ 자동 파싱
+            </button>
+            <div className="grid grid-cols-2 gap-2 mt-1">
+              <input
+                type="number"
+                value={childFee ?? ''}
+                onChange={(e) => setChildFee(e.target.value === '' ? null : Number(e.target.value))}
+                placeholder="어린이 요금(원)"
+                className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs"
+              />
+              <input
+                type="number"
+                value={guardianFee ?? ''}
+                onChange={(e) => setGuardianFee(e.target.value === '' ? null : Number(e.target.value))}
+                placeholder="보호자 요금(원)"
+                className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs"
+              />
+            </div>
           </div>
 
           {/* [예약 및 링크 폴백 체인](2026-09-01 사용자 지시) 3순위: 공공예약/원본 링크가

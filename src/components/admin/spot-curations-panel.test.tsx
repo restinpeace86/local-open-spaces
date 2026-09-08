@@ -91,6 +91,9 @@ describe('SpotCurationsPanel — 리스트 기반 등록/수정 (2026-09-03)', (
             break_end: null,
             last_order: null,
             menu_items: [{ name: '짜장면', price: 7000 }],
+            // [가격 및 입장료 스마트 파싱](2026-09-08 사용자 지시) 프리필 확인용.
+            child_fee: 12000,
+            guardian_fee: 5000,
             naver_booking_url: null,
             curation_note: null,
             created_at: '2026-09-01T00:00:00.000Z',
@@ -109,6 +112,10 @@ describe('SpotCurationsPanel — 리스트 기반 등록/수정 (2026-09-03)', (
 
     expect(screen.getByText('스팟 큐레이션 수정')).toBeInTheDocument();
     expect(screen.getByText(/짜장면/)).toBeInTheDocument();
+    // [가격 및 입장료 스마트 파싱](2026-09-08 사용자 지시): 기존 큐레이션을
+    // 다시 열면 이미 저장된 입장료도 프리필된다.
+    expect(screen.getByPlaceholderText('어린이 요금(원)')).toHaveValue(12000);
+    expect(screen.getByPlaceholderText('보호자 요금(원)')).toHaveValue(5000);
   });
 
   it('이미 큐레이션이 있는 스팟 행에는 노출 활성화 토글이 함께 노출된다', async () => {
@@ -140,6 +147,56 @@ describe('SpotCurationsPanel — 리스트 기반 등록/수정 (2026-09-03)', (
 
     await screen.findByText('큐레이션됨');
     expect(screen.getByRole('switch')).toBeInTheDocument();
+  });
+
+  // [가격 및 입장료 스마트 파싱](2026-09-08 사용자 지시): "네이버 플레이스 등의
+  // 가격 텍스트를 그대로 복사·붙여넣기할 수 있는 [가격 스마트 입력창]을 제공..
+  // 어린이 요금, 보호자 요금 등의 필드에 숫자가 자동으로 쪼개져 매핑되도록 하고,
+  // 관리자가 수정·저장할 수 있어야 합니다." — 원래 BlogCurationModal로 옮겼다가
+  // 사용자 지시로 다시 이 화면(스팟 큐레이션)으로 되돌아왔다.
+  it('입장료 텍스트를 붙여넣고 자동 파싱하면 어린이/보호자 요금이 채워지고, 등록 시 그대로 전송된다', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/api/admin/data-grid')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ rows: [{ id: 'spot-1', name: '플레이버디 키즈카페', address: '경기도 의정부시' }], total: 1 }),
+        } as Response);
+      }
+      if (url.includes('/api/admin/spot-curations') && init?.method === 'POST') {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ item: { id: 'curation-1' } }) } as Response);
+      }
+      if (url.includes('/api/admin/spot-curations')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [] }) } as Response);
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<SpotCurationsPanel />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await waitFor(() => expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('플레이버디 키즈카페'));
+    expect(await screen.findByText('+ 스팟 큐레이션 등록')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText(/아동 12,000원/), {
+      target: { value: '아동 12,000원\n보호자 5,000원' },
+    });
+    // 자동 파싱 버튼이 영업시간/메뉴/입장료 3곳에 있다(폼 순서: 영업시간, 메뉴,
+    // 입장료) — 마지막(입장료) 버튼을 지정한다.
+    const parseButtons = screen.getAllByText('⚡ 자동 파싱');
+    fireEvent.click(parseButtons[parseButtons.length - 1]);
+
+    fireEvent.click(screen.getByText('등록하기'));
+
+    await waitFor(() => {
+      const saveCall = fetchMock.mock.calls.find(
+        (c) => (c[0] as string) === '/api/admin/spot-curations' && (c[1] as RequestInit)?.method === 'POST'
+      );
+      expect(saveCall).toBeDefined();
+      const body = JSON.parse((saveCall![1] as RequestInit).body as string);
+      expect(body.child_fee).toBe(12000);
+      expect(body.guardian_fee).toBe(5000);
+    });
   });
 });
 

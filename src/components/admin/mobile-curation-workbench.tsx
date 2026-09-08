@@ -5,7 +5,6 @@ import { ServiceCategory } from '@/lib/admin/service-category';
 import { useSpotCurationForm } from '@/lib/admin/use-spot-curation-form';
 import { BlogReferenceViewer } from '@/components/admin/blog-reference-viewer';
 import { CurationBadgeForm } from '@/components/admin/curation-badge-form';
-import { KidsCafeDetailsForm } from '@/components/admin/kids-cafe-details-form';
 import { GroupDetailModal } from '@/components/admin/spot-dedup-panel';
 import { DedupCandidateRow } from '@/lib/admin/spot-dedup-grouping';
 
@@ -218,46 +217,6 @@ export function MobileCurationWorkbench({
             onCurationNoteChange={form.setCurationNote}
           />
         </section>
-
-        {/* [키즈카페/실내놀이터 팝업 기본 입력 필드](2026-09-08 todo.md 개선사항1):
-            이 카테고리를 골랐을 때만 대표 이미지/영업시간/가격/메뉴 입력 UI를
-            보여준다(BlogCurationModal과 동일한 게이팅 — 제5장 제4조). */}
-        {form.curationCategoryId === 'kids_cafe' && (
-          <section className="flex flex-col gap-2">
-            <h3 className="text-xs font-bold text-gray-400">2-1. 키즈카페 기본 정보(이미지/영업시간/가격/메뉴)</h3>
-            <KidsCafeDetailsForm
-              imageUrl={form.imageUrl}
-              onImageUrlChange={form.setImageUrl}
-              isUploadingImage={form.isUploadingImage}
-              onPasteImage={form.handlePasteImage}
-              hoursRaw={form.hoursRaw}
-              onHoursRawChange={form.setHoursRaw}
-              openTime={form.openTime}
-              onOpenTimeChange={form.setOpenTime}
-              closeTime={form.closeTime}
-              onCloseTimeChange={form.setCloseTime}
-              breakStart={form.breakStart}
-              onBreakStartChange={form.setBreakStart}
-              breakEnd={form.breakEnd}
-              onBreakEndChange={form.setBreakEnd}
-              lastOrder={form.lastOrder}
-              onLastOrderChange={form.setLastOrder}
-              onParseHours={form.handleParseHours}
-              feeRaw={form.feeRaw}
-              onFeeRawChange={form.setFeeRaw}
-              childFee={form.childFee}
-              onChildFeeChange={form.setChildFee}
-              guardianFee={form.guardianFee}
-              onGuardianFeeChange={form.setGuardianFee}
-              onParseFee={form.handleParseFee}
-              menuRaw={form.menuRaw}
-              onMenuRawChange={form.setMenuRaw}
-              menuItems={form.menuItems}
-              onParseMenu={form.handleParseMenu}
-              onRemoveMenuItem={form.handleRemoveMenuItem}
-            />
-          </section>
-        )}
 
         {/* 3단: 네이버 블로그 참고 & 형광펜 뷰어 */}
         <section className="flex flex-col gap-2">

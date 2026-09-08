@@ -4,7 +4,6 @@ import { ServiceCategory } from '@/lib/admin/service-category';
 import { useSpotCurationForm } from '@/lib/admin/use-spot-curation-form';
 import { BlogReferenceViewer } from '@/components/admin/blog-reference-viewer';
 import { CurationBadgeForm } from '@/components/admin/curation-badge-form';
-import { KidsCafeDetailsForm } from '@/components/admin/kids-cafe-details-form';
 
 // [관리자용 블로그 큐레이션 모달 및 스마트 뷰어](2026-09-05 사용자 지시, Decision 021):
 // "관리자가 장소 상세 페이지에서 버튼을 누르면, 네이버 블로그 검색 API를
@@ -95,43 +94,6 @@ export function BlogCurationModal({
           curationNote={form.curationNote}
           onCurationNoteChange={form.setCurationNote}
         />
-
-        {/* [키즈카페/실내놀이터 팝업 기본 입력 필드](2026-09-08 todo.md 개선사항1):
-            "[키즈카페 / 실내놀이터] 카테고리를 위한" 요구사항 그대로, 이 카테고리를
-            골랐을 때만 대표 이미지/영업시간/가격/메뉴 입력 UI를 보여준다. */}
-        {form.curationCategoryId === 'kids_cafe' && (
-          <KidsCafeDetailsForm
-            imageUrl={form.imageUrl}
-            onImageUrlChange={form.setImageUrl}
-            isUploadingImage={form.isUploadingImage}
-            onPasteImage={form.handlePasteImage}
-            hoursRaw={form.hoursRaw}
-            onHoursRawChange={form.setHoursRaw}
-            openTime={form.openTime}
-            onOpenTimeChange={form.setOpenTime}
-            closeTime={form.closeTime}
-            onCloseTimeChange={form.setCloseTime}
-            breakStart={form.breakStart}
-            onBreakStartChange={form.setBreakStart}
-            breakEnd={form.breakEnd}
-            onBreakEndChange={form.setBreakEnd}
-            lastOrder={form.lastOrder}
-            onLastOrderChange={form.setLastOrder}
-            onParseHours={form.handleParseHours}
-            feeRaw={form.feeRaw}
-            onFeeRawChange={form.setFeeRaw}
-            childFee={form.childFee}
-            onChildFeeChange={form.setChildFee}
-            guardianFee={form.guardianFee}
-            onGuardianFeeChange={form.setGuardianFee}
-            onParseFee={form.handleParseFee}
-            menuRaw={form.menuRaw}
-            onMenuRawChange={form.setMenuRaw}
-            menuItems={form.menuItems}
-            onParseMenu={form.handleParseMenu}
-            onRemoveMenuItem={form.handleRemoveMenuItem}
-          />
-        )}
 
         {form.saveError && <p className="text-xs text-red-600">{form.saveError}</p>}
 
