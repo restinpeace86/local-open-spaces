@@ -215,6 +215,98 @@ describe('RawDataModal — 블로그 큐레이션 트리거', () => {
   });
 });
 
+// [open_spaces 상세에서 스팟 큐레이션 바로 열기](2026-09-08 사용자 지시): "스팟큐레이션
+// (가격, 메뉴 등 입력)도 블로그 큐레이션처럼.. 같은 레벨로 해당 버튼 아래에 스팟
+// 큐레이션 버튼 만들어서.. 누르면 스팟큐레이션 팝업가서 입력하도록 해줘" — 이 버튼이
+// open_spaces 탭에서만 노출되고 누르면 SpotCurationQuickModal(내부적으로
+// CurationFormModal 재사용)이 열리는지 확인한다.
+describe('RawDataModal — 스팟 큐레이션 트리거', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('open_spaces 탭에서 버튼을 누르면 스팟 큐레이션 팝업이 열린다(기존 큐레이션 없음 → 신규 등록 모드)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ item: null }) } as Response))
+    );
+    const row = buildRow({ name: '행복키즈카페', address: '경기도 성남시 분당구' });
+    render(
+      <RawDataModal
+        table="open_spaces"
+        row={row}
+        categoryMinOptions={[]}
+        serviceCategories={[]}
+        onServiceCategoryUpdated={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText('🏷️ 스팟 큐레이션 (대표 이미지/영업시간/가격/메뉴 입력)'));
+
+    expect(await screen.findByText('+ 스팟 큐레이션 등록')).toBeInTheDocument();
+    // 리스트 검색 없이 이미 정해진 스팟 이름이 곧바로 보인다(요약 카드).
+    expect(screen.getAllByText('행복키즈카페').length).toBeGreaterThan(0);
+  });
+
+  it('이미 큐레이션이 있는 스팟이면 기존 값이 채워진 수정 모드로 연다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              item: {
+                id: 'curation-1',
+                spot_id: 'row-1',
+                is_active: true,
+                image_url: null,
+                operating_hours_raw: null,
+                open_time: null,
+                close_time: null,
+                break_start: null,
+                break_end: null,
+                last_order: null,
+                menu_items: [{ name: '짜장면', price: 7000 }],
+                child_fee: null,
+                guardian_fee: null,
+                naver_booking_url: null,
+                curation_note: null,
+                created_at: 't',
+                updated_at: 't',
+                open_spaces: { name: '행복키즈카페', address: '경기도 성남시 분당구', category: 'CULTURE' },
+              },
+            }),
+        } as Response)
+      )
+    );
+    const row = buildRow({ name: '행복키즈카페', address: '경기도 성남시 분당구' });
+    render(
+      <RawDataModal
+        table="open_spaces"
+        row={row}
+        categoryMinOptions={[]}
+        serviceCategories={[]}
+        onServiceCategoryUpdated={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText('🏷️ 스팟 큐레이션 (대표 이미지/영업시간/가격/메뉴 입력)'));
+
+    expect(await screen.findByText('스팟 큐레이션 수정')).toBeInTheDocument();
+    expect(screen.getByText(/짜장면/)).toBeInTheDocument();
+  });
+
+  it('events 탭에는 이 버튼이 없다', () => {
+    const row = buildRow();
+    render(<RawDataModal table="events" row={row as unknown as AdminOpenSpaceRow} categoryMinOptions={[]} onClose={vi.fn()} />);
+
+    expect(screen.queryByText('🏷️ 스팟 큐레이션 (대표 이미지/영업시간/가격/메뉴 입력)')).not.toBeInTheDocument();
+  });
+});
+
 // [드래그 시 팝업 닫힘 버그 수정](2026-09-05 사용자 지시): "마우스로 살짝 드래그&드롭
 // 하면 팝업창이 그냥 꺼져버려.." — RawDataModal의 배경 클릭 닫기가 useBackdropDismiss로
 // 교체됐는지, 기존 "배경을 눌러 닫는" 정상 동작은 그대로 유지되는지 함께 검증한다.

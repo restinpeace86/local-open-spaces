@@ -5,6 +5,7 @@ import { AdminTable, AdminRow, AdminOpenSpaceRow, AdminEventRow, AdminRawIngestR
 import { MigrateToEventModal } from '@/components/admin/migrate-to-event-modal';
 import { ServiceCategory } from '@/lib/admin/service-category';
 import { BlogCurationModal } from '@/components/admin/blog-curation-modal';
+import { SpotCurationQuickModal } from '@/components/admin/spot-curation-quick-modal';
 import { useBackdropDismiss } from '@/lib/admin/use-backdrop-dismiss';
 
 // [개편] 행 클릭 시 해당 행의 전체 원천 컬럼(구조화된 값) + raw_data/raw_payload 원문 JSON을
@@ -400,6 +401,8 @@ export function RawDataModal({
   const prettyJson = JSON.stringify(raw ?? null, null, 2);
   const [isMigrateModalOpen, setIsMigrateModalOpen] = useState(false);
   const [isBlogCurationModalOpen, setIsBlogCurationModalOpen] = useState(false);
+  // [open_spaces 상세에서 스팟 큐레이션 바로 열기](2026-09-08 사용자 지시)
+  const [isSpotCurationModalOpen, setIsSpotCurationModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   // [원문 JSON 필드를 HTML로 보기](2026-09-06 사용자 지시) — 어떤 필드를 HTML로
@@ -523,6 +526,23 @@ export function RawDataModal({
               className="mt-3 w-full rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
             >
               🔍 블로그로 큐레이션 (뱃지/노출 중분류 빠르게 채우기)
+            </button>
+          )}
+
+          {/* [open_spaces 상세에서 스팟 큐레이션 바로 열기](2026-09-08 사용자 지시):
+              "스팟큐레이션(가격, 메뉴 등 입력)도 블로그 큐레이션처럼.. 같은 레벨로
+              해당 버튼 아래에 스팟 큐레이션 버튼 만들어서.. 누르면 스팟큐레이션
+              팝업가서 입력하도록 해줘" — 블로그 큐레이션 버튼과 같은 레벨(바로 아래)에
+              둔다. 블로그 큐레이션과 달리 onServiceCategoryUpdated 없이도(노출
+              중분류 갱신 콜백과 무관) 항상 열 수 있다 — 스팟 큐레이션은 노출
+              중분류를 바꾸지 않는다. */}
+          {table === 'open_spaces' && (
+            <button
+              type="button"
+              onClick={() => setIsSpotCurationModalOpen(true)}
+              className="mt-2 w-full rounded-xl border border-sky-200 bg-sky-50/60 px-3 py-2.5 text-xs font-semibold text-sky-800 hover:bg-sky-100"
+            >
+              🏷️ 스팟 큐레이션 (대표 이미지/영업시간/가격/메뉴 입력)
             </button>
           )}
 
@@ -652,6 +672,16 @@ export function RawDataModal({
           serviceCategories={serviceCategories}
           onClose={() => setIsBlogCurationModalOpen(false)}
           onServiceCategoryUpdated={onServiceCategoryUpdated}
+        />
+      )}
+
+      {isSpotCurationModalOpen && table === 'open_spaces' && (
+        <SpotCurationQuickModal
+          spotId={(row as AdminOpenSpaceRow).id}
+          spotName={(row as AdminOpenSpaceRow).name}
+          spotAddress={(row as AdminOpenSpaceRow).address}
+          onClose={() => setIsSpotCurationModalOpen(false)}
+          onSaved={() => setIsSpotCurationModalOpen(false)}
         />
       )}
     </div>

@@ -9,7 +9,7 @@ import { CORE_SPOT_CATEGORIES } from '@/lib/spaces/spot-category-groups';
 // 중심)와는 데이터 모양·목적이 달라 자기완결적인 별도 패널로 분리했다(CuratedItemsPanel과
 // 동일한 근거 — 제5장 제4조 기존 구조 우선의 취지는 "다른 목적을 억지로 통합"이 아님).
 // 관리자 페이지 성능 최적화(섹션 3)와 동일하게 마운트 시 자동 조회하지 않는다.
-type SpotCurationItem = {
+export type SpotCurationItem = {
   id: string;
   spot_id: string;
   is_active: boolean;
@@ -34,7 +34,7 @@ type SpotCurationItem = {
   open_spaces: { name: string; address: string | null; category: string } | null;
 };
 
-type SpotSearchResult = { id: string; name: string; address: string | null };
+export type SpotSearchResult = { id: string; name: string; address: string | null };
 
 // [todo.md 개선사항 9](2026-09-03) 실측으로 발견: 후보 목록 조회를 재사용하는
 // /api/admin/data-grid는 page_size를 50/100/200 중 하나로만 받고(그 외 값은 조용히
@@ -101,7 +101,12 @@ function BoundSpotSummary({ name, address }: { name: string; address: string | n
 // 그 리스트에서 항목을 클릭하면 이미 스팟이 정해진 채로(`presetSpot`) 이 모달이 열린다.
 // 그래서 모달 자체의 검색 UI(spotQuery/spotResults/자동완성 useEffect 전체)를 들어냈다 —
 // 요구사항 원문 "모달 내부는 메뉴/시간 정보만 입력"을 그대로 구현한 것.
-function CurationFormModal({
+// [open_spaces 상세에서 스팟 큐레이션 바로 열기](2026-09-08 사용자 지시): "스팟큐레이션
+// (가격, 메뉴 등 입력)도 블로그 큐레이션처럼.. open_spaces에서 데이터 상세 열었을때..
+// 스팟 큐레이션 버튼 만들어서.. 누르면 스팟큐레이션 팝업가서 입력하도록 해줘" —
+// RawDataModal(open_spaces 상세)이 이 모달을 직접 열 수 있도록 export한다(제5장
+// 제4조 기존 구조 우선 — 새 폼을 만들지 않고 이미 검증된 이 모달을 그대로 재사용).
+export function CurationFormModal({
   initial,
   presetSpot,
   onClose,
