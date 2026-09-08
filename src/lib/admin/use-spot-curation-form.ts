@@ -86,6 +86,16 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
   const [hasCheckedExistingCuration, setHasCheckedExistingCuration] = useState(false);
   const [hasAutoCheckedBadges, setHasAutoCheckedBadges] = useState(false);
   const [selectedBadges, setSelectedBadges] = useState<Set<string>>(new Set());
+  // [뱃지 상태별 시각적 색상 구분](2026-09-08 사용자 지시, todo.md 개선사항2-1):
+  // "AI가 키워드 기반으로 1차 자동 체크했으나 아직 DB에 저장되지 않은 상태는
+  // 초록색, 기존에 이미 DB에 저장되어 불러와진 상태는 파란색" — "이미 저장됨"의
+  // 기준선을 별도 Set으로 들고 있다가, 체크된 뱃지 중 이 Set에 없는 것만 초록으로
+  // 구분한다(자동 체크든 관리자가 방금 수동으로 새로 체크했든, "아직 저장 안 됨"
+  // 이라는 사실 자체는 동일하게 초록으로 보여주는 게 더 유용하다 — 저장 전 변경
+  // 사항을 한눈에 보여주는 목적과 부합). 저장이 성공하면 그 시점의 selectedBadges로
+  // 기준선을 다시 맞춘다(방금 저장한 것들도 이제 "이미 저장됨"이 되어 파란색으로
+  // 바뀜).
+  const [savedBadgeKeys, setSavedBadgeKeys] = useState<Set<string>>(new Set());
   const [serviceCategoryId, setServiceCategoryIdState] = useState(spot.service_category_id ?? '');
 
   // [카테고리별 뱃지/룰 완전 독립 Config 구조](2026-09-07 개선사항4): "노출 중분류"가
@@ -179,6 +189,7 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
           const item = data.item as SpotCurationItem;
           setExistingCuration(item);
           setSelectedBadges(new Set(item.curation_badges ?? []));
+          setSavedBadgeKeys(new Set(item.curation_badges ?? []));
           setCurationNote(item.curation_note ?? '');
         }
       })
@@ -308,6 +319,7 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
           });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? '큐레이션 저장에 실패했습니다.');
+      setSavedBadgeKeys(new Set(selectedBadges));
       return true;
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : '저장에 실패했습니다.');
@@ -359,6 +371,7 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
     overrideActiveUrl,
     existingCuration,
     selectedBadges,
+    savedBadgeKeys,
     toggleBadge,
     curationNote,
     setCurationNote,

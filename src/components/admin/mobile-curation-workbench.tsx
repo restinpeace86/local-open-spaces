@@ -211,6 +211,7 @@ export function MobileCurationWorkbench({
             badgeGroups={form.badgeGroups}
             badgeOptions={form.badgeOptions}
             selectedBadges={form.selectedBadges}
+            savedBadgeKeys={form.savedBadgeKeys}
             onToggleBadge={form.toggleBadge}
             curationNote={form.curationNote}
             onCurationNoteChange={form.setCurationNote}

@@ -149,6 +149,13 @@ describe('kids_cafe 카테고리 뱃지 — 식당과 완전히 독립적', () =
     const result = matchBadgeKeysFromText('영유아부터 미취학, 초등학생까지 다 즐길 수 있어요', 'kids_cafe');
     expect(result).toEqual(new Set(['kc_age_infant', 'kc_age_preschool', 'kc_age_school']));
   });
+
+  // [트램펄린 표기 동의어](2026-09-08 사용자 지시, todo.md 개선사항1-1): "트램폴린에
+  // 대하여 키워드 트램펄린도 가져가도록 할것"
+  it('트램펄린(대체 표기)도 트램폴린과 같은 뱃지로 매칭된다', () => {
+    expect(matchBadgeKeysFromText('트램펄린 존이 있어요', 'kids_cafe')).toEqual(new Set(['kc_trampoline']));
+    expect(matchBadgeKeysFromText('트램폴린 존이 있어요', 'kids_cafe')).toEqual(new Set(['kc_trampoline']));
+  });
 });
 
 describe('아직 전용 콘텐츠가 없는 노출 중분류(보편 임시 뱃지)', () => {

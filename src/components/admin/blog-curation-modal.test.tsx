@@ -228,7 +228,9 @@ describe('BlogCurationModal', () => {
     );
 
     await screen.findByText('행복키즈카페 다녀왔어요');
-    await waitFor(() => expect(screen.getByText('주차 완비').closest('label')).toHaveClass('bg-gray-900'));
+    // [뱃지 상태별 시각적 색상 구분](2026-09-08 개선사항2-1): 이미 DB에 저장되어
+    // 불러와진 뱃지는 파란색으로 표시된다(예전엔 단순 검은색이었음).
+    await waitFor(() => expect(screen.getByText('주차 완비').closest('label')).toHaveClass('bg-blue-600'));
 
     fireEvent.click(screen.getByText('저장 및 완료'));
 
@@ -238,6 +240,52 @@ describe('BlogCurationModal', () => {
       );
       expect(patchCall).toBeDefined();
       expect(JSON.parse((patchCall![1] as RequestInit).body as string).id).toBe('existing-1');
+    });
+  });
+
+  // [뱃지 상태별 시각적 색상 구분](2026-09-08 사용자 지시, todo.md 개선사항2-1):
+  // "AI가 1차 자동 체크했으나 아직 저장 안 된 상태는 초록, 이미 저장된 상태는 파란색"
+  describe('뱃지 상태별 색상 구분', () => {
+    it('신규 등록 시 방금 체크한 뱃지는 초록색(아직 저장 안 됨)이고, 저장하면 파란색(저장됨)으로 바뀐다', async () => {
+      const fetchMock = mockFetchByUrl({
+        blogSearch: { items: [makeBlogItem()], hasRecentReview: true, hasNoResults: false },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(
+        <BlogCurationModal spot={SPOT} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+      );
+
+      await screen.findByText('행복키즈카페 다녀왔어요');
+      fireEvent.click(screen.getByText('주차 완비'));
+      expect(screen.getByText('주차 완비').closest('label')).toHaveClass('bg-green-600');
+
+      fireEvent.click(screen.getByText('저장 및 완료'));
+      await waitFor(() => {
+        const saveCall = fetchMock.mock.calls.find(
+          (c) => (c[0] as string) === '/api/admin/spot-curations' && (c[1] as RequestInit)?.method === 'POST'
+        );
+        expect(saveCall).toBeDefined();
+      });
+    });
+
+    it('기존 큐레이션에서 이미 저장된 뱃지를 해제했다가 다시 체크하면 파란색(원래 저장된 값)을 유지한다', async () => {
+      const fetchMock = mockFetchByUrl({
+        blogSearch: { items: [makeBlogItem()], hasRecentReview: true, hasNoResults: false },
+        existingCuration: { id: 'existing-1', spot_id: 'spot-1', blog_url_1: null, blog_url_2: null, blog_url_3: null, curation_badges: ['parking'] },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(
+        <BlogCurationModal spot={SPOT} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+      );
+
+      await screen.findByText('행복키즈카페 다녀왔어요');
+      await waitFor(() => expect(screen.getByText('주차 완비').closest('label')).toHaveClass('bg-blue-600'));
+
+      // 아직 저장된 적 없는 다른 뱃지를 새로 체크하면 초록색이어야 한다.
+      fireEvent.click(screen.getByText('유모차 가능'));
+      expect(screen.getByText('유모차 가능').closest('label')).toHaveClass('bg-green-600');
+      // 기존 저장된 뱃지는 여전히 파란색 그대로다.
+      expect(screen.getByText('주차 완비').closest('label')).toHaveClass('bg-blue-600');
     });
   });
 

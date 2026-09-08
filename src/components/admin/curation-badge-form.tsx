@@ -18,6 +18,10 @@ export function CurationBadgeForm({
   badgeGroups,
   badgeOptions,
   selectedBadges,
+  // [뱃지 상태별 시각적 색상 구분](2026-09-08 사용자 지시, todo.md 개선사항2-1):
+  // "AI가 1차 자동 체크했으나 아직 저장 안 된 상태는 초록, 이미 DB에 저장된
+  // 상태는 파란색" — 이 Set에 들어있는 키만 "이미 저장됨"으로 판정한다.
+  savedBadgeKeys,
   onToggleBadge,
   curationNote,
   onCurationNoteChange,
@@ -28,6 +32,7 @@ export function CurationBadgeForm({
   badgeGroups: string[];
   badgeOptions: CurationBadgeOption[];
   selectedBadges: Set<string>;
+  savedBadgeKeys: Set<string>;
   onToggleBadge: (key: string) => void;
   // [큐레이션 메모 입력란](2026-09-06 사용자 지시): "내가 입력란에 좀.. 붙여넣을
   // 수 있게.. 입력가능한 란도 하나 만들어줘" — 태그/키워드/자유 메모 등 무엇이든
@@ -61,12 +66,19 @@ export function CurationBadgeForm({
             <div className="flex flex-wrap gap-1.5">
               {badgeOptions.filter((opt) => opt.group === group).map((opt) => {
                 const checked = selectedBadges.has(opt.key);
+                // 미체크: 기존 그대로. 체크됨 + 이미 저장된 뱃지: 파란색. 체크됨 +
+                // 아직 저장 안 된 뱃지(자동 체크 직후 또는 방금 수동 체크): 초록색.
+                const isSaved = checked && savedBadgeKeys.has(opt.key);
+                const isUnsaved = checked && !savedBadgeKeys.has(opt.key);
+                const colorClass = isSaved
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : isUnsaved
+                    ? 'bg-green-600 text-white border-green-600'
+                    : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50';
                 return (
                   <label
                     key={opt.key}
-                    className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs cursor-pointer ${
-                      checked ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                    }`}
+                    className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs cursor-pointer ${colorClass}`}
                   >
                     <input type="checkbox" checked={checked} onChange={() => onToggleBadge(opt.key)} className="sr-only" />
                     {opt.label}
