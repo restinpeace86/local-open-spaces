@@ -6,6 +6,7 @@ import { MigrateToEventModal } from '@/components/admin/migrate-to-event-modal';
 import { ServiceCategory } from '@/lib/admin/service-category';
 import { BlogCurationModal } from '@/components/admin/blog-curation-modal';
 import { SpotCurationQuickModal } from '@/components/admin/spot-curation-quick-modal';
+import { SpotDedupQuickModal } from '@/components/admin/spot-dedup-quick-modal';
 import { useBackdropDismiss } from '@/lib/admin/use-backdrop-dismiss';
 
 // [개편] 행 클릭 시 해당 행의 전체 원천 컬럼(구조화된 값) + raw_data/raw_payload 원문 JSON을
@@ -403,6 +404,8 @@ export function RawDataModal({
   const [isBlogCurationModalOpen, setIsBlogCurationModalOpen] = useState(false);
   // [open_spaces 상세에서 스팟 큐레이션 바로 열기](2026-09-08 사용자 지시)
   const [isSpotCurationModalOpen, setIsSpotCurationModalOpen] = useState(false);
+  // [open_spaces 상세에서 중복 스팟 검토](2026-09-09 사용자 지시)
+  const [isSpotDedupModalOpen, setIsSpotDedupModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   // [원문 JSON 필드를 HTML로 보기](2026-09-06 사용자 지시) — 어떤 필드를 HTML로
@@ -546,6 +549,21 @@ export function RawDataModal({
             </button>
           )}
 
+          {/* [open_spaces 상세에서 중복 스팟 검토](2026-09-09 사용자 지시): "8월 일반캠핑존
+              C형.. 장소기준으로는 난지캠핑장 하나 아니야?" → "중복스팟 검수 및 매핑..
+              해당 스팟 상세에 대하여 버튼 만들어서.." — 위 두 버튼과 같은 레벨에 둔다.
+              기존 관리자 '중복 스팟 그룹핑' 탭(spot-dedup-panel.tsx)의 병합 로직을
+              그대로 재사용한다(SpotDedupQuickModal 참고, 제5장 제4조). */}
+          {table === 'open_spaces' && (
+            <button
+              type="button"
+              onClick={() => setIsSpotDedupModalOpen(true)}
+              className="mt-2 w-full rounded-xl border border-orange-200 bg-orange-50/60 px-3 py-2.5 text-xs font-semibold text-orange-800 hover:bg-orange-100"
+            >
+              🔗 중복 스팟 검토 (같은 장소 병합)
+            </button>
+          )}
+
           {/* [todo.md 개선사항 5](2026-09-03): 스팟픽에 잘못 분류돼 있던 데이터(예: 실제로는
               기간이 있는 행사·체험 프로그램)를 이벤트픽 테이블로 옮기는 액션. open_spaces
               탭에서만 의미가 있다. */}
@@ -682,6 +700,20 @@ export function RawDataModal({
           spotAddress={(row as AdminOpenSpaceRow).address}
           onClose={() => setIsSpotCurationModalOpen(false)}
           onSaved={() => setIsSpotCurationModalOpen(false)}
+        />
+      )}
+
+      {isSpotDedupModalOpen && table === 'open_spaces' && (
+        <SpotDedupQuickModal
+          spot={{
+            id: (row as AdminOpenSpaceRow).id,
+            name: (row as AdminOpenSpaceRow).name,
+            category: (row as AdminOpenSpaceRow).category,
+            category_min: (row as AdminOpenSpaceRow).category_min,
+            address: (row as AdminOpenSpaceRow).address,
+          }}
+          serviceCategories={serviceCategories}
+          onClose={() => setIsSpotDedupModalOpen(false)}
         />
       )}
     </div>

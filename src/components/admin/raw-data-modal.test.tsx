@@ -307,6 +307,46 @@ describe('RawDataModal — 스팟 큐레이션 트리거', () => {
   });
 });
 
+// [open_spaces 상세에서 중복 스팟 검토](2026-09-09 사용자 지시): "8월 일반캠핑존
+// C형.. 장소기준으로는 난지캠핑장 하나 아니야?" → "해당 스팟 상세에 대하여 버튼
+// 만들어서 중복 스팟 검색이라던가 검수라던가.." — 이 버튼이 open_spaces 탭에서만
+// 노출되고 누르면 SpotDedupQuickModal이 열리는지 확인한다(모달 내부 동작은
+// spot-dedup-quick-modal.test.tsx가 별도로 검증).
+describe('RawDataModal — 중복 스팟 검토 트리거', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('open_spaces 탭에서 버튼을 누르면 중복 스팟 검토 팝업이 열린다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [] }) } as Response))
+    );
+    const row = buildRow();
+    render(
+      <RawDataModal
+        table="open_spaces"
+        row={row}
+        categoryMinOptions={[]}
+        serviceCategories={[]}
+        onServiceCategoryUpdated={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText('🔗 중복 스팟 검토 (같은 장소 병합)'));
+
+    expect(await screen.findByText('🔗 중복 스팟 검토')).toBeInTheDocument();
+  });
+
+  it('events 탭에는 이 버튼이 없다', () => {
+    const row = buildRow();
+    render(<RawDataModal table="events" row={row as unknown as AdminOpenSpaceRow} categoryMinOptions={[]} onClose={vi.fn()} />);
+
+    expect(screen.queryByText('🔗 중복 스팟 검토 (같은 장소 병합)')).not.toBeInTheDocument();
+  });
+});
+
 // [드래그 시 팝업 닫힘 버그 수정](2026-09-05 사용자 지시): "마우스로 살짝 드래그&드롭
 // 하면 팝업창이 그냥 꺼져버려.." — RawDataModal의 배경 클릭 닫기가 useBackdropDismiss로
 // 교체됐는지, 기존 "배경을 눌러 닫는" 정상 동작은 그대로 유지되는지 함께 검증한다.
