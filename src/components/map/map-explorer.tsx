@@ -15,10 +15,14 @@ import { AiChatFab } from '@/components/chat/ai-chat-fab';
 import { Toast } from '@/components/map/toast';
 import { LocationHeader } from '@/components/map/location-header';
 import { LocationOnboardingModal } from '@/components/map/location-onboarding-modal';
+import { GpsSyncModal } from '@/components/map/gps-sync-modal';
 import { RecenterButton } from '@/components/map/recenter-button';
 import { MyLocationButton } from '@/components/map/my-location-button';
 import { getNearbySpacesAndEvents, NearbyItem } from '@/lib/spaces/get-nearby';
 import { useUserLocation } from '@/hooks/use-user-location';
+import { useGpsSyncCheck } from '@/hooks/use-gps-sync-check';
+import { useLiveGpsPosition } from '@/hooks/use-live-gps-position';
+import { haversineDistanceMeters } from '@/lib/geo/haversine';
 import { CORE_SPOT_CATEGORIES } from '@/lib/spaces/spot-category-groups';
 import { rankAiRecommendedSpots } from '@/lib/spaces/ai-recommend';
 
@@ -34,6 +38,12 @@ const MARKER_LIMIT = 1000;
 // 기본값(5km)을 그대로 고정값으로 승계한다(임의로 새 값을 고르지 않음, 기존 동작 최대한 보존).
 const FIXED_RADIUS_METERS = 5000;
 
+// [바텀시트 GPS 거리순 정렬](2026-09-08 사용자 지시, todo.md 개선사항3-1): "하단
+// 바텀시트 리스트는 유저의 '현재 GPS 위치'를 기준으로 가까운 거리순으로 정렬합니다
+// (단 하단 바텀시트 리스트는 현재 설정한 위치 기준 반경 10km 로 제한합니다.)" —
+// 지시문이 명시한 값 그대로.
+const SHEET_GPS_DISTANCE_LIMIT_METERS = 10000;
+
 export function MapExplorer() {
   const {
     center,
@@ -44,6 +54,12 @@ export function MapExplorer() {
     openOnboarding,
     closeOnboarding,
   } = useUserLocation();
+  // [실시간 위치 싱크(GPS Sync 팝업)](2026-09-08 사용자 지시, todo.md 개선사항3-3)
+  const { suggestion: gpsSyncSuggestion, dismiss: dismissGpsSync } = useGpsSyncCheck(center, isOnboardingOpen);
+  // [바텀시트 GPS 거리순 정렬](2026-09-08 개선사항3-1): 위 훅과 별개로 바텀시트
+  // 정렬에도 같은 실시간 GPS 좌표가 필요하다(내부적으로 동일한 훅을 공유해 중복
+  // 조회 없음 — useGpsSyncCheck도 useLiveGpsPosition을 그대로 쓴다).
+  const liveGpsPosition = useLiveGpsPosition();
   // Task 9-1(2026-08-22): 홈 화면 검색바에서 "/nearby?q=..."로 넘어온 검색어를 초기값으로 반영한다.
   const searchParams = useSearchParams();
   const radius = FIXED_RADIUS_METERS;
@@ -185,6 +201,16 @@ export function MapExplorer() {
     [confirmLocation]
   );
 
+  // [실시간 위치 싱크(GPS Sync 팝업)](2026-09-08 사용자 지시, todo.md 개선사항3-3):
+  // "수락 시 기본 위치 설정을 현재 GPS 기준으로 업데이트합니다" — 동네를 직접
+  // 재설정하는 것과 동일하게 처리한다(드래그/재검색으로 벗어나 있던 임시 기준점도
+  // 함께 초기화).
+  const handleAcceptGpsSync = useCallback(() => {
+    if (!gpsSyncSuggestion) return;
+    handleConfirmLocation(gpsSyncSuggestion);
+    dismissGpsSync();
+  }, [gpsSyncSuggestion, handleConfirmLocation, dismissGpsSync]);
+
   // implementation/todo.md: dragend 발생 시 새로운 지도 중심을 재검색 후보로 저장해 Floating 버튼을 노출한다.
   const handleMapDragEnd = useCallback((dragCenter: { lat: number; lng: number }) => {
     setPendingRecenter(dragCenter);
@@ -259,6 +285,27 @@ export function MapExplorer() {
 
   const visibleItems = useMemo(() => filteredItems.slice(0, MARKER_LIMIT), [filteredItems]);
   const isOverLimit = filteredItems.length > MARKER_LIMIT;
+
+  // [바텀시트 GPS 거리순 정렬](2026-09-08 사용자 지시, todo.md 개선사항3-1): 지도
+  // 마커/데스크톱 목록은 기존처럼 effectiveCenter(설정한 동네 또는 드래그/검색
+  // 기준점) 기준 순서를 그대로 쓰고, 모바일 바텀시트 리스트만 실시간 GPS 좌표
+  // 기준으로 다시 정렬 + 10km로 재제한한다. GPS를 못 가져왔으면(권한 거부 등)
+  // 기존 목록으로 조용히 폴백한다(제5장 제11조).
+  // 검색 모드(전국구 서버사이드 텍스트 검색)는 "주변" 탐색이 아니라 이름으로 콕
+  // 짚어 찾는 목적이라, 실제 검색 결과를 GPS 10km로 임의로 잘라내면 오히려
+  // 사용자가 찾던 항목이 사라져 보이는 회귀가 된다 — 검색 모드에서는 이 재정렬을
+  // 적용하지 않는다.
+  const mobileSheetItems = useMemo(() => {
+    if (isSearchMode || !liveGpsPosition) return visibleItems;
+    return visibleItems
+      .map((item) => ({ item, gpsDistance: haversineDistanceMeters(liveGpsPosition, { lat: item.lat, lng: item.lng }) }))
+      .filter(({ gpsDistance }) => gpsDistance <= SHEET_GPS_DISTANCE_LIMIT_METERS)
+      .sort((a, b) => a.gpsDistance - b.gpsDistance)
+      // ItemListPanel은 item.distance_meters를 그대로 표시하므로, 여기서
+      // GPS 기준 실제 거리로 덮어써야 화면에 보이는 거리도 정렬 기준과 일치한다.
+      .map(({ item, gpsDistance }) => ({ ...item, distance_meters: gpsDistance }));
+  }, [isSearchMode, visibleItems, liveGpsPosition]);
+
   const isBusy = isSearchMode ? isSearching : isLoading;
   const activeError = isSearchMode ? searchError : errorMessage;
   const isEmptyByFilter =
@@ -429,7 +476,7 @@ export function MapExplorer() {
         >
           <span className="w-10 h-1 rounded-full bg-gray-300" aria-hidden />
           <span className="mt-2 text-sm text-gray-600">
-            {isSearchMode ? '검색결과' : '주변'} {visibleItems.length}건 {isSheetExpanded ? '접기' : '목록 보기'}
+            {isSearchMode ? '검색결과' : '주변'} {mobileSheetItems.length}건 {isSheetExpanded ? '접기' : '목록 보기'}
           </span>
         </button>
         <div className="h-[calc(100%-56px)] overflow-y-auto">
@@ -438,7 +485,7 @@ export function MapExplorer() {
           {isEmptyByFilter && <EmptyState onReset={resetFilters} />}
           {!isBusy && !activeError && !isEmptyByFilter && (
             <ItemListPanel
-              items={visibleItems}
+              items={mobileSheetItems}
               selectedId={selectedItem?.id ?? null}
               onSelect={(item) => {
                 handleSelectItem(item);
@@ -485,6 +532,16 @@ export function MapExplorer() {
 
       {isOnboardingOpen && (
         <LocationOnboardingModal onConfirm={handleConfirmLocation} onClose={closeOnboarding} />
+      )}
+
+      {/* [실시간 위치 싱크(GPS Sync 팝업)](2026-09-08 todo.md 개선사항3-3): 온보딩이
+          열려 있을 때는 useGpsSyncCheck 자체가 검사를 건너뛰므로 동시에 뜰 일이 없다. */}
+      {gpsSyncSuggestion && (
+        <GpsSyncModal
+          neighborhoodName={gpsSyncSuggestion.sigungu_name ?? gpsSyncSuggestion.address_name}
+          onConfirm={handleAcceptGpsSync}
+          onDismiss={dismissGpsSync}
+        />
       )}
 
       {/* [스팟픽 AI 맞춤 추천 챗봇 엔진](2026-09-01 사용자 지시): 기존 "AI 추천" 칩

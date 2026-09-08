@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MapExplorer } from './map-explorer';
 
 // [검색창/지도 검색 키워드 유연성 대폭 개선](2026-08-30 사용자 지시)를 위해 mockResolvedValueOnce로
@@ -440,5 +440,57 @@ describe('MapExplorer 마커 클릭 2단계 UX (2026-09-01)', () => {
 
     expect(await screen.findByText('주소')).toBeInTheDocument();
     expect(screen.queryByLabelText('미리보기 닫기')).not.toBeInTheDocument();
+  });
+});
+
+// [바텀시트 GPS 거리순 정렬](2026-09-08 사용자 지시, todo.md 개선사항3-1): "하단
+// 바텀시트 리스트는 유저의 '현재 GPS 위치'를 기준으로 가까운 거리순으로 정렬합니다
+// (단 하단 바텀시트 리스트는 현재 설정한 위치 기준 반경 10km 로 제한합니다.)"
+describe('MapExplorer 바텀시트 GPS 거리순 정렬(개선사항3-1)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('실시간 GPS 기준 10km를 넘는 항목은 바텀시트 목록에서 제외된다(데스크톱 목록/지도는 그대로 유지)', async () => {
+    // GPS 위치를 makeSpaceRow() 기본 좌표(37.5, 127.1)로 고정한다.
+    const getCurrentPosition = vi.fn((success) => success({ coords: { latitude: 37.5, longitude: 127.1 } }));
+    vi.stubGlobal('navigator', { geolocation: { getCurrentPosition } });
+
+    // '서울시청카페'는 effectiveCenter(기본 서울시청, 37.5665/126.978)와 정확히 같은
+    // 좌표라 서버 거리(distance_meters)는 가장 가깝지만, 실시간 GPS(37.5/127.1)
+    // 로부터는 10km를 넘는다 — GPS 기준 정렬/제한이 실제로 적용됐다면 바텀시트에서
+    // 빠지고, 지도/데스크톱 목록은 원래 순서/전체 개수를 그대로 유지해야 한다.
+    rpcMock.mockResolvedValueOnce({
+      data: [
+        makeSpaceRow({ id: 'seoul-1', name: '서울시청카페', distance_meters: 50, lat: 37.5665, lng: 126.978 }),
+        makeSpaceRow({ id: 'gps-1', name: '용인어린이상상의숲', distance_meters: 4800 }),
+      ],
+      error: null,
+    });
+    render(<MapExplorer />);
+    await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
+
+    await waitFor(() => expect(screen.getByText(/주변 1건/)).toBeInTheDocument());
+    // GPS와 가까운 쪽은 데스크톱 목록 + 모바일 바텀시트 둘 다 보인다.
+    expect(screen.getAllByText('용인어린이상상의숲').length).toBeGreaterThanOrEqual(2);
+    // GPS와 먼 쪽은 데스크톱 목록에는 여전히 보이지만(1회), 바텀시트에서는 빠져
+    // 전체 등장 횟수가 1회(데스크톱만)여야 한다.
+    expect(screen.getAllByText('서울시청카페')).toHaveLength(1);
+  });
+
+  it('GPS를 가져올 수 없으면(권한 거부) 기존처럼 전체 목록을 그대로 보여준다(폴백)', async () => {
+    const getCurrentPosition = vi.fn((_success, error) => error());
+    vi.stubGlobal('navigator', { geolocation: { getCurrentPosition } });
+
+    rpcMock.mockResolvedValueOnce({
+      data: [makeSpaceRow({ id: 'seoul-1', name: '서울시청카페', lat: 37.5665, lng: 126.978 })],
+      error: null,
+    });
+    render(<MapExplorer />);
+    await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
+
+    await waitFor(() => expect(getCurrentPosition).toHaveBeenCalled());
+    expect(await screen.findByText(/주변 1건/)).toBeInTheDocument();
+    expect(screen.getAllByText('서울시청카페').length).toBeGreaterThanOrEqual(2);
   });
 });
