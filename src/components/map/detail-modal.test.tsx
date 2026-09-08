@@ -350,7 +350,10 @@ describe('DetailModal 스마트 폴백(View/Reservation Fallback, 2026-09-01)', 
     render(<DetailModal item={makeSpaceItem({ operating_hours: '평일 09:00-18:00' })} onClose={() => {}} />);
 
     expect(await screen.findByText('평일 09:00-18:00')).toBeInTheDocument();
-    expect(screen.queryByText(/메뉴/)).not.toBeInTheDocument();
+    // [가격 및 메뉴 '준비 중' 플레이스홀더](2026-09-08 개선사항3-5): 메뉴가 없어도
+    // 행 자체는 숨기지 않고 전용 문구를 보여준다(예전엔 완전히 숨겨졌음).
+    expect(screen.getByText('메뉴')).toBeInTheDocument();
+    expect(await screen.findByText('상세 메뉴 정보는 순차적으로 추가될 예정이에요')).toBeInTheDocument();
   });
 
   it('큐레이션이 있으면 구조화된 영업시간(오픈~마감/브레이크타임/라스트오더)을 우선 보여준다', async () => {
@@ -392,6 +395,45 @@ describe('DetailModal 스마트 폴백(View/Reservation Fallback, 2026-09-01)', 
     render(<DetailModal item={makeSpaceItem()} onClose={() => {}} />);
 
     expect(await screen.findByText('짜장면 · 7,000원')).toBeInTheDocument();
+  });
+
+  // [가격 및 메뉴 '준비 중' 플레이스홀더](2026-09-08 사용자 지시, todo.md 개선사항3-5)
+  describe('가격 정보', () => {
+    it('큐레이션에 입장료(child_fee/guardian_fee)가 있으면 그대로 보여준다', async () => {
+      mockCurationResponse({
+        id: 'curation-1',
+        spot_id: 'space-1',
+        image_url: null,
+        operating_hours_raw: null,
+        open_time: null,
+        close_time: null,
+        break_start: null,
+        break_end: null,
+        last_order: null,
+        menu_items: [],
+        child_fee: 12000,
+        guardian_fee: 5000,
+        naver_booking_url: null,
+        curation_note: null,
+      });
+      render(<DetailModal item={makeSpaceItem({ is_free: false })} onClose={() => {}} />);
+
+      expect(await screen.findByText('어린이 12,000원 · 보호자 5,000원')).toBeInTheDocument();
+    });
+
+    it('입장료가 없어도 공공데이터로 이미 무료임을 알면(is_free=true) "무료입장"으로 보여준다(오해의 소지가 있는 준비중 문구 대신)', async () => {
+      mockCurationResponse(null);
+      render(<DetailModal item={makeSpaceItem({ is_free: true })} onClose={() => {}} />);
+
+      expect(await screen.findByText('무료입장')).toBeInTheDocument();
+    });
+
+    it('입장료도 없고 무료 여부도 모르면 준비중 플레이스홀더를 보여준다', async () => {
+      mockCurationResponse(null);
+      render(<DetailModal item={makeSpaceItem({ is_free: null })} onClose={() => {}} />);
+
+      expect(await screen.findByText('가격 정보 업데이트 준비 중입니다 ⏳')).toBeInTheDocument();
+    });
   });
 
   it('큐레이션의 대표 이미지가 있으면 헤더에 보여준다', async () => {

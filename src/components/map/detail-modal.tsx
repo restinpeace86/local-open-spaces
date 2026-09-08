@@ -14,6 +14,15 @@ import { BookmarkButton } from '@/components/community/bookmark-button';
 
 const NO_INFO_TEXT = '정보 준비 중 (공공 기관 문의)';
 
+// [가격 및 메뉴 '준비 중' 플레이스홀더](2026-09-08 사용자 지시, todo.md
+// 개선사항3-5): "MVP 단계에서 가격이나 메뉴 데이터가 아직 채워지지 않은
+// 스팟의 경우, 빈 화면 대신 아래와 같은 플레이스홀더 문구를 노출하여
+// 신뢰도를 유지합니다" — 주소 등 다른 필드의 기존 NO_INFO_TEXT("공공 기관
+// 문의")와는 다른, 더 친근한 톤의 전용 문구를 그대로 지시받은 원문대로 쓴다.
+const PRICE_PLACEHOLDER = '가격 정보 업데이트 준비 중입니다 ⏳';
+const MENU_PLACEHOLDER = '상세 메뉴 정보는 순차적으로 추가될 예정이에요';
+const HOURS_PLACEHOLDER = '영업시간 정보는 순차적으로 추가될 예정이에요';
+
 // [개발 종합 요청] 스팟픽 MVP 스마트 폴백 아키텍처(2026-09-01 사용자 지시) 섹션 1
 // "View Fallback": 우리 DB(spot_curations)에 관리자가 보강한 상세 정보가 있으면 그
 // "풍성한" 정보를 쓰고, 없으면 지금까지처럼 공공데이터 기본 뼈대(주소/운영시간/
@@ -29,9 +38,21 @@ type SpotCuration = {
   break_end: string | null;
   last_order: string | null;
   menu_items: Array<{ name: string; price: number }>;
+  // [가격 및 입장료 스마트 파싱](2026-09-08 개선사항1-3에서 관리자가 입력)
+  child_fee: number | null;
+  guardian_fee: number | null;
   naver_booking_url: string | null;
   curation_note: string | null;
 };
+
+// 있는 것만 이어붙인다(추측으로 빈 칸을 채우지 않음) — formatCuratedHours와 동일한
+// 원칙.
+function formatEntranceFee(curation: SpotCuration): string | null {
+  const parts: string[] = [];
+  if (curation.child_fee != null) parts.push(`어린이 ${curation.child_fee.toLocaleString()}원`);
+  if (curation.guardian_fee != null) parts.push(`보호자 ${curation.guardian_fee.toLocaleString()}원`);
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
 
 // 구조화된 필드가 있으면 사람이 읽기 좋은 한 줄로 합친다(예: "10:00~22:00 (브레이크타임
 // 15:00~17:00, 라스트오더 21:30)") — 관리자가 개별 필드를 일부만 채웠어도 있는 것만
@@ -330,24 +351,48 @@ export function DetailModal({
                   {(curation && formatCuratedHours(curation)) ||
                     curation?.operating_hours_raw ||
                     item.operating_hours ||
-                    NO_INFO_TEXT}
+                    HOURS_PLACEHOLDER}
+                </dd>
+              </div>
+            )}
+
+            {/* [가격 및 메뉴 '준비 중' 플레이스홀더](2026-09-08 개선사항3-5): 입장료가
+                아직 없으면 빈 화면 대신 전용 문구를 보여준다(주소처럼 "이미 공공데이터에
+                항상 있어야 할 정보"가 아니라 관리자 큐레이션에 의존하는 정보라, 로딩
+                중(curation === undefined)에는 아직 판단하지 않고 잠시 아무것도 보여주지
+                않는다 — 로딩 끝나면 즉시 실제 값 또는 플레이스홀더로 확정된다). */}
+            {!isEvent && curation !== undefined && (
+              <div className="flex items-start justify-between gap-2">
+                <dt className="text-gray-500 shrink-0">가격</dt>
+                {/* item.is_free===true(공공데이터로 이미 확인된 무료 시설)면 굳이
+                    "준비 중"이라는 오해의 소지가 있는 문구 대신 이미 아는 사실을
+                    그대로 보여준다 — 신뢰도 유지라는 취지에 더 부합한다. */}
+                <dd className="text-right text-gray-900">
+                  {(curation && formatEntranceFee(curation)) ||
+                    (item.is_free === true ? '무료입장' : PRICE_PLACEHOLDER)}
                 </dd>
               </div>
             )}
 
             {/* [View Fallback](2026-09-01 사용자 지시) "풍성한 뷰": 관리자가 등록한 메뉴가
-                있으면 보여준다. 공공데이터에는 메뉴 개념 자체가 없어 큐레이션 전용 정보다. */}
-            {!isEvent && curation && curation.menu_items.length > 0 && (
+                있으면 보여준다. 공공데이터에는 메뉴 개념 자체가 없어 큐레이션 전용 정보다.
+                [가격 및 메뉴 '준비 중' 플레이스홀더](2026-09-08 개선사항3-5): 메뉴가 없어도
+                행 자체는 숨기지 않고 전용 문구로 대신한다. */}
+            {!isEvent && curation !== undefined && (
               <div className="flex items-start justify-between gap-2">
                 <dt className="text-gray-500 shrink-0">메뉴</dt>
                 <dd className="text-right text-gray-900">
-                  <ul className="flex flex-col gap-0.5">
-                    {curation.menu_items.map((menuItem, i) => (
-                      <li key={`${menuItem.name}-${i}`}>
-                        {menuItem.name} · {menuItem.price.toLocaleString()}원
-                      </li>
-                    ))}
-                  </ul>
+                  {curation && curation.menu_items.length > 0 ? (
+                    <ul className="flex flex-col gap-0.5">
+                      {curation.menu_items.map((menuItem, i) => (
+                        <li key={`${menuItem.name}-${i}`}>
+                          {menuItem.name} · {menuItem.price.toLocaleString()}원
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    MENU_PLACEHOLDER
+                  )}
                 </dd>
               </div>
             )}

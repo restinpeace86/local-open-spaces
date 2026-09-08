@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
 
@@ -9,10 +10,15 @@ import { getCategoryMeta } from '@/lib/spaces/category-meta';
 // 터치해야만(2단계) 전체 상세 모달로 들어간다(map-explorer.tsx가 onOpenDetail에서
 // selectedItem을 세팅해 DetailModal을 연다).
 //
-// 공공데이터 스팟은 thumbnail_url이 항상 null이라(get-home-feed.ts의 toSpaceItem) 실제
-// 썸네일 이미지가 없는 경우가 대부분이다 — 이 카드에서 관리자 큐레이션 이미지를 추가로
-// 조회하지는 않는다(가벼운 1단계 카드의 취지에 맞게 별도 네트워크 요청 없이 카테고리
-// 색상 아이콘으로 대체, 실제 대표 이미지는 2단계 상세 모달에서 보여준다).
+// [프리뷰 카드에 대표 이미지/핵심 뱃지 추가](2026-09-08 사용자 지시, todo.md
+// 개선사항3-4): "[요약 프리뷰 카드] (대표 이미지, 이름, 핵심 뱃지)" — 예전엔
+// "가벼운 1단계 카드의 취지에 맞게 별도 네트워크 요청 없이" 카테고리 색상
+// 아이콘만 보여줬는데, 이번 지시가 실제 대표 이미지/뱃지를 명시적으로 요구해
+// DetailModal과 동일한 공개 엔드포인트(/api/spot-curations)를 가볍게 한 번
+// 호출한다(단건 조회라 부담은 크지 않음). 큐레이션이 없거나 조회 실패하면
+// 기존처럼 카테고리 색상 아이콘으로 조용히 폴백한다(제5장 제11조).
+type PreviewCuration = { image_url: string | null; badge_labels: string[] };
+
 export function MarkerPreviewCard({
   item,
   onOpenDetail,
@@ -23,6 +29,26 @@ export function MarkerPreviewCard({
   onClose: () => void;
 }) {
   const meta = getCategoryMeta(item.category);
+  const [curation, setCuration] = useState<PreviewCuration | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setCuration(null);
+    fetch(`/api/spot-curations?spot_id=${encodeURIComponent(item.id)}`)
+      .then((res) => res.json())
+      .then((data: { item?: PreviewCuration | null }) => {
+        if (!cancelled) setCuration(data.item ?? null);
+      })
+      .catch(() => {
+        // 조회 실패해도 카드 자체는 계속 보여줘야 하므로 기존 아이콘 폴백으로 둔다.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [item.id]);
+
+  // 핵심 뱃지만 간단히 — 카드가 좁아 2개까지만 보여준다.
+  const coreBadges = (curation?.badge_labels ?? []).slice(0, 2);
 
   return (
     // [마커 미리보기 카드가 바텀시트를 가리는 문제 수정](2026-09-05 사용자 지시): "지도에
@@ -52,16 +78,37 @@ export function MarkerPreviewCard({
           aria-label={`${item.name} 상세보기`}
           className="w-full flex items-center gap-3 p-3 pr-8 text-left"
         >
-          <div
-            className="shrink-0 w-14 h-14 rounded-xl flex items-center justify-center text-2xl"
-            style={{ backgroundColor: `${meta.color}22` }}
-            aria-hidden
-          >
-            🖼️
-          </div>
+          {curation?.image_url ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={curation.image_url}
+              alt={item.name}
+              className="shrink-0 w-14 h-14 rounded-xl object-cover"
+            />
+          ) : (
+            <div
+              className="shrink-0 w-14 h-14 rounded-xl flex items-center justify-center text-2xl"
+              style={{ backgroundColor: `${meta.color}22` }}
+              aria-hidden
+            >
+              🖼️
+            </div>
+          )}
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-gray-900 truncate">{item.name}</p>
             <p className="text-xs text-gray-500 truncate">{item.address || meta.label}</p>
+            {coreBadges.length > 0 && (
+              <div className="mt-1 flex gap-1">
+                {coreBadges.map((label) => (
+                  <span
+                    key={label}
+                    className="shrink-0 text-[10px] font-medium px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600"
+                  >
+                    {label}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           <span className="shrink-0 text-gray-300" aria-hidden>
             ▲
