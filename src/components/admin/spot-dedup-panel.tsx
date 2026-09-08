@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { DedupCandidateRow, DedupGroup, formatDedupGroupLabel, groupDedupCandidates } from '@/lib/admin/spot-dedup-grouping';
 import { buildPendingGroupKey } from '@/lib/admin/spot-dedup-pending-key';
 import { ServiceCategory } from '@/lib/admin/service-category';
@@ -28,6 +28,13 @@ const GROUPS_PAGE_SIZE = 50;
 // "노출 중분류" 선택 드롭다운을 쓰므로, serviceCategories 목록 자체는 이 패널도 계속
 // 자체적으로(가볍게) 조회한다 — "관리(생성)" UI만 이전했을 뿐 "조회"는 두 탭 모두
 // 필요하다.
+
+// [노출 중분류별 중복 스팟 검수](2026-09-09 사용자 지시): "각 노출중분류별 중복
+// 스팟 검수 가능하도록.. 먼저 노출중분류 선택하고 거기 있는 데이터들끼리만
+// 좌표 비교해서 중복 스팟 있는지 확인하는거" — 선택지 중 하나로 기존 방식
+// (아직 어떤 중분류로도 매핑되지 않은 원본 전체 스캔)도 유지한다. 실제 매핑
+// 전 원본 데이터를 정리하던 기존 워크플로우를 없애지 않기 위함(제5장 제4조).
+const UNMAPPED_SCOPE = '__UNMAPPED__';
 
 const AGE_GROUP_OPTIONS = [
   { value: '', label: '선택 안 함' },
@@ -224,8 +231,23 @@ type PendingGroupItem = {
 
 export function SpotDedupPanel() {
   const [serviceCategories, setServiceCategories] = useState<ServiceCategory[]>([]);
-  const [hasLoadedCategories, setHasLoadedCategories] = useState(false);
   const [categoriesError, setCategoriesError] = useState<string | null>(null);
+
+  // [노출 중분류별 중복 스팟 검수](2026-09-09 사용자 지시): 스캔 범위를 먼저
+  // 고르게 한다 — ''(미선택, 스캔 불가) | UNMAPPED_SCOPE(기존 방식) | 실제
+  // 중분류 id. 그룹 병합 모달의 "중분류" select와는 별개 상태다(저건 그룹을
+  // 저장할 때 부여할 값, 이건 어디를 스캔할지 고르는 값).
+  const [scanScope, setScanScope] = useState('');
+
+  // 이 패널은 원래 "탭 진입 시 자동 조회 금지"(관리자 페이지 성능 최적화 관례)를
+  // 지켜 그룹 병합 모달이 열릴 때만 부가적으로 중분류 목록을 가져왔지만, 이제
+  // 스캔 범위 선택 자체가 이 목록에 의존하므로(선택지가 없으면 아무 것도 고를
+  // 수 없음) 조회 비용이 가벼운 이 목록만 예외적으로 마운트 시 가져온다 —
+  // 무거운 후보 스캔(불러오기 버튼)은 여전히 명시적 클릭이 있어야만 실행된다.
+  useEffect(() => {
+    loadServiceCategories();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // [2026-09-05 페이지네이션] 그룹은 더 이상 서버가 미리 합쳐 주지 않는다 — 원시
   // 후보 행을 페이지(최대 50건)마다 누적하고, 누적된 전체 후보를 대상으로 매번
@@ -264,7 +286,6 @@ export function SpotDedupPanel() {
   );
 
   function loadServiceCategories() {
-    setHasLoadedCategories(true);
     setCategoriesError(null);
     fetch('/api/admin/service-categories')
       .then(async (res) => {
@@ -276,19 +297,16 @@ export function SpotDedupPanel() {
   }
 
   // 처음 불러오기(누적 초기화) — after를 실을 이유가 없으므로 매번 새로 시작한다.
-  // [노출 중분류 매핑/중복 스팟 검수 탭 분리](2026-09-05 사용자 지시): "노출 중분류
-  // 관리" 섹션이 category-mapping-panel.tsx로 옮겨가면서 이 패널엔 serviceCategories를
-  // 채워줄 눈에 보이는 UI가 없어졌다 — 그룹 병합 모달이 여전히 그 목록을 쓰므로,
-  // 그룹을 불러오는 시점에 함께 조용히 가져온다(관리자 페이지 성능 최적화 관례 —
-  // "탭 진입 시 자동 조회 금지"는 지키되, 그룹 조회는 관리자가 명시적으로 누른 행동
-  // 이므로 그 김에 필요한 부가 데이터도 함께 가져오는 것은 그 원칙을 벗어나지 않는다).
+  // [노출 중분류별 중복 스팟 검수](2026-09-09 사용자 지시): scanScope를 고르지
+  // 않았으면(빈 문자열) 아무 것도 스캔하지 않는다 — 버튼 자체가 비활성화돼
+  // 있어 정상 흐름으로는 도달하지 않지만 방어적으로 한 번 더 막는다.
   function loadGroups() {
+    if (!scanScope) return;
     setHasLoadedGroups(true);
     setCandidates([]);
     setCursor(null);
     setHasMoreGroups(false);
     fetchGroupsPage(null, true);
-    if (!hasLoadedCategories) loadServiceCategories();
   }
 
   // 다음 페이지(50건) 이어서 불러오기 — 기존 누적 후보에 추가한다.
@@ -299,7 +317,13 @@ export function SpotDedupPanel() {
   function fetchGroupsPage(after: string | null, isInitial: boolean) {
     setIsLoadingGroups(true);
     setGroupsError(null);
-    const url = after ? `/api/admin/spot-dedup/groups?after=${encodeURIComponent(after)}` : '/api/admin/spot-dedup/groups';
+    const params = new URLSearchParams();
+    if (after) params.set('after', after);
+    // UNMAPPED_SCOPE는 "아직 매핑 안 됨"이라는 기존 기본 동작 그대로라 파라미터를
+    // 아예 넘기지 않는다 — 실제 중분류를 골랐을 때만 서버에 그 id를 전달한다.
+    if (scanScope && scanScope !== UNMAPPED_SCOPE) params.set('service_category_id', scanScope);
+    const query = params.toString();
+    const url = `/api/admin/spot-dedup/groups${query ? `?${query}` : ''}`;
     fetch(url)
       .then(async (res) => {
         const data = await res.json();
@@ -417,9 +441,44 @@ export function SpotDedupPanel() {
             </button>
           )}
         </div>
+
+        {/* [노출 중분류별 중복 스팟 검수](2026-09-09 사용자 지시): "먼저 노출중분류
+            선택하고 거기 있는 데이터들끼리만 좌표 비교" — 스캔 범위를 먼저 고른다.
+            범위를 바꾸면 이전 범위의 결과가 새 범위인 것처럼 남아 보이지 않도록
+            누적 후보/그룹 상태를 초기화한다. */}
+        <div className="mb-3 flex flex-col gap-1 text-sm">
+          <span className="font-medium text-gray-700">스캔 범위</span>
+          <select
+            value={scanScope}
+            onChange={(e) => {
+              setScanScope(e.target.value);
+              setHasLoadedGroups(false);
+              setCandidates([]);
+              setCursor(null);
+              setHasMoreGroups(false);
+              setGroupsError(null);
+            }}
+            className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="">노출 중분류를 선택하세요</option>
+            <option value={UNMAPPED_SCOPE}>미매핑 원본 전체 (기존 방식)</option>
+            {serviceCategories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.parent_category} &gt; {c.category_name}
+              </option>
+            ))}
+          </select>
+          {categoriesError && <p className="text-xs text-red-600">{categoriesError}</p>}
+        </div>
+
         {groupsError && <p className="text-xs text-red-600 mb-2">{groupsError}</p>}
         {!hasLoadedGroups ? (
-          <button type="button" onClick={loadGroups} className="text-xs font-medium text-blue-600 hover:underline">
+          <button
+            type="button"
+            onClick={loadGroups}
+            disabled={!scanScope}
+            className="text-xs font-medium text-blue-600 hover:underline disabled:opacity-50 disabled:no-underline disabled:text-gray-400"
+          >
             📥 불러오기
           </button>
         ) : (

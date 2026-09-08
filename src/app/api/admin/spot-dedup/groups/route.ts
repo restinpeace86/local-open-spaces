@@ -30,17 +30,24 @@ import { DedupCandidateRow } from '@/lib/admin/spot-dedup-grouping';
 // 변경이 없다.
 const DEFAULT_LIMIT = 50;
 
+// [노출 중분류별 중복 스팟 검수](2026-09-09 사용자 지시): "먼저 노출중분류
+// 선택하고 거기 있는 데이터들끼리만 좌표 비교해서 중복 스팟 있는지 확인하는거"
+// — service_category_id 쿼리 파라미터를 넘기면 그 중분류로 이미 매핑된
+// 행끼리만 스캔한다(find_spot_dedup_candidates RPC 3번째 인자). 넘기지
+// 않으면 기존 동작(아직 매핑되지 않은 원본 전체 스캔)을 그대로 유지한다.
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const limitParam = Number(searchParams.get('limit'));
     const limit = Number.isFinite(limitParam) && limitParam > 0 ? limitParam : DEFAULT_LIMIT;
     const after = searchParams.get('after') || undefined;
+    const serviceCategoryId = searchParams.get('service_category_id') || undefined;
 
     const admin = createAdminClient();
     const { data, error } = await admin.rpc('find_spot_dedup_candidates', {
       p_limit: limit,
       p_after_key: after,
+      ...(serviceCategoryId ? { p_service_category_id: serviceCategoryId } : {}),
     });
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

@@ -1,6 +1,16 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SpotDedupPanel } from './spot-dedup-panel';
+
+// [노출 중분류별 중복 스팟 검수](2026-09-09 사용자 지시): "먼저 노출중분류
+// 선택하고 거기 있는 데이터들끼리만 좌표 비교" — 스캔 범위를 고르기 전에는
+// "불러오기"가 비활성화되므로, 기존 동작(미매핑 원본 전체)을 그대로 검증하던
+// 테스트들은 이 헬퍼로 그 범위를 먼저 선택한 뒤 진행한다.
+function selectScanScope(label: string) {
+  const select = screen.getByRole('combobox');
+  const option = within(select).getByRole('option', { name: label }) as HTMLOptionElement;
+  fireEvent.change(select, { target: { value: option.value } });
+}
 
 // [개선사항10 - 관리자 '중복 스팟 그룹핑 및 매핑' 탭](2026-09-04 todo.md): 다른
 // 자기완결적 관리자 패널(SpotCurationsPanel 등)과 동일하게 탭 진입 시 자동 조회하지
@@ -76,12 +86,63 @@ describe('SpotDedupPanel', () => {
     vi.unstubAllGlobals();
   });
 
-  it('진입 시 자동으로 조회하지 않고, "불러오기"를 눌러야 각 영역이 조회된다', () => {
-    vi.stubGlobal('fetch', mockFetchByUrl({}));
+  it('진입 시 자동으로 조회하지 않고, "불러오기"를 눌러야 각 영역이 조회된다(단, 스캔 범위 선택지 목록만 예외적으로 조용히 미리 조회한다)', async () => {
+    const fetchMock = mockFetchByUrl({});
+    vi.stubGlobal('fetch', fetchMock);
     renderPanel();
 
     expect(screen.getAllByText('📥 불러오기')).toHaveLength(2); // 그룹 영역 + 진행 중 저장된 그룹 영역
     expect(screen.queryByText('현재 중복 의심 그룹이 없습니다.')).not.toBeInTheDocument();
+    // 스캔 범위를 고르지 않은 초기 상태에서는 그룹 영역의 "불러오기"가 비활성화돼 있다.
+    expect(screen.getAllByText('📥 불러오기')[0]).toBeDisabled();
+    await waitFor(() => {
+      expect(fetchMock.mock.calls.some((c) => (c[0] as string).includes('/api/admin/service-categories'))).toBe(true);
+    });
+  });
+
+  it('스캔 범위를 선택해야만 그룹 "불러오기"가 활성화된다', () => {
+    vi.stubGlobal('fetch', mockFetchByUrl({}));
+    renderPanel();
+
+    const loadButton = screen.getAllByText('📥 불러오기')[0];
+    expect(loadButton).toBeDisabled();
+
+    selectScanScope('미매핑 원본 전체 (기존 방식)');
+    expect(loadButton).not.toBeDisabled();
+  });
+
+  it('실제 노출 중분류를 선택해 불러오면 그 중분류 id를 쿼리 파라미터로 넘긴다', async () => {
+    const fetchMock = mockFetchByUrl({
+      categories: { items: [{ id: 'svc-9', parent_category: '자연/공원', category_name: '캠핑장 / 피크닉장' }] },
+      groupsPages: { initial: { candidates: [], next_cursor: null, has_more: false } },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderPanel();
+
+    await screen.findByRole('option', { name: '자연/공원 > 캠핑장 / 피크닉장' });
+    selectScanScope('자연/공원 > 캠핑장 / 피크닉장');
+    fireEvent.click(screen.getAllByText('📥 불러오기')[0]);
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/spot-dedup/groups'));
+      expect(call).toBeDefined();
+      expect(call![0] as string).toContain('service_category_id=svc-9');
+    });
+  });
+
+  it('미매핑 원본 전체를 선택해 불러오면 기존과 동일하게 service_category_id 파라미터 없이 조회한다', async () => {
+    const fetchMock = mockFetchByUrl({ groupsPages: { initial: { candidates: [], next_cursor: null, has_more: false } } });
+    vi.stubGlobal('fetch', fetchMock);
+    renderPanel();
+
+    selectScanScope('미매핑 원본 전체 (기존 방식)');
+    fireEvent.click(screen.getAllByText('📥 불러오기')[0]);
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/spot-dedup/groups'));
+      expect(call).toBeDefined();
+      expect(call![0] as string).not.toContain('service_category_id');
+    });
   });
 
   it('그룹 불러오기를 누르면 첫 페이지 후보로 그룹을 계산해 라벨로 보여주고, 클릭하면 상세/매핑 모달이 열린다', async () => {
@@ -99,6 +160,7 @@ describe('SpotDedupPanel', () => {
     );
     renderPanel();
 
+    selectScanScope('미매핑 원본 전체 (기존 방식)');
     fireEvent.click(screen.getAllByText('📥 불러오기')[0]);
 
     const groupButton = await screen.findByText(/행복놀이터 외 1건/);
@@ -131,6 +193,7 @@ describe('SpotDedupPanel', () => {
     );
     renderPanel();
 
+    selectScanScope('미매핑 원본 전체 (기존 방식)');
     fireEvent.click(screen.getAllByText('📥 불러오기')[0]);
     expect(await screen.findByText('다음 50건 더 스캔하기')).toBeInTheDocument();
     // 페이지 1건만으로는 아직 "중복 의심"이 성립하지 않아(그룹 최소 2건) 목록에 없다.
@@ -157,6 +220,7 @@ describe('SpotDedupPanel', () => {
       })
     );
     renderPanel();
+    selectScanScope('미매핑 원본 전체 (기존 방식)');
     fireEvent.click(screen.getAllByText('📥 불러오기')[0]);
     fireEvent.click(await screen.findByText(/행복놀이터 외 1건/));
 
@@ -168,7 +232,11 @@ describe('SpotDedupPanel', () => {
     expect(screen.queryByText(/행복놀이터 외 1건/)).not.toBeInTheDocument();
   });
 
-  it('그룹을 불러오면 그룹 병합 모달용 노출 중분류 목록도 함께(조용히) 조회한다', async () => {
+  // [노출 중분류별 중복 스팟 검수](2026-09-09 사용자 지시) 이후: 스캔 범위 선택
+  // 자체가 이 목록에 의존하므로("그룹을 불러올 때" 조용히 가져오던 기존 방식으로는
+  // 애초에 무엇을 스캔할지도 고를 수 없다) 이제 마운트 시점에 미리 조회한다.
+  // 그룹 병합 모달(GroupDetailModal)의 "중분류" select도 여전히 같은 목록을 쓴다.
+  it('마운트 시 노출 중분류 목록을 미리 조회하고, 그룹 병합 모달의 중분류 select에도 그대로 쓰인다', async () => {
     vi.stubGlobal(
       'fetch',
       mockFetchByUrl({
@@ -183,10 +251,15 @@ describe('SpotDedupPanel', () => {
       })
     );
     renderPanel();
+    await screen.findByRole('option', { name: '자연/공원 > 대형 근린공원 / 잔디광장' });
+
+    selectScanScope('미매핑 원본 전체 (기존 방식)');
     fireEvent.click(screen.getAllByText('📥 불러오기')[0]);
     fireEvent.click(await screen.findByText(/행복놀이터 외 1건/));
 
-    expect(await screen.findByText('자연/공원 > 대형 근린공원 / 잔디광장')).toBeInTheDocument();
+    // 스캔 범위 select와 그룹 병합 모달의 "중분류" select 양쪽에 같은 목록이 쓰여
+    // 옵션 텍스트가 두 번 나타난다.
+    expect(screen.getAllByText('자연/공원 > 대형 근린공원 / 잔디광장')).toHaveLength(2);
   });
 
   // [중복 스팟 검수 — 진행 상태 임시 저장](2026-09-05 사용자 지시): "따로 저장해주는
@@ -207,6 +280,7 @@ describe('SpotDedupPanel', () => {
       vi.stubGlobal('fetch', fetchMock);
       renderPanel();
 
+      selectScanScope('미매핑 원본 전체 (기존 방식)');
       fireEvent.click(screen.getAllByText('📥 불러오기')[0]);
       fireEvent.click(await screen.findByText(/행복놀이터 외 1건/));
 
@@ -226,6 +300,7 @@ describe('SpotDedupPanel', () => {
       vi.stubGlobal('fetch', fetchMock);
       renderPanel();
 
+      selectScanScope('미매핑 원본 전체 (기존 방식)');
       fireEvent.click(screen.getAllByText('📥 불러오기')[0]);
       await screen.findByText(/행복놀이터 외 1건/);
       fireEvent.click(screen.getByText('🙈 중복 아님'));

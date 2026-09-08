@@ -95,3 +95,8 @@
    - [x] 신규 `get_spot_group_members` RPC + `getSpotGroupMembers` 클라이언트 함수.
    - [x] `DetailModal`에 "이 장소의 다른 예약 옵션 보기" 버튼(스팟픽 지도 화면 한정) + 기존 `MarkerGroupModal` 재사용해 펼쳐보기.
    - **[특이 사항]** 코드/메커니즘은 특정 카테고리에 종속되지 않는 일반 구조로 구현했다. 다만 이 기록 완료 시점 기준 `spot_dedup_groups`는 여전히 0건이라(실제 그루핑은 관리자가 위 1번 도구로 별도 수행해야 함), 난지캠핑장 사례를 화면에서 직접 확인하려면 관리자가 그 도구로 먼저 그룹을 등록해야 한다 — 사용자가 제안한 "일단 캠핑장부터" 범위는 코드가 아니라 이 실제 등록 작업의 범위로 남아있다.
+- [x] 3. 노출 중분류별 중복 스팟 검수 + 기존 그룹 자동 편입 + 한시성 예약 스팟 자동 삭제 — [[2026-09-09-category-scoped-dedup-and-auto-expiry]]
+   - [x] "먼저 노출중분류 선택하고 거기 있는 데이터들끼리만 좌표 비교해서 중복 스팟 있는지 확인" — `find_spot_dedup_candidates` RPC에 `p_service_category_id`(선택) 추가, `SpotDedupPanel`에 "스캔 범위" select(노출 중분류 | 미매핑 원본 전체=기존 방식) 추가.
+   - [x] "일단 중복되는 것에 대하여 대표스팟을 만들고 추후에 들어온 데이터들도 동일 좌표면 대표스팟내로 묶이는걸로 하자" — 신규 `auto_assign_open_spaces_to_existing_groups` RPC, daily batch(DEDUPE_OPEN_SPACES 다음 단계)에서 매일 자동 실행. 이미 사람이 확정한 그룹의 좌표 30m 이내 신규 미그룹 행만 편입(새 자동 판정 휴리스틱 아님).
+   - [x] "seoul_public_reservation으로 들어온것들은.. 예약일자 기준 end date가 지난건 open_spaces에서 삭제해버리자" — `deleteExpiredReservationSpaces`(raw_data.SVCOPNENDDT 기준, deactivateExpiredEvents와 동일한 유예 0일 정책), daily batch에 추가. 실측(dry-run): 1,465건 중 279건이 이미 만료 상태로 확인(다음 배치에서 실제 삭제 예정).
+   - **[특이 사항]** 난지캠핑장 42건은 아직 미매핑 상태라 "노출 중분류 선택 스캔" 모드로는 못 찾는다 — 관리자가 먼저 캠핑장 중분류로 매핑해야 하며, 이 매핑 작업은 이번 범위 밖이라 진행하지 않았다(기존 "미매핑 원본 전체" 모드로는 지금도 검수 가능).

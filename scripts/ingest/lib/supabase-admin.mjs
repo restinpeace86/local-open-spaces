@@ -253,6 +253,17 @@ export async function analyzeOpenSpaces(client) {
   if (error) throw new Error(`open_spaces ANALYZE 실패: ${error.message}`);
 }
 
+// [노출 중분류별 중복 스팟 검수 + 기존 그룹 자동 편입](2026-09-09 사용자 지시):
+// "일단 중복되는 것에 대하여 대표스팟을 만들고 추후에 들어온 데이터들도 동일
+// 좌표면 대표스팟내로 묶이는걸로 하자" — 관리자가 이미 확정한 그룹(open_spaces.
+// group_id)의 좌표 30m 이내에 새로 들어온 미그룹 행을 자동으로 그 그룹에
+// 편입한다(RPC 본문: 2026-09-09-spot-dedup-by-category-and-auto-group.sql).
+export async function autoAssignOpenSpacesToExistingGroups(client) {
+  const { data, error } = await client.rpc('auto_assign_open_spaces_to_existing_groups');
+  if (error) throw new Error(`기존 그룹 자동 편입 실패: ${error.message}`);
+  return data ?? 0;
+}
+
 // [챗봇 개선](2026-09-04 사용자 지시) 3: get_sigungu_options()가 매 요청마다 open_spaces+
 // events 전체(16만+ 행)를 다시 집계해 17.68초가 걸려 PostgREST 8초 타임아웃에 항상
 // 걸리던 문제를 sigungu_options_cache 머티리얼라이즈드 뷰로 해결했다(scripts/migrations/

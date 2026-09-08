@@ -1160,6 +1160,10 @@ export type Database = {
             Returns: string
           }
       analyze_open_spaces: { Args: never; Returns: undefined }
+      auto_assign_open_spaces_to_existing_groups: {
+        Args: never
+        Returns: number
+      }
       count_new_nearby_items: {
         Args: {
           radius_meters: number
@@ -1207,7 +1211,11 @@ export type Database = {
         Returns: Json
       }
       find_spot_dedup_candidates: {
-        Args: { p_after_key?: string; p_limit?: number }
+        Args: {
+          p_after_key?: string
+          p_limit?: number
+          p_service_category_id?: string
+        }
         Returns: Json
       }
       geometry: { Args: { "": string }; Returns: unknown }

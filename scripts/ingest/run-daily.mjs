@@ -20,8 +20,9 @@
 import { pathToFileURL } from 'url';
 import { loadEnv } from '../lib/load-env.mjs';
 import { getMissingEnvVars, formatMissingEnvVarsMessage } from './lib/env-precheck.mjs';
-import { createAdminClient, analyzeOpenSpaces, refreshSigunguOptionsCache } from './lib/supabase-admin.mjs';
+import { createAdminClient, analyzeOpenSpaces, refreshSigunguOptionsCache, autoAssignOpenSpacesToExistingGroups } from './lib/supabase-admin.mjs';
 import { dedupeOpenSpaces } from './lib/dedupe-open-spaces.mjs';
+import { deleteExpiredReservationSpaces } from './lib/delete-expired-reservation-spaces.mjs';
 import { applyDetailedCategoryFallback } from './lib/detailed-category-fallback.mjs';
 import { applyLegacySourceCategoryMapping } from './lib/legacy-source-category-mapping.mjs';
 import { recordBatchRun } from './lib/batch-log.mjs';
@@ -240,6 +241,80 @@ async function runLocationEnrichment({ dryRun }) {
 // open_spaces에도 기록하므로(targetTable: 'multi'), 배치 종료 시점에 통계를 갱신해 다음
 // 배치(내일 Daily 또는 다음 Monthly)의 open_spaces upsert가 stale 통계로 인한 statement
 // timeout을 겪지 않도록 한다. dry-run에서는 실행하지 않는다(DB 상태 변경 없음 원칙).
+// [노출 중분류별 중복 스팟 검수 + 기존 그룹 자동 편입](2026-09-09 사용자 지시):
+// "일단 중복되는 것에 대하여 대표스팟을 만들고 추후에 들어온 데이터들도 동일
+// 좌표면 대표스팟내로 묶이는걸로 하자" — 관리자가 '중복 스팟 검토'로 이미
+// 확정한 그룹의 좌표 30m 이내에 오늘 새로 들어온 미그룹 행이 있으면 자동으로
+// 그 그룹에 편입한다. DEDUPE_OPEN_SPACES(교차 출처 중복 정제) 바로 다음에
+// 둬서, 오늘 배치가 만든 최신 상태를 기준으로 판정한다.
+async function runAutoAssignToExistingGroups({ dryRun }) {
+  if (dryRun) {
+    return {
+      sourceKey: 'AUTO_ASSIGN_TO_EXISTING_GROUPS',
+      source: null,
+      targetTable: 'open_spaces',
+      rawCount: 0,
+      count: 0,
+      upserted: false,
+      safeMergeCount: 0,
+      errorCount: 0,
+      excludeFromVerification: true,
+      note: 'dry-run: 실제 UPDATE는 실행하지 않음',
+    };
+  }
+
+  const client = createAdminClient();
+  const updatedCount = await autoAssignOpenSpacesToExistingGroups(client);
+  return {
+    sourceKey: 'AUTO_ASSIGN_TO_EXISTING_GROUPS',
+    source: null,
+    targetTable: 'open_spaces',
+    rawCount: updatedCount,
+    count: updatedCount,
+    upserted: updatedCount > 0,
+    safeMergeCount: 0,
+    errorCount: 0,
+    excludeFromVerification: true,
+    note: `이미 확정된 그룹 좌표 30m 이내 미그룹 신규 행 자동 편입 — ${updatedCount}건`,
+  };
+}
+
+// [한시성 예약 스팟 자동 삭제](2026-09-09 사용자 지시): "예약일자 기준 end date가
+// 지난건 open_spaces에서 삭제해버리자" — seoul_public_reservation 소스는
+// open_spaces에 소프트 삭제 컬럼이 없어(dedupe-open-spaces.mjs와 동일한 제약)
+// 하드 삭제한다. 삭제 전 dedupeOpenSpaces와 동일하게 백업 파일을 남긴다.
+async function runDeleteExpiredReservationSpaces({ dryRun }) {
+  if (dryRun) {
+    return {
+      sourceKey: 'DELETE_EXPIRED_RESERVATION_SPACES',
+      source: null,
+      targetTable: 'open_spaces',
+      rawCount: 0,
+      count: 0,
+      upserted: false,
+      safeMergeCount: 0,
+      errorCount: 0,
+      excludeFromVerification: true,
+      note: 'dry-run: 실제 DELETE는 실행하지 않음',
+    };
+  }
+
+  const client = createAdminClient();
+  const { cutoffDate, deletedCount, backupFile } = await deleteExpiredReservationSpaces(client);
+  return {
+    sourceKey: 'DELETE_EXPIRED_RESERVATION_SPACES',
+    source: null,
+    targetTable: 'open_spaces',
+    rawCount: deletedCount,
+    count: deletedCount,
+    upserted: false,
+    safeMergeCount: 0,
+    errorCount: 0,
+    excludeFromVerification: true,
+    note: `서비스 이용 종료일(SVCOPNENDDT) < ${cutoffDate}인 한시성 예약 스팟 ${deletedCount}건 삭제(신규 적재 아닌 만료 정리 후처리)${backupFile ? ` (백업: ${backupFile})` : ''}`,
+  };
+}
+
 async function runAnalyzeOpenSpaces({ dryRun }) {
   if (dryRun) {
     return {
@@ -350,7 +425,7 @@ async function runDedupeOpenSpaces({ dryRun }) {
 }
 
 export async function runDailyBatch({ dryRun = false } = {}) {
-  console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length + 8}개 단계\n`);
+  console.log(`\n▶▶▶ ${BATCH_NAME} 시작 (dry-run: ${dryRun}) — ${STEPS.length + 10}개 단계\n`);
 
   // [핵심 events 수집 파이프라인 장애 점검](2026-08-30 사용자 지시): 필수 환경변수가 하나라도
   // 없으면 이후 11개 단계가 각자 다른 형태로 실패해(외부 API 키 누락 예외/Supabase 클라이언트
@@ -446,6 +521,22 @@ export async function runDailyBatch({ dryRun = false } = {}) {
   } catch (err) {
     console.error(`❌ [DEDUPE_OPEN_SPACES] 실패: ${err.message}`);
     results.push({ failed: true, sourceKey: 'DEDUPE_OPEN_SPACES', source: null, note: err.message });
+  }
+
+  console.log('\n=== [AUTO_ASSIGN_TO_EXISTING_GROUPS] ===');
+  try {
+    results.push(await runAutoAssignToExistingGroups({ dryRun }));
+  } catch (err) {
+    console.error(`❌ [AUTO_ASSIGN_TO_EXISTING_GROUPS] 실패: ${err.message}`);
+    results.push({ failed: true, sourceKey: 'AUTO_ASSIGN_TO_EXISTING_GROUPS', source: null, note: err.message });
+  }
+
+  console.log('\n=== [DELETE_EXPIRED_RESERVATION_SPACES] ===');
+  try {
+    results.push(await runDeleteExpiredReservationSpaces({ dryRun }));
+  } catch (err) {
+    console.error(`❌ [DELETE_EXPIRED_RESERVATION_SPACES] 실패: ${err.message}`);
+    results.push({ failed: true, sourceKey: 'DELETE_EXPIRED_RESERVATION_SPACES', source: null, note: err.message });
   }
 
   console.log('\n=== [ANALYZE_OPEN_SPACES] ===');
