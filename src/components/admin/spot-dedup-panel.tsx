@@ -36,13 +36,18 @@ const GROUPS_PAGE_SIZE = 50;
 // 전 원본 데이터를 정리하던 기존 워크플로우를 없애지 않기 위함(제5장 제4조).
 const UNMAPPED_SCOPE = '__UNMAPPED__';
 
-const AGE_GROUP_OPTIONS = [
-  { value: '', label: '선택 안 함' },
-  { value: '미취학', label: '미취학' },
-  { value: '취학', label: '취학' },
-  { value: '성인', label: '성인 (비노출용)' },
-  { value: '기타', label: '기타 (비노출용)' },
-];
+// [중복 스팟 검수 및 매핑 모달 필드 정리](2026-09-09 사용자 지시): "블로그
+// URL(선택)/연령대/특징 이런건 왜있어?.. 블로그 연령대 특징 같은건 나중에
+// 블로그 큐레이션 같은곳에서 넣는걸로 하고 여기서는 빼는게 낫지 않을까?" —
+// 실측 확인 결과 open_spaces.blog_url/age_group/feature_tag는 이 모달(과
+// apply route)에서만 write되고 앱 어디에서도 read되지 않는 완전한 사문화
+// 필드였다(블로그 큐레이션의 blog_url_1/2/3 + curation_badges의 연령대
+// 뱃지(kc_age_infant 등)/특징 키워드 뱃지가 이미 같은 역할을 더 풍부하게
+// 대신하고 있음). 그래서 새로 블로그 검색 API를 붙이는 대신(사용자가 제시한
+// 두 대안 중 두 번째) 이 세 필드를 통째로 제거하고, 그룹 병합 후 필요하면
+// 대표 스팟에 대해 기존 블로그 큐레이션 버튼을 쓰도록 안내한다. DB 컬럼
+// 자체(open_spaces/spot_dedup_groups)는 데이터 구조 변경(제5장 제3조)이라
+// 이번에는 건드리지 않고, 쓰기 경로만 끊는다.
 
 // [All-in-One 모바일 큐레이션 워크벤치](2026-09-05 사용자 지시)의 "중복 장소 검수
 // 배너 → 합치기" 버튼이 이 모달을 그대로 재사용한다(제5장 제4조 기존 구조 우선 —
@@ -52,21 +57,26 @@ const AGE_GROUP_OPTIONS = [
 export function GroupDetailModal({
   group,
   serviceCategories,
+  initialServiceCategoryId,
   onClose,
   onSaved,
 }: {
   group: DedupGroup;
   serviceCategories: ServiceCategory[];
+  // [노출 중분류별 중복 스팟 검수](2026-09-09) 뒤이은 버그 수정: "중분류는 이미
+  // 중분류 선택한거에 대하여 하는거라 선택안함 상태로 하면 중분류 한게 다시
+  // 선택안함으로 변하는거 아니야?" — 특정 중분류로 스캔 범위를 좁혀 찾은
+  // 그룹은 멤버 전원이 이미 그 중분류다(스캔 조건 자체가 그 값으로 필터링).
+  // 이 값을 넘기지 않으면(미매핑 스캔/다른 진입점) 기존처럼 빈 값(선택 안 함)
+  // 에서 시작한다.
+  initialServiceCategoryId?: string;
   onClose: () => void;
   onSaved: (memberIds: string[]) => void;
 }) {
   // [드래그 시 팝업 닫힘 버그 수정](2026-09-05 사용자 지시) 참고: use-backdrop-dismiss.ts
   const backdropDismiss = useBackdropDismiss(onClose);
   const [standardName, setStandardName] = useState(group.members[0]?.name ?? '');
-  const [serviceCategoryId, setServiceCategoryId] = useState('');
-  const [blogUrl, setBlogUrl] = useState('');
-  const [ageGroup, setAgeGroup] = useState('');
-  const [featureTag, setFeatureTag] = useState('');
+  const [serviceCategoryId, setServiceCategoryId] = useState(initialServiceCategoryId ?? '');
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -87,9 +97,6 @@ export function GroupDetailModal({
           spot_ids: group.members.map((m) => m.id),
           standard_name: standardName.trim(),
           service_category_id: serviceCategoryId || null,
-          blog_url: blogUrl.trim() || null,
-          age_group: ageGroup || null,
-          feature_tag: featureTag.trim() || null,
         }),
       });
       const data = await res.json();
@@ -166,42 +173,12 @@ export function GroupDetailModal({
             </select>
           </div>
 
-          <div className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-gray-700">블로그 URL (선택)</span>
-            <input
-              type="text"
-              value={blogUrl}
-              onChange={(e) => setBlogUrl(e.target.value)}
-              placeholder="https://..."
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-
-          <div className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-gray-700">연령대</span>
-            <select
-              value={ageGroup}
-              onChange={(e) => setAgeGroup(e.target.value)}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              {AGE_GROUP_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-gray-700">특징 (선택)</span>
-            <input
-              type="text"
-              value={featureTag}
-              onChange={(e) => setFeatureTag(e.target.value)}
-              placeholder="예: 바닥분수 / 놀이터"
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
+          {/* [중복 스팟 검수 및 매핑 모달 필드 정리](2026-09-09 사용자 지시): 블로그
+              URL/연령대/특징은 제거했다 — 그룹 병합 후 필요하면 대표 스팟에서
+              기존 블로그 큐레이션(🔍 블로그로 큐레이션 버튼)을 쓰면 된다. */}
+          <p className="text-xs text-gray-400">
+            블로그/연령대/특징 정보는 병합 후 대표 스팟의 &quot;🔍 블로그로 큐레이션&quot;에서 입력해주세요.
+          </p>
 
           {errorMessage && <p className="text-xs text-red-600">{errorMessage}</p>}
 
@@ -592,6 +569,7 @@ export function SpotDedupPanel() {
         <GroupDetailModal
           group={selectedGroup}
           serviceCategories={serviceCategories}
+          initialServiceCategoryId={scanScope !== UNMAPPED_SCOPE ? scanScope : undefined}
           onClose={() => setSelectedGroup(null)}
           onSaved={handleGroupSaved}
         />

@@ -28,7 +28,21 @@ export function SpotDedupQuickModal({
   serviceCategories,
   onClose,
 }: {
-  spot: { id: string; name: string; category: string; category_min: string | null; address: string | null };
+  spot: {
+    id: string;
+    name: string;
+    category: string;
+    category_min: string | null;
+    address: string | null;
+    // [중분류 선택 초기화 버그 수정](2026-09-09 사용자 지시): "중분류는 이미
+    // 중분류 선택한거에 대하여 하는거라 선택안함 상태로 하면 중분류 한게
+    // 다시 선택안함으로 변하는거 아니야?" — 이 스팟이 이미 노출 중분류로
+    // 매핑돼 있으면 병합 모달의 중분류 select를 그 값으로 미리 채워, 무심코
+    // "선택 안 함"으로 저장해 기존 매핑을 지우는 사고를 막는다. 30m 반경
+    // 후보들은 이 스팟과 같은 중분류라는 보장이 없어(공간 근접만으로 찾음)
+    // "최선의 기본값"일 뿐 — 다르면 관리자가 select에서 바꾸면 된다.
+    service_category_id?: string | null;
+  };
   serviceCategories: ServiceCategory[];
   onClose: () => void;
 }) {
@@ -187,6 +201,7 @@ export function SpotDedupQuickModal({
             ],
           }}
           serviceCategories={serviceCategories}
+          initialServiceCategoryId={spot.service_category_id ?? undefined}
           onClose={() => setIsMergeOpen(false)}
           onSaved={(memberIds) => {
             setDismissedIds((prev) => {

@@ -145,6 +145,49 @@ describe('SpotDedupPanel', () => {
     });
   });
 
+  // [중분류 선택 초기화 버그 수정](2026-09-09 사용자 지시): "중분류는 이미 중분류
+  // 선택한거에 대하여 하는거라 선택안함 상태로 하면 중분류 한게 다시 선택안함으로
+  // 변하는거 아니야?" — 특정 중분류로 스캔해 찾은 그룹은 멤버 전원이 이미 그
+  // 중분류이므로, 상세 모달의 "중분류" select가 그 값으로 미리 채워져 있어야
+  // 하고, 아무 것도 바꾸지 않고 저장해도 그 값 그대로 보존돼야 한다(빈 값으로
+  // 덮어써 기존 매핑을 지우면 안 됨).
+  it('노출 중분류를 선택해 찾은 그룹은 상세 모달의 중분류가 그 값으로 미리 채워지고, 그대로 저장해도 유지된다', async () => {
+    const fetchMock = mockFetchByUrl({
+      categories: { items: [{ id: 'svc-9', parent_category: '자연/공원', category_name: '캠핑장 / 피크닉장' }] },
+      groupsPages: {
+        initial: {
+          candidates: [
+            candidateRow({ id: 'a', name: '난지캠핑장 A' }),
+            candidateRow({ id: 'b', name: '난지캠핑장 B', address: '서울 마포구 상암동 1-1' }),
+          ],
+          next_cursor: 'b',
+          has_more: false,
+        },
+      },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    renderPanel();
+
+    await screen.findByRole('option', { name: '자연/공원 > 캠핑장 / 피크닉장' });
+    selectScanScope('자연/공원 > 캠핑장 / 피크닉장');
+    fireEvent.click(screen.getAllByText('📥 불러오기')[0]);
+    fireEvent.click(await screen.findByText(/난지캠핑장 A 외 1건/));
+
+    // 스캔 범위 select + 모달의 중분류 select 둘 다 svc-9로 채워져 있다.
+    const selects = screen.getAllByRole('combobox') as HTMLSelectElement[];
+    const categorySelect = selects.find((s) => s.value === 'svc-9');
+    expect(categorySelect).toBeDefined();
+
+    fireEvent.click(screen.getByText(/저장 및 일괄 적용/));
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/spot-dedup/apply'));
+      expect(call).toBeDefined();
+      const body = JSON.parse((call![1] as RequestInit).body as string);
+      expect(body.service_category_id).toBe('svc-9');
+    });
+  });
+
   it('그룹 불러오기를 누르면 첫 페이지 후보로 그룹을 계산해 라벨로 보여주고, 클릭하면 상세/매핑 모달이 열린다', async () => {
     vi.stubGlobal(
       'fetch',

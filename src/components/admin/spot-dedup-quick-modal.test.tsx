@@ -128,4 +128,37 @@ describe('SpotDedupQuickModal', () => {
     // 합쳐진 후보는 목록에서도 사라진다.
     expect(screen.queryByText('8월 일반캠핑존 B형')).not.toBeInTheDocument();
   });
+
+  // [중분류 선택 초기화 버그 수정](2026-09-09 사용자 지시): "중분류는 이미 중분류
+  // 선택한거에 대하여 하는거라 선택안함 상태로 하면 중분류 한게 다시 선택안함으로
+  // 변하는거 아니야?" — 이 스팟이 이미 노출 중분류로 매핑돼 있으면 병합 모달의
+  // 중분류 select가 그 값으로 미리 채워져야 한다(빈 값으로 저장해 지우지 않도록).
+  it('스팟이 이미 노출 중분류로 매핑돼 있으면 병합 모달의 중분류가 그 값으로 미리 채워진다', async () => {
+    const fetchMock = mockFetchByUrl({ nearby: { items: [makeCandidate({ id: 'cand-1' })] } });
+    vi.stubGlobal('fetch', fetchMock);
+    render(
+      <SpotDedupQuickModal
+        spot={{ ...SPOT, service_category_id: 'svc-1' }}
+        serviceCategories={SERVICE_CATEGORIES}
+        onClose={vi.fn()}
+      />
+    );
+
+    const candidateName = '8월 일반캠핑존 B형(4인용, 자갈형) 26년 한강공원 난지캠핑장';
+    await screen.findByText(candidateName);
+    fireEvent.click(screen.getByLabelText(`${candidateName} 선택`));
+    fireEvent.click(screen.getByRole('button', { name: /선택한 1건 합치기/ }));
+    await screen.findByText('중복 의심 그룹 검수 (2건)');
+
+    const categorySelect = screen.getByRole('combobox') as HTMLSelectElement;
+    expect(categorySelect.value).toBe('svc-1');
+
+    fireEvent.click(screen.getByRole('button', { name: /저장 및 일괄 적용/ }));
+
+    await waitFor(() => {
+      const applyCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/spot-dedup/apply'));
+      const body = JSON.parse((applyCall![1] as RequestInit).body as string);
+      expect(body.service_category_id).toBe('svc-1');
+    });
+  });
 });

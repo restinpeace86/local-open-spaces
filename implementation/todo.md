@@ -100,3 +100,6 @@
    - [x] "일단 중복되는 것에 대하여 대표스팟을 만들고 추후에 들어온 데이터들도 동일 좌표면 대표스팟내로 묶이는걸로 하자" — 신규 `auto_assign_open_spaces_to_existing_groups` RPC, daily batch(DEDUPE_OPEN_SPACES 다음 단계)에서 매일 자동 실행. 이미 사람이 확정한 그룹의 좌표 30m 이내 신규 미그룹 행만 편입(새 자동 판정 휴리스틱 아님).
    - [x] "seoul_public_reservation으로 들어온것들은.. 예약일자 기준 end date가 지난건 open_spaces에서 삭제해버리자" — `deleteExpiredReservationSpaces`(raw_data.SVCOPNENDDT 기준, deactivateExpiredEvents와 동일한 유예 0일 정책), daily batch에 추가. 실측(dry-run): 1,465건 중 279건이 이미 만료 상태로 확인(다음 배치에서 실제 삭제 예정).
    - **[특이 사항]** 난지캠핑장 42건은 아직 미매핑 상태라 "노출 중분류 선택 스캔" 모드로는 못 찾는다 — 관리자가 먼저 캠핑장 중분류로 매핑해야 하며, 이 매핑 작업은 이번 범위 밖이라 진행하지 않았다(기존 "미매핑 원본 전체" 모드로는 지금도 검수 가능).
+- [x] 4. 중복 스팟 병합 모달 필드 정리 + 중분류 선택 초기화 버그 수정 — [[2026-09-09-dedup-merge-modal-field-cleanup]]
+   - [x] "표준 시설명말고 중분류나 블로그 URL(선택)? 연령대? 특징? 이런건 왜있어?.. 블로그 연령대 특징 같은건 나중에 블로그 큐레이션에서 넣는걸로 하고 여기서는 빼는게 낫지 않을까?" — 실측 확인 결과 셋 다 앱 어디서도 읽히지 않는 사문화 필드(블로그 큐레이션의 blog_url_1/2/3+curation_badges가 이미 동일 역할 수행)라 셋 다 모달/apply route에서 제거(새 블로그 검색 UI는 만들지 않음, DB 컬럼 자체는 미변경).
+   - [x] "중분류는 이미 중분류 선택한거에 대하여 하는거라 선택안함 상태로 하면 중분류 한게 다시 선택안함으로 변하는거 아니야?" — 실제 버그였음을 확인, `GroupDetailModal`에 `initialServiceCategoryId` prop 추가해 스캔 범위/스팟의 기존 service_category_id로 미리 채움(3개 진입점 모두: SpotDedupPanel/SpotDedupQuickModal/MobileCurationWorkbench).

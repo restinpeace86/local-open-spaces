@@ -287,6 +287,7 @@ export function MobileCurationWorkbench({
             ],
           }}
           serviceCategories={serviceCategories}
+          initialServiceCategoryId={spot.service_category_id ?? undefined}
           onClose={() => setMergeTarget(null)}
           onSaved={() => {
             setDismissedNearbyIds((prev) => new Set(prev).add(mergeTarget.id));

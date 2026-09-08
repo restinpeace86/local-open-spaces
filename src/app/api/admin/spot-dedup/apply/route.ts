@@ -2,10 +2,15 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { buildPendingGroupKey } from '@/lib/admin/spot-dedup-pending-key';
 
-// open_spaces.age_group과 정확히 같은 허용값(2026-09-04 마이그레이션의 CHECK 제약과
-// 동일 — 한쪽만 바뀌면 서버가 DB에서 거부당하는 오류로 드러나는 대신 여기서 먼저
-// 사용자에게 명확한 문구로 안내한다).
-const ALLOWED_AGE_GROUPS = ['미취학', '취학', '성인', '기타'] as const;
+// [중복 스팟 검수 및 매핑 모달 필드 정리](2026-09-09 사용자 지시): "블로그
+// URL(선택)/연령대/특징 이런건 왜있어?.. 블로그 연령대 특징 같은건 나중에
+// 블로그 큐레이션 같은곳에서 넣는걸로 하고 여기서는 빼는게 낫지 않을까?" —
+// 실측 확인 결과 이 세 필드는 이 라우트에서만 write되고 앱 어디에서도
+// read되지 않는 사문화 필드였다(블로그 큐레이션의 blog_url_1/2/3 +
+// curation_badges가 이미 같은 역할을 더 풍부하게 대신함). age_group/
+// feature_tag/blog_url을 요청 바디에서 받는 것 자체를 그만두고, open_spaces/
+// spot_dedup_groups의 표준화 갱신 대상을 standard_name/service_category_id
+// 두 가지로 좁혔다 — 컬럼 자체(데이터 구조 변경)는 이번에 건드리지 않았다.
 
 // [개선사항10 - 중복 스팟 그룹핑 및 매핑 탭](2026-09-04 todo.md) 2-2항: "그룹 일괄
 // 저장(Bulk Save) — 그룹에 속한 각각의 모든 원천 데이터 행에 표준 정보가 동일하게
@@ -27,14 +32,6 @@ export async function POST(request: NextRequest) {
     }
 
     const serviceCategoryId = typeof body.service_category_id === 'string' && body.service_category_id ? body.service_category_id : null;
-    const blogUrl = typeof body.blog_url === 'string' && body.blog_url.trim() ? body.blog_url.trim() : null;
-    const featureTag = typeof body.feature_tag === 'string' && body.feature_tag.trim() ? body.feature_tag.trim() : null;
-
-    const ageGroupRaw = typeof body.age_group === 'string' ? body.age_group : null;
-    if (ageGroupRaw && !ALLOWED_AGE_GROUPS.includes(ageGroupRaw as (typeof ALLOWED_AGE_GROUPS)[number])) {
-      return NextResponse.json({ error: `연령대는 ${ALLOWED_AGE_GROUPS.join('/')} 중 하나이거나 비어있어야 합니다.` }, { status: 400 });
-    }
-    const ageGroup = ageGroupRaw || null;
 
     const admin = createAdminClient();
 
@@ -46,9 +43,6 @@ export async function POST(request: NextRequest) {
         member_spot_ids: spotIds,
         standard_name: standardName,
         service_category_id: serviceCategoryId,
-        blog_url: blogUrl,
-        age_group: ageGroup,
-        feature_tag: featureTag,
       })
       .select('id')
       .single();
@@ -62,9 +56,6 @@ export async function POST(request: NextRequest) {
       .update({
         standard_name: standardName,
         service_category_id: serviceCategoryId,
-        blog_url: blogUrl,
-        age_group: ageGroup,
-        feature_tag: featureTag,
         group_id: groupRow.id,
       })
       .in('id', spotIds)

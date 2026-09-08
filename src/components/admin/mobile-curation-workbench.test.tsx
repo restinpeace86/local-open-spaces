@@ -240,4 +240,36 @@ describe('MobileCurationWorkbench', () => {
     expect(await screen.findByText('✅ "행복키즈카페"과(와) "행복키즈카페 분점"을(를) 하나로 합쳤습니다.')).toBeInTheDocument();
     expect(screen.queryByText(/유사 장소 발견/)).not.toBeInTheDocument();
   });
+
+  // [중분류 선택 초기화 버그 수정](2026-09-09 사용자 지시): "중분류는 이미 중분류
+  // 선택한거에 대하여 하는거라 선택안함 상태로 하면 중분류 한게 다시 선택안함으로
+  // 변하는거 아니야?" — 이 스팟이 이미 노출 중분류로 매핑돼 있으면 병합 모달의
+  // 중분류 select가 그 값으로 미리 채워져야 한다.
+  it('스팟이 이미 노출 중분류로 매핑돼 있으면 "합치기" 모달의 중분류가 그 값으로 미리 채워진다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      mockFetchByUrl({
+        nearby: { items: [{ id: 'near-1', name: '행복키즈카페 분점', category: 'CULTURE', category_min: '키즈카페', address: '바로 옆', distance_m: 12 }] },
+      })
+    );
+    render(
+      <MobileCurationWorkbench
+        spot={{ ...SPOT, service_category_id: 'svc-1' }}
+        serviceCategories={SERVICE_CATEGORIES}
+        queue={QUEUE}
+        onClose={vi.fn()}
+        onAdvance={vi.fn()}
+        onServiceCategoryUpdated={vi.fn()}
+      />
+    );
+
+    await screen.findByText(/유사 장소 발견/);
+    fireEvent.click(screen.getByText('합치기'));
+    await screen.findByText('중복 의심 그룹 검수 (2건)');
+
+    // 이 워크벤치 화면 안에는 병합 모달의 "중분류" select 하나만 존재한다(스팟
+    // 큐레이션 폼 쪽 중분류는 별도 select이지만 값이 다를 수 있어 svc-1인 것만 찾는다).
+    const categorySelects = screen.getAllByRole('combobox') as HTMLSelectElement[];
+    expect(categorySelects.some((s) => s.value === 'svc-1')).toBe(true);
+  });
 });

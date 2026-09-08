@@ -711,6 +711,7 @@ export function RawDataModal({
             category: (row as AdminOpenSpaceRow).category,
             category_min: (row as AdminOpenSpaceRow).category_min,
             address: (row as AdminOpenSpaceRow).address,
+            service_category_id: (row as AdminOpenSpaceRow).service_category_id,
           }}
           serviceCategories={serviceCategories}
           onClose={() => setIsSpotDedupModalOpen(false)}
