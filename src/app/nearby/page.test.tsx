@@ -26,9 +26,11 @@ describe('NearbyPage', () => {
     // [스팟픽 나들이 전용 핵심 중분류 1단 필터 개편](2026-08-29): 대분류 탭 없이 핵심
     // 중분류 칩(+AI 추천)이 처음부터 1단으로 노출된다.
     expect((await screen.findAllByText(/AI 추천/)).length).toBeGreaterThan(0);
-    // [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판): 반경 선택 버튼(1km/5km/10km)이
-    // 전면 삭제됐다 — 더 이상 화면에 노출되지 않아야 한다.
-    expect(screen.queryByText('5km')).not.toBeInTheDocument();
-    expect(screen.queryByText('10km')).not.toBeInTheDocument();
+    // [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판): 지도 상단의 탐색
+    // 반경(1km/5km/10km) Floating 선택 버튼은 전면 삭제됐다(FIXED_RADIUS_METERS로
+    // 고정) — 지금 화면에 있는 "5km/10km/20km" 버튼은 그것과는 다른, 하단 상시
+    // 바텀시트 전용 GPS 거리순 정렬 반경 선택이다(2026-09-08 사용자 지시, 별도
+    // 개념 — map-explorer.test.tsx에서 그 동작을 검증한다).
+    expect((await screen.findAllByRole('button', { name: '5km' })).length).toBeGreaterThan(0);
   });
 });

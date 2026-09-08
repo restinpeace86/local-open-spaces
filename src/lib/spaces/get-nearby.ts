@@ -84,3 +84,25 @@ export async function getNearbySpacesAndEvents(
 
   return (data ?? []) as NearbyItem[];
 }
+
+// [노출 중분류 기준 카테고리 필터 전면 교체 + 반경 컷오프 폐지](2026-09-08 사용자
+// 지시): "반경 컷오프 완전 폐지 + 도 전역 노출로 해줘(지도에 찍히는 거 기준)..
+// 현재 노출 중분류 기준으로 카테고리 필터 전면교체할것" — 노출 중분류
+// (service_category_id)로 선택된 중분류에 해당하는 스팟 전체를 반경 제한 없이
+// 가져온다. 반환된 항목의 distance_meters는 항상 -1(거리 정보 없음 sentinel —
+// get-home-feed.ts/detail-modal.tsx와 동일한 기존 관례)이다 — 고정된 기준점이
+// 없는 전역 조회라 서버가 거리를 계산할 방법이 없고, 필요하면 호출부(map-
+// explorer.tsx)가 실시간 GPS/설정 위치 기준으로 직접 계산해 덮어쓴다.
+export async function getSpotsByServiceCategory(serviceCategoryId: string): Promise<NearbyItem[]> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase.rpc('get_spots_by_service_category', {
+    p_service_category_id: serviceCategoryId,
+  });
+
+  if (error) {
+    throw new Error(`노출 중분류별 공간 조회 실패: ${error.message}`);
+  }
+
+  return (data ?? []) as NearbyItem[];
+}

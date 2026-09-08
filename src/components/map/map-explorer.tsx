@@ -18,12 +18,12 @@ import { LocationOnboardingModal } from '@/components/map/location-onboarding-mo
 import { GpsSyncModal } from '@/components/map/gps-sync-modal';
 import { RecenterButton } from '@/components/map/recenter-button';
 import { MyLocationButton } from '@/components/map/my-location-button';
-import { getNearbySpacesAndEvents, NearbyItem } from '@/lib/spaces/get-nearby';
+import { getNearbySpacesAndEvents, getSpotsByServiceCategory, NearbyItem } from '@/lib/spaces/get-nearby';
+import { ServiceCategory } from '@/lib/admin/service-category';
 import { useUserLocation } from '@/hooks/use-user-location';
 import { useGpsSyncCheck } from '@/hooks/use-gps-sync-check';
 import { useLiveGpsPosition } from '@/hooks/use-live-gps-position';
 import { haversineDistanceMeters } from '@/lib/geo/haversine';
-import { CORE_SPOT_CATEGORIES } from '@/lib/spaces/spot-category-groups';
 import { rankAiRecommendedSpots } from '@/lib/spaces/ai-recommend';
 
 // spec/map/spatial-search.md 3.1: 반경 내 최대 1,000개 마커만 우선 렌더링
@@ -38,11 +38,20 @@ const MARKER_LIMIT = 1000;
 // 기본값(5km)을 그대로 고정값으로 승계한다(임의로 새 값을 고르지 않음, 기존 동작 최대한 보존).
 const FIXED_RADIUS_METERS = 5000;
 
-// [바텀시트 GPS 거리순 정렬](2026-09-08 사용자 지시, todo.md 개선사항3-1): "하단
-// 바텀시트 리스트는 유저의 '현재 GPS 위치'를 기준으로 가까운 거리순으로 정렬합니다
-// (단 하단 바텀시트 리스트는 현재 설정한 위치 기준 반경 10km 로 제한합니다.)" —
-// 지시문이 명시한 값 그대로.
-const SHEET_GPS_DISTANCE_LIMIT_METERS = 10000;
+// [바텀시트 GPS 거리순 정렬 + 반경 선택](2026-09-08 사용자 지시): "바텀시트에
+// 보이는 것중에는 반경 컷오프로.. 반경 5km 혹은 10km 내 20km 내에 거리순으로
+// 보이도록.. 거리 눌러서 적용할수있게" — 기존엔 10km 고정이었으나, 이제 관리자가
+// 아니라 사용자가 5/10/20km 중 눌러서 고를 수 있다. 기본값은 기존 고정값(10km)을
+// 그대로 승계한다.
+const DEFAULT_SHEET_RADIUS_KM = 10;
+
+// [노출 중분류 전역 노출 시 지도 줌 레벨](2026-09-08 사용자 지시): "반경 컷오프
+// 완전 폐지 + 도 전역 노출로 해줘(지도에 찍히는 거 기준)" — 마커 데이터 자체는
+// 전국 단위인데 지도가 계속 5km 기준 줌 레벨에 머물러 있으면 흩어진 마커 대부분이
+// 화면 밖이라 "전역 노출"이 실제로는 안 보인다. KakaoMapView의 radiusToLevel은
+// 최대 레벨 10(가장 넓은 줌)까지만 허용하므로, 그 상한에 닿도록 충분히 큰 값을
+// 넘긴다(정확한 값 자체는 중요하지 않다 — 이미 level 10에서 clamp되므로).
+const CATEGORY_WIDE_VIEW_RADIUS_METERS = 200000;
 
 export function MapExplorer() {
   const {
@@ -64,37 +73,72 @@ export function MapExplorer() {
   const searchParams = useSearchParams();
   const radius = FIXED_RADIUS_METERS;
   const [keyword, setKeyword] = useState(() => searchParams.get('q') ?? '');
-  // [스팟픽 나들이 전용 핵심 중분류 1단 필터 개편](2026-08-28~29 사용자 지시): 대분류→중분류
-  // 2단 구조를 철회하고 핵심 중분류 칩만 1단으로 노출한다. UI는 "칩 id" 단위로 선택 상태를
-  // 관리하고(칩 하나가 실제 category_min 여러 개를 아우를 수 있음 — 예: "박물관" 칩은 2개
-  // category_min을 동시에 포함), 실제 필터링에 쓰는 category_min 배열은 선택된 칩의 minors를
-  // 펼친 파생값이다.
-  // [단일 선택으로 변경](2026-08-29 사용자 지시): 기존 다중 선택(최대 5개)을 철회하고 한 번에
-  // 하나의 칩만 선택 가능하도록 변경 — 배열이 아니라 단일 nullable id로 상태를 단순화한다.
+  // [노출 중분류 기준 카테고리 필터 전면 교체](2026-09-08 사용자 지시): "현재 노출
+  // 중분류 기준으로 카테고리 필터 전면교체할것" — 예전엔 표준 중분류(category_min)
+  // 기반 CORE_SPOT_CATEGORIES였지만, 이제 관리자가 직접 큐레이션하는
+  // service_categories(노출 중분류)를 단일 출처로 쓴다. selectedCategoryId는 이제
+  // service_categories.id(uuid)를 담는다. 단일 선택 정책(2026-08-29)은 그대로
+  // 유지한다.
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
-  const selectedCategoryMins = useMemo(
-    () => CORE_SPOT_CATEGORIES.find((c) => c.id === selectedCategoryId)?.minors ?? [],
-    [selectedCategoryId]
-  );
-  // [todo.md 개선사항 6](2026-09-03): 대분류 바텀시트에서 0건 중분류를 숨기기 위한 전역
-  // 카운트 — 마운트 시 한 번만 불러온다(지역과 무관, home-view.tsx의 categoryCounts와
-  // 동일한 관례).
-  const [categoryMinCounts, setCategoryMinCounts] = useState<Record<string, number> | undefined>(undefined);
+  const [serviceCategories, setServiceCategories] = useState<ServiceCategory[]>([]);
+  // [개선사항 6과 동일한 원칙] 대분류 바텀시트에서 0건 중분류를 숨기기 위한 전역
+  // 카운트 — 마운트 시 한 번만 불러온다(지역과 무관).
+  const [serviceCategoryCounts, setServiceCategoryCounts] = useState<Record<string, number> | undefined>(undefined);
   useEffect(() => {
     let cancelled = false;
-    fetch('/api/nearby/spot-category-counts')
+    fetch('/api/nearby/service-categories')
       .then((res) => res.json())
-      .then((data: { counts?: Record<string, number> }) => {
-        if (!cancelled && data.counts) setCategoryMinCounts(data.counts);
+      .then((data: { items?: ServiceCategory[]; counts?: Record<string, number> }) => {
+        if (cancelled) return;
+        if (data.items) setServiceCategories(data.items);
+        if (data.counts) setServiceCategoryCounts(data.counts);
       })
       .catch(() => {
-        // 카운트 조회 실패해도 바텀시트는 모든 중분류를 노출하는 안전한 기본값으로
-        // 동작하므로 화면을 막지 않는다(제5장 제11조 오류 처리 원칙).
+        // 조회 실패해도 대분류 탭 자체가 안 뜰 뿐 나머지 화면(반경 기반 기본 목록)은
+        // 정상 동작하므로 화면을 막지 않는다(제5장 제11조 오류 처리 원칙).
       });
     return () => {
       cancelled = true;
     };
   }, []);
+
+  // [반경 컷오프 완전 폐지 + 도 전역 노출](2026-09-08 사용자 지시): "반경 컷오프
+  // 완전 폐지 + 도 전역 노출로 해줘(지도에 찍히는 거 기준).. 지도는 중분류 항목에
+  // 대하여 해당 데이터들 전역 노출" — 노출 중분류를 하나 고르면, 지도 중심/반경과
+  // 무관하게 그 중분류에 매핑된 전체 스팟을 전국 단위로 가져온다(get-nearby.ts의
+  // getSpotsByServiceCategory, 신규 RPC). 선택 해제하면 기존 반경 기반 기본 목록
+  // (아래 items)으로 돌아간다.
+  const [categoryItems, setCategoryItems] = useState<NearbyItem[]>([]);
+  const [isCategoryLoading, setIsCategoryLoading] = useState(false);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
+  useEffect(() => {
+    if (!selectedCategoryId) {
+      setCategoryItems([]);
+      setCategoryError(null);
+      return;
+    }
+    let cancelled = false;
+    setIsCategoryLoading(true);
+    setCategoryError(null);
+    getSpotsByServiceCategory(selectedCategoryId)
+      .then((result) => {
+        if (!cancelled) setCategoryItems(result);
+      })
+      .catch((err: Error) => {
+        if (!cancelled) setCategoryError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setIsCategoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCategoryId]);
+
+  // [바텀시트 반경 선택](2026-09-08 사용자 지시): 5/10/20km 중 사용자가 눌러서
+  // 고를 수 있다. 지도(전역 노출)와는 무관하게 바텀시트 결과 리스트에만 적용된다.
+  const [sheetRadiusKm, setSheetRadiusKm] = useState(DEFAULT_SHEET_RADIUS_KM);
+
   const [items, setItems] = useState<NearbyItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<NearbyItem[] | null>(null);
@@ -212,9 +256,17 @@ export function MapExplorer() {
   }, [gpsSyncSuggestion, handleConfirmLocation, dismissGpsSync]);
 
   // implementation/todo.md: dragend 발생 시 새로운 지도 중심을 재검색 후보로 저장해 Floating 버튼을 노출한다.
-  const handleMapDragEnd = useCallback((dragCenter: { lat: number; lng: number }) => {
-    setPendingRecenter(dragCenter);
-  }, []);
+  // [노출 중분류 전역 노출](2026-09-08 사용자 지시): 중분류가 선택된 동안은 표시되는
+  // 데이터가 지도 중심/반경과 무관한 전국 단위라, "이 위치에서 재검색" 버튼이
+  // 눌러도 아무 것도 바꾸지 못하는 죽은 버튼이 된다 — 아예 뜨지 않게 dragend 자체를
+  // 무시한다.
+  const handleMapDragEnd = useCallback(
+    (dragCenter: { lat: number; lng: number }) => {
+      if (selectedCategoryId) return;
+      setPendingRecenter(dragCenter);
+    },
+    [selectedCategoryId]
+  );
 
   // implementation/todo.md: 재검색 버튼 클릭 시 지도 중심을 새로운 탐색 기준점으로 지정하고 버튼을 숨긴다.
   const handleRecenterSearch = useCallback(() => {
@@ -265,53 +317,53 @@ export function MapExplorer() {
   // spec/common/search.md 2.3: 카테고리 선택 시 지도 마커와 리스트가 즉시 동기화되어 렌더링
   // Task 9-6-10(2026-08-23): /nearby가 상시 공간 전용으로 단일화되면서(RPC가 이미 SPACE만
   // 반환) EVENT/showSpaces 토글 분기가 필요 없어졌다.
-  // [스팟픽 대분류/중분류 계층적 탐색](2026-08-28): 목적별 테마(classifyThemeSpot) 대신
-  // 표준 중분류(category_min) 다중 선택으로 거른다 — get_nearby_spaces_and_events RPC가
-  // 이제 category_min을 반환한다(2026-08-28-nearby-rpc-category-min.sql).
-  // [스팟픽 전국구 서버사이드 검색](2026-08-30 사용자 지시): 검색어가 있으면(searchResults가
-  // null이 아니면) 텍스트 매칭이 이미 서버에서 끝난 전국구 결과를 기반으로 하고, 없으면
-  // 기존처럼 지도 반경 내 items를 기반으로 한다. 중분류 필터는 두 경우 모두 동일하게
-  // 클라이언트에서 한 번 더 좁힌다(검색 결과 안에서도 카테고리로 추가 탐색 가능).
+  // [노출 중분류 기준 카테고리 필터 전면 교체 + 반경 컷오프 폐지](2026-09-08 사용자
+  // 지시): 우선순위는 검색 > 노출 중분류 선택 > 기본(반경 기반) 순이다.
+  // - 검색어가 있으면(searchResults가 null이 아니면) 텍스트 매칭이 이미 서버에서
+  //   끝난 전국구 결과를 그대로 쓴다(카테고리 필터는 이 모드에선 적용하지 않는다 —
+  //   콕 짚어 찾는 검색 결과를 노출 중분류로 다시 좁히면 오히려 못 찾는 회귀가 될
+  //   수 있어 기존 "검색 모드 최우선" 원칙을 그대로 유지한다).
+  // - 노출 중분류를 선택했으면 categoryItems(반경 무관 전국 조회)를 쓴다 — 지도는
+  //   전역 노출, 반경 컷오프가 아예 없다.
+  // - 둘 다 아니면 기존처럼 반경(5km) 기반 items를 쓴다.
   const isSearchMode = keyword.trim().length > 0;
-  const filteredItems = useMemo(() => {
-    let result = isSearchMode ? (searchResults ?? []) : items;
+  const baseItems = isSearchMode ? (searchResults ?? []) : selectedCategoryId ? categoryItems : items;
 
-    if (selectedCategoryMins.length > 0) {
-      result = result.filter((item) => item.category_min && selectedCategoryMins.includes(item.category_min));
-    }
+  const visibleItems = useMemo(() => baseItems.slice(0, MARKER_LIMIT), [baseItems]);
+  const isOverLimit = baseItems.length > MARKER_LIMIT;
 
-    return result;
-  }, [isSearchMode, searchResults, items, selectedCategoryMins]);
-
-  const visibleItems = useMemo(() => filteredItems.slice(0, MARKER_LIMIT), [filteredItems]);
-  const isOverLimit = filteredItems.length > MARKER_LIMIT;
-
-  // [바텀시트 GPS 거리순 정렬](2026-09-08 사용자 지시, todo.md 개선사항3-1): 지도
-  // 마커/데스크톱 목록은 기존처럼 effectiveCenter(설정한 동네 또는 드래그/검색
-  // 기준점) 기준 순서를 그대로 쓰고, 모바일 바텀시트 리스트만 실시간 GPS 좌표
-  // 기준으로 다시 정렬 + 10km로 재제한한다. GPS를 못 가져왔으면(권한 거부 등)
-  // 기존 목록으로 조용히 폴백한다(제5장 제11조).
-  // 검색 모드(전국구 서버사이드 텍스트 검색)는 "주변" 탐색이 아니라 이름으로 콕
-  // 짚어 찾는 목적이라, 실제 검색 결과를 GPS 10km로 임의로 잘라내면 오히려
-  // 사용자가 찾던 항목이 사라져 보이는 회귀가 된다 — 검색 모드에서는 이 재정렬을
-  // 적용하지 않는다.
+  // [바텀시트 GPS 거리순 정렬 + 반경 선택](2026-09-08 사용자 지시): "바텀시트에
+  // 보이는 것중에는.. 반경 5km 혹은 10km 내 20km 내에 거리순으로 보이도록.. 거리
+  // 눌러서 적용" — 지도 마커/데스크톱 목록(visibleItems)은 위에서 이미 확정된
+  // 소스를 그대로 쓰고, 바텀시트 리스트만 실시간 GPS 좌표 기준으로 다시 정렬
+  // + 선택한 반경(sheetRadiusKm)으로 제한한다. baseItems(1,000건으로 잘리기 전
+  // 원본)를 기준으로 계산해야 한다 — 노출 중분류 전역 조회는 정렬 기준이 없어
+  // (전역 조회라 서버가 거리로 정렬해 줄 기준점 자체가 없음) 앞쪽 1,000건만 잘라
+  // 거리 계산을 하면 실제로 가장 가까운 항목이 잘려나간 뒤일 수 있다. GPS를 못
+  // 가져왔으면(권한 거부 등) 기존 목록(최대 1,000건)으로 조용히 폴백한다(제5장
+  // 제11조). 검색 모드는 "이름으로 콕 짚어 찾는" 목적이라 이 재정렬을 적용하지
+  // 않는다(기존 원칙 그대로).
   const mobileSheetItems = useMemo(() => {
-    if (isSearchMode || !liveGpsPosition) return visibleItems;
-    return visibleItems
+    if (isSearchMode || !liveGpsPosition) return baseItems.slice(0, MARKER_LIMIT);
+    return baseItems
       .map((item) => ({ item, gpsDistance: haversineDistanceMeters(liveGpsPosition, { lat: item.lat, lng: item.lng }) }))
-      .filter(({ gpsDistance }) => gpsDistance <= SHEET_GPS_DISTANCE_LIMIT_METERS)
+      .filter(({ gpsDistance }) => gpsDistance <= sheetRadiusKm * 1000)
       .sort((a, b) => a.gpsDistance - b.gpsDistance)
       // ItemListPanel은 item.distance_meters를 그대로 표시하므로, 여기서
       // GPS 기준 실제 거리로 덮어써야 화면에 보이는 거리도 정렬 기준과 일치한다.
       .map(({ item, gpsDistance }) => ({ ...item, distance_meters: gpsDistance }));
-  }, [isSearchMode, visibleItems, liveGpsPosition]);
+  }, [isSearchMode, baseItems, liveGpsPosition, sheetRadiusKm]);
 
-  const isBusy = isSearchMode ? isSearching : isLoading;
-  const activeError = isSearchMode ? searchError : errorMessage;
+  const isBusy = isSearchMode ? isSearching : selectedCategoryId ? isCategoryLoading : isLoading;
+  const activeError = isSearchMode ? searchError : selectedCategoryId ? categoryError : errorMessage;
   const isEmptyByFilter =
     !isBusy &&
     !activeError &&
-    (isSearchMode ? searchResults !== null && visibleItems.length === 0 : items.length > 0 && visibleItems.length === 0);
+    (isSearchMode
+      ? searchResults !== null && visibleItems.length === 0
+      : selectedCategoryId
+      ? categoryItems.length === 0
+      : items.length > 0 && visibleItems.length === 0);
 
   // spec/space/space-card.md 3, spec/event/event-card.md 3: 카드/마커 클릭 시 지도 panTo + 상세 모달 활성화
   // 리스트 패널 등에서 바로 전체 상세로 들어가는 경로라 열려 있던 마커 미리보기 카드가
@@ -366,6 +418,12 @@ export function MapExplorer() {
     ? { lat: previewItem.lat, lng: previewItem.lng }
     : null;
 
+  // [노출 중분류 전역 노출 시 지도 줌 레벨](2026-09-08 사용자 지시): 중분류를
+  // 선택하면 데이터가 전국 단위로 흩어져 있어, 기존 5km 기준 줌 레벨 그대로면
+  // 대부분의 마커가 화면 밖이라 "전역 노출"이 체감되지 않는다 — KakaoMapView가
+  // 지원하는 가장 넓은 줌 레벨로 시작하도록 큰 값을 넘긴다.
+  const mapRadius = selectedCategoryId ? CATEGORY_WIDE_VIEW_RADIUS_METERS : radius;
+
   return (
     <div className="relative flex-1 flex flex-col md:flex-row overflow-hidden">
       {/* 데스크톱 좌측 패널 (spec/common/responsive.md 2.2) */}
@@ -374,13 +432,16 @@ export function MapExplorer() {
           <LocationHeader addressName={sigunguName ?? addressName} onClick={openOnboarding} />
           <SearchBar value={keyword} onChange={setKeyword} />
           <SpotCategoryFilter
+            serviceCategories={serviceCategories}
+            serviceCategoryCounts={serviceCategoryCounts}
             selectedCategoryId={selectedCategoryId}
             onSelectCategory={handleSelectCategory}
             onSelectAiRecommend={handleOpenAiRecommend}
-            categoryMinCounts={categoryMinCounts}
-            items={visibleItems}
+            items={mobileSheetItems}
             isItemsLoading={isBusy}
             onSelectItem={handleSelectItem}
+            sheetRadiusKm={sheetRadiusKm}
+            onSelectSheetRadiusKm={setSheetRadiusKm}
           />
         </div>
         <div className="flex-1 overflow-y-auto">
@@ -401,7 +462,7 @@ export function MapExplorer() {
       <div className="relative flex-1">
         <KakaoMapView
           center={effectiveCenter}
-          radius={radius}
+          radius={mapRadius}
           items={visibleItems}
           focusPosition={focusPosition}
           onSelectItem={handleMarkerSelectItem}
@@ -444,13 +505,16 @@ export function MapExplorer() {
             </div>
           </div>
           <SpotCategoryFilter
+            serviceCategories={serviceCategories}
+            serviceCategoryCounts={serviceCategoryCounts}
             selectedCategoryId={selectedCategoryId}
             onSelectCategory={handleSelectCategory}
             onSelectAiRecommend={handleOpenAiRecommend}
-            categoryMinCounts={categoryMinCounts}
-            items={visibleItems}
+            items={mobileSheetItems}
             isItemsLoading={isBusy}
             onSelectItem={handleSelectItem}
+            sheetRadiusKm={sheetRadiusKm}
+            onSelectSheetRadiusKm={setSheetRadiusKm}
           />
           {/* implementation/todo.md: 지도 드래그 후 재검색 버튼 - 모바일에서는 필터 스택 하단에 노출해 겹침 방지 */}
           {pendingRecenter && (
@@ -479,7 +543,30 @@ export function MapExplorer() {
             {isSearchMode ? '검색결과' : '주변'} {mobileSheetItems.length}건 {isSheetExpanded ? '접기' : '목록 보기'}
           </span>
         </button>
-        <div className="h-[calc(100%-56px)] overflow-y-auto">
+        {/* [바텀시트 반경 선택](2026-09-08 사용자 지시): "반경 5km 혹은 10km 내 20km
+            내에 거리순으로 보이도록.. 거리 눌러서 적용할수있게" — 검색 모드는 이
+            반경이 적용되지 않아(위 mobileSheetItems 참고) 숨긴다. */}
+        {!isSearchMode && (
+          <div className="flex items-center justify-center gap-1.5 pb-2">
+            <span className="text-[11px] text-gray-400">반경</span>
+            {[5, 10, 20].map((km) => (
+              <button
+                key={km}
+                type="button"
+                aria-pressed={sheetRadiusKm === km}
+                onClick={() => setSheetRadiusKm(km)}
+                className={`shrink-0 rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors ${
+                  sheetRadiusKm === km
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {km}km
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="h-[calc(100%-96px)] overflow-y-auto">
           {isBusy && <p className="p-4 text-sm text-gray-400">불러오는 중...</p>}
           {activeError && <p className="p-4 text-sm text-red-500">{activeError}</p>}
           {isEmptyByFilter && <EmptyState onReset={resetFilters} />}
@@ -501,6 +588,8 @@ export function MapExplorer() {
           message={
             isSearchMode
               ? '검색 결과가 너무 많습니다. 검색어를 더 구체적으로 입력해 보세요.'
+              : selectedCategoryId
+              ? '선택하신 중분류에 해당하는 시설이 너무 많습니다. 지도를 확대해 세부 지역을 살펴보세요.'
               : '반경 내 시설이 너무 많습니다. 지도를 확대하거나 범위를 좁혀 상세히 탐색하세요.'
           }
         />

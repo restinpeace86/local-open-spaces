@@ -271,7 +271,44 @@ describe('MapExplorer 전국구 서버사이드 검색 (2026-08-30)', () => {
 // 대분류 탭 + 클릭 시 바텀시트로 하위 중분류 노출 구조로 가는 것이 맞다"는 확인에 따라
 // 2026-08-29에 도입했던 1단 플랫 필터를 다시 2단(대분류 탭 → 바텀시트 중분류)으로
 // 되돌렸다 — 이 describe 블록도 그 새 흐름에 맞춰 갱신한다.
+// [노출 중분류 기준 카테고리 필터 전면 교체](2026-09-08 사용자 지시): 실측
+// service_categories 데이터(2026-09-08 확인)를 그대로 픽스처로 쓴다 — 지도
+// 대분류/중분류 바텀시트가 이제 이 데이터를 유일한 출처로 삼는다.
+const SERVICE_CATEGORIES_FIXTURE = [
+  { id: 'sc-1', parent_category: '농장/체험', category_name: '체험농장·농원' },
+  { id: 'sc-2', parent_category: '농장/체험', category_name: '휴양마을' },
+  { id: 'sc-3', parent_category: '문화시설', category_name: '미술관 / 전시체험관' },
+  { id: 'sc-4', parent_category: '문화시설', category_name: '어린이 과학관 / 박물관' },
+  { id: 'sc-5', parent_category: '문화시설', category_name: '어린이 도서관' },
+  { id: 'sc-6', parent_category: '자연/공원', category_name: '대형 근린공원 / 잔디광장' },
+  { id: 'sc-7', parent_category: '자연/공원', category_name: '생태공원 / 산책로' },
+  { id: 'sc-8', parent_category: '키즈/놀이시설', category_name: '키즈카페 / 실내놀이터' },
+  { id: 'sc-9', parent_category: '키즈/놀이시설', category_name: '키즈친화 식당(놀이시설 포함)' },
+];
+
 describe('MapExplorer 대분류 탭 + 중분류 바텀시트 필터 (2026-09-03, todo.md 개선사항 6)', () => {
+  // [노출 중분류 기준 카테고리 필터 전면 교체](2026-09-08): 이 describe 블록의
+  // 테스트는 실제 중분류 칩 라벨을 검증하므로, 마운트 시 호출되는
+  // /api/nearby/service-categories를 이 픽스처로 응답하도록 고정한다(다른
+  // describe 블록은 이 fetch가 실패해도 무해하므로 건드리지 않는다 — 기존 관례).
+  beforeEach(() => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/nearby/service-categories')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ items: SERVICE_CATEGORIES_FIXTURE, counts: {} }),
+          } as Response);
+        }
+        return Promise.reject(new Error(`unexpected fetch: ${url}`));
+      })
+    );
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('기존 목적별 테마 칩과 키즈/무료/오늘·주말 Quick 필터가 더 이상 렌더링되지 않는다', () => {
     render(<MapExplorer />);
     expect(screen.queryByText('공원·광장')).not.toBeInTheDocument();
@@ -299,14 +336,14 @@ describe('MapExplorer 대분류 탭 + 중분류 바텀시트 필터 (2026-09-03,
     return screen.getByTestId('spot-category-sheet');
   }
 
-  it('대분류 탭을 누르면 그 대분류의 중분류만 바텀시트에 노출되고, 체육시설은 어디에도 없다', () => {
+  it('대분류 탭을 누르면 그 대분류의 중분류만 바텀시트에 노출되고, 체육시설은 어디에도 없다', async () => {
     render(<MapExplorer />);
     fireEvent.click(screen.getAllByRole('button', { name: '문화시설' })[0]);
 
     const sheet = within(getOpenSheet());
-    expect(sheet.getByText('도서관')).toBeInTheDocument();
-    expect(sheet.getByText('미술관')).toBeInTheDocument();
-    expect(sheet.queryByText('놀이터')).not.toBeInTheDocument();
+    expect(await sheet.findByText('어린이 도서관')).toBeInTheDocument();
+    expect(sheet.getByText('미술관 / 전시체험관')).toBeInTheDocument();
+    expect(sheet.queryByText('키즈카페 / 실내놀이터')).not.toBeInTheDocument();
     expect(sheet.queryByText('테니스장')).not.toBeInTheDocument();
   });
 
@@ -322,25 +359,26 @@ describe('MapExplorer 대분류 탭 + 중분류 바텀시트 필터 (2026-09-03,
     return screen.getAllByTestId('spot-category-tabs')[0]; // [0] = 데스크톱 인스턴스(항상 먼저 렌더링됨)
   }
 
-  it('중분류는 한 번에 하나만 선택 가능하고(단일 선택), 같은 중분류를 다시 고르면 해제된다', () => {
+  it('중분류는 한 번에 하나만 선택 가능하고(단일 선택), 같은 중분류를 다시 고르면 해제된다', async () => {
     render(<MapExplorer />);
 
     fireEvent.click(screen.getAllByRole('button', { name: '자연/공원' })[0]);
-    fireEvent.click(within(getOpenSheet()).getByText('공원'));
-    expect(within(getOuterTabs()).getByRole('button', { name: '공원' })).toBeInTheDocument();
+    fireEvent.click(await within(getOpenSheet()).findByText('대형 근린공원 / 잔디광장'));
+    expect(within(getOuterTabs()).getByRole('button', { name: '대형 근린공원 / 잔디광장' })).toBeInTheDocument();
     expect(within(getOuterTabs()).queryByRole('button', { name: '자연/공원' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getAllByRole('button', { name: '문화시설' })[0]);
-    fireEvent.click(within(getOpenSheet()).getByText('도서관'));
-    expect(within(getOuterTabs()).getByRole('button', { name: '도서관' })).toBeInTheDocument();
-    // 다른 대분류(자연/공원)를 골랐으므로 이전 선택(공원)의 대분류 탭은 원래 라벨로 돌아간다.
+    fireEvent.click(await within(getOpenSheet()).findByText('어린이 도서관'));
+    expect(within(getOuterTabs()).getByRole('button', { name: '어린이 도서관' })).toBeInTheDocument();
+    // 다른 대분류(자연/공원)를 골랐으므로 이전 선택(대형 근린공원)의 대분류 탭은 원래
+    // 라벨로 돌아간다.
     expect(within(getOuterTabs()).getByRole('button', { name: '자연/공원' })).toBeInTheDocument();
 
-    // 지금은 대분류 탭이 "도서관"으로 표시 중이므로 그 이름으로 다시 열어 같은 중분류를
-    // 재클릭하면 해제되어 대분류 탭이 원래 라벨("문화시설")로 돌아간다.
-    fireEvent.click(within(getOuterTabs()).getByRole('button', { name: '도서관' }));
-    fireEvent.click(within(getOpenSheet()).getByText('도서관'));
-    expect(within(getOuterTabs()).queryByRole('button', { name: '도서관' })).not.toBeInTheDocument();
+    // 지금은 대분류 탭이 "어린이 도서관"으로 표시 중이므로 그 이름으로 다시 열어 같은
+    // 중분류를 재클릭하면 해제되어 대분류 탭이 원래 라벨("문화시설")로 돌아간다.
+    fireEvent.click(within(getOuterTabs()).getByRole('button', { name: '어린이 도서관' }));
+    fireEvent.click(await within(getOpenSheet()).findByText('어린이 도서관'));
+    expect(within(getOuterTabs()).queryByRole('button', { name: '어린이 도서관' })).not.toBeInTheDocument();
     expect(within(getOuterTabs()).getByRole('button', { name: '문화시설' })).toBeInTheDocument();
   });
 
@@ -361,6 +399,83 @@ describe('MapExplorer 대분류 탭 + 중분류 바텀시트 필터 (2026-09-03,
     fireEvent.click(screen.getAllByText(/AI 추천/)[0]);
 
     expect(rankAiRecommendedSpots).toHaveBeenCalledTimes(1);
+  });
+});
+
+// [노출 중분류 기준 카테고리 필터 전면 교체 + 반경 컷오프 폐지](2026-09-08 사용자
+// 지시): "반경 컷오프 완전 폐지 + 도 전역 노출로 해줘(지도에 찍히는 거 기준).. 현재
+// 노출 중분류 기준으로 카테고리 필터 전면교체할것"
+describe('MapExplorer 노출 중분류 전역 노출(2026-09-08)', () => {
+  beforeEach(() => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/nearby/service-categories')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ items: SERVICE_CATEGORIES_FIXTURE, counts: {} }),
+          } as Response);
+        }
+        return Promise.reject(new Error(`unexpected fetch: ${url}`));
+      })
+    );
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('중분류를 선택하면 반경/중심과 무관한 전국 조회 RPC(get_spots_by_service_category)를 그 id로 호출한다', async () => {
+    render(<MapExplorer />);
+    await waitFor(() =>
+      expect(rpcMock).toHaveBeenCalledWith('get_nearby_spaces_and_events', expect.anything())
+    );
+    rpcMock.mockClear();
+
+    fireEvent.click(screen.getAllByRole('button', { name: '문화시설' })[0]);
+    fireEvent.click(await within(screen.getByTestId('spot-category-sheet')).findByText('어린이 도서관'));
+
+    await waitFor(() =>
+      expect(rpcMock).toHaveBeenCalledWith('get_spots_by_service_category', { p_service_category_id: 'sc-5' })
+    );
+  });
+
+  it('중분류를 선택하면 지도 마커가 반경 기반 목록이 아니라 전국 조회 결과로 바뀐다(전역 노출)', async () => {
+    rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow({ id: 'near-1', name: '반경내스팟' })], error: null });
+    rpcMock.mockResolvedValueOnce({
+      data: [makeSpaceRow({ id: 'far-1', name: '전국스팟', lat: 35.1, lng: 129.0 })],
+      error: null,
+    });
+
+    render(<MapExplorer />);
+    await screen.findByText('simulate-marker-click-반경내스팟');
+
+    fireEvent.click(screen.getAllByRole('button', { name: '문화시설' })[0]);
+    fireEvent.click(await within(screen.getByTestId('spot-category-sheet')).findByText('어린이 도서관'));
+
+    await screen.findByText('simulate-marker-click-전국스팟');
+    expect(screen.queryByText('simulate-marker-click-반경내스팟')).not.toBeInTheDocument();
+  });
+
+  it('선택한 중분류를 다시 눌러 해제하면 지도 마커가 반경 기반 기본 목록으로 되돌아온다', async () => {
+    rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow({ id: 'near-1', name: '반경내스팟' })], error: null });
+    rpcMock.mockResolvedValueOnce({
+      data: [makeSpaceRow({ id: 'far-1', name: '전국스팟', lat: 35.1, lng: 129.0 })],
+      error: null,
+    });
+
+    render(<MapExplorer />);
+    await screen.findByText('simulate-marker-click-반경내스팟');
+
+    fireEvent.click(screen.getAllByRole('button', { name: '문화시설' })[0]);
+    fireEvent.click(await within(screen.getByTestId('spot-category-sheet')).findByText('어린이 도서관'));
+    await screen.findByText('simulate-marker-click-전국스팟');
+
+    // 같은 중분류를 다시 눌러 선택 해제한다.
+    fireEvent.click(screen.getAllByRole('button', { name: '어린이 도서관' })[0]);
+    fireEvent.click(await within(screen.getByTestId('spot-category-sheet')).findByText('어린이 도서관'));
+
+    await screen.findByText('simulate-marker-click-반경내스팟');
+    expect(screen.queryByText('simulate-marker-click-전국스팟')).not.toBeInTheDocument();
   });
 });
 
