@@ -707,6 +707,24 @@ export type Database = {
         }
         Relationships: []
       }
+      sigungu_options_cache: {
+        Row: {
+          lat: number | null
+          lng: number | null
+          sigungu_name: string
+        }
+        Insert: {
+          lat?: number | null
+          lng?: number | null
+          sigungu_name: string
+        }
+        Update: {
+          lat?: number | null
+          lng?: number | null
+          sigungu_name?: string
+        }
+        Relationships: []
+      }
       spatial_ref_sys: {
         Row: {
           auth_name: string | null
@@ -738,10 +756,12 @@ export type Database = {
           blog_url_3: string | null
           break_end: string | null
           break_start: string | null
+          child_fee: number | null
           close_time: string | null
           created_at: string
           curation_badges: string[]
           curation_note: string | null
+          guardian_fee: number | null
           id: string
           image_url: string | null
           is_active: boolean
@@ -759,10 +779,12 @@ export type Database = {
           blog_url_3?: string | null
           break_end?: string | null
           break_start?: string | null
+          child_fee?: number | null
           close_time?: string | null
           created_at?: string
           curation_badges?: string[]
           curation_note?: string | null
+          guardian_fee?: number | null
           id?: string
           image_url?: string | null
           is_active?: boolean
@@ -780,10 +802,12 @@ export type Database = {
           blog_url_3?: string | null
           break_end?: string | null
           break_start?: string | null
+          child_fee?: number | null
           close_time?: string | null
           created_at?: string
           curation_badges?: string[]
           curation_note?: string | null
+          guardian_fee?: number | null
           id?: string
           image_url?: string | null
           is_active?: boolean
@@ -1003,14 +1027,6 @@ export type Database = {
           f_table_schema?: unknown
           srid?: number | null
           type?: string | null
-        }
-        Relationships: []
-      }
-      sigungu_options_cache: {
-        Row: {
-          lat: number | null
-          lng: number | null
-          sigungu_name: string | null
         }
         Relationships: []
       }

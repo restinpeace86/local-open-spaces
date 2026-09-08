@@ -111,6 +111,58 @@ const PRICE_ONLY_LINE = /^([\d,]+)\s*원?$/;
 // menu_items 스키마(scripts/migrations/2026-09-01-create-spot-curations-table.sql)가
 // { name, price }만 저장하도록 이미 확정돼 있어(설명 컬럼 없음), 설명 줄은 의도적으로
 // 버린다 — 스키마를 임의로 바꾸지 않는다(제5장 제3조).
+// [가격 및 입장료 스마트 파싱](2026-09-08 사용자 지시, todo.md 개선사항1-3):
+// "네이버 플레이스 등의 가격 텍스트를 그대로 복사·붙여넣기할 수 있는 [가격
+// 스마트 입력창]을 제공.. 어린이 요금, 보호자 요금 등의 필드에 숫자가 자동으로
+// 쪼개져 매핑되도록" — 키즈카페 입장료 표기는 "아동/소인 12,000원", "보호자/
+// 대인 5,000원"처럼 대상 키워드와 금액이 한 줄에 함께 나오는 경우가 많다.
+// extractLabeledTime과 동일한 방식(키워드가 있는 줄을 찾고 그 줄의 금액을
+// 채택)으로 파싱하되, 못 찾으면 억지로 추측해 채우지 않고 null로 남긴다
+// (제3장 제5조 추측 금지).
+export type ParsedEntranceFee = { childFee: number | null; guardianFee: number | null };
+
+const CHILD_FEE_KEYWORD = /(?:어린이|아동|아이|소인|유아)/;
+const GUARDIAN_FEE_KEYWORD = /(?:보호자|어른|성인|부모|대인)/;
+
+// [한 줄에 두 대상 요금이 함께 있는 경우](2026-09-08 실측 확인): "어린이 10,000원 /
+// 어른 3,000원"처럼 한 줄에 두 키워드+금액 쌍이 같이 오면, 그 줄의 "첫 번째" 금액을
+// 무조건 채택하는 방식은 뒤쪽 키워드(어른)에 앞쪽 금액(10,000)을 잘못 붙인다.
+// extractLabeledTime/extractLabeledRange와 동일하게, 키워드 위치에서 가장 가까운
+// 금액을 채택해야 정확하다.
+function extractLabeledFee(text: string, keyword: RegExp): number | null {
+  for (const line of text.split('\n')) {
+    const keywordMatch = line.match(keyword);
+    if (!keywordMatch || keywordMatch.index === undefined) continue;
+    const keywordIndex = keywordMatch.index;
+
+    const amountRegex = /([\d,]+)\s*원?/g;
+    let best: RegExpExecArray | null = null;
+    let bestDistance = Infinity;
+    let match: RegExpExecArray | null;
+    while ((match = amountRegex.exec(line)) !== null) {
+      const distance = Math.abs(match.index - keywordIndex);
+      if (distance < bestDistance) {
+        bestDistance = distance;
+        best = match;
+      }
+    }
+    if (best) {
+      const value = Number(best[1].replace(/,/g, ''));
+      if (Number.isFinite(value)) return value;
+    }
+  }
+  return null;
+}
+
+export function parseEntranceFeeText(text: string): ParsedEntranceFee {
+  const trimmed = (text ?? '').trim();
+  if (!trimmed) return { childFee: null, guardianFee: null };
+  return {
+    childFee: extractLabeledFee(trimmed, CHILD_FEE_KEYWORD),
+    guardianFee: extractLabeledFee(trimmed, GUARDIAN_FEE_KEYWORD),
+  };
+}
+
 export function parseMenuText(text: string): ParsedMenuItem[] {
   const lines = (text ?? '').split('\n');
   const items: ParsedMenuItem[] = [];

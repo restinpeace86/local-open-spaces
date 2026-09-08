@@ -177,6 +177,10 @@ describe('BlogCurationModal', () => {
     );
     expect(saveCall).toBeDefined();
     const body = JSON.parse((saveCall![1] as RequestInit).body as string);
+    // [키즈카페 팝업 기본 입력 필드](2026-09-08 개선사항1): 이 스팟은 노출
+    // 중분류를 고르지 않아 기본(restaurant) 카테고리라 이미지/영업시간/가격/
+    // 메뉴 UI는 안 보이지만, 저장 페이로드에는 항상 빈 값(null/[])으로 함께
+    // 실려 간다(카테고리 무관 공통 저장 로직).
     expect(body).toEqual({
       spot_id: 'spot-1',
       blog_url_1: 'https://blog.naver.com/1',
@@ -184,6 +188,16 @@ describe('BlogCurationModal', () => {
       blog_url_3: 'https://blog.naver.com/3',
       curation_badges: ['parking', 'stroller'],
       curation_note: null,
+      image_url: null,
+      operating_hours_raw: null,
+      open_time: null,
+      close_time: null,
+      break_start: null,
+      break_end: null,
+      last_order: null,
+      menu_items: [],
+      child_fee: null,
+      guardian_fee: null,
     });
     // 본문(description)은 어디에도 전송되지 않는다(저장/폐기 정책).
     expect(JSON.stringify(body)).not.toContain('주차장이 넓고');
@@ -778,6 +792,94 @@ describe('BlogCurationModal', () => {
       // 다시 식당으로 돌아가도 방금 지워진 선택은 복구되지 않는다(되돌리기 기능 없음).
       fireEvent.change(screen.getByDisplayValue('키즈/놀이시설 > 키즈카페 / 실내놀이터'), { target: { value: '' } });
       expect(await screen.findByLabelText('좌식/온돌 있음')).not.toBeChecked();
+    });
+  });
+
+  // [키즈카페 팝업 기본 입력 필드](2026-09-08 사용자 지시, todo.md 개선사항1):
+  // "관리자 워크벤치 내에 [키즈카페 / 실내놀이터] 카테고리를 위한 스팟 큐레이션
+  // 팝업 UI... 대표 이미지 등록, 영업시간 및 휴무일 정보, 가격 및 입장료 스마트
+  // 파싱, 식음료 및 메뉴 정보(옵셔널)"
+  describe('키즈카페 기본 입력 필드(개선사항1)', () => {
+    it('노출 중분류가 키즈카페가 아니면 대표 이미지/영업시간/가격/메뉴 UI가 보이지 않는다', async () => {
+      vi.stubGlobal('fetch', mockFetchByUrl({ blogSearch: { items: [], hasRecentReview: false, hasNoResults: true } }));
+      render(
+        <BlogCurationModal spot={SPOT} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+      );
+
+      await screen.findByLabelText('주차 완비');
+      expect(screen.queryByText('대표 이미지')).not.toBeInTheDocument();
+    });
+
+    it('노출 중분류를 키즈카페로 바꾸면 대표 이미지/영업시간/가격/메뉴 UI가 나타난다', async () => {
+      vi.stubGlobal('fetch', mockFetchByUrl({ blogSearch: { items: [], hasRecentReview: false, hasNoResults: true } }));
+      render(
+        <BlogCurationModal spot={SPOT} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+      );
+
+      await screen.findByLabelText('주차 완비');
+      fireEvent.change(screen.getByDisplayValue('(선택 안 함)'), { target: { value: 'svc-1' } });
+
+      expect(await screen.findByText('대표 이미지')).toBeInTheDocument();
+      expect(screen.getByText('영업시간 및 휴무일(텍스트 붙여넣기)')).toBeInTheDocument();
+      expect(screen.getByText('입장료(텍스트 붙여넣기 — 어린이/보호자 요금 자동 인식)')).toBeInTheDocument();
+      expect(screen.getByText('식음료/메뉴(선택 — "이름 가격원" 한 줄씩)')).toBeInTheDocument();
+    });
+
+    it('가격 텍스트를 붙여넣고 자동 파싱하면 어린이/보호자 요금이 채워지고, 저장 시 그대로 전송된다', async () => {
+      const fetchMock = mockFetchByUrl({ blogSearch: { items: [], hasRecentReview: false, hasNoResults: true } });
+      vi.stubGlobal('fetch', fetchMock);
+      render(
+        <BlogCurationModal spot={SPOT} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+      );
+
+      await screen.findByLabelText('주차 완비');
+      fireEvent.change(screen.getByDisplayValue('(선택 안 함)'), { target: { value: 'svc-1' } });
+      await screen.findByText('대표 이미지');
+
+      fireEvent.change(screen.getByPlaceholderText(/아동 12,000원/), {
+        target: { value: '아동 12,000원\n보호자 5,000원' },
+      });
+      // 자동 파싱 버튼이 영업시간/가격/메뉴 3곳에 있어(순서: 영업시간, 가격, 메뉴)
+      // 가운데(가격) 버튼을 지정한다.
+      fireEvent.click(screen.getAllByText('⚡ 자동 파싱')[1]);
+
+      expect(screen.getByPlaceholderText('어린이 요금(원)')).toHaveValue(12000);
+      expect(screen.getByPlaceholderText('보호자 요금(원)')).toHaveValue(5000);
+
+      fireEvent.click(screen.getByText('저장 및 완료'));
+
+      await waitFor(() => {
+        const saveCall = fetchMock.mock.calls.find(
+          (c) => (c[0] as string) === '/api/admin/spot-curations' && (c[1] as RequestInit)?.method === 'POST'
+        );
+        expect(saveCall).toBeDefined();
+        const body = JSON.parse((saveCall![1] as RequestInit).body as string);
+        expect(body.child_fee).toBe(12000);
+        expect(body.guardian_fee).toBe(5000);
+      });
+    });
+
+    it('메뉴는 옵셔널이라 비워둬도 저장이 실패하지 않는다(빈 배열로 저장)', async () => {
+      const fetchMock = mockFetchByUrl({ blogSearch: { items: [], hasRecentReview: false, hasNoResults: true } });
+      vi.stubGlobal('fetch', fetchMock);
+      render(
+        <BlogCurationModal spot={SPOT} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+      );
+
+      await screen.findByLabelText('주차 완비');
+      fireEvent.change(screen.getByDisplayValue('(선택 안 함)'), { target: { value: 'svc-1' } });
+      await screen.findByText('대표 이미지');
+
+      fireEvent.click(screen.getByText('저장 및 완료'));
+
+      await waitFor(() => {
+        const saveCall = fetchMock.mock.calls.find(
+          (c) => (c[0] as string) === '/api/admin/spot-curations' && (c[1] as RequestInit)?.method === 'POST'
+        );
+        expect(saveCall).toBeDefined();
+        const body = JSON.parse((saveCall![1] as RequestInit).body as string);
+        expect(body.menu_items).toEqual([]);
+      });
     });
   });
 });

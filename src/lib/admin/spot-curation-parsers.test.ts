@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseMenuText, parseOperatingHoursText } from './spot-curation-parsers';
+import { parseEntranceFeeText, parseMenuText, parseOperatingHoursText } from './spot-curation-parsers';
 
 describe('parseOperatingHoursText', () => {
   it('단순 영업시간(10:00~22:00)만 있으면 open/close만 채우고 나머지는 null이다', () => {
@@ -159,5 +159,40 @@ describe('parseMenuText', () => {
     // 마지막 "설명"만 있고 그 뒤에 가격이 없는 경우 — 추측으로 항목을 만들지 않는다.
     const text = ['탕수육', '15,000원', '설명입니다'].join('\n');
     expect(parseMenuText(text)).toEqual([{ name: '탕수육', price: 15000 }]);
+  });
+});
+
+// [가격 및 입장료 스마트 파싱](2026-09-08 사용자 지시, todo.md 개선사항1-3):
+// "네이버 플레이스 등의 가격 텍스트를.. 어린이 요금, 보호자 요금 등의 필드에
+// 숫자가 자동으로 쪼개져 매핑되도록"
+describe('parseEntranceFeeText', () => {
+  it('"아동/보호자" 키워드가 붙은 줄에서 각각 금액을 뽑아낸다', () => {
+    const result = parseEntranceFeeText('아동 12,000원\n보호자 5,000원');
+    expect(result).toEqual({ childFee: 12000, guardianFee: 5000 });
+  });
+
+  it('"소인/대인" 같은 다른 표기의 동의어도 인식한다', () => {
+    const result = parseEntranceFeeText('입장료\n소인 15000\n대인 8000');
+    expect(result).toEqual({ childFee: 15000, guardianFee: 8000 });
+  });
+
+  // 한 줄에 두 대상 요금이 함께 있으면, 각 키워드에 가장 가까운 금액을
+  // 채택해야 한다("첫 번째 금액을 무조건 채택"하면 어른 요금에 어린이
+  // 금액이 잘못 붙는다).
+  it('"어린이/어른" 표기도 인식하고, 한 줄에 둘 다 있어도 가까운 금액끼리 정확히 짝짓는다', () => {
+    const result = parseEntranceFeeText('어린이 10,000원 / 어른 3,000원');
+    expect(result).toEqual({ childFee: 10000, guardianFee: 3000 });
+  });
+
+  it('한쪽 키워드만 있으면 그 쪽만 채우고 나머지는 null이다', () => {
+    expect(parseEntranceFeeText('아동 12,000원')).toEqual({ childFee: 12000, guardianFee: null });
+  });
+
+  it('키워드가 있어도 금액을 찾지 못하면 null로 남긴다(추측 금지)', () => {
+    expect(parseEntranceFeeText('아동 동반 시 보호자 무료 입장 가능')).toEqual({ childFee: null, guardianFee: null });
+  });
+
+  it('빈 문자열이면 둘 다 null이다', () => {
+    expect(parseEntranceFeeText('')).toEqual({ childFee: null, guardianFee: null });
   });
 });

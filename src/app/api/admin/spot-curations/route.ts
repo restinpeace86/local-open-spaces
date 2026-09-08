@@ -21,6 +21,10 @@ type SpotCurationRow = {
   break_end: string | null;
   last_order: string | null;
   menu_items: unknown;
+  // [가격 및 입장료 스마트 파싱](2026-09-08 사용자 지시, todo.md 개선사항1-3):
+  // 어린이/보호자 요금. 파싱 실패/미입력이면 NULL(추측해서 채우지 않음).
+  child_fee: number | null;
+  guardian_fee: number | null;
   naver_booking_url: string | null;
   curation_note: string | null;
   // [관리자용 블로그 큐레이션 모달](2026-09-05 사용자 지시, Decision 021): 블로그
@@ -41,6 +45,12 @@ function normalizeUrl(value: unknown): string | null {
 
 function normalizeBadges(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
+}
+
+// [가격 및 입장료 스마트 파싱](2026-09-08 개선사항1-3): 숫자가 아니거나 없으면
+// NULL로 저장한다(음수 등 명백히 잘못된 값도 추측해 보정하지 않고 NULL 처리).
+function normalizeFee(value: unknown): number | null {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.round(value) : null;
 }
 
 export async function GET(request: NextRequest) {
@@ -125,6 +135,8 @@ export async function POST(request: NextRequest) {
         break_end: body.break_end || null,
         last_order: body.last_order || null,
         menu_items: isValidMenuItems(body.menu_items) ? body.menu_items : [],
+        child_fee: normalizeFee(body.child_fee),
+        guardian_fee: normalizeFee(body.guardian_fee),
         naver_booking_url: typeof body.naver_booking_url === 'string' && body.naver_booking_url.trim() ? body.naver_booking_url.trim() : null,
         curation_note: typeof body.curation_note === 'string' ? body.curation_note : null,
         blog_url_1: normalizeUrl(body.blog_url_1),
@@ -172,6 +184,8 @@ export async function PATCH(request: NextRequest) {
       break_end: string | null;
       last_order: string | null;
       menu_items: Array<{ name: string; price: number }>;
+      child_fee: number | null;
+      guardian_fee: number | null;
       naver_booking_url: string | null;
       curation_note: string | null;
       blog_url_1: string | null;
@@ -188,6 +202,8 @@ export async function PATCH(request: NextRequest) {
     if ('break_end' in body) updates.break_end = body.break_end || null;
     if ('last_order' in body) updates.last_order = body.last_order || null;
     if ('menu_items' in body) updates.menu_items = isValidMenuItems(body.menu_items) ? body.menu_items : [];
+    if ('child_fee' in body) updates.child_fee = normalizeFee(body.child_fee);
+    if ('guardian_fee' in body) updates.guardian_fee = normalizeFee(body.guardian_fee);
     if ('naver_booking_url' in body) {
       updates.naver_booking_url = typeof body.naver_booking_url === 'string' && body.naver_booking_url.trim() ? body.naver_booking_url.trim() : null;
     }

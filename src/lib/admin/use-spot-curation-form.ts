@@ -3,6 +3,12 @@
 import { useEffect, useState } from 'react';
 import { buildSmartBlogQuery, buildFallbackBlogQuery, extractAllSigunguCoreNames } from './naver-blog-search';
 import { getBadgeGroupsForCategory, getBadgeOptionsForCategory, matchBadgeKeysFromText, resolveCurationCategoryId } from './curation-badges';
+import {
+  parseEntranceFeeText,
+  parseMenuText,
+  parseOperatingHoursText,
+  ParsedMenuItem,
+} from './spot-curation-parsers';
 import { ServiceCategory } from './service-category';
 
 // [All-in-One 모바일 큐레이션 워크벤치](2026-09-05 사용자 지시)를 만들면서
@@ -28,6 +34,12 @@ export type BlogSearchItem = {
   isRecent: boolean;
 };
 
+// [키즈카페 팝업 기본 입력 필드/가격·메뉴](2026-09-08 사용자 지시, todo.md
+// 개선사항1-2·3·4): "대표 이미지 등록, 영업시간 및 휴무일 정보.. 가격 및
+// 입장료 스마트 파싱.. 식음료 및 메뉴 정보(옵셔널)" — 이 필드들은 이미
+// spot_curations 테이블(과 SpotCurationsPanel 폼)에 존재하던 것을 그대로
+// 가져온다(제5장 제4조 기존 구조 우선). 전부 옵셔널로 둔 이유는 기존
+// 호출부/테스트가 이 필드들 없이도 계속 동작해야 하기 때문이다(점진적 적용).
 export type SpotCurationItem = {
   id: string;
   spot_id: string;
@@ -36,6 +48,17 @@ export type SpotCurationItem = {
   blog_url_3: string | null;
   curation_badges: string[];
   curation_note: string | null;
+  image_url?: string | null;
+  operating_hours_raw?: string | null;
+  open_time?: string | null;
+  close_time?: string | null;
+  break_start?: string | null;
+  break_end?: string | null;
+  last_order?: string | null;
+  menu_items?: ParsedMenuItem[];
+  // [가격 및 입장료 스마트 파싱](2026-09-08 개선사항1-3): 어린이/보호자 요금.
+  child_fee?: number | null;
+  guardian_fee?: number | null;
 };
 
 export type SpotForCuration = {
@@ -142,6 +165,81 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
   // 이미 쓰던 자유 입력 필드)를 그대로 재사용한다(제5장 제4조).
   const [curationNote, setCurationNote] = useState('');
 
+  // [키즈카페 팝업 기본 입력 필드](2026-09-08 사용자 지시, todo.md 개선사항1-2):
+  // "대표 이미지 등록, 영업시간 및 휴무일 정보" — SpotCurationsPanel의 동일 필드를
+  // 그대로 재사용한다(제5장 제4조). curation-badge-form과 달리 이 필드들은
+  // curationCategoryId === 'kids_cafe'일 때만 UI에 노출하지만(item 1 요구사항
+  // 범위), state/저장 로직 자체는 카테고리와 무관하게 항상 존재해도 무해하다
+  // (다른 카테고리는 그냥 이 값들을 편집할 UI가 안 보일 뿐).
+  const [imageUrl, setImageUrl] = useState('');
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
+  const [hoursRaw, setHoursRaw] = useState('');
+  const [openTime, setOpenTime] = useState('');
+  const [closeTime, setCloseTime] = useState('');
+  const [breakStart, setBreakStart] = useState('');
+  const [breakEnd, setBreakEnd] = useState('');
+  const [lastOrder, setLastOrder] = useState('');
+  // [식음료 및 메뉴 정보(옵셔널)](2026-09-08 개선사항1-4): 붙여넣기 원문(menuRaw)은
+  // 저장 대상이 아니다(파싱 결과인 menuItems만 menu_items 컬럼에 저장) — 빈 채로
+  // 둬도 에러 없이 저장된다(옵셔널 처리 요구사항 그대로).
+  const [menuRaw, setMenuRaw] = useState('');
+  const [menuItems, setMenuItems] = useState<ParsedMenuItem[]>([]);
+  // [가격 및 입장료 스마트 파싱](2026-09-08 개선사항1-3): "어린이 요금, 보호자
+  // 요금 등의 필드에 숫자가 자동으로 쪼개져 매핑되도록 하고, 관리자가 수정·저장할
+  // 수 있어야 합니다" — feeRaw(붙여넣기 원문)도 menuRaw와 동일하게 저장하지
+  // 않는다(파싱 결과인 childFee/guardianFee만 저장).
+  const [feeRaw, setFeeRaw] = useState('');
+  const [childFee, setChildFee] = useState<number | null>(null);
+  const [guardianFee, setGuardianFee] = useState<number | null>(null);
+
+  function handlePasteImage(e: React.ClipboardEvent<HTMLDivElement>) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    const imageItem = Array.from(items).find((item) => item.type.startsWith('image/'));
+    if (!imageItem) return;
+
+    e.preventDefault();
+    const file = imageItem.getAsFile();
+    if (!file) return;
+
+    setIsUploadingImage(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    fetch('/api/admin/spot-curations/upload-image', { method: 'POST', body: formData })
+      .then(async (res) => {
+        const data: { url?: string; error?: string } = await res.json();
+        if (!res.ok || !data.url) throw new Error(data.error ?? '이미지 업로드에 실패했습니다.');
+        setImageUrl(data.url);
+      })
+      .catch((err) => {
+        setSaveError(err instanceof Error ? err.message : '이미지 업로드에 실패했습니다.');
+      })
+      .finally(() => setIsUploadingImage(false));
+  }
+
+  function handleParseHours() {
+    const parsed = parseOperatingHoursText(hoursRaw);
+    setOpenTime(parsed.openTime ?? '');
+    setCloseTime(parsed.closeTime ?? '');
+    setBreakStart(parsed.breakStart ?? '');
+    setBreakEnd(parsed.breakEnd ?? '');
+    setLastOrder(parsed.lastOrder ?? '');
+  }
+
+  function handleParseMenu() {
+    setMenuItems(parseMenuText(menuRaw));
+  }
+
+  function handleRemoveMenuItem(index: number) {
+    setMenuItems((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function handleParseFee() {
+    const parsed = parseEntranceFeeText(feeRaw);
+    setChildFee(parsed.childFee);
+    setGuardianFee(parsed.guardianFee);
+  }
+
   // [블로그 큐레이션 전체 본문 보기](2026-09-05 사용자 지시) — 링크별 전체 본문 캐시.
   const [bodyByLink, setBodyByLink] = useState<Record<string, BlogBodyState>>({});
 
@@ -209,6 +307,18 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
           setSelectedBadges(new Set(item.curation_badges ?? []));
           setSavedBadgeKeys(new Set(item.curation_badges ?? []));
           setCurationNote(item.curation_note ?? '');
+          // [키즈카페 팝업 기본 입력 필드/가격/메뉴 프리필](2026-09-08 개선사항1):
+          // 기존 큐레이션을 다시 열면 이미 저장된 값을 채워 보여준다.
+          setImageUrl(item.image_url ?? '');
+          setHoursRaw(item.operating_hours_raw ?? '');
+          setOpenTime(item.open_time ?? '');
+          setCloseTime(item.close_time ?? '');
+          setBreakStart(item.break_start ?? '');
+          setBreakEnd(item.break_end ?? '');
+          setLastOrder(item.last_order ?? '');
+          setMenuItems(item.menu_items ?? []);
+          setChildFee(item.child_fee ?? null);
+          setGuardianFee(item.guardian_fee ?? null);
         }
       })
       .catch(() => {
@@ -340,13 +450,27 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
         if (!res.ok) throw new Error(data.error ?? '노출 중분류 저장에 실패했습니다.');
       }
 
-      // 2) 블로그 URL 3개(본문은 절대 전송하지 않음) + 뱃지를 spot_curations에 저장한다.
+      // 2) 블로그 URL 3개(본문은 절대 전송하지 않음) + 뱃지 + 키즈카페 팝업 기본
+      // 입력 필드(대표 이미지/영업시간/가격/메뉴)를 spot_curations에 저장한다.
+      // 이 필드들은 UI가 kids_cafe 카테고리일 때만 편집 가능하게 보여주지만,
+      // 저장 자체는 카테고리와 무관하게 항상 함께 보낸다 — 다른 카테고리는 그냥
+      // 항상 비어있는 값(null/[])으로 저장될 뿐이라 무해하다.
       const payload = {
         blog_url_1: blogItems?.[0]?.link ?? null,
         blog_url_2: blogItems?.[1]?.link ?? null,
         blog_url_3: blogItems?.[2]?.link ?? null,
         curation_badges: [...selectedBadges],
         curation_note: curationNote.trim() || null,
+        image_url: imageUrl.trim() || null,
+        operating_hours_raw: hoursRaw || null,
+        open_time: openTime || null,
+        close_time: closeTime || null,
+        break_start: breakStart || null,
+        break_end: breakEnd || null,
+        last_order: lastOrder || null,
+        menu_items: menuItems,
+        child_fee: childFee,
+        guardian_fee: guardianFee,
       };
       const res = existingCuration
         ? await fetch('/api/admin/spot-curations', {
@@ -408,5 +532,35 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
     isSaving,
     saveError,
     save,
+    // [키즈카페 팝업 기본 입력 필드/가격/메뉴](2026-09-08 개선사항1-2·3·4)
+    imageUrl,
+    setImageUrl,
+    isUploadingImage,
+    handlePasteImage,
+    hoursRaw,
+    setHoursRaw,
+    openTime,
+    setOpenTime,
+    closeTime,
+    setCloseTime,
+    breakStart,
+    setBreakStart,
+    breakEnd,
+    setBreakEnd,
+    lastOrder,
+    setLastOrder,
+    handleParseHours,
+    menuRaw,
+    setMenuRaw,
+    menuItems,
+    handleParseMenu,
+    handleRemoveMenuItem,
+    feeRaw,
+    setFeeRaw,
+    childFee,
+    setChildFee,
+    guardianFee,
+    setGuardianFee,
+    handleParseFee,
   };
 }
