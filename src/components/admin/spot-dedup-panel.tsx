@@ -445,6 +445,15 @@ export function SpotDedupPanel() {
     stagePendingGroup(group, 'in_progress');
 
     try {
+      // [노출 중분류 경계 넘는 오묶음 방지](2026-09-09 사용자 지시): "같은
+      // 노출중분류에 대하여서만 하는거 맞아?" — find_nearby_open_spaces는 좌표
+      // 30m 반경만 볼 뿐 노출 중분류를 전혀 모른다(다른 두 호출부인
+      // SpotDedupQuickModal/MobileCurationWorkbench는 오히려 그래야 정상이라
+      // RPC 자체에 필터를 넣지 않았다 — 대신 이 스캔은 scanScope로 이미
+      // 범위를 좁혀뒀으니, 여기서 그 범위와 다른 노출 중분류의 결과만 걸러낸다.
+      // scanScope가 UNMAPPED_SCOPE면 "미매핑(null)" 범위이므로 null인 것만,
+      // 실제 중분류면 정확히 그 값인 것만 허용한다.
+      const expectedServiceCategoryId = scanScope === UNMAPPED_SCOPE ? null : scanScope;
       const existingIds = new Set(group.members.map((m) => m.id));
       const results = await Promise.all(
         group.members.map((m) =>
@@ -457,6 +466,7 @@ export function SpotDedupPanel() {
       for (const data of results as { items?: NearbySpot[] }[]) {
         for (const n of data.items ?? []) {
           if (existingIds.has(n.id) || extraById.has(n.id)) continue;
+          if (n.service_category_id !== expectedServiceCategoryId) continue;
           extraById.set(n.id, {
             id: n.id,
             name: n.name,

@@ -210,8 +210,10 @@ describe('SpotDedupPanel', () => {
         },
         // 스캔 페이지에는 a/b만 실렸지만, 실제로는 c도 같은 위치에 있다(다른
         // 페이지로 흩어진 것을 재현) — a/b 기준 30m 재조회에서 c가 발견된다.
+        // 미매핑 스캔(scanScope=UNMAPPED_SCOPE) 중이므로 service_category_id는
+        // null이어야 채택된다(아래 "다른 노출 중분류는 채택하지 않는다" 참고).
         nearby: {
-          items: [{ id: 'c', name: '행복놀이터(신관)', category: 'PARK', category_min: '공원', address: '경기도 성남시 분당구 1-2', distance_m: 5 }],
+          items: [{ id: 'c', name: '행복놀이터(신관)', category: 'PARK', category_min: '공원', address: '경기도 성남시 분당구 1-2', distance_m: 5, service_category_id: null }],
         },
       });
       vi.stubGlobal('fetch', fetchMock);
@@ -225,6 +227,41 @@ describe('SpotDedupPanel', () => {
       // 보강 조회가 끝나면 놓쳤던 멤버(c)가 자동으로 합쳐져 3건이 된다.
       expect(await screen.findByText('중복 의심 그룹 검수 (3건)')).toBeInTheDocument();
       expect(screen.getByText('행복놀이터(신관)')).toBeInTheDocument();
+    });
+
+    // [노출 중분류 경계 넘는 오묶음 방지](2026-09-09 사용자 지시): "이부분에서 같은
+    // 노출중분류에 대하여서만 하는거 맞아?" — find_nearby_open_spaces는 좌표만
+    // 보고 노출 중분류를 모르므로, 응답에 다른(또는 다르게 매핑된) service_
+    // category_id가 섞여 있으면 패널이 직접 걸러내야 한다.
+    it('30m 이내라도 노출 중분류가 다른 스팟은 보강 대상에서 제외한다', async () => {
+      const fetchMock = mockFetchByUrl({
+        categories: { items: [{ id: 'svc-9', parent_category: '자연/공원', category_name: '캠핑장 / 피크닉장' }] },
+        groupsPages: {
+          initial: {
+            candidates: [candidateRow({ id: 'a' }), candidateRow({ id: 'b', name: '난지캠핑장 B', address: '서울 마포구 상암동 1-1' })],
+            next_cursor: 'b',
+            has_more: false,
+          },
+        },
+        // c는 30m 이내지만 노출 중분류가 svc-9(캠핑장)가 아니라 완전히 다른 값이다
+        // — 무관한 스팟이 잘못 합쳐지면 병합 시 그 스팟의 노출 중분류까지 덮어써버린다.
+        nearby: {
+          items: [{ id: 'c', name: '근처 편의점', category: 'ETC', category_min: null, address: '서울 마포구 상암동 1-2', distance_m: 10, service_category_id: 'svc-other' }],
+        },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      renderPanel();
+
+      await screen.findByRole('option', { name: '자연/공원 > 캠핑장 / 피크닉장' });
+      selectScanScope('자연/공원 > 캠핑장 / 피크닉장');
+      fireEvent.click(screen.getAllByText('📥 불러오기')[0]);
+      fireEvent.click(await screen.findByText(/행복놀이터 외 1건/));
+
+      // 잠시 뒤에도(보강 조회가 끝난 뒤에도) 2건 그대로 유지되고, 무관한 스팟은
+      // 목록에 나타나지 않는다.
+      await waitFor(() => expect(fetchMock.mock.calls.some((c) => (c[0] as string).includes('/api/admin/spot-dedup/nearby'))).toBe(true));
+      expect(screen.getByText('중복 의심 그룹 검수 (2건)')).toBeInTheDocument();
+      expect(screen.queryByText('근처 편의점')).not.toBeInTheDocument();
     });
 
     it('보강 조회가 실패해도 기존 스캔 결과 그대로 검수를 계속할 수 있다', async () => {
