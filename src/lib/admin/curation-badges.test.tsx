@@ -160,9 +160,103 @@ describe('kids_cafe 카테고리 뱃지 — 식당과 완전히 독립적', () =
 
 describe('아직 전용 콘텐츠가 없는 노출 중분류(보편 임시 뱃지)', () => {
   it('식당/키즈카페 전용 항목 없이 보편적인 항목(주차/유모차 등)만 갖는다', () => {
-    const categoryId = resolveCurationCategoryId('캠핑장 / 피크닉장');
+    // [2026-09-10] '캠핑장 / 피크닉장'은 전용 config로 승격돼(아래 describe 참고)
+    // 이 테스트는 여전히 보편 임시 뱃지인 '어린이 도서관'으로 검증한다.
+    const categoryId = resolveCurationCategoryId('어린이 도서관');
     const labels = getBadgeOptionsForCategory(categoryId).map((o) => o.label);
     expect(labels).toEqual(['주차 완비', '유모차 가능', '수유실 있음', '기저귀 갈이대', '예약 필수', '예약 가능']);
+  });
+});
+
+// [캠핑장/체험휴양마을/교육농장 전용 뱃지 + 네거티브 뱃지](2026-09-10 사용자
+// 지시): "각각 데이터들 속성들을 확인해 보고 어린이 친화로 사용할 뱃지들
+// 리스트 제안 및 작성해줘. 또 반대로 어린이 포함 가족들이 가지 못하는
+// 뱃지들도 제안해줘."
+describe('camping(캠핑장 / 피크닉장) 카테고리 뱃지', () => {
+  it('노출 중분류 "캠핑장 / 피크닉장"은 camping으로 매핑된다', () => {
+    expect(resolveCurationCategoryId('캠핑장 / 피크닉장')).toBe('camping');
+  });
+
+  it('포지티브(트램폴린/미끄럼틀/모래놀이/온수 등)와 네거티브(백패킹/험지/노키즈존 등) 뱃지를 모두 갖는다', () => {
+    const labels = getBadgeOptionsForCategory('camping').map((o) => o.label);
+    expect(labels).toEqual(
+      expect.arrayContaining([
+        '트램폴린/방방',
+        '미끄럼틀',
+        '모래놀이터',
+        '온수 샤워 가능',
+        '백패킹 전용(차량 진입 불가)',
+        '험지/고지대(등산 필요)',
+        '노키즈존/유아 동반 제한',
+      ])
+    );
+  });
+
+  it('4개 그룹(이동/편의, 놀이/편의시설, 캠핑 유형, 주의/제한)으로 나뉜다', () => {
+    expect(getBadgeGroupsForCategory('camping')).toEqual(['이동/편의', '놀이/편의시설', '캠핑 유형', '주의/제한']);
+  });
+
+  it('사용자 예시 문구가 각 뱃지로 정확히 매칭된다', () => {
+    expect(matchBadgeKeysFromText('방방이랑 트램폴린, 미끄럼틀, 모래놀이터, 온수 샤워까지 다 있어요', 'camping')).toEqual(
+      new Set(['cp_trampoline', 'cp_slide', 'cp_sand_play', 'cp_hot_water'])
+    );
+    expect(matchBadgeKeysFromText('백패킹 전용이라 험지를 올라가야 하고 노키즈존이에요', 'camping')).toEqual(
+      new Set(['cp_backpacking_only', 'cp_rough_terrain', 'cp_no_kids_zone'])
+    );
+  });
+});
+
+describe('rural_village(휴양마을) 카테고리 뱃지', () => {
+  it('노출 중분류 "휴양마을"은 rural_village로 매핑된다', () => {
+    expect(resolveCurationCategoryId('휴양마을')).toBe('rural_village');
+  });
+
+  it('포지티브(갯벌체험/동물먹이주기 등)와 네거티브(밀물 위험/깊은 갯벌 등) 뱃지를 모두 갖는다', () => {
+    const labels = getBadgeOptionsForCategory('rural_village').map((o) => o.label);
+    expect(labels).toEqual(
+      expect.arrayContaining([
+        '갯벌체험 가능',
+        '동물 먹이주기 체험',
+        '갯벌이 깊어 유아 부적합',
+        '밀물시간 위험(조수 간만 주의)',
+      ])
+    );
+  });
+
+  it('갯벌체험/밀물 관련 키워드가 정확히 매칭된다', () => {
+    expect(matchBadgeKeysFromText('바지락캐기 갯벌체험을 할 수 있어요', 'rural_village')).toEqual(
+      new Set(['rv_mudflat_experience'])
+    );
+    expect(matchBadgeKeysFromText('물때주의, 밀물 시간에는 위험해요', 'rural_village')).toEqual(
+      new Set(['rv_tide_danger'])
+    );
+  });
+});
+
+describe('education_farm(체험농장·농원) 카테고리 뱃지', () => {
+  it('노출 중분류 "체험농장·농원"은 education_farm으로 매핑된다', () => {
+    expect(resolveCurationCategoryId('체험농장·농원')).toBe('education_farm');
+  });
+
+  it('포지티브(동물체험/수확체험 등)와 네거티브(농기계 위험/해충 등) 뱃지를 모두 갖는다', () => {
+    const labels = getBadgeOptionsForCategory('education_farm').map((o) => o.label);
+    expect(labels).toEqual(
+      expect.arrayContaining([
+        '동물 체험/승마 체험',
+        '작물 수확 체험',
+        '농기계 이동 구간 위험',
+        '벌·모기 등 해충 많음',
+      ])
+    );
+  });
+
+  it('체험/위험 관련 키워드가 정확히 매칭된다', () => {
+    expect(matchBadgeKeysFromText('말타기 체험도 하고 수확체험도 해요', 'education_farm')).toEqual(
+      new Set(['ef_animal_experience', 'ef_harvest_experience'])
+    );
+    expect(matchBadgeKeysFromText('트랙터이동구간이 있어 벌레많음 주의하세요', 'education_farm')).toEqual(
+      new Set(['ef_farm_machinery_danger', 'ef_insect_risk'])
+    );
   });
 });
 

@@ -157,8 +157,139 @@ const KIDS_CAFE_CONFIG: CurationCategoryConfig = {
   },
 };
 
+// [캠핑장/체험휴양마을/교육농장 전용 뱃지 + 네거티브 뱃지](2026-09-10 사용자
+// 지시): "중분류중 캠핑장과 체험휴양마을 교육농장 3개에 대하여 각각 데이터들
+// 속성들을 확인해 보고 어린이 친화로 사용할 뱃지들 리스트 제안 및 작성해줘.
+// 또 반대로 어린이 포함 가족들이 가지 못하는 뱃지들도 제안해줘." — 실측 확인:
+// 이 3개 노출 중분류의 원천 데이터(GO_CAMPING/RURAL_EXPERIENCE_VILLAGE/
+// RURAL_EDUCATION_FARM)는 부대시설 관련 구조화 필드(sbrsCl/posblFcltyCl/
+// holdFclty 등)가 있어도 실제로는 거의 비어 있어(실측 샘플 전수 확인),
+// 구조화 필드 기반 자동 판정은 신뢰할 수 없다 — 기존 키즈카페/식당과 동일하게
+// "관리자가 블로그 본문을 붙여넣으면 키워드로 1차 자동 체크"하는 방식을
+// 그대로 따른다(제5장 제4조 기존 구조 우선). 이 3개는 이제 아래 GENERIC_
+// CATEGORY_NAMES에서 빠지고 전용 config로 승격된다.
+//
+// [네거티브 뱃지 신설] 이 기능이 다루는 첫 "주의/제한" 유형 뱃지다 — 구조상
+// 특별한 처리가 필요 없다(curation_badges는 단순 키 배열이라 포지티브/
+// 네거티브 구분 없이 같은 방식으로 저장·표시된다). "노출 중분류에 이런
+// 어린이 위험 요소가 있다"를 관리자가 정확히 표시할 수 있게 그룹만 별도
+// ("주의/제한")로 분리했다.
+const CAMPING_CONFIG: CurationCategoryConfig = {
+  categoryId: 'camping',
+  exposureCategoryNames: ['캠핑장 / 피크닉장'],
+  badgeGroups: ['이동/편의', '놀이/편의시설', '캠핑 유형', '주의/제한'],
+  badgeOptions: [
+    { key: 'cp_parking', label: '주차 완비', group: '이동/편의' },
+    { key: 'cp_stroller', label: '유모차 이용 가능(평탄한 부지)', group: '이동/편의' },
+    { key: 'cp_hot_water', label: '온수 샤워 가능', group: '이동/편의' },
+    { key: 'cp_playground', label: '놀이터 있음', group: '놀이/편의시설' },
+    { key: 'cp_trampoline', label: '트램폴린/방방', group: '놀이/편의시설' },
+    { key: 'cp_slide', label: '미끄럼틀', group: '놀이/편의시설' },
+    { key: 'cp_sand_play', label: '모래놀이터', group: '놀이/편의시설' },
+    { key: 'cp_water_play', label: '물놀이장/계곡 인접', group: '놀이/편의시설' },
+    { key: 'cp_convenience_store', label: '매점/편의점', group: '놀이/편의시설' },
+    { key: 'cp_glamping', label: '글램핑 사이트', group: '캠핑 유형' },
+    { key: 'cp_caravan', label: '카라반 사이트', group: '캠핑 유형' },
+    { key: 'cp_ondol', label: '온돌/구들장 사이트', group: '캠핑 유형' },
+    { key: 'cp_backpacking_only', label: '백패킹 전용(차량 진입 불가)', group: '주의/제한' },
+    { key: 'cp_rough_terrain', label: '험지/고지대(등산 필요)', group: '주의/제한' },
+    { key: 'cp_no_kids_zone', label: '노키즈존/유아 동반 제한', group: '주의/제한' },
+    { key: 'cp_no_electricity', label: '전기 미사용(무전기 사이트만)', group: '주의/제한' },
+    { key: 'cp_pet_only', label: '반려동물 전용 캠핑장', group: '주의/제한' },
+    { key: 'cp_valley_danger', label: '계곡 급류/안전펜스 없음', group: '주의/제한' },
+  ],
+  keywordGroups: {
+    cp_parking: ['주차', '주차장', '파킹', '차댈곳'],
+    cp_stroller: ['유모차', '유모차동반', '평탄한부지', '유모차이동'],
+    cp_hot_water: ['온수', '온수샤워', '따뜻한물', '온수이용'],
+    cp_playground: ['놀이터', '어린이놀이터', '키즈놀이터'],
+    cp_trampoline: ['트램폴린', '트램펄린', '방방', '방방이', '점핑존'],
+    cp_slide: ['미끄럼틀', '슬라이드'],
+    cp_sand_play: ['모래놀이', '모래놀이터', '모래사장', '모래존'],
+    cp_water_play: ['물놀이', '물놀이장', '계곡', '개울', '수영장'],
+    cp_convenience_store: ['매점', '편의점', '마트'],
+    cp_glamping: ['글램핑', '글램핑존', '글램핑사이트'],
+    cp_caravan: ['카라반', '트레일러', '카라반사이트'],
+    cp_ondol: ['온돌', '구들장', '온돌사이트', '온돌존'],
+    cp_backpacking_only: ['백패킹', '백패킹전용', '차량진입불가', '도보이동만'],
+    cp_rough_terrain: ['험지', '고지대', '등산', '오지캠핑', '산악지형'],
+    cp_no_kids_zone: ['노키즈존', '유아동반불가', '어린이동반제한'],
+    cp_no_electricity: ['무전기', '전기없음', '전기미사용', '노전기'],
+    cp_pet_only: ['반려동물전용', '펫캠핑', '애견동반전용'],
+    cp_valley_danger: ['급류', '계곡위험', '안전펜스없음', '깊은계곡'],
+  },
+};
+
+const RURAL_VILLAGE_CONFIG: CurationCategoryConfig = {
+  categoryId: 'rural_village',
+  exposureCategoryNames: ['휴양마을'],
+  badgeGroups: ['이동/편의', '체험 프로그램', '숙박/편의시설', '주의/제한'],
+  badgeOptions: [
+    { key: 'rv_parking', label: '주차 완비', group: '이동/편의' },
+    { key: 'rv_mudflat_experience', label: '갯벌체험 가능', group: '체험 프로그램' },
+    { key: 'rv_animal_feeding', label: '동물 먹이주기 체험', group: '체험 프로그램' },
+    { key: 'rv_fruit_picking', label: '과일·농작물 수확 체험', group: '체험 프로그램' },
+    { key: 'rv_indoor_experience', label: '우천 대비 실내 체험장', group: '체험 프로그램' },
+    { key: 'rv_safety_gear', label: '장화/장갑 등 체험 장비 제공', group: '숙박/편의시설' },
+    { key: 'rv_wash_facility', label: '체험 후 세척시설 잘 갖춰짐', group: '숙박/편의시설' },
+    { key: 'rv_lodging', label: '숙박 가능(온돌방 등)', group: '숙박/편의시설' },
+    { key: 'rv_deep_mudflat', label: '갯벌이 깊어 유아 부적합', group: '주의/제한' },
+    { key: 'rv_tide_danger', label: '밀물시간 위험(조수 간만 주의)', group: '주의/제한' },
+    { key: 'rv_adult_labor_program', label: '성인 위주 중노동 체험', group: '주의/제한' },
+    { key: 'rv_remote_access', label: '교통 불편/오지 마을', group: '주의/제한' },
+  ],
+  keywordGroups: {
+    rv_parking: ['주차', '주차장', '파킹', '차댈곳'],
+    rv_mudflat_experience: ['갯벌체험', '갯벌', '바지락캐기', '동죽', '조개캐기'],
+    rv_animal_feeding: ['동물먹이주기', '동물체험', '먹이주기체험'],
+    rv_fruit_picking: ['수확체험', '과일따기', '농작물수확', '체험수확'],
+    rv_indoor_experience: ['실내체험장', '실내체험', '우천대비'],
+    rv_safety_gear: ['장화', '장갑', '체험장비제공', '장비대여'],
+    rv_wash_facility: ['세척시설', '샤워실', '세면장', '씻는곳'],
+    rv_lodging: ['숙박', '민박', '온돌방', '체험마을숙박'],
+    rv_deep_mudflat: ['깊은갯벌', '갯벌위험', '유아부적합'],
+    rv_tide_danger: ['밀물', '조수간만', '물때주의', '밀물위험'],
+    rv_adult_labor_program: ['중노동', '성인전용체험', '농사일체험'],
+    rv_remote_access: ['교통불편', '오지마을', '접근성낮음'],
+  },
+};
+
+const EDUCATION_FARM_CONFIG: CurationCategoryConfig = {
+  categoryId: 'education_farm',
+  exposureCategoryNames: ['체험농장·농원'],
+  badgeGroups: ['이동/편의', '체험 프로그램', '부대시설', '주의/제한'],
+  badgeOptions: [
+    { key: 'ef_parking', label: '주차 완비', group: '이동/편의' },
+    { key: 'ef_animal_experience', label: '동물 체험/승마 체험', group: '체험 프로그램' },
+    { key: 'ef_harvest_experience', label: '작물 수확 체험', group: '체험 프로그램' },
+    { key: 'ef_cooking_experience', label: '요리·만들기 체험(장 담그기 등)', group: '체험 프로그램' },
+    { key: 'ef_tractor_ride', label: '트랙터 등 농기구 탑승 체험', group: '체험 프로그램' },
+    { key: 'ef_indoor_experience', label: '우천 대비 실내 체험장', group: '부대시설' },
+    { key: 'ef_toddler_program', label: '미취학 아동 맞춤 프로그램', group: '부대시설' },
+    { key: 'ef_safety_staff', label: '안전 관리 인력 상주', group: '부대시설' },
+    { key: 'ef_farm_machinery_danger', label: '농기계 이동 구간 위험', group: '주의/제한' },
+    { key: 'ef_insect_risk', label: '벌·모기 등 해충 많음', group: '주의/제한' },
+    { key: 'ef_uneven_terrain', label: '계단식 지형(유모차 이동 어려움)', group: '주의/제한' },
+    { key: 'ef_high_intensity_program', label: '체력 소모 큰 체험(미취학 제한)', group: '주의/제한' },
+  ],
+  keywordGroups: {
+    ef_parking: ['주차', '주차장', '파킹', '차댈곳'],
+    ef_animal_experience: ['동물체험', '승마체험', '말타기', '동물먹이주기'],
+    ef_harvest_experience: ['수확체험', '작물수확', '과일따기', '농작물체험'],
+    ef_cooking_experience: ['장담그기', '요리체험', '만들기체험', '떡만들기'],
+    ef_tractor_ride: ['트랙터체험', '농기구체험', '트랙터탑승'],
+    ef_indoor_experience: ['실내체험장', '실내체험', '우천대비'],
+    ef_toddler_program: ['미취학프로그램', '유아프로그램', '영유아체험'],
+    ef_safety_staff: ['안전관리', '안전요원', '체험도우미'],
+    ef_farm_machinery_danger: ['농기계위험', '트랙터이동구간', '농기계주의'],
+    ef_insect_risk: ['벌레많음', '모기', '벌', '해충주의'],
+    ef_uneven_terrain: ['계단식지형', '유모차이동어려움', '경사지형'],
+    ef_high_intensity_program: ['체력소모', '고강도체험', '장시간체험'],
+  },
+};
+
 // [보편 임시 뱃지](위 파일 상단 설명 참고) — 아직 전용 콘텐츠가 확정되지 않은
-// 나머지 11개 노출 중분류에 공통으로 적용하는 최소 항목. venue별 특화 뱃지가
+// 나머지 8개 노출 중분류에 공통으로 적용하는 최소 항목. venue별 특화 뱃지가
 // 아니라 "어느 공공장소든 있을 법한" 편의시설만 담았다 — 임의로 지어낸 특화
 // 항목(예: 도서관에 "볼풀장")은 없다.
 const GENERIC_BADGE_GROUPS = ['이동/편의', '운영'];
@@ -180,17 +311,17 @@ const GENERIC_KEYWORD_GROUPS: Record<string, string[]> = {
 };
 
 // [보편 임시 config 목록] — 사용자 지시대로 "노출 중분류 13개 전부"가 이 배열에
-// 등록돼 있어야 한다. 실측 확인한 나머지 11개 노출 중분류(service_categories
+// 등록돼 있어야 한다. 실측 확인한 나머지 8개 노출 중분류(service_categories
 // 실제 값) 각각에 위 보편 임시 뱃지를 연결한다.
+// [2026-09-10] '체험농장·농원'/'휴양마을'/'캠핑장 / 피크닉장' 3개는 전용 config
+// (CAMPING_CONFIG/RURAL_VILLAGE_CONFIG/EDUCATION_FARM_CONFIG)로 승격돼 이
+// 목록에서 빠졌다.
 const GENERIC_CATEGORY_NAMES = [
   '물놀이장 / 바닥분수 (시즌성)',
   '실내 체험·놀이 공간',
-  '체험농장·농원',
-  '휴양마을',
   '대형 근린공원 / 잔디광장',
   '생태공원 / 산책로',
   '수목원 / 식물원',
-  '캠핑장 / 피크닉장',
   '어린이 도서관',
   '어린이 과학관 / 박물관',
   '미술관 / 전시체험관',
@@ -208,7 +339,14 @@ const GENERIC_CONFIGS: CurationCategoryConfig[] = GENERIC_CATEGORY_NAMES.map((na
   keywordGroups: GENERIC_KEYWORD_GROUPS,
 }));
 
-const CURATION_CATEGORIES: CurationCategoryConfig[] = [RESTAURANT_CONFIG, KIDS_CAFE_CONFIG, ...GENERIC_CONFIGS];
+const CURATION_CATEGORIES: CurationCategoryConfig[] = [
+  RESTAURANT_CONFIG,
+  KIDS_CAFE_CONFIG,
+  CAMPING_CONFIG,
+  RURAL_VILLAGE_CONFIG,
+  EDUCATION_FARM_CONFIG,
+  ...GENERIC_CONFIGS,
+];
 
 // 노출 중분류가 아직 선택되지 않았거나(신규 스팟) 어떤 config에도 매칭되지 않는
 // 값이면 식당 기준으로 되돌린다 — 이 프로젝트에서 가장 먼저, 가장 많이(83건)
