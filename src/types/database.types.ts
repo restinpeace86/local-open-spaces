@@ -1500,6 +1500,10 @@ export type Database = {
       }
       gettransactionid: { Args: never; Returns: unknown }
       longtransactionsenabled: { Args: never; Returns: boolean }
+      normalize_address_region_prefix: {
+        Args: { addr: string }
+        Returns: string
+      }
       populate_geometry_columns:
         | { Args: { tbl_oid: unknown; use_typmod?: boolean }; Returns: number }
         | { Args: { use_typmod?: boolean }; Returns: string }
