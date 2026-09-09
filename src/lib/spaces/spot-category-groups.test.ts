@@ -43,10 +43,18 @@ describe('CORE_SPOT_CATEGORIES', () => {
     expect(artMuseum?.minors).toEqual(['미술관']);
   });
 
-  it('[행안부 놀이시설 매핑](2026-08-29) 자연휴양림/육아종합지원센터/유아교육진흥원 칩이 존재한다', () => {
+  it('[행안부 놀이시설 매핑](2026-08-29) 자연휴양림 칩이 존재한다', () => {
     expect(CORE_SPOT_CATEGORIES.find((c) => c.minors.includes('자연휴양림'))).toBeTruthy();
-    expect(CORE_SPOT_CATEGORIES.find((c) => c.minors.includes('육아종합지원센터'))).toBeTruthy();
-    expect(CORE_SPOT_CATEGORIES.find((c) => c.minors.includes('유아교육진흥원'))).toBeTruthy();
+  });
+
+  // [설치장소코드 표준 중분류 전면 정비 후속](2026-09-09 사용자 지시): "육아종합지원센터와
+  // 유아교육진흥원 중분류는 왜 기타 대분류로 안옮겼어?" — 어드민이 이 둘을 '키즈/놀이시설'
+  // 에서 '기타'로 옮기면서, '기타'는 원래 제외 대상이라(위 EXCLUDED_MAJORS) 이 두 칩도
+  // CORE_SPOT_CATEGORIES에서 제거됐다.
+  it('육아종합지원센터/유아교육진흥원은 더 이상 노출 칩이 아니다(대분류가 기타로 이동)', () => {
+    const allMinors = CORE_SPOT_CATEGORIES.flatMap((c) => c.minors);
+    expect(allMinors).not.toContain('육아종합지원센터');
+    expect(allMinors).not.toContain('유아교육진흥원');
   });
 
   it('AI 추천 칩은 실제 category_min을 가지지 않고 어느 대분류에도 속하지 않는다(별도 액션 버튼)', () => {

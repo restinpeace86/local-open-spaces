@@ -79,20 +79,11 @@ export const CORE_SPOT_CATEGORIES: CoreSpotCategory[] = [
   { id: 'kids-cafe', label: '키즈카페', emoji: '☕', minors: ['키즈카페'], major: 'kids-play' },
   { id: 'kids-restaurant', label: '키즈친화 식당', emoji: '🍽️', minors: ['놀이방식당'], major: 'kids-play' },
   { id: 'water-play', label: '물놀이시설', emoji: '💦', minors: ['바닥분수/물놀이시설'], major: 'kids-play' },
-  {
-    id: 'childcare-support-center',
-    label: '육아종합지원센터',
-    emoji: '🍼',
-    minors: ['육아종합지원센터'],
-    major: 'kids-play',
-  },
-  {
-    id: 'early-childhood-education-center',
-    label: '유아교육진흥원',
-    emoji: '🎓',
-    minors: ['유아교육진흥원'],
-    major: 'kids-play',
-  },
+  // [설치장소코드 표준 중분류 전면 정비 후속](2026-09-09 사용자 지시): "육아종합지원센터와
+  // 유아교육진흥원 중분류는 왜 기타 대분류로 안옮겼어?" — 어드민(category-min-groups.ts)이
+  // 이 두 중분류를 '키즈/놀이시설'에서 '기타'로 옮기면서(육아 정책/행정 지원기관이라 실제
+  // 놀이시설과 성격이 다름), '기타'는 CORE_SPOT_CATEGORIES에서 원래부터 제외 대상이라(위
+  // 2026-09-05 동기화 원칙) 이 두 칩 자체를 제거한다 — 남겨두면 어드민과 다시 어긋난다.
   // [표준 중분류 동기화](2026-09-05): 어드민 기준 체험학습장은 "농장/체험"이 아니라
   // "키즈/놀이시설" 소속이다(위 상단 코멘트 참고).
   {
