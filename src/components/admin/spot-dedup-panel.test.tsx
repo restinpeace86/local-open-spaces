@@ -188,6 +188,91 @@ describe('SpotDedupPanel', () => {
     });
   });
 
+  // [그룹 오묶음 부분 제외](2026-09-09 사용자 지시): "무심골 캠핑장 / 무주 구천동
+  // 캠핑장 / 무주구천동캠핑장 이거는 1번째꺼는 다른거고 2,3번째는 같은건데 3개가
+  // 묶여서 대표로 묶을 수가 없네" — 근접 판정이 전이적(A~B, B~C면 A~C가 아니어도
+  // 셋이 한 그룹)이라 실제로는 다른 장소가 섞여 들어올 수 있다. 체크박스로 뺄 수
+  // 있어야 한다.
+  describe('그룹 오묶음 부분 제외(2026-09-09)', () => {
+    // A-B 약 17.7m, B-C 약 17.7m, A-C 약 35.4m(30m 임계값 초과) — A와 C는 서로
+    // 직접 연결되지 않지만 B를 거쳐 전이적으로 한 그룹이 된다(실제 신고 사례 재현).
+    function makeChainedCandidates() {
+      return [
+        candidateRow({ id: 'a', name: '무심골 캠핑장', address: '전북특별자치도 무주군 설천면 원심곡1길 1', normalized_address: 'addr-a', lat: 37.3, lng: 127.1 }),
+        candidateRow({ id: 'b', name: '무주 구천동 캠핑장', address: '전북특별자치도 무주군 설천면 원심곡1길 11', normalized_address: 'addr-b', lat: 37.3, lng: 127.1002 }),
+        candidateRow({ id: 'c', name: '무주구천동캠핑장', address: '전북특별자치도 무주군 설천면 원심곡1길 11', normalized_address: 'addr-b', lat: 37.3, lng: 127.1004 }),
+      ];
+    }
+
+    it('체크를 해제해서 뺀 항목은 병합 대상에서 제외되고, 나머지만 apply로 전송된다', async () => {
+      const fetchMock = mockFetchByUrl({
+        groupsPages: { initial: { candidates: makeChainedCandidates(), next_cursor: 'c', has_more: false } },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      renderPanel();
+
+      selectScanScope('미매핑 원본 전체 (기존 방식)');
+      fireEvent.click(screen.getAllByText('📥 불러오기')[0]);
+      fireEvent.click(await screen.findByText(/무심골 캠핑장 외 2건/));
+
+      expect(screen.getByText('중복 의심 그룹 검수 (3건)')).toBeInTheDocument();
+      fireEvent.click(screen.getByLabelText('무심골 캠핑장 포함')); // 체크 해제 — 다른 장소
+
+      expect(screen.getByText(/저장 및 일괄 적용 \(2건\)/)).toBeInTheDocument();
+      fireEvent.click(screen.getByText(/저장 및 일괄 적용/));
+
+      await waitFor(() => {
+        const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/spot-dedup/apply'));
+        expect(call).toBeDefined();
+        const body = JSON.parse((call![1] as RequestInit).body as string);
+        expect(body.spot_ids.sort()).toEqual(['b', 'c']);
+      });
+
+      // 뺀 멤버(a)는 후보 목록에 그대로 남아 있어야 한다(사라지지 않음).
+      expect(screen.queryByText('무심골 캠핑장')).not.toBeInTheDocument(); // 모달은 닫혔음
+    });
+
+    it('일부만 병합해도 원본 전체 그룹의 진행 중 임시 저장 기록이 함께 정리된다(유령 항목 방지)', async () => {
+      const fetchMock = mockFetchByUrl({
+        groupsPages: { initial: { candidates: makeChainedCandidates(), next_cursor: 'c', has_more: false } },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      renderPanel();
+
+      selectScanScope('미매핑 원본 전체 (기존 방식)');
+      fireEvent.click(screen.getAllByText('📥 불러오기')[0]);
+      fireEvent.click(await screen.findByText(/무심골 캠핑장 외 2건/)); // handleOpenGroup이 [a,b,c] 전체를 in_progress로 저장
+
+      fireEvent.click(screen.getByLabelText('무심골 캠핑장 포함')); // a 제외
+      fireEvent.click(screen.getByText(/저장 및 일괄 적용/)); // b,c만 저장
+
+      await waitFor(() => {
+        // 실제 병합 키(b,c)뿐 아니라 원본 전체 키(a,b,c)도 DELETE 돼야 한다.
+        const deleteCalls = fetchMock.mock.calls.filter(
+          (c) => (c[0] as string).includes('/api/admin/spot-dedup/pending-groups') && c[1]?.method === 'DELETE'
+        );
+        expect(deleteCalls.some((c) => (c[0] as string).includes('group_key=a%2Cb%2Cc'))).toBe(true);
+      });
+    });
+
+    it('2건 미만으로 줄이면 저장 버튼이 비활성화된다', async () => {
+      const fetchMock = mockFetchByUrl({
+        groupsPages: { initial: { candidates: makeChainedCandidates(), next_cursor: 'c', has_more: false } },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      renderPanel();
+
+      selectScanScope('미매핑 원본 전체 (기존 방식)');
+      fireEvent.click(screen.getAllByText('📥 불러오기')[0]);
+      fireEvent.click(await screen.findByText(/무심골 캠핑장 외 2건/));
+
+      fireEvent.click(screen.getByLabelText('무심골 캠핑장 포함'));
+      fireEvent.click(screen.getByLabelText('무주 구천동 캠핑장 포함'));
+
+      expect(screen.getByRole('button', { name: /저장 및 일괄 적용/ })).toBeDisabled();
+    });
+  });
+
   it('그룹 불러오기를 누르면 첫 페이지 후보로 그룹을 계산해 라벨로 보여주고, 클릭하면 상세/매핑 모달이 열린다', async () => {
     vi.stubGlobal(
       'fetch',

@@ -79,11 +79,34 @@ export function GroupDetailModal({
   const [serviceCategoryId, setServiceCategoryId] = useState(initialServiceCategoryId ?? '');
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [그룹 오묶음 부분 제외](2026-09-09 사용자 지시): "무심골 캠핑장 / 무주 구천동
+  // 캠핑장 / 무주구천동캠핑장 이거는 1번째꺼는 다른거고 2,3번째는 같은건데 3개가
+  // 묶여서 대표로 묶을 수가 없네" — 근접 판정(주소 일치 또는 30m 이내)이 전이적
+  // (transitive)이라 A~B, B~C면 A~C가 아니어도 A/B/C가 통째로 한 그룹으로 잡힌다
+  // (groupDedupCandidates 참고). 진짜로는 B/C만 같은 장소인 경우 이 모달에서
+  // 체크박스로 A를 빼고 B/C만 병합할 수 있게 한다 — 이렇게 병합된 멤버는 group_id가
+  // 채워져 다음 스캔부터 영구히 후보에서 제외되고(2026-09-09 버그 수정 참고), 뺀
+  // 멤버(A)는 그대로 남아 있다가 필요하면 나중에 다른 조합으로 다시 검토된다.
+  const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set());
+  const activeMembers = group.members.filter((m) => !excludedIds.has(m.id));
+
+  function toggleExcluded(id: string) {
+    setExcludedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!standardName.trim()) {
       setErrorMessage('표준 시설명을 입력해주세요.');
+      return;
+    }
+    if (activeMembers.length < 2) {
+      setErrorMessage('그룹은 최소 2개 이상의 스팟으로 구성돼야 합니다. 제외한 항목을 다시 포함해주세요.');
       return;
     }
 
@@ -94,14 +117,14 @@ export function GroupDetailModal({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          spot_ids: group.members.map((m) => m.id),
+          spot_ids: activeMembers.map((m) => m.id),
           standard_name: standardName.trim(),
           service_category_id: serviceCategoryId || null,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? '저장에 실패했습니다.');
-      onSaved(group.members.map((m) => m.id));
+      onSaved(activeMembers.map((m) => m.id));
       onClose();
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : '저장에 실패했습니다.');
@@ -123,11 +146,17 @@ export function GroupDetailModal({
           </button>
         </div>
 
-        {/* 요구사항: "묶인 원천 데이터들의 상세 내용이 나란히 비교 표시" */}
+        {/* [그룹 오묶음 부분 제외](2026-09-09 사용자 지시): 근접/주소 매칭이 전이적이라
+            실제로는 다른 장소인 항목이 함께 묶일 수 있다 — 체크 해제하면 이 항목을
+            병합 대상에서 빼고 나머지끼리만 합칠 수 있다. */}
+        <p className="mb-2 text-[11px] text-gray-400">
+          실제로는 다른 장소가 섞여 있으면 체크를 해제해서 빼고, 나머지만 병합하세요.
+        </p>
         <div className="mb-4 overflow-x-auto rounded-lg border border-gray-200">
           <table className="w-full text-xs text-left">
             <thead className="bg-gray-50 text-gray-500">
               <tr>
+                <th className="py-2 px-3 w-8" />
                 <th className="py-2 px-3">상호명</th>
                 <th className="py-2 px-3">원본 중분류</th>
                 <th className="py-2 px-3">주소</th>
@@ -135,7 +164,15 @@ export function GroupDetailModal({
             </thead>
             <tbody className="divide-y divide-gray-100">
               {group.members.map((m) => (
-                <tr key={m.id}>
+                <tr key={m.id} className={excludedIds.has(m.id) ? 'opacity-40' : undefined}>
+                  <td className="py-2 px-3">
+                    <input
+                      type="checkbox"
+                      checked={!excludedIds.has(m.id)}
+                      onChange={() => toggleExcluded(m.id)}
+                      aria-label={`${m.name} 포함`}
+                    />
+                  </td>
                   <td className="py-2 px-3 font-medium text-gray-800">{m.name}</td>
                   <td className="py-2 px-3 text-gray-600">{m.category_min ?? m.category}</td>
                   <td className="py-2 px-3 text-gray-500">{m.address ?? '-'}</td>
@@ -184,10 +221,10 @@ export function GroupDetailModal({
 
           <button
             type="submit"
-            disabled={isSaving}
+            disabled={isSaving || activeMembers.length < 2}
             className="rounded-full bg-gray-900 py-2.5 text-sm font-semibold text-white hover:bg-gray-700 disabled:opacity-50"
           >
-            {isSaving ? '저장 중...' : `저장 및 일괄 적용 (${group.members.length}건)`}
+            {isSaving ? '저장 중...' : `저장 및 일괄 적용 (${activeMembers.length}건)`}
           </button>
         </form>
       </div>
@@ -317,12 +354,24 @@ export function SpotDedupPanel() {
     // 처리된 그룹의 후보들을 누적 목록에서 제거한다 — 해당 스팟들은 이제
     // service_category_id가 채워져 다음 조회부터는 애초에 후보에서 빠진다(재조회
     // 없이도 이미 정확함). groups는 candidates에서 파생되므로 이걸로 충분하다.
+    // 체크박스로 일부를 뺀 경우(2026-09-09) memberIds는 실제 병합된 부분집합만
+    // 담겨 있다 — 뺀 멤버는 candidates에 그대로 남아 다음 재계산에서 다시 검토된다.
     const removed = new Set(memberIds);
     setCandidates((prev) => prev.filter((c) => !removed.has(c.id)));
     // apply/route.ts가 서버에서 이미 임시 저장 행을 삭제했다 — 클라이언트 목록도
     // 같은 group_key를 골라내 즉시 반영한다(다시 불러오지 않아도 정확함).
     const groupKey = buildPendingGroupKey(memberIds);
     setPendingGroups((prev) => prev.filter((g) => g.group_key !== groupKey));
+
+    // [그룹 오묶음 부분 제외 후속 정리](2026-09-09 사용자 지시): 그룹을 열 때
+    // handleOpenGroup이 원본 그룹 전체(제외 전)를 'in_progress'로 임시 저장해두는데,
+    // 일부를 빼고 저장하면 실제 병합 키(memberIds)와 원본 키가 달라져 위 정리로는
+    // 지워지지 않는다 — "진행 중 저장된 그룹"에 유령 항목이 남는 것을 막기 위해
+    // 원본 전체 키도 함께 정리한다(이미 지워졌으면 서버 DELETE는 조용히 무시됨).
+    if (selectedGroup) {
+      const originalKey = buildPendingGroupKey(selectedGroup.members.map((m) => m.id));
+      if (originalKey !== groupKey) handleRemovePendingGroup(originalKey);
+    }
   }
 
   function loadPendingGroups() {
