@@ -168,11 +168,27 @@ describe('PlaygroundAdapter', () => {
     // 추측 아님). 실측 확인한 설치장소코드별 실제 시설명 표본(예: A013='서울형 키즈카페
     // 마포구 서교동2호점')에 근거한 매핑이다.
     describe('설치장소코드(instlPlaceCd) 기준 category_min 매핑', () => {
+      // [개선사항3 - 설치장소코드 표준 중분류 전면 정비](todo.md, 2026-09-09) 나머지
+      // 14개 코드(A001/A002/A004~A012/A020/A023/A031)를 추가했다.
       it.each([
+        ['A001', '목욕장업소'],
+        ['A002', '도로휴게시설'],
         ['A003', '공원'],
+        ['A004', '식품접객업소'],
+        ['A005', '아동복지시설'],
+        ['A006', '어린이집'],
+        ['A007', '유치원'],
+        ['A008', '대규모점포'],
+        ['A009', '의료기관'],
+        ['A010', '주택단지'],
+        ['A011', '학교'],
+        ['A012', '학원'],
         ['A013', '키즈카페'],
+        ['A020', '주상복합'],
         ['A022', '종합/기타박물관'],
+        ['A023', '종교시설'],
         ['A030', '자연휴양림'],
+        ['A031', '하천'],
         ['A032', '캠핑장'],
         ['A033', '도서관'],
         ['A092', '육아종합지원센터'],
@@ -186,7 +202,9 @@ describe('PlaygroundAdapter', () => {
 
       it('매핑 대상 코드가 아니면 category_min을 null로 남겨 배치 후처리(키워드 매칭)에 맡긴다', () => {
         const adapter = new PlaygroundAdapter();
-        const rows = adapter.transform([{ ...BASE_ITEM, instlPlaceCd: 'A011' }]);
+        // [개선사항3 - 설치장소코드 표준 중분류 전면 정비](2026-09-09) A011(학교)도 이제
+        // 매핑 대상이라 실존하지 않는 코드로 바꿔 "매핑 대상 아님" 케이스를 검증한다.
+        const rows = adapter.transform([{ ...BASE_ITEM, instlPlaceCd: 'A999' }]);
         expect(rows[0].category_min).toBeNull();
         expect(rows[0].category_min_source).toBeNull();
       });
