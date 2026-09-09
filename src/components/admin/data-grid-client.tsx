@@ -55,6 +55,10 @@ export type AdminOpenSpaceRow = {
   // [노출 중분류 개별 행 수정](2026-09-05 사용자 지시): "노출 중분류 변경할 수
   // 있도록 해줘 open_spaces쪽에서" — events에는 없는 open_spaces 전용 컬럼이다.
   service_category_id: string | null;
+  // [개선사항2](todo.md, 2026-09-09) "단독 데이터와 병합 데이터의 화면 단일화":
+  // 이 값이 있으면 이 행은 그 그룹의 대표(목록 API가 이미 대표만 걸러 내려줌)다
+  // — "🔗 그룹" 뱃지와 원본 멤버 열람 버튼의 트리거로 쓴다.
+  group_id: string | null;
   address: string;
   location: unknown;
   location_precision: string;
@@ -1499,6 +1503,15 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                       {isNewToday && (
                         <span className="mr-1.5 inline-block align-middle text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-500 text-white">
                           NEW
+                        </span>
+                      )}
+                      {/* [개선사항2](todo.md, 2026-09-09) "단독 데이터와 병합 데이터의
+                          화면 단일화.. 다만 어떻게 병합되었는지 원본에 대한 정보는 확인할
+                          수 있어야" — 목록 API가 이미 그룹 대표만 내려주므로, 이 뱃지가
+                          보이면 곧 그 스팟이 대표라는 뜻이다(상세에서 원본 멤버 열람). */}
+                      {!isEvent && (r as AdminOpenSpaceRow).group_id && (
+                        <span className="mr-1.5 inline-block align-middle text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-violet-500 text-white">
+                          🔗 그룹
                         </span>
                       )}
                       {titleText}

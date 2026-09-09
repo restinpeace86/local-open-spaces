@@ -13,6 +13,7 @@ function buildOpenSpaceRow(overrides: Partial<AdminOpenSpaceRow> = {}): AdminOpe
     category_min: null,
     category_min_source: null,
     service_category_id: null,
+    group_id: null,
     address: '서울시 종로구',
     location: null,
     location_precision: 'EXACT',
@@ -389,6 +390,51 @@ describe('AdminDataGridClient — open_spaces 목록 컬럼 정리(2026-09-07)',
     expect(screen.getByText('요금')).toBeInTheDocument();
     expect(screen.getByText('접수상태')).toBeInTheDocument();
     expect(screen.getByText('테스트 장소')).toBeInTheDocument(); // venue_name, title과 다른 값
+  });
+});
+
+// [개선사항2](todo.md, 2026-09-09) "단독 데이터와 병합(중복 제거) 데이터의 화면
+// 단일화.. 다만 어떻게 병합되었는지 원본에 대한 정보는 어떤 방식이든 확인할 수
+// 있어야합니다" — 목록 API가 그룹 대표만 내려주므로(서버 필터), 화면은 group_id가
+// 있는 행에 뱃지만 표시하면 된다(멤버 숨기기 자체는 서버 책임 — 이 컴포넌트는
+// 받은 행을 그대로 그린다).
+describe('AdminDataGridClient — 병합된 그룹 대표 뱃지(2026-09-09)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('group_id가 있는 open_spaces 행에는 "🔗 그룹" 뱃지가 보인다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ rows: [buildOpenSpaceRow({ group_id: 'group-1' })], total: 1 }),
+        } as Response)
+      )
+    );
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+
+    await screen.findByText('테스트 공간');
+    expect(screen.getByText('🔗 그룹')).toBeInTheDocument();
+  });
+
+  it('group_id가 없으면 뱃지가 보이지 않는다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ rows: [buildOpenSpaceRow({ group_id: null })], total: 1 }),
+        } as Response)
+      )
+    );
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+
+    await screen.findByText('테스트 공간');
+    expect(screen.queryByText('🔗 그룹')).not.toBeInTheDocument();
   });
 });
 

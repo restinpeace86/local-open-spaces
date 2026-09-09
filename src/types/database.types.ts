@@ -470,6 +470,7 @@ export type Database = {
           has_parking: boolean
           id: string
           info_url: string | null
+          is_dedup_representative: boolean
           is_free: boolean | null
           is_kids_friendly: boolean
           location: unknown
@@ -501,6 +502,7 @@ export type Database = {
           has_parking?: boolean
           id?: string
           info_url?: string | null
+          is_dedup_representative?: boolean
           is_free?: boolean | null
           is_kids_friendly?: boolean
           location?: unknown
@@ -532,6 +534,7 @@ export type Database = {
           has_parking?: boolean
           id?: string
           info_url?: string | null
+          is_dedup_representative?: boolean
           is_free?: boolean | null
           is_kids_friendly?: boolean
           location?: unknown

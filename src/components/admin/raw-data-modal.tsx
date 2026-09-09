@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AdminTable, AdminRow, AdminOpenSpaceRow, AdminEventRow, AdminRawIngestRow, extractLngLat } from '@/components/admin/data-grid-client';
 import { MigrateToEventModal } from '@/components/admin/migrate-to-event-modal';
 import { ServiceCategory } from '@/lib/admin/service-category';
@@ -8,6 +8,7 @@ import { BlogCurationModal } from '@/components/admin/blog-curation-modal';
 import { SpotCurationQuickModal } from '@/components/admin/spot-curation-quick-modal';
 import { SpotDedupQuickModal } from '@/components/admin/spot-dedup-quick-modal';
 import { useBackdropDismiss } from '@/lib/admin/use-backdrop-dismiss';
+import { GroupMemberRow } from '@/app/api/admin/spot-dedup/group-members/route';
 
 // [개편] 행 클릭 시 해당 행의 전체 원천 컬럼(구조화된 값) + raw_data/raw_payload 원문 JSON을
 // 함께 보여주는 Read-Only 뷰어. 3개 탭(open_spaces/events/raw_ingest_data) 행 형태가 서로
@@ -406,6 +407,9 @@ export function RawDataModal({
   const [isSpotCurationModalOpen, setIsSpotCurationModalOpen] = useState(false);
   // [open_spaces 상세에서 중복 스팟 검토](2026-09-09 사용자 지시)
   const [isSpotDedupModalOpen, setIsSpotDedupModalOpen] = useState(false);
+  // [개선사항2](todo.md, 2026-09-09) "원본에 대한 정보는 어떤 방식이든 확인할 수
+  // 있어야합니다" — 그룹 대표의 원본 멤버 목록 보기.
+  const [isGroupMembersModalOpen, setIsGroupMembersModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   // [원문 JSON 필드를 HTML로 보기](2026-09-06 사용자 지시) — 어떤 필드를 HTML로
@@ -564,6 +568,20 @@ export function RawDataModal({
             </button>
           )}
 
+          {/* [개선사항2](todo.md, 2026-09-09) "다만 어떻게 병합되었는지 원본에 대한
+              정보는 어떤 방식이든 확인할 수 있어야합니다" — 목록에는 이제 그룹 대표
+              1건만 보이므로(data-grid/route.ts), 그 대표에서 원본 멤버 전체를 열람할
+              수 있는 버튼을 별도로 둔다. group_id가 있는 행(=대표)에만 보인다. */}
+          {table === 'open_spaces' && (row as AdminOpenSpaceRow).group_id && (
+            <button
+              type="button"
+              onClick={() => setIsGroupMembersModalOpen(true)}
+              className="mt-2 w-full rounded-xl border border-violet-200 bg-violet-50/60 px-3 py-2.5 text-xs font-semibold text-violet-800 hover:bg-violet-100"
+            >
+              🔗 병합된 원본 데이터 보기
+            </button>
+          )}
+
           {/* [todo.md 개선사항 5](2026-09-03): 스팟픽에 잘못 분류돼 있던 데이터(예: 실제로는
               기간이 있는 행사·체험 프로그램)를 이벤트픽 테이블로 옮기는 액션. open_spaces
               탭에서만 의미가 있다. */}
@@ -717,6 +735,87 @@ export function RawDataModal({
           onClose={() => setIsSpotDedupModalOpen(false)}
         />
       )}
+
+      {isGroupMembersModalOpen && table === 'open_spaces' && (row as AdminOpenSpaceRow).group_id && (
+        <GroupMembersModal
+          groupId={(row as AdminOpenSpaceRow).group_id as string}
+          onClose={() => setIsGroupMembersModalOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// [개선사항2](todo.md, 2026-09-09) "다만 어떻게 병합되었는지 원본에 대한 정보는
+// 어떤 방식이든 확인할 수 있어야합니다" — 그룹 대표 상세에서 여는, 같은 group_id를
+// 공유하는 전체 원본 멤버(대표 포함) 목록. HtmlFieldPreviewModal과 동일하게 이
+// 파일 안의 작은 지역 컴포넌트로 둔다(다른 화면에서 재사용되지 않음).
+function GroupMembersModal({ groupId, onClose }: { groupId: string; onClose: () => void }) {
+  const backdropDismiss = useBackdropDismiss(onClose);
+  const [members, setMembers] = useState<GroupMemberRow[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/admin/spot-dedup/group-members?group_id=${encodeURIComponent(groupId)}`)
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? '그룹 멤버 조회에 실패했습니다.');
+        if (!cancelled) setMembers(data.items ?? []);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : '그룹 멤버 조회에 실패했습니다.');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [groupId]);
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-[80] flex items-end md:items-center justify-center" {...backdropDismiss}>
+      <div
+        className="w-full md:w-[560px] max-h-[80vh] overflow-y-auto bg-white rounded-t-2xl md:rounded-2xl shadow-xl p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-base font-bold text-gray-900">🔗 병합된 원본 데이터{members ? ` (${members.length}건)` : ''}</h2>
+          <button type="button" onClick={onClose} aria-label="닫기" className="text-gray-400 hover:text-gray-600">
+            ✕
+          </button>
+        </div>
+        {error && <p className="text-xs text-red-600">{error}</p>}
+        {!members && !error && <p className="text-xs text-gray-400">불러오는 중...</p>}
+        {members && (
+          <div className="overflow-x-auto rounded-lg border border-gray-200">
+            <table className="w-full text-xs text-left">
+              <thead className="bg-gray-50 text-gray-500">
+                <tr>
+                  <th className="py-2 px-3">상호명</th>
+                  <th className="py-2 px-3">원본 중분류</th>
+                  <th className="py-2 px-3">출처</th>
+                  <th className="py-2 px-3">구분</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {members.map((m) => (
+                  <tr key={m.id}>
+                    <td className="py-2 px-3 font-medium text-gray-800">{m.name}</td>
+                    <td className="py-2 px-3 text-gray-600">{m.category_min ?? m.category}</td>
+                    <td className="py-2 px-3 text-gray-500">{m.source ?? m.source_type}</td>
+                    <td className="py-2 px-3">
+                      {m.is_dedup_representative ? (
+                        <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-violet-100 text-violet-700">대표</span>
+                      ) : (
+                        <span className="text-[10px] text-gray-400">원본</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -16,6 +16,7 @@ function buildRow(overrides: Partial<AdminOpenSpaceRow> = {}): AdminOpenSpaceRow
     category_min: null,
     category_min_source: null,
     service_category_id: null,
+    group_id: null,
     address: '서울시 종로구',
     location: null,
     location_precision: 'EXACT',
@@ -344,6 +345,77 @@ describe('RawDataModal — 중복 스팟 검토 트리거', () => {
     render(<RawDataModal table="events" row={row as unknown as AdminOpenSpaceRow} categoryMinOptions={[]} onClose={vi.fn()} />);
 
     expect(screen.queryByText('🔗 중복 스팟 검토 (같은 장소 병합)')).not.toBeInTheDocument();
+  });
+});
+
+// [개선사항2](todo.md, 2026-09-09) "다만 어떻게 병합되었는지 원본에 대한 정보는
+// 어떤 방식이든 확인할 수 있어야합니다" — group_id가 있는(=목록에서 이미 대표로
+// 걸러진) 행에서만 "병합된 원본 데이터 보기" 버튼이 뜨고, 누르면 같은 group_id의
+// 전체 멤버를 보여주는지 확인한다.
+describe('RawDataModal — 병합된 원본 데이터 보기(2026-09-09)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('group_id가 없으면 버튼이 보이지 않는다', () => {
+    const row = buildRow({ group_id: null });
+    render(
+      <RawDataModal
+        table="open_spaces"
+        row={row}
+        categoryMinOptions={[]}
+        serviceCategories={[]}
+        onServiceCategoryUpdated={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByText('🔗 병합된 원본 데이터 보기')).not.toBeInTheDocument();
+  });
+
+  it('group_id가 있으면 버튼이 보이고, 누르면 같은 그룹의 전체 멤버를 불러와 보여준다', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/api/admin/spot-dedup/group-members')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              items: [
+                { id: 'a', name: '난지캠핑장 A', category: 'ETC', category_min: '캠핑장', source: 'seoul_public_reservation', source_type: 'SEOUL_YEYAK', is_dedup_representative: true, created_at: '2026-08-01T00:00:00Z' },
+                { id: 'b', name: '난지캠핑장 B', category: 'ETC', category_min: '캠핑장', source: 'seoul_public_reservation', source_type: 'SEOUL_YEYAK', is_dedup_representative: false, created_at: '2026-08-02T00:00:00Z' },
+              ],
+            }),
+        } as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [] }) } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const row = buildRow({ group_id: 'group-1' });
+    render(
+      <RawDataModal
+        table="open_spaces"
+        row={row}
+        categoryMinOptions={[]}
+        serviceCategories={[]}
+        onServiceCategoryUpdated={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText('🔗 병합된 원본 데이터 보기'));
+
+    expect(await screen.findByText('🔗 병합된 원본 데이터 (2건)')).toBeInTheDocument();
+    expect(screen.getByText('난지캠핑장 A')).toBeInTheDocument();
+    expect(screen.getByText('난지캠핑장 B')).toBeInTheDocument();
+    expect(screen.getByText('대표')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some((c) => (c[0] as string).includes('group_id=group-1'))).toBe(true);
+  });
+
+  it('events 탭에는 이 버튼이 없다', () => {
+    const row = buildRow({ group_id: 'group-1' });
+    render(<RawDataModal table="events" row={row as unknown as AdminOpenSpaceRow} categoryMinOptions={[]} onClose={vi.fn()} />);
+
+    expect(screen.queryByText('🔗 병합된 원본 데이터 보기')).not.toBeInTheDocument();
   });
 });
 

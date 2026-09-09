@@ -126,8 +126,14 @@ function applyCreatedAtRange<Q extends { gte: (c: string, v: string) => Q; lt: (
 // 해줘 open_spaces쪽에서" — 상세 모달에서 현재 값을 보여주고 고치려면 service_category_id를
 // 이 목록 조회 시점에 함께 받아와야 한다(지금까지는 대량/선택 매핑 API만 이 값을
 // 갱신했을 뿐, 조회 응답에는 아예 없었다).
+// [개선사항2](todo.md, 2026-09-09) "단독 데이터와 병합(중복 제거) 데이터의 화면
+// 단일화": group_id를 응답에 포함해, 관리자 화면이 병합된 스팟에 "🔗 그룹" 뱃지를
+// 보여주고 원본 멤버 목록을 열람할 수 있게 한다. is_dedup_representative는 화면에
+// 직접 노출하지는 않지만, queryOpenSpacesViaSourceSubset(SEOUL_YEYAK 전용 JS 필터
+// 경로 — 정확히 이번에 문제가 된 캠핑장 데이터가 지나가는 경로)가 이 값을 JS에서
+// 직접 걸러야 해서 SELECT 목록에 반드시 포함해야 한다.
 const OPEN_SPACES_COLUMNS =
-  'id, external_id, source_type, source, name, category, category_min, category_min_source, service_category_id, address, location, location_precision, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, raw_data, sigungu_name, created_at, updated_at';
+  'id, external_id, source_type, source, name, category, category_min, category_min_source, service_category_id, group_id, is_dedup_representative, address, location, location_precision, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, raw_data, sigungu_name, created_at, updated_at';
 
 const EVENTS_COLUMNS =
   'id, external_id, source, title, event_type, category_maj, category_min, category_min_source, target_audience, target_audience_source, venue_name, sigungu_name, start_date, end_date, location, location_precision, is_reservation_required, reservation_url, reservation_start_date, reservation_end_date, is_free, thumbnail_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, is_active, raw_data, created_at';
@@ -205,6 +211,11 @@ async function queryOpenSpacesViaSourceSubset(
     if (params.missingFee && row.is_free !== null) return false;
     if (createdFromIso && (!row.created_at || row.created_at < createdFromIso)) return false;
     if (createdToIso && (!row.created_at || row.created_at >= createdToIso)) return false;
+    // [개선사항2](todo.md, 2026-09-09) "관리자 검수/큐레이션 화면에서는 무조건
+    // 하나의 깔끔한 레코드로 노출" — 그룹에 속했지만 대표가 아닌 행(이미 병합된
+    // 원본 멤버)은 목록에서 숨긴다. 대표는 raw-data-modal.tsx에서 group_id로
+    // 나머지 멤버를 열람할 수 있다.
+    if (row.group_id && !row.is_dedup_representative) return false;
     return true;
   });
 
@@ -343,6 +354,11 @@ async function queryOpenSpaces(supabase: Ctx, searchParams: URLSearchParams, pag
     if (curatedIds.length > 0) query = query.not('id', 'in', `(${curatedIds.join(',')})`);
   }
   query = applyCreatedAtRange(query, createdFrom, createdTo);
+  // [개선사항2](todo.md, 2026-09-09) "관리자 검수/큐레이션 화면에서는 무조건
+  // 하나의 깔끔한 레코드로 노출" — 그룹에 속했지만 대표가 아닌 행(이미 병합된
+  // 원본 멤버)은 목록에서 숨긴다. 그룹 미소속 행(group_id is null)은 항상
+  // 그대로 보인다.
+  query = query.or('group_id.is.null,is_dedup_representative.eq.true');
 
   const from = (page - 1) * pageSize;
   const { data, error, count } = await query
