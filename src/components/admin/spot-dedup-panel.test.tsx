@@ -35,10 +35,17 @@ function mockFetchByUrl(handlers: {
   groupsPages?: Record<string, unknown>; // key: 'initial' | after 커서 값
   apply?: unknown;
   pendingGroups?: unknown; // GET /pending-groups 응답
+  // [그룹이 페이지 경계에 끊겨 쪼개지는 문제 보강](2026-09-09 사용자 지시): 그룹을 열
+  // 때마다 각 멤버 기준으로 find_nearby_open_spaces를 재조회한다 — 기본값은 "추가로
+  // 찾은 멤버 없음"(빈 배열)이라 대부분의 기존 테스트는 신경 쓸 필요가 없다.
+  nearby?: unknown;
 }) {
   return vi.fn((url: string, init?: RequestInit) => {
     if (url.includes('/api/admin/service-categories')) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve(handlers.categories ?? { items: [] }) } as Response);
+    }
+    if (url.includes('/api/admin/spot-dedup/nearby')) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(handlers.nearby ?? { items: [] }) } as Response);
     }
     if (url.includes('/api/admin/spot-dedup/pending-groups')) {
       // [중복 스팟 검수 — 진행 상태 임시 저장](2026-09-05 사용자 지시) POST(그룹 열기/무시)와
@@ -188,6 +195,62 @@ describe('SpotDedupPanel', () => {
     });
   });
 
+  // [그룹이 페이지 경계에 끊겨 쪼개지는 문제 보강](2026-09-09 사용자 지시): "한강
+  // 난지공원.. 많이 묶여야하는데 50건씩하다보니 끊겨서 두개그룹으로 됐네" — 그룹을
+  // 열 때 스캔에서 놓친 실제 근접 멤버를 find_nearby_open_spaces로 보강해 합친다.
+  describe('그룹이 페이지 경계에 끊겨 쪼개지는 문제 보강(2026-09-09)', () => {
+    it('그룹을 열면 각 멤버 기준으로 실제 반경을 재조회해, 스캔에서 놓친 멤버를 자동으로 합친다', async () => {
+      const fetchMock = mockFetchByUrl({
+        groupsPages: {
+          initial: {
+            candidates: [candidateRow({ id: 'a' }), candidateRow({ id: 'b', name: '행복놀이터(구)', address: '경기도 성남시 분당구 1-1' })],
+            next_cursor: 'b',
+            has_more: false,
+          },
+        },
+        // 스캔 페이지에는 a/b만 실렸지만, 실제로는 c도 같은 위치에 있다(다른
+        // 페이지로 흩어진 것을 재현) — a/b 기준 30m 재조회에서 c가 발견된다.
+        nearby: {
+          items: [{ id: 'c', name: '행복놀이터(신관)', category: 'PARK', category_min: '공원', address: '경기도 성남시 분당구 1-2', distance_m: 5 }],
+        },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      renderPanel();
+
+      selectScanScope('미매핑 원본 전체 (기존 방식)');
+      fireEvent.click(screen.getAllByText('📥 불러오기')[0]);
+      fireEvent.click(await screen.findByText(/행복놀이터 외 1건/));
+
+      expect(screen.getByText('중복 의심 그룹 검수 (2건)')).toBeInTheDocument();
+      // 보강 조회가 끝나면 놓쳤던 멤버(c)가 자동으로 합쳐져 3건이 된다.
+      expect(await screen.findByText('중복 의심 그룹 검수 (3건)')).toBeInTheDocument();
+      expect(screen.getByText('행복놀이터(신관)')).toBeInTheDocument();
+    });
+
+    it('보강 조회가 실패해도 기존 스캔 결과 그대로 검수를 계속할 수 있다', async () => {
+      const base = mockFetchByUrl({
+        groupsPages: {
+          initial: {
+            candidates: [candidateRow({ id: 'a' }), candidateRow({ id: 'b', name: '행복놀이터(구)', address: '경기도 성남시 분당구 1-1' })],
+            next_cursor: 'b',
+            has_more: false,
+          },
+        },
+      });
+      const fetchMock = vi.fn((url: string, init?: RequestInit) =>
+        url.includes('/api/admin/spot-dedup/nearby') ? Promise.reject(new Error('network error')) : base(url, init)
+      );
+      vi.stubGlobal('fetch', fetchMock);
+      renderPanel();
+
+      selectScanScope('미매핑 원본 전체 (기존 방식)');
+      fireEvent.click(screen.getAllByText('📥 불러오기')[0]);
+      fireEvent.click(await screen.findByText(/행복놀이터 외 1건/));
+
+      expect(await screen.findByText('중복 의심 그룹 검수 (2건)')).toBeInTheDocument();
+    });
+  });
+
   // [그룹 오묶음 부분 제외](2026-09-09 사용자 지시): "무심골 캠핑장 / 무주 구천동
   // 캠핑장 / 무주구천동캠핑장 이거는 1번째꺼는 다른거고 2,3번째는 같은건데 3개가
   // 묶여서 대표로 묶을 수가 없네" — 근접 판정이 전이적(A~B, B~C면 A~C가 아니어도
@@ -299,7 +362,7 @@ describe('SpotDedupPanel', () => {
     expect(screen.getByText('행복놀이터(구)')).toBeInTheDocument();
   });
 
-  it('has_more가 true면 "다음 50건 더 스캔하기" 버튼이 보이고, 누르면 다음 페이지 후보를 이어붙여 그룹을 다시 계산한다', async () => {
+  it('has_more가 true면 "다음 100건 더 스캔하기" 버튼이 보이고, 누르면 다음 페이지 후보를 이어붙여 그룹을 다시 계산한다', async () => {
     vi.stubGlobal(
       'fetch',
       mockFetchByUrl({
@@ -323,15 +386,15 @@ describe('SpotDedupPanel', () => {
 
     selectScanScope('미매핑 원본 전체 (기존 방식)');
     fireEvent.click(screen.getAllByText('📥 불러오기')[0]);
-    expect(await screen.findByText('다음 50건 더 스캔하기')).toBeInTheDocument();
+    expect(await screen.findByText('다음 100건 더 스캔하기')).toBeInTheDocument();
     // 페이지 1건만으로는 아직 "중복 의심"이 성립하지 않아(그룹 최소 2건) 목록에 없다.
     expect(screen.queryByText(/행복놀이터/)).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('다음 50건 더 스캔하기'));
+    fireEvent.click(screen.getByText('다음 100건 더 스캔하기'));
 
     // 두 페이지 후보(같은 normalized_address)가 합쳐져 이제 그룹 하나로 보인다.
     expect(await screen.findByText(/행복놀이터 외 1건/)).toBeInTheDocument();
-    expect(screen.queryByText('다음 50건 더 스캔하기')).not.toBeInTheDocument(); // has_more=false
+    expect(screen.queryByText('다음 100건 더 스캔하기')).not.toBeInTheDocument(); // has_more=false
   });
 
   it('그룹 상세에서 표준 정보를 입력하고 저장하면 apply API를 호출하고, 목록에서 제거된 뒤 모달이 닫힌다', async () => {

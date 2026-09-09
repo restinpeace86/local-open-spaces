@@ -5,14 +5,23 @@ import { DedupCandidateRow, DedupGroup, formatDedupGroupLabel, groupDedupCandida
 import { buildPendingGroupKey } from '@/lib/admin/spot-dedup-pending-key';
 import { ServiceCategory } from '@/lib/admin/service-category';
 import { useBackdropDismiss } from '@/lib/admin/use-backdrop-dismiss';
+import { NearbySpot } from '@/app/api/admin/spot-dedup/nearby/route';
 
 // [2026-09-05 페이지네이션 도입 — 사용자 timeout 신고 대응] "중복 의심 그룹 데이터
 // 너무 많나봐 또 timeout 걸리네.. 이것도 50여건씩 pagination 하던가..." 진짜 원인은
 // open_spaces 테이블 통계가 낡아 생긴 쿼리 플래너 오판이었고(ANALYZE로 이미 해소,
 // /api/admin/spot-dedup/groups/route.ts 주석 참고) 이미 라이브 DB에 반영했지만,
 // 통계가 다시 낡아지는 경우에 대비해 방어적으로 커서 기반 페이지네이션도 함께
-// 적용한다 — 한 번에 최대 GROUPS_PAGE_SIZE(50)건만 스캔한다.
-const GROUPS_PAGE_SIZE = 50;
+// 적용한다 — 한 번에 최대 GROUPS_PAGE_SIZE건만 스캔한다.
+// [50건→100건 상향](2026-09-09 사용자 지시): "50건씩은 너무 적어 100건씩 스캔하기
+// 해.. 한강 난지공원.. 많이 묶여야하는데 50건씩하다보니 끊겨서 두개그룹으로 됐네" —
+// 페이지 경계에 걸려 같은 실제 장소의 멤버가 서로 다른 페이지로 흩어지면(특히
+// geohash 정렬이 실제 좌표 근접성을 완벽히 보장하지 않는 경계 사례) 한 번에 다
+// 스캔되지 않아 그룹이 쪼개져 보일 수 있다 — 한 번에 더 많이 스캔해 그 확률을
+// 낮춘다. 이 상수를 클라이언트가 API 호출에도 그대로 실어 보낸다(아래 fetchGroupsPage)
+// — 전에는 버튼 문구에만 쓰이고 실제 요청에는 안 실려 서버 기본값(DEFAULT_LIMIT)에만
+// 의존했던 것도 함께 바로잡는다.
+const GROUPS_PAGE_SIZE = 100;
 
 // [개선사항10 - 관리자 '중복 스팟 그룹핑 및 매핑' 탭](2026-09-04 todo.md): open_spaces
 // 원본 데이터를 정제하기 위한 관리자 전용 화면. curated_items/spot_curations와 데이터
@@ -332,6 +341,7 @@ export function SpotDedupPanel() {
     setIsLoadingGroups(true);
     setGroupsError(null);
     const params = new URLSearchParams();
+    params.set('limit', String(GROUPS_PAGE_SIZE));
     if (after) params.set('after', after);
     // UNMAPPED_SCOPE는 "아직 매핑 안 됨"이라는 기존 기본 동작 그대로라 파라미터를
     // 아예 넘기지 않는다 — 실제 중분류를 골랐을 때만 서버에 그 id를 전달한다.
@@ -421,9 +431,58 @@ export function SpotDedupPanel() {
       .catch((err) => console.warn('⚠️ 그룹 임시 저장 실패(무시하고 계속):', err instanceof Error ? err.message : err));
   }
 
-  function handleOpenGroup(group: DedupGroup) {
+  // [그룹이 페이지 경계에 끊겨 쪼개지는 문제 보강](2026-09-09 사용자 지시): "한강
+  // 난지공원.. 많이 묶여야하는데 50건씩하다보니 끊겨서 두개그룹으로 됐네" — 스캔
+  // 페이지네이션(geohash 순서)이 실제로는 같은 장소인 멤버를 서로 다른 페이지로
+  // 흩어놓을 수 있어, 누적된 candidates만으로 계산한 그룹이 실제보다 작게 보일 수
+  // 있다. 그룹을 열 때 각 멤버 기준으로 실제 30m 반경 전체를 다시 조회해(기존
+  // find_nearby_open_spaces RPC, SpotDedupQuickModal과 동일한 방식 재사용 — 제5장
+  // 제4조) 스캔에서 놓친 멤버가 있으면 자동으로 합쳐 보여준다. 페이지 크기를
+  // 100건으로 올린 것과 별개로, 이 보강은 페이지 크기와 무관하게 항상 실제 위치
+  // 기준으로 완전한 그룹을 보장한다.
+  async function handleOpenGroup(group: DedupGroup) {
     setSelectedGroup(group);
     stagePendingGroup(group, 'in_progress');
+
+    try {
+      const existingIds = new Set(group.members.map((m) => m.id));
+      const results = await Promise.all(
+        group.members.map((m) =>
+          fetch(`/api/admin/spot-dedup/nearby?spot_id=${encodeURIComponent(m.id)}`)
+            .then((res) => (res.ok ? res.json() : { items: [] }))
+            .catch(() => ({ items: [] }))
+        )
+      );
+      const extraById = new Map<string, DedupCandidateRow>();
+      for (const data of results as { items?: NearbySpot[] }[]) {
+        for (const n of data.items ?? []) {
+          if (existingIds.has(n.id) || extraById.has(n.id)) continue;
+          extraById.set(n.id, {
+            id: n.id,
+            name: n.name,
+            category: n.category,
+            category_min: n.category_min,
+            address: n.address,
+            normalized_address: '',
+            lat: null,
+            lng: null,
+          });
+        }
+      }
+      if (extraById.size > 0) {
+        const enrichedGroup: DedupGroup = { ...group, members: [...group.members, ...extraById.values()] };
+        setSelectedGroup((prev) => (prev && prev.groupKey === group.groupKey ? enrichedGroup : prev));
+        // 원래 스캔 결과(더 적은 멤버) 기준으로 이미 'in_progress'로 임시 저장해둔
+        // 키는 이제 실제 저장될 조합과 달라졌다 — 그대로 두면 Step 85와 같은 유령
+        // 항목이 남으므로, 보강된 전체 조합으로 다시 저장하고 원래 키는 정리한다.
+        const originalKey = buildPendingGroupKey(group.members.map((m) => m.id));
+        stagePendingGroup(enrichedGroup, 'in_progress');
+        handleRemovePendingGroup(originalKey);
+      }
+    } catch {
+      // 보강 조회가 실패해도 기존 스캔 결과 그대로 검수를 계속할 수 있어야 한다
+      // (제5장 제11조 — 부가 기능 실패가 핵심 흐름을 막지 않음).
+    }
   }
 
   function handleIgnoreGroup(group: DedupGroup) {
