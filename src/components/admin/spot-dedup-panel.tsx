@@ -98,6 +98,17 @@ export function GroupDetailModal({
   // 멤버(A)는 그대로 남아 있다가 필요하면 나중에 다른 조합으로 다시 검토된다.
   const [excludedIds, setExcludedIds] = useState<Set<string>>(new Set());
   const activeMembers = group.members.filter((m) => !excludedIds.has(m.id));
+  // [원본 중분류가 다른 멤버 경고](2026-09-09 사용자 지시): "화성에코팜테마파크
+  // 오토캠핑장(캠핑장)/화성에코팜 테마파크 어린이체험관(키즈카페).. 이거 원본
+  // 중분류가 다른데?" — 실측 확인 결과 코드 버그가 아니라 데이터 자체의 노출
+  // 중분류 매핑 실수였다(같은 주소의 서로 다른 시설이 우연히 같은 노출
+  // 중분류로 잘못 매핑돼 있었음). 근접/주소 매칭은 "물리적으로 가깝다"만 볼 뿐
+  // "같은 성격의 시설이다"는 보장하지 않으므로, 체크된(병합 예정) 멤버들의
+  // 원본 중분류(category_min)가 서로 다르면 경고를 보여준다 — 막지는 않는다
+  // (서로 다른 출처가 같은 개념을 "야영장"/"캠핑장"처럼 다르게 표기하는 정상
+  // 케이스도 있어 임의로 차단하면 제3장 제5조 추측 금지에 어긋난다).
+  const activeCategoryMins = new Set(activeMembers.map((m) => m.category_min ?? m.category));
+  const hasMixedCategoryMin = activeCategoryMins.size > 1;
 
   function toggleExcluded(id: string) {
     setExcludedIds((prev) => {
@@ -161,6 +172,12 @@ export function GroupDetailModal({
         <p className="mb-2 text-[11px] text-gray-400">
           실제로는 다른 장소가 섞여 있으면 체크를 해제해서 빼고, 나머지만 병합하세요.
         </p>
+        {hasMixedCategoryMin && (
+          <p className="mb-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-[11px] text-amber-700">
+            ⚠️ 병합 예정인 항목들의 원본 중분류가 서로 다릅니다({[...activeCategoryMins].join(' / ')}).
+            정말 같은 장소인지 확인해주세요 — 다른 시설이면 체크를 해제해 빼주세요.
+          </p>
+        )}
         <div className="mb-4 overflow-x-auto rounded-lg border border-gray-200">
           <table className="w-full text-xs text-left">
             <thead className="bg-gray-50 text-gray-500">

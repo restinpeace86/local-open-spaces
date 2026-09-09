@@ -373,6 +373,81 @@ describe('SpotDedupPanel', () => {
     });
   });
 
+  // [원본 중분류가 다른 멤버 경고](2026-09-09 사용자 지시): "화성에코팜테마파크
+  // 오토캠핑장(캠핑장)/화성에코팜 테마파크 어린이체험관(키즈카페).. 이거 원본
+  // 중분류가 다른데?" — 근접/주소 매칭만으로는 "같은 성격의 시설"임을 보장하지
+  // 않으므로, 병합 예정 멤버들의 원본 중분류가 섞여 있으면 경고를 보여준다(막지는
+  // 않음 — 서로 다른 출처가 같은 개념을 다르게 표기하는 정상 케이스도 있음).
+  describe('원본 중분류가 다른 멤버 경고(2026-09-09)', () => {
+    it('병합 예정 멤버들의 원본 중분류가 다르면 경고 문구를 보여준다', async () => {
+      const fetchMock = mockFetchByUrl({
+        groupsPages: {
+          initial: {
+            candidates: [
+              candidateRow({ id: 'a', name: '화성에코팜테마파크 오토캠핑장', category_min: '캠핑장', normalized_address: 'addr-x' }),
+              candidateRow({ id: 'b', name: '화성에코팜 테마파크 어린이체험관', category_min: '키즈카페', normalized_address: 'addr-x' }),
+            ],
+            next_cursor: 'b',
+            has_more: false,
+          },
+        },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      renderPanel();
+
+      selectScanScope('미매핑 원본 전체 (기존 방식)');
+      fireEvent.click(screen.getAllByText('📥 불러오기')[0]);
+      fireEvent.click(await screen.findByText(/화성에코팜테마파크 오토캠핑장 외 1건/));
+
+      expect(screen.getByText(/원본 중분류가 서로 다릅니다/)).toBeInTheDocument();
+      expect(screen.getByText(/캠핑장 \/ 키즈카페/)).toBeInTheDocument();
+    });
+
+    it('체크 해제로 원본 중분류가 다른 멤버를 빼면 경고가 사라진다', async () => {
+      const fetchMock = mockFetchByUrl({
+        groupsPages: {
+          initial: {
+            candidates: [
+              candidateRow({ id: 'a', name: '화성에코팜테마파크 오토캠핑장', category_min: '캠핑장', normalized_address: 'addr-x' }),
+              candidateRow({ id: 'b', name: '화성에코팜 테마파크 어린이체험관', category_min: '키즈카페', normalized_address: 'addr-x' }),
+            ],
+            next_cursor: 'b',
+            has_more: false,
+          },
+        },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      renderPanel();
+
+      selectScanScope('미매핑 원본 전체 (기존 방식)');
+      fireEvent.click(screen.getAllByText('📥 불러오기')[0]);
+      fireEvent.click(await screen.findByText(/화성에코팜테마파크 오토캠핑장 외 1건/));
+      fireEvent.click(screen.getByLabelText('화성에코팜 테마파크 어린이체험관 포함'));
+
+      expect(screen.queryByText(/원본 중분류가 서로 다릅니다/)).not.toBeInTheDocument();
+    });
+
+    it('병합 예정 멤버들의 원본 중분류가 같으면 경고가 없다', async () => {
+      const fetchMock = mockFetchByUrl({
+        groupsPages: {
+          initial: {
+            candidates: [candidateRow({ id: 'a' }), candidateRow({ id: 'b', name: '행복놀이터(구)', address: '경기도 성남시 분당구 1-1' })],
+            next_cursor: 'b',
+            has_more: false,
+          },
+        },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      renderPanel();
+
+      selectScanScope('미매핑 원본 전체 (기존 방식)');
+      fireEvent.click(screen.getAllByText('📥 불러오기')[0]);
+      fireEvent.click(await screen.findByText(/행복놀이터 외 1건/));
+
+      expect(screen.queryByText(/원본 중분류가 서로 다릅니다/)).not.toBeInTheDocument();
+    });
+  });
+
   it('그룹 불러오기를 누르면 첫 페이지 후보로 그룹을 계산해 라벨로 보여주고, 클릭하면 상세/매핑 모달이 열린다', async () => {
     vi.stubGlobal(
       'fetch',
