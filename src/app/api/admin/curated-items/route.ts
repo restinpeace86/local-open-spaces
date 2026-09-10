@@ -15,6 +15,17 @@ function isValidDateString(value: unknown): value is string {
   return !Number.isNaN(new Date(`${value}T00:00:00`).getTime());
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const SPOT_ID_SELECT = '*, spot:open_spaces(id, name, address)';
+
+// [제휴 상품 ↔ 스팟 연동](2026-09-10 개선사항6): spot_id는 선택값 — 빈 문자열/null이면
+// 연동 해제, 값이 있으면 uuid 형식만 검증(FK 존재 여부는 DB가 판정).
+// 'invalid'는 형식 오류 — 호출부가 400으로 응답한다.
+function parseSpotId(value: unknown): string | null | 'invalid' {
+  if (value === null || value === undefined || value === '') return null;
+  return typeof value === 'string' && UUID_RE.test(value.trim()) ? value.trim() : 'invalid';
+}
+
 // 요구사항 2: 상품명 키워드 검색(title), 등록일(created_at) 범위, 운영/예약 가능 기간
 // (operation_start_date~operation_end_date) 범위 필터를 모두 지원한다. 기존
 // /api/admin/data-grid(open_spaces/events/raw_ingest_data 전용, 복잡한 표준 중분류/
@@ -36,7 +47,12 @@ export async function GET(request: NextRequest) {
     const from = (page - 1) * pageSize;
 
     const admin = createAdminClient();
-    let query = admin.from('curated_items').select('*', { count: 'exact' }).order('created_at', { ascending: false });
+    // [제휴 상품 ↔ 스팟 연동](2026-09-10 개선사항6): 폼 편집 프리필/목록 표기용으로
+    // 연동된 스팟명을 함께 내려준다.
+    let query = admin
+      .from('curated_items')
+      .select('*, spot:open_spaces(id, name, address)', { count: 'exact' })
+      .order('created_at', { ascending: false });
 
     // [검색창/지도 검색 키워드 유연성 대폭 개선](2026-08-30 사용자 지시): 검색어 전체를
     // 하나의 ILIKE 패턴으로 걸면 띄어쓰기 차이로 누락될 수 있어 공백 기준 토큰마다
@@ -97,6 +113,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
+    const spotId = parseSpotId(body.spot_id);
+    if (spotId === 'invalid') {
+      return NextResponse.json({ error: 'spot_id 형식이 올바르지 않습니다.' }, { status: 400 });
+    }
+
     const admin = createAdminClient();
     const { data, error } = await admin
       .from('curated_items')
@@ -108,8 +129,9 @@ export async function POST(request: NextRequest) {
         is_active: body.is_active !== false,
         operation_start_date: body.operation_start_date || null,
         operation_end_date: body.operation_end_date || null,
+        spot_id: spotId,
       })
-      .select()
+      .select(SPOT_ID_SELECT)
       .single();
 
     if (error) {
@@ -141,6 +163,7 @@ export async function PATCH(request: NextRequest) {
       is_active: boolean;
       operation_start_date: string | null;
       operation_end_date: string | null;
+      spot_id: string | null;
     }> = {};
     if (typeof body.title === 'string') {
       if (!body.title.trim()) return NextResponse.json({ error: '상품명을 입력해 주세요.' }, { status: 400 });
@@ -170,13 +193,20 @@ export async function PATCH(request: NextRequest) {
       }
       updates.operation_end_date = body.operation_end_date || null;
     }
+    if ('spot_id' in body) {
+      const spotId = parseSpotId(body.spot_id);
+      if (spotId === 'invalid') {
+        return NextResponse.json({ error: 'spot_id 형식이 올바르지 않습니다.' }, { status: 400 });
+      }
+      updates.spot_id = spotId;
+    }
 
     if (Object.keys(updates).length === 0) {
       return NextResponse.json({ error: '수정할 필드가 없습니다.' }, { status: 400 });
     }
 
     const admin = createAdminClient();
-    const { data, error } = await admin.from('curated_items').update(updates).eq('id', id).select().single();
+    const { data, error } = await admin.from('curated_items').update(updates).eq('id', id).select(SPOT_ID_SELECT).single();
 
     if (error) {
       if (error.code === 'PGRST116') {

@@ -20,3 +20,24 @@ export function buildMarkerSvgDataUrl(color: string): string {
 
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
+
+// [제휴 상품 연동 특별 마커](2026-09-10 사용자 지시, implementation/todo.md 개선사항6):
+// "spot_id가 매핑되어 있고 '노출 활성화'된 제휴 상품이 존재하는 스팟인 경우, 일반
+// 마커와 차별화된 특별 마커(예: 특가 마커, Hot 마커 등)로 시각적으로 강조". 금색
+// 핀 + 불꽃(🔥)으로 일반 핀과 확실히 구분한다(크기도 살짝 크게 34x44).
+export function buildDealMarkerSvgDataUrl(): string {
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="34" height="44" viewBox="0 0 34 44">
+      <defs>
+        <filter id="deal-shadow" x="-60%" y="-60%" width="220%" height="220%">
+          <feDropShadow dx="0" dy="2" stdDeviation="1.6" flood-color="#000000" flood-opacity="0.45" />
+        </filter>
+      </defs>
+      <path d="M17 0C8.16 0 1 7.16 1 16c0 12 16 28 16 28s16-16 16-28C33 7.16 25.84 0 17 0z" fill="#F59E0B" stroke="white" stroke-width="2.5" filter="url(#deal-shadow)"/>
+      <circle cx="17" cy="16" r="9" fill="#ffffff"/>
+      <text x="17" y="20.5" font-size="11" text-anchor="middle">🔥</text>
+    </svg>
+  `.trim();
+
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}

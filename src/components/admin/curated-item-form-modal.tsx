@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useBackdropDismiss } from '@/lib/admin/use-backdrop-dismiss';
+import { SpotPicker, SpotOption } from '@/components/community/spot-picker';
 
 // [관리자 화면(/admin/data-grid) 기능 고도화 및 범용 제휴 상품 테이블 개편](2026-08-30
 // 사용자 지시) 요구사항 2: "[+ 신규 상품 등록]"/각 행의 "[수정]"이 여는 팝업 폼. 신규
@@ -23,6 +24,10 @@ export type CuratedItemFormValue = {
   operation_start_date: string | null;
   operation_end_date: string | null;
   created_at: string;
+  // [제휴 상품 ↔ 스팟 연동](2026-09-10 사용자 지시, todo.md 개선사항6): 연동된 스팟.
+  // spot_id는 1:1 매핑 저장값, spot은 폼 편집 프리필/목록 표기용 조인 결과.
+  spot_id?: string | null;
+  spot?: { id: string; name: string; address: string | null } | null;
 };
 
 export function CuratedItemFormModal({
@@ -44,6 +49,9 @@ export function CuratedItemFormModal({
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
   const [operationStart, setOperationStart] = useState(initial?.operation_start_date ?? '');
   const [operationEnd, setOperationEnd] = useState(initial?.operation_end_date ?? '');
+  const [spot, setSpot] = useState<SpotOption | null>(
+    initial?.spot ? { id: initial.spot.id, name: initial.spot.name, address: initial.spot.address } : null
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -75,6 +83,7 @@ export function CuratedItemFormModal({
         is_active: isActive,
         operation_start_date: operationStart || null,
         operation_end_date: operationEnd || null,
+        spot_id: spot?.id ?? null,
       };
       const res = isEdit
         ? await fetch('/api/admin/curated-items', {
@@ -161,6 +170,18 @@ export function CuratedItemFormModal({
               ))}
             </select>
           </label>
+
+          {/* [제휴 상품 ↔ 스팟 연동](2026-09-10 사용자 지시, todo.md 개선사항6):
+              통합 장소 검색(내부 DB → 카카오 로컬 Fallback → Auto-Upsert)을 그대로
+              재사용한다(글쓰기 SpotPicker와 동일 파이프라인). 선택된 스팟의 id가
+              spot_id로 저장돼 스팟픽 지도에서 특가 마커로 강조된다. */}
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-gray-700">연동 장소(Spot) — 선택</span>
+            <SpotPicker selected={spot} onSelect={setSpot} />
+            <p className="text-xs text-gray-400">
+              장소를 연동하면 노출 활성화 시 스팟픽 지도에서 특가/Hot 마커로 강조됩니다.
+            </p>
+          </div>
 
           <div className="flex gap-3">
             <label className="flex-1 flex flex-col gap-1 text-sm">

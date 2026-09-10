@@ -109,6 +109,7 @@ export type Database = {
           is_active: boolean
           operation_end_date: string | null
           operation_start_date: string | null
+          spot_id: string | null
           title: string
         }
         Insert: {
@@ -120,6 +121,7 @@ export type Database = {
           is_active?: boolean
           operation_end_date?: string | null
           operation_start_date?: string | null
+          spot_id?: string | null
           title: string
         }
         Update: {
@@ -131,9 +133,18 @@ export type Database = {
           is_active?: boolean
           operation_end_date?: string | null
           operation_start_date?: string | null
+          spot_id?: string | null
           title?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "curated_items_spot_id_fkey"
+            columns: ["spot_id"]
+            isOneToOne: false
+            referencedRelation: "open_spaces"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       deals: {
         Row: {

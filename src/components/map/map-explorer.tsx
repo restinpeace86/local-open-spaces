@@ -201,6 +201,26 @@ export function MapExplorer() {
     };
   }, [effectiveCenter.lat, effectiveCenter.lng, radius]);
 
+  // [제휴 상품 ↔ 스팟픽 마커 연동](2026-09-10 사용자 지시, todo.md 개선사항6):
+  // 노출 활성화된 제휴 상품이 연동된 스팟 목록을 한 번 불러와, 지도에서는 특가
+  // 마커로 강조하고 상세/프리뷰 카드에서는 제휴 링크로 연결한다.
+  const [dealBySpotId, setDealBySpotId] = useState<Record<string, { title: string; bookingUrl: string }>>({});
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/nearby/deal-spots')
+      .then((res) => res.json())
+      .then((data: { deals?: Record<string, { title: string; bookingUrl: string }> }) => {
+        if (!cancelled && data.deals) setDealBySpotId(data.deals);
+      })
+      .catch(() => {
+        // 실패해도 일반 마커로 정상 동작한다(제5장 제11조).
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  const dealSpotIds = useMemo(() => new Set(Object.keys(dealBySpotId)), [dealBySpotId]);
+
   // [스팟픽 전국구 서버사이드 검색](2026-08-30 사용자 지시): 검색어가 있으면 현재 지도
   // 중심/반경과 무관하게 open_spaces 전체를 대상으로 한 /api/spots/search를 호출한다 —
   // 기존에는 이미 반경 내로 좁혀진 items를 클라이언트에서 다시 텍스트로 거르기만 해서,
@@ -518,6 +538,7 @@ export function MapExplorer() {
           center={effectiveCenter}
           radius={mapRadius}
           items={visibleItems}
+          dealSpotIds={dealSpotIds}
           focusPosition={focusPosition}
           onSelectItem={handleMarkerSelectItem}
           onSelectGroup={handleSelectGroup}
@@ -529,7 +550,12 @@ export function MapExplorer() {
             열려 있을 때는 이미 handleOpenDetailFromPreview/handleSelectItem 등에서
             previewItem을 함께 정리하므로 중복 노출되지 않는다. */}
         {previewItem && (
-          <MarkerPreviewCard item={previewItem} onOpenDetail={handleOpenDetailFromPreview} onClose={handleClosePreview} />
+          <MarkerPreviewCard
+            item={previewItem}
+            deal={dealBySpotId[previewItem.id] ?? null}
+            onOpenDetail={handleOpenDetailFromPreview}
+            onClose={handleClosePreview}
+          />
         )}
 
         {/* 데스크톱: 지도 상단 중앙에 재검색 Floating 버튼 노출 (지도 위 별도 오버레이 없어 최상단 사용 가능) */}
@@ -659,6 +685,7 @@ export function MapExplorer() {
           onClose={() => setSelectedItem(null)}
           hideMapSection
           spotPickCard
+          deal={dealBySpotId[selectedItem.id] ?? null}
           onExpandGroup={handleExpandGroup}
           isExpandingGroup={isExpandingGroup}
         />

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from 'react';
 import { loadKakaoMapSdk } from '@/lib/kakao/load-kakao-sdk';
-import { buildMarkerSvgDataUrl } from '@/lib/kakao/marker-image';
+import { buildMarkerSvgDataUrl, buildDealMarkerSvgDataUrl } from '@/lib/kakao/marker-image';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 
@@ -22,6 +22,7 @@ export function KakaoMapView({
   center,
   radius,
   items,
+  dealSpotIds,
   focusPosition,
   onSelectItem,
   onSelectGroup,
@@ -30,6 +31,9 @@ export function KakaoMapView({
   center: { lat: number; lng: number };
   radius: number;
   items: NearbyItem[];
+  // [제휴 상품 연동 특별 마커](2026-09-10 사용자 지시, todo.md 개선사항6): 노출
+  // 활성화된 제휴 상품이 연동된 스팟 id 집합. 이 스팟들은 🔥 특가 마커로 그린다.
+  dealSpotIds?: Set<string>;
   focusPosition?: { lat: number; lng: number } | null;
   onSelectItem: (item: NearbyItem) => void;
   // [겹친 마커 처리](2026-08-29 사용자 지시): 원본 데이터가 동일 좌표를 공유하는 경우
@@ -233,16 +237,22 @@ export function KakaoMapView({
 
     const markers = items.map((item) => {
       const meta = getCategoryMeta(item.category);
-      const image = new window.kakao.maps.MarkerImage(
-        buildMarkerSvgDataUrl(meta.color),
-        new window.kakao.maps.Size(28, 36),
-        { offset: new window.kakao.maps.Point(14, 36) }
-      );
+      const isDeal = dealSpotIds?.has(item.id) ?? false;
+      const image = isDeal
+        ? new window.kakao.maps.MarkerImage(buildDealMarkerSvgDataUrl(), new window.kakao.maps.Size(34, 44), {
+            offset: new window.kakao.maps.Point(17, 44),
+          })
+        : new window.kakao.maps.MarkerImage(buildMarkerSvgDataUrl(meta.color), new window.kakao.maps.Size(28, 36), {
+            offset: new window.kakao.maps.Point(14, 36),
+          });
 
       const marker = new window.kakao.maps.Marker({
         position: new window.kakao.maps.LatLng(item.lat, item.lng),
         image,
       });
+      // 특가 마커는 일반 마커 위로 올려 겹칠 때 가려지지 않게 한다(로컬 kakao 타입
+      // 정의에 setZIndex가 빠져 있어 캐스팅해서 호출한다 — 실제 SDK엔 존재).
+      if (isDeal) (marker as unknown as { setZIndex?: (z: number) => void }).setZIndex?.(5);
 
       window.kakao.maps.event.addListener(marker, 'click', () => {
         const key = `${item.lat.toFixed(6)},${item.lng.toFixed(6)}`;
@@ -261,7 +271,7 @@ export function KakaoMapView({
     clustererRef.current.addMarkers(markers);
     // onSelectItem은 상위에서 안정적으로 전달되지 않을 수 있어 의도적으로 의존성에서 제외한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items]);
+  }, [items, dealSpotIds]);
 
   return <div ref={containerRef} className="w-full h-full bg-gray-100" />;
 }

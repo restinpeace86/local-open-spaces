@@ -351,3 +351,14 @@ NEG_EDU_MACHINE_HAZARD (농기계 이동 구간 등 안전 주의): 농기계 �
       2단계 검색(내부 `/api/spots/search` → 부족 시 카카오 로컬 `/api/spots/search-external` Fallback 병합),
       외부(미등록) 장소 탭 시 `/api/spots/upsert-external`로 open_spaces에 Auto-Upsert(external_id UNIQUE
       dedup) 후 반환 id로 선택 완료. (완료: 2026-09-10)
+
+### 개선사항6 진행 상태 (Harness 자율 실행)
+- [x] 개선사항6 (Step 98): 관리자 제휴 상품 ↔ 스팟 연동.
+      · DB: `curated_items.spot_id`(FK open_spaces, on delete set null) + 인덱스.
+      · 관리자 폼: `CuratedItemFormModal`에 "연동 장소(Spot)" 필드 추가 — 글쓰기 SpotPicker(내부 검색 →
+        카카오 로컬 Fallback → Auto-Upsert 파이프라인) 그대로 재사용. `/api/admin/curated-items` POST/PATCH가
+        `spot_id` 저장, GET/응답에 `spot` 조인.
+      · 소비자: `GET /api/nearby/deal-spots`(노출 활성화 + 운영기간 유효한 제휴 상품의 spot_id → deal 맵),
+        `map-explorer`가 한 번 조회해 `KakaoMapView`에 `dealSpotIds` 전달 → 🔥 특가 마커(buildDealMarkerSvgDataUrl,
+        34x44, zIndex 상향). 마커 프리뷰 카드 "🔥" 표기, 상세 카드(spotPickCard) "🔥 특가" 뱃지 +
+        "🔥 <상품명> · 특가 보기" 제휴 링크 CTA. (완료: 2026-09-10)

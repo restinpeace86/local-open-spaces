@@ -722,4 +722,31 @@ describe('DetailModal 스팟픽 카드(spotPickCard)', () => {
     expect(await screen.findByText('야외·자연')).toBeInTheDocument();
     expect(screen.queryByText('트램폴린/방방')).not.toBeInTheDocument();
   });
+
+  // [제휴 상품 ↔ 스팟픽 마커 연동](2026-09-10 사용자 지시, todo.md 개선사항6)
+  it('연동된 제휴 상품(deal)이 있으면 특가 뱃지 + 제휴 링크 CTA를 보여준다', async () => {
+    mockSpotPickFetch({ curation: CURATION });
+    render(
+      <DetailModal
+        item={makeSpaceItem()}
+        onClose={() => {}}
+        spotPickCard
+        hideMapSection
+        deal={{ title: '주말 입장권 30% 할인', bookingUrl: 'https://deal.example.com/1' }}
+      />
+    );
+
+    expect(await screen.findByText('🔥 특가')).toBeInTheDocument();
+    const cta = screen.getByText(/주말 입장권 30% 할인/).closest('a');
+    expect(cta).toHaveAttribute('href', 'https://deal.example.com/1');
+    expect(cta).toHaveAttribute('target', '_blank');
+  });
+
+  it('deal이 없으면 특가 뱃지/CTA가 없다', async () => {
+    mockSpotPickFetch({ curation: CURATION });
+    render(<DetailModal item={makeSpaceItem()} onClose={() => {}} spotPickCard hideMapSection />);
+
+    await screen.findByText('트램폴린/방방');
+    expect(screen.queryByText('🔥 특가')).not.toBeInTheDocument();
+  });
 });

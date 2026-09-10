@@ -22,10 +22,14 @@ type PreviewCuration = { image_url: string | null; badge_labels: string[] };
 
 export function MarkerPreviewCard({
   item,
+  deal = null,
   onOpenDetail,
   onClose,
 }: {
   item: NearbyItem;
+  // [제휴 상품 ↔ 스팟픽 마커 연동](2026-09-10 사용자 지시, todo.md 개선사항6):
+  // 연동된 노출 활성화 제휴 상품이 있으면 "🔥 특가" 뱃지를 보여준다.
+  deal?: { title: string; bookingUrl: string } | null;
   onOpenDetail: () => void;
   onClose: () => void;
 }) {
@@ -100,7 +104,10 @@ export function MarkerPreviewCard({
                 한 줄, 주소 다음 줄, 맞춤형 뱃지. 구형 레거시 라벨(meta.label)은 더
                 이상 폴백으로 쓰지 않는다(개선사항2-2·3-2). */}
             <div className="flex items-baseline justify-between gap-2">
-              <p className="text-sm font-semibold text-gray-900 truncate">{item.name}</p>
+              <p className="text-sm font-semibold text-gray-900 truncate">
+                {deal && <span className="mr-1 text-amber-500">🔥</span>}
+                {item.name}
+              </p>
               {item.distance_meters >= 0 && (
                 <span className="shrink-0 text-xs font-semibold text-blue-600">
                   🧭 {formatDistance(item.distance_meters)}

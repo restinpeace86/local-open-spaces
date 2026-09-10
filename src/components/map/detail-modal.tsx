@@ -89,6 +89,7 @@ export function DetailModal({
   onExpandGroup,
   isExpandingGroup = false,
   spotPickCard = false,
+  deal = null,
 }: {
   item: NearbyItem;
   onClose: () => void;
@@ -115,6 +116,10 @@ export function DetailModal({
   // 숨김, 네이버 블로그 후기 동적 버튼. map-explorer.tsx만 이 값을 넘긴다 —
   // 다른 화면(홈/이벤트픽/캘린더/지역별)은 기존 구조를 그대로 유지한다.
   spotPickCard?: boolean;
+  // [제휴 상품 ↔ 스팟픽 마커 연동](2026-09-10 사용자 지시, todo.md 개선사항6):
+  // 이 스팟에 노출 활성화된 제휴 상품이 연동돼 있으면, 특가 뱃지 + 제휴 링크 CTA를
+  // 보여준다. map-explorer.tsx만 넘긴다.
+  deal?: { title: string; bookingUrl: string } | null;
 }) {
   const [copied, setCopied] = useState(false);
   const [isMapPreviewOpen, setIsMapPreviewOpen] = useState(false);
@@ -339,6 +344,11 @@ export function DetailModal({
                   카드는 구형 레거시 뱃지(meta.label)를 배제하고 맞춤형 뱃지만 노출. */}
               {spotPickCard && !isEvent ? (
                 <>
+                  {deal && (
+                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500 text-white">
+                      🔥 특가
+                    </span>
+                  )}
                   {minAgeRecommended > 0 && (
                     <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
                       만 {minAgeRecommended}세 이상
@@ -409,6 +419,19 @@ export function DetailModal({
             >
               {isExpandingGroup ? '불러오는 중...' : '🔗 이 장소의 다른 예약 옵션 보기'}
             </button>
+          )}
+
+          {/* [제휴 상품 연동 CTA](2026-09-10 사용자 지시, todo.md 개선사항6): 이 스팟에
+              연동된 노출 활성화 제휴 상품이 있으면 눈에 띄는 특가 버튼으로 연결한다. */}
+          {spotPickCard && !isEvent && deal && (
+            <a
+              href={deal.bookingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 flex items-center justify-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2.5 text-sm font-bold text-white hover:bg-amber-600"
+            >
+              🔥 {deal.title} · 특가 보기
+            </a>
           )}
 
           {/* [스팟픽 상세 카드 네이버 블로그 후기 바로가기](2026-09-10 사용자 지시,
