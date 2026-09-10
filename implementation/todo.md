@@ -120,6 +120,14 @@ NEG_EDU_PESTS_RISK (벌·모기 등 해충 주의 야외 험지): 모기, 벌, �
 
 NEG_EDU_MACHINE_HAZARD (농기계 이동 구간 등 안전 주의): 농기계 이동, 차량 조심, 위험 구간, 안전 주의, 차량 통행
 
+### 진행 상태 (Harness 자율 실행)
+- [x] 1-A (Step 91): `src/lib/admin/curation-badges.ts` 3개 config(camping/rural_village/education_farm)를
+      위 스펙의 뱃지 키(CAMPING_TRAMPOLINE / NEG_BACKPACKING / RURAL_* / EDU_* 명명)·키워드로 전면 재작성 +
+      제안 뱃지/키워드 보완. (완료: 2026-09-10)
+- [ ] 1-B (Step 92): 동적 연령 추천 시스템(min_age_recommended) — `spot_curations.min_age_recommended`
+      컬럼 신설(기본 0, 0이면 미노출), 후기 텍스트 휴리스틱 자동 판정("초등 이상"→7 / "영유아 어려움"→3 /
+      명시 연령 자동 입력), 나이 키워드 노란색 하이라이트, 관리자 수동 숫자 입력 오버라이드.
+
 [개선사항2]
 현재 '스팟픽' 서비스의 식당/키즈카페 카테고리 검색 및 리스트 노출 과정에서 발생한 핵심 버그들을 수정해야 합니다. 데이터 손실 없이 아래 요구사항에 맞춰 백엔드 쿼리 및 뱃지 매핑 로직을 즉시 수정해 주세요.
 
