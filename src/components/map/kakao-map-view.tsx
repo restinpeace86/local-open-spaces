@@ -244,14 +244,20 @@ export function KakaoMapView({
       pulseOverlay.setMap(map);
       userPulseOverlayRef.current = pulseOverlay;
 
-      // [마커 프리뷰 카드 앵커](2026-09-10): 마커 좌표에 붙는 빈 컨테이너 오버레이.
-      // 실제 카드는 아래 createPortal로 이 div에 렌더링한다. yAnchor=1이면 오버레이
-      // 아래 끝이 마커 위치 — 카드가 마커 위쪽에 뜬다.
+      // [마커 프리뷰 카드 앵커](2026-09-10): 마커 좌표에 붙는 0×0 앵커 오버레이.
+      // CustomOverlay content가 생성 시점엔 비어 있어(카드는 나중에 createPortal로
+      // 채워짐) Kakao가 콘텐츠 크기를 0으로 측정해 yAnchor가 제대로 안 먹는다 —
+      // 그래서 이 div를 0×0 기준점으로만 쓰고, 카드는 이 div 기준 position:absolute
+      // 로 "위쪽"에 띄운다(marker-preview-card.tsx). div 자체는 마커 상단(핀 꼭지)에
+      // 오도록 xAnchor 0.5 / yAnchor 1.
       canHoverRef.current =
         typeof window !== 'undefined' &&
         typeof window.matchMedia === 'function' &&
         window.matchMedia('(hover: hover) and (pointer: fine)').matches;
       const previewEl = document.createElement('div');
+      previewEl.style.position = 'relative';
+      previewEl.style.width = '0';
+      previewEl.style.height = '0';
       const previewOverlay = new window.kakao.maps.CustomOverlay({
         position: initialPosition,
         content: previewEl,
@@ -364,8 +370,8 @@ export function KakaoMapView({
       }
     }
 
-    // 포커스 마커는 기본 크기의 2.4배로 그린다(사용자 지시: "기본크기의 2배 이상").
-    const EMPHASIS = 2.4;
+    // 포커스 마커는 기본 크기의 1.5배로 그린다(사용자 지시: 2.4배는 너무 커서 1.5배로).
+    const EMPHASIS = 1.5;
     const markers = items.map((item) => {
       const meta = getCategoryMeta(item.category);
       const isDeal = dealSpotIds?.has(item.id) ?? false;
