@@ -458,6 +458,8 @@ export type Database = {
         Row: {
           address: string
           age_group: string | null
+          blog_review_updated_at: string | null
+          blog_review_urls: string[]
           blog_url: string | null
           category: string
           category_min: string | null
@@ -490,6 +492,8 @@ export type Database = {
         Insert: {
           address: string
           age_group?: string | null
+          blog_review_updated_at?: string | null
+          blog_review_urls?: string[]
           blog_url?: string | null
           category: string
           category_min?: string | null
@@ -522,6 +526,8 @@ export type Database = {
         Update: {
           address?: string
           age_group?: string | null
+          blog_review_updated_at?: string | null
+          blog_review_urls?: string[]
           blog_url?: string | null
           category?: string
           category_min?: string | null

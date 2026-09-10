@@ -225,7 +225,10 @@ NEG_EDU_MACHINE_HAZARD (농기계 이동 구간 등 안전 주의): 농기계 �
 - [ ] 2-5 나머지: 지도 마커도 경기+서울 등 광역 경계로 제한할지 → **Decision 011/013/017 및
       "반경 컷오프 완전 폐지 + 도 전역 노출" 결정과 상충 가능 — 착수 전 Decision 확인 필요.**
 - [ ] 2-6: 마커 팝업 카드 ↔ 상세 카드 UI 일원화.
-- [ ] 2-7: 상세 카드 네이버 블로그 후기 10일 캐싱(TTL) — blog_urls/blog_updated_at 필드 + 신뢰도 검증.
+- [x] 2-7 백엔드 (Step 94): 네이버 블로그 후기 10일 캐싱(TTL) — `open_spaces.blog_review_urls`/
+      `blog_review_updated_at` 컬럼 + `GET /api/spot-blog-reviews?spot_id=` Cache-Aside 엔드포인트
+      (관리자 큐레이션 우선 → 10일 캐시 → 네이버 재조회 + 신뢰도 검증). 상세 카드 렌더링(블로그 버튼)은
+      개선사항3-5에서 연결. (완료: 2026-09-10)
 
 [개선사항3] [스팟픽] 상세 카드(Detail View) 최종 UI 컴포넌트 스펙
 컴포넌트 배치 순서와 각 영역별 동작 규칙은 다음과 같습니다.
