@@ -216,16 +216,21 @@ export function MapExplorer() {
     };
   }, [effectiveCenter.lat, effectiveCenter.lng, radius]);
 
-  // [제휴 상품 ↔ 스팟픽 마커 연동](2026-09-10 사용자 지시, todo.md 개선사항6):
-  // 노출 활성화된 제휴 상품이 연동된 스팟 목록을 한 번 불러와, 지도에서는 특가
-  // 마커로 강조하고 상세/프리뷰 카드에서는 제휴 링크로 연결한다.
+  // [제휴 상품 ↔ 스팟픽 연동](2026-09-10 사용자 지시, todo.md 개선사항6 + 후속):
+  // 노출 활성화된 제휴 상품이 연동된 스팟을 한 번 불러온다.
+  //  - dealBySpotId: 특가 마커/CTA용 요약(spot_id → 제목/링크).
+  //  - dealItems: NearbyItem 형태 — 노출 중분류 필터와 무관하게 지도/바텀시트에
+  //    (반경 내면) 거리순으로 병합해 노출한다("제휴 상품 장소가 안 보인다").
   const [dealBySpotId, setDealBySpotId] = useState<Record<string, { title: string; bookingUrl: string }>>({});
+  const [dealItems, setDealItems] = useState<NearbyItem[]>([]);
   useEffect(() => {
     let cancelled = false;
     fetch('/api/nearby/deal-spots')
       .then((res) => res.json())
-      .then((data: { deals?: Record<string, { title: string; bookingUrl: string }> }) => {
-        if (!cancelled && data.deals) setDealBySpotId(data.deals);
+      .then((data: { deals?: Record<string, { title: string; bookingUrl: string }>; items?: NearbyItem[] }) => {
+        if (cancelled) return;
+        if (data.deals) setDealBySpotId(data.deals);
+        if (Array.isArray(data.items)) setDealItems(data.items);
       })
       .catch(() => {
         // 실패해도 일반 마커로 정상 동작한다(제5장 제11조).
@@ -370,7 +375,31 @@ export function MapExplorer() {
   const isSearchMode = keyword.trim().length > 0;
   // 지도 마커 / 데스크톱 목록: 노출 중분류 선택 시 현재 위치 도(道) 단위로 제한
   // (Decision 023). 반경 컷오프는 없다.
-  const baseItems = isSearchMode ? (searchResults ?? []) : selectedCategoryId ? provinceScopedCategoryItems : items;
+  // [제휴 상품 연동 스팟은 노출 중분류와 무관하게 노출](2026-09-10 사용자 지시):
+  // "제휴 상품 관련 장소들이 노출 중분류 매핑이 없어 스팟픽에서 안 보인다 → 노출
+  // 중분류와 상관없이 반경 내면 지도/바텀시트에 거리순으로 끼워넣어줘." 지도
+  // 마커는 도(道) 스코프 안의 제휴 스팟을, 바텀시트는 선택 반경 안의 제휴 스팟을
+  // 나머지와 병합한다(id 중복 제거 — 우연히 카테고리 결과에도 있으면 한 번만).
+  const provinceScopedDealItems = useMemo(() => {
+    if (!visibleProvinces) return dealItems;
+    return dealItems.filter((it) => isSpotInProvinces(it.address, it.sigungu_name, visibleProvinces));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dealItems, currentProvince]);
+  const mergeById = (base: NearbyItem[], extra: NearbyItem[]): NearbyItem[] => {
+    if (extra.length === 0) return base;
+    const seen = new Set(base.map((i) => i.id));
+    return [...base, ...extra.filter((i) => !seen.has(i.id))];
+  };
+
+  const baseItems = useMemo(() => {
+    if (isSearchMode) return searchResults ?? [];
+    // 노출 중분류를 골랐을 때만 제휴 스팟을 병합한다 — 중분류 필터가 제외한
+    // 제휴 스팟을 되살리는 것이 목적. 기본(반경) 모드는 반경 내 모든 스팟을 이미
+    // 보여주므로(제휴 여부 무관) 병합이 불필요. 검색 모드는 "콕 짚어 찾기"라 제외.
+    if (!selectedCategoryId) return items;
+    return mergeById(provinceScopedCategoryItems, provinceScopedDealItems);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSearchMode, searchResults, selectedCategoryId, provinceScopedCategoryItems, items, provinceScopedDealItems]);
 
   const visibleItems = useMemo(() => baseItems.slice(0, MARKER_LIMIT), [baseItems]);
   const isOverLimit = baseItems.length > MARKER_LIMIT;
@@ -402,11 +431,16 @@ export function MapExplorer() {
   // 바텀시트 소스는 provinceScopedCategoryItems(=baseItems)가 아니라 광역 필터
   // 이전의 categoryItems를 쓴다. 도 경계에 걸친 인접 스팟(예: 평택에서 10km인
   // 천안 스팟)도 선택 반경 안이면 리스트/건수에 포함된다.
-  const sheetSourceItems = isSearchMode
-    ? (searchResults ?? [])
-    : selectedCategoryId
-    ? categoryItems
-    : items;
+  const sheetSourceItems = useMemo(() => {
+    if (isSearchMode) return searchResults ?? [];
+    if (!selectedCategoryId) return items;
+    // 노출 중분류 모드에서만 제휴 스팟을 병합한다. 바텀시트는 도 스코프 필터 없이
+    // (Decision 023) 순수 반경 기준이라 제휴 스팟도 광역 필터 없이 통째로 병합 —
+    // 아래 mobileSheetItems의 반경 필터가 "롯데월드가 10km 안이면 거리순으로
+    // 끼워넣기"를 처리한다.
+    return mergeById(categoryItems, dealItems);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSearchMode, searchResults, selectedCategoryId, categoryItems, items, dealItems]);
   const originLat = liveGpsPosition?.lat ?? effectiveCenter.lat;
   const originLng = liveGpsPosition?.lng ?? effectiveCenter.lng;
   const mobileSheetItems = useMemo(() => {
@@ -459,7 +493,8 @@ export function MapExplorer() {
     (isSearchMode
       ? searchResults !== null && visibleItems.length === 0
       : selectedCategoryId
-      ? provinceScopedCategoryItems.length === 0
+      ? // 노출 중분류 결과 + 병합된 제휴 스팟 둘 다 없을 때만 "비었음".
+        visibleItems.length === 0
       : items.length > 0 && visibleItems.length === 0);
 
   // spec/space/space-card.md 3, spec/event/event-card.md 3: 카드/마커 클릭 시 지도 panTo + 상세 모달 활성화

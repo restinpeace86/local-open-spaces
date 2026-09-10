@@ -559,6 +559,47 @@ describe('MapExplorer 노출 중분류 전역 노출(2026-09-08)', () => {
     await waitFor(() => expect(screen.getByText(/주변 2건/)).toBeInTheDocument());
   });
 
+  // [제휴 상품 연동 스팟은 노출 중분류와 무관하게 노출](2026-09-10 사용자 지시):
+  // 키즈친화식당 중분류를 골라도, 노출 중분류 매핑이 없는 제휴 스팟(예: 롯데월드)이
+  // 지도/바텀시트에 (반경 내면) 끼워 노출된다.
+  it('노출 중분류를 골라도 제휴 스팟(deal-spots)이 지도와 바텀시트에 병합 노출된다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/nearby/service-categories')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: SERVICE_CATEGORIES_FIXTURE, counts: {} }) } as Response);
+        }
+        if (url.includes('/api/nearby/deal-spots')) {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                deals: { 'deal-1': { title: '롯데월드 자유이용권', bookingUrl: 'https://x' } },
+                // 노출 중분류(어린이 도서관) 결과엔 없지만 제휴 상품이 연결된 스팟.
+                items: [makeSpaceRow({ id: 'deal-1', name: '롯데월드', lat: 37.5111, lng: 127.098 })],
+              }),
+          } as Response);
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+      })
+    );
+
+    rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow({ id: 'near-1', name: '반경내스팟' })], error: null });
+    rpcMock.mockResolvedValueOnce({
+      data: [makeSpaceRow({ id: 'lib-1', name: '어린이도서관A', lat: 37.5, lng: 127.1 })],
+      error: null,
+    });
+
+    render(<MapExplorer />);
+    await screen.findByText('simulate-marker-click-반경내스팟');
+    fireEvent.click(screen.getAllByRole('button', { name: '문화시설' })[0]);
+    fireEvent.click(await within(screen.getByTestId('spot-category-sheet')).findByText('어린이 도서관'));
+
+    // 노출 중분류 결과 + 제휴 스팟이 지도 마커에 함께.
+    await screen.findByText('simulate-marker-click-어린이도서관A');
+    expect(await screen.findByText('simulate-marker-click-롯데월드')).toBeInTheDocument();
+  });
+
   it('현재 위치가 강원이면 강원 데이터만 남는다(인접 도 미포함)', async () => {
     mockUserLocation.addressName = '강원특별자치도 강릉시 E로 1';
     rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow({ id: 'near-1', name: '반경내스팟' })], error: null });

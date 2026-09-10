@@ -1345,6 +1345,38 @@ export type Database = {
           category_min: string
         }[]
       }
+      get_deal_spots: {
+        Args: never
+        Returns: {
+          address: string
+          booking_status: string
+          category: string
+          category_min: string
+          distance_meters: number
+          end_date: string
+          facility_type: string
+          group_id: string
+          has_parking: boolean
+          id: string
+          info_url: string
+          is_free: boolean
+          is_kids_friendly: boolean
+          is_reservation_required: boolean
+          item_type: string
+          lat: number
+          lng: number
+          name: string
+          operating_hours: string
+          reservation_end_date: string
+          reservation_start_date: string
+          reservation_url: string
+          source_type: string
+          start_date: string
+          stroller_accessible: boolean
+          target_age_group: string
+          thumbnail_url: string
+        }[]
+      }
       get_events_filter_options: {
         Args: never
         Returns: {
