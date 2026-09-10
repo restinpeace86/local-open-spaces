@@ -370,6 +370,8 @@ export function MapExplorer() {
   //   전역 노출, 반경 컷오프가 아예 없다.
   // - 둘 다 아니면 기존처럼 반경(5km) 기반 items를 쓴다.
   const isSearchMode = keyword.trim().length > 0;
+  // 지도 마커 / 데스크톱 목록: 노출 중분류 선택 시 현재 위치 도(道) 단위로 제한
+  // (Decision 023). 반경 컷오프는 없다.
   const baseItems = isSearchMode ? (searchResults ?? []) : selectedCategoryId ? provinceScopedCategoryItems : items;
 
   const visibleItems = useMemo(() => baseItems.slice(0, MARKER_LIMIT), [baseItems]);
@@ -395,19 +397,31 @@ export function MapExplorer() {
   // 사용자가 설정/온보딩한 위치(effectiveCenter)는 항상 있으므로 그걸 기준점으로
   // 폴백해 반경 필터·거리순 정렬·거리(km) 계산을 "항상" 적용한다. 검색 모드는
   // "이름으로 콕 짚어 찾는" 목적이라 이 재정렬을 적용하지 않는다(기존 원칙).
+  //
+  // [바텀시트는 도 단위 사전 필터 없이 순수 반경 기준](2026-09-10 사용자 지시,
+  // Decision 023): "바텀시트는 지도 마커 도단위 표시와 다르게 반경 설정하도록
+  // 되어있으니 반경 기준으로 나오는게 맞음 — 도단위 사전 필터 없이." 그래서
+  // 바텀시트 소스는 provinceScopedCategoryItems(=baseItems)가 아니라 광역 필터
+  // 이전의 categoryItems를 쓴다. 도 경계에 걸친 인접 스팟(예: 평택에서 10km인
+  // 천안 스팟)도 선택 반경 안이면 리스트/건수에 포함된다.
+  const sheetSourceItems = isSearchMode
+    ? (searchResults ?? [])
+    : selectedCategoryId
+    ? categoryItems
+    : items;
   const originLat = liveGpsPosition?.lat ?? effectiveCenter.lat;
   const originLng = liveGpsPosition?.lng ?? effectiveCenter.lng;
   const mobileSheetItems = useMemo(() => {
-    if (isSearchMode) return baseItems.slice(0, MARKER_LIMIT);
+    if (isSearchMode) return sheetSourceItems.slice(0, MARKER_LIMIT);
     const origin = { lat: originLat, lng: originLng };
-    return baseItems
+    return sheetSourceItems
       .map((item) => ({ item, gpsDistance: haversineDistanceMeters(origin, { lat: item.lat, lng: item.lng }) }))
       .filter(({ gpsDistance }) => gpsDistance <= sheetRadiusKm * 1000)
       .sort((a, b) => a.gpsDistance - b.gpsDistance)
       // ItemListPanel은 item.distance_meters를 그대로 표시하므로, 여기서
       // 기준점 기준 실제 거리로 덮어써야 화면에 보이는 거리도 정렬 기준과 일치한다.
       .map(({ item, gpsDistance }) => ({ ...item, distance_meters: gpsDistance }));
-  }, [isSearchMode, baseItems, originLat, originLng, sheetRadiusKm]);
+  }, [isSearchMode, sheetSourceItems, originLat, originLng, sheetRadiusKm]);
 
   const isBusy = isSearchMode ? isSearching : selectedCategoryId ? isCategoryLoading : isLoading;
   const activeError = isSearchMode ? searchError : selectedCategoryId ? categoryError : errorMessage;

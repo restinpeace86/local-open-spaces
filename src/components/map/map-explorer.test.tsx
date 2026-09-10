@@ -529,6 +529,36 @@ describe('MapExplorer 노출 중분류 전역 노출(2026-09-08)', () => {
     expect(screen.queryByText('simulate-marker-click-세종도서관')).not.toBeInTheDocument();
   });
 
+  it('바텀시트 리스트/건수는 도 단위 사전 필터 없이 순수 반경 기준으로 나온다(도 경계 인접 스팟 포함)', async () => {
+    // 현재 위치는 경기(도 스코프 = 경기+서울), 지도 기준점은 테스트 기본값 서울시청(37.5665/126.978).
+    mockUserLocation.addressName = '경기도 성남시 분당구 판교로 68';
+    rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow({ id: 'near-1', name: '반경내스팟' })], error: null });
+    rpcMock.mockResolvedValueOnce({
+      data: [
+        // 경기 · 반경 내(≈1.5km) → 지도 O, 바텀시트 O
+        makeSpaceRow({ id: 'gg-in', name: '경기근처도서관', address: '경기 성남시 A로 1', lat: 37.57, lng: 126.99 }),
+        // 충남 · 반경 내(≈1km) → 지도 X(도 필터), 바텀시트 O(반경만)
+        makeSpaceRow({ id: 'cn-in', name: '충남경계도서관', address: '충청남도 천안시 B로 2', lat: 37.56, lng: 126.98 }),
+        // 경기 · 반경 밖(≈12km) → 지도 O(반경 없음), 바텀시트 X(반경)
+        makeSpaceRow({ id: 'gg-far', name: '경기먼도서관', address: '경기 용인시 C로 3', lat: 37.5, lng: 127.1 }),
+      ],
+      error: null,
+    });
+
+    render(<MapExplorer />);
+    await screen.findByText('simulate-marker-click-반경내스팟');
+    fireEvent.click(screen.getAllByRole('button', { name: '문화시설' })[0]);
+    fireEvent.click(await within(screen.getByTestId('spot-category-sheet')).findByText('어린이 도서관'));
+
+    // 지도 마커: 경기 2건, 충남 0건(도 필터)
+    await screen.findByText('simulate-marker-click-경기근처도서관');
+    expect(screen.getByText('simulate-marker-click-경기먼도서관')).toBeInTheDocument();
+    expect(screen.queryByText('simulate-marker-click-충남경계도서관')).not.toBeInTheDocument();
+
+    // 바텀시트 건수: 반경 10km 내 2건(경기근처 + 충남경계) — 도 필터 없이 반경 기준
+    await waitFor(() => expect(screen.getByText(/주변 2건/)).toBeInTheDocument());
+  });
+
   it('현재 위치가 강원이면 강원 데이터만 남는다(인접 도 미포함)', async () => {
     mockUserLocation.addressName = '강원특별자치도 강릉시 E로 1';
     rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow({ id: 'near-1', name: '반경내스팟' })], error: null });

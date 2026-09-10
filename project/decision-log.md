@@ -546,9 +546,13 @@ Decision 022로 "노출 중분류 선택 시 지도는 반경 컷오프 없이 �
    매핑 건수가 적어(Decision 022에서 실측 최대 2,304건) 도 단위 데이터를
    클라이언트가 받아 거르는 부담이 무시할 만하고, RETURNS TABLE 변경("cannot
    change return type") 리스크를 피한다.
-4. **바텀시트 리스트 반경(5/10/20km)**: 위 광역 필터가 먼저 적용된 결과에
-   그대로 얹힌다(2026-09-10 Step 93에서 이미 "GPS 없어도 설정 위치 기준 반경
-   필터" 수정 완료).
+4. **바텀시트 리스트/건수는 도 단위 필터와 독립 — 순수 반경 기준**: 사용자
+   추가 확정 — "바텀시트는 지도 마커 도단위 표시와 다르게 반경 설정이 따로
+   있으니 반경 기준으로 나오는 게 맞다. 도단위 사전 필터 없이." 따라서 바텀시트
+   리스트/상단 건수(`mobileSheetItems`)는 **광역 필터 이전의 `categoryItems`**를
+   소스로 쓰고 선택 반경(5/10/20km)으로만 좁힌다 — 도 경계에 걸친 인접 스팟도
+   반경 안이면 포함된다. 도 단위 제한은 지도 마커(위 2번)에만 적용한다.
+   (2026-09-10 Step 93의 "GPS 없어도 설정 위치 기준 반경 필터" 수정은 그대로.)
 
 #### 결정 이유
 - 사용자가 실사용 후 "대구/세종까지 찍힌다"는 구체적 회귀를 직접 지적하고,
@@ -560,8 +564,10 @@ Decision 022로 "노출 중분류 선택 시 지도는 반경 컷오프 없이 �
 - **신규**: `src/lib/spaces/province.ts`(주소/시군구명 → 광역 정규화,
   `getVisibleProvinces`, `isSpotInProvinces`) + 단위 테스트.
 - **코드 영향**: `map-explorer.tsx` — `provinceScopedCategoryItems` useMemo로
-  `categoryItems`를 현재 위치 광역 기준 필터, `baseItems`/`isEmptyByFilter`가
-  이 값을 사용.
+  `categoryItems`를 현재 위치 광역 기준 필터. `baseItems`/`visibleItems`(지도
+  마커·데스크톱 목록)/`isEmptyByFilter`는 이 값을 사용하고, `mobileSheetItems`
+  (바텀시트 리스트·건수)는 광역 필터 이전의 `sheetSourceItems`(= `categoryItems`)를
+  써서 반경으로만 좁힌다.
 - `spec/map/spatial-search.md` §2.1을 이 Decision에 맞춰 개정(§3.1 마커 상한/
   클러스터링 정책은 변경 없음).
 - **후속(범위 밖)**: 대분류 바텀시트의 노출 중분류별 카운트(`/api/nearby/
