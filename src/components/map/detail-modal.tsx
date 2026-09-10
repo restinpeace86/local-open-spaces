@@ -273,21 +273,28 @@ export function DetailModal({
   // 컬럼을 만들지 않았다). 셋 다 없는(비큐레이션) 절대다수의 공공데이터 스팟은 이제
   // 예약 버튼 대신 안내 텍스트만 보여준다 — 무료 시설은 "예약 필요 없음", 그 외는
   // 정보 없음 안내로 오해를 방지한다.
-  // [스팟픽 상세 카드 예약 버튼 조건부 렌더링](2026-09-10 사용자 지시, todo.md
-  // 개선사항3-7·2-4): "현재 자사 예약 시스템이 구축되지 않은 상태이므로, 하단
-  // 버튼은 스팟별 DB에 등록된 외부 예약 링크(예: 네이버 예약 URL 등)의 유무에
-  // 따라 조건부로 노출". case 1(링크 있음) → 외부 연동 버튼, case 2(링크 없음) →
-  // "뜬금없는 '간편 예약/신청하기' 버튼이 노출되지 않도록" 영역 완전 숨김.
-  // 스팟픽 카드에서는 자체 간편 예약 폼(2026-08-29 도입)과 안내 텍스트를 쓰지
-  // 않는다 — 다른 화면(홈/이벤트픽/캘린더/지역별)은 기존 폴백 체인을 그대로 유지.
+  // [스팟픽 상세 카드 맨 아래 = "예약하기" 전용](2026-09-10 사용자 지시): "맨아래에
+  // 예약하기... 네이버 예약하기 있으면 해당 버튼이 그쪽으로 링크. 우리 기준은
+  // 우리 시스템에서 예약 가능한지 DB를 훑고 없으면 네이버 예약으로 넘어가도록
+  // (다만 자사 예약은 아직 미구현)." → 스팟픽 카드의 하단 버튼은 오직 예약
+  // 채널이다: 자사 예약 가능 신호(공간엔 reservation_url 컬럼이 없어 항상 null)
+  // → 없으면 관리자가 등록한 네이버 예약(naver_booking_url) → 그것도 없으면 버튼
+  // 자체를 숨긴다. 공식 홈페이지(info_url)는 "예약"이 아니라 정보라서 하단
+  // 버튼이 아니라 아래 상세 정보(dl)에 "홈페이지" 행으로 노출한다.
+  // 다른 화면(홈/이벤트픽/캘린더/지역별)은 기존 폴백 체인(공식 홈페이지 → 네이버
+  // 예약 → 자체 간편 예약 폼 → 안내 텍스트)을 그대로 유지한다.
   const secondaryAction = isEvent
     ? null
+    : spotPickCard
+    ? item.reservation_url
+      ? { type: 'link' as const, label: '📝 예약하기', href: item.reservation_url }
+      : curation?.naver_booking_url
+      ? { type: 'link' as const, label: '🟢 네이버로 예약하기', href: curation.naver_booking_url }
+      : null
     : item.info_url
     ? { type: 'link' as const, label: '🌐 공식 홈페이지 바로가기', href: item.info_url }
     : curation?.naver_booking_url
     ? { type: 'link' as const, label: '🟢 네이버로 예약하기', href: curation.naver_booking_url }
-    : spotPickCard
-    ? null
     : curation
     ? { type: 'reservation' as const, label: '📝 간편 예약/신청하기' }
     : {
@@ -546,6 +553,25 @@ export function DetailModal({
                   ) : (
                     MENU_PLACEHOLDER
                   )}
+                </dd>
+              </div>
+            )}
+
+            {/* [스팟픽 상세 카드 홈페이지 행](2026-09-10 사용자 지시): 공식 홈페이지
+                (info_url)는 "예약"이 아니라 정보라서 하단 예약 버튼이 아니라 이
+                상세 정보 영역에 링크 행으로 노출한다. */}
+            {spotPickCard && !isEvent && item.info_url && (
+              <div className="flex items-start justify-between gap-2">
+                <dt className="text-gray-500 shrink-0">홈페이지</dt>
+                <dd className="text-right">
+                  <a
+                    href={item.info_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm font-semibold text-blue-600 hover:underline"
+                  >
+                    공식 홈페이지 바로가기 ↗
+                  </a>
                 </dd>
               </div>
             )}

@@ -463,9 +463,19 @@ export function MapExplorer() {
       : items.length > 0 && visibleItems.length === 0);
 
   // spec/space/space-card.md 3, spec/event/event-card.md 3: 카드/마커 클릭 시 지도 panTo + 상세 모달 활성화
+  // [리스트 → 상세 → 닫기 후 리스트 포커스 복원](2026-09-10 사용자 지시): "카드
+  // 리스트 → 상세 카드 진입한 거면, 닫았을 때 카드 리스트에 그 누른 지점이
+  // 포커스 되어 있어야 한다." 리스트/필터에서 고른 항목 id를 상세를 닫아도
+  // 유지해, ItemListPanel이 그 행을 하이라이트 + 스크롤한다.
+  const [lastListSelectedId, setLastListSelectedId] = useState<string | null>(null);
   const handleSelectItem = useCallback((item: NearbyItem) => {
+    setLastListSelectedId(item.id);
     setSelectedItem(item);
   }, []);
+  // 목록 소스 자체가 바뀌면(노출 중분류 전환 / 검색 시작·종료) 이전 포커스는 무의미하다.
+  useEffect(() => {
+    setLastListSelectedId(null);
+  }, [selectedCategoryId, keyword]);
 
   // [마커 클릭/호버 → 상세 카드 바로 진입](2026-09-10 사용자 지시): 예전엔 마커
   // 클릭 → 화면 중앙/하단 고정 프리뷰 카드 → 다시 탭 → 상세(2단계)였다. 사용자가
@@ -476,6 +486,9 @@ export function MapExplorer() {
   // (="상세로 진입") 콜백만 받는다. 거리 보정(distance_meters -1 → 실제 거리)은
   // KakaoMapView가 originLat/originLng로 수행해 넘겨준다.
   const handleMarkerSelectItem = useCallback((item: NearbyItem) => {
+    // 마커로 들어온 흐름 — 리스트 포커스는 남기지 않는다("아까 마커로 들어왔으면
+    // 해당 마커 누른 것부터 시작").
+    setLastListSelectedId(null);
     setSelectedItem(item);
     setIsSheetExpanded(false);
   }, []);
@@ -536,6 +549,7 @@ export function MapExplorer() {
             onSelectAiRecommend={handleOpenAiRecommend}
             items={mobileSheetItems}
             badgesBySpotId={badgesBySpotId}
+            selectedListId={selectedItem?.id ?? lastListSelectedId}
             isItemsLoading={isBusy}
             onSelectItem={handleSelectItem}
             sheetRadiusKm={sheetRadiusKm}
@@ -550,7 +564,7 @@ export function MapExplorer() {
             <ItemListPanel
               items={visibleItems}
               badgesBySpotId={badgesBySpotId}
-              selectedId={selectedItem?.id ?? null}
+              selectedId={selectedItem?.id ?? lastListSelectedId}
               onSelect={handleSelectItem}
             />
           )}
@@ -609,6 +623,7 @@ export function MapExplorer() {
             onSelectAiRecommend={handleOpenAiRecommend}
             items={mobileSheetItems}
             badgesBySpotId={badgesBySpotId}
+            selectedListId={selectedItem?.id ?? lastListSelectedId}
             isItemsLoading={isBusy}
             onSelectItem={handleSelectItem}
             sheetRadiusKm={sheetRadiusKm}
@@ -672,7 +687,7 @@ export function MapExplorer() {
             <ItemListPanel
               items={mobileSheetItems}
               badgesBySpotId={badgesBySpotId}
-              selectedId={selectedItem?.id ?? null}
+              selectedId={selectedItem?.id ?? lastListSelectedId}
               onSelect={(item) => {
                 handleSelectItem(item);
                 setIsSheetExpanded(false);

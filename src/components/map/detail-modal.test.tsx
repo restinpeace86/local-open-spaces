@@ -688,6 +688,26 @@ describe('DetailModal 스팟픽 카드(spotPickCard)', () => {
     expect(link).toHaveAttribute('target', '_blank');
   });
 
+  it('info_url은 하단 예약 버튼이 아니라 상세 정보의 "홈페이지" 행 링크로만 노출된다', async () => {
+    mockSpotPickFetch({ curation: CURATION });
+    render(
+      <DetailModal
+        item={makeSpaceItem({ info_url: 'https://official.example.com' })}
+        onClose={() => {}}
+        spotPickCard
+        hideMapSection
+      />
+    );
+
+    await screen.findByText('트램폴린/방방');
+    const link = screen.getByText('공식 홈페이지 바로가기 ↗').closest('a');
+    expect(link).toHaveAttribute('href', 'https://official.example.com');
+    // 하단 예약 버튼(간편 예약/네이버 예약)은 없다 — naver_booking_url이 없으므로.
+    expect(screen.queryByText('🌐 공식 홈페이지 바로가기')).not.toBeInTheDocument();
+    expect(screen.queryByText('🟢 네이버로 예약하기')).not.toBeInTheDocument();
+    expect(screen.queryByText('📝 간편 예약/신청하기')).not.toBeInTheDocument();
+  });
+
   it('거리(길찾기) 버튼을 누르면 외부로 나가지 않고 인앱 지도 모달이 열린다', async () => {
     mockSpotPickFetch({ curation: CURATION });
     render(

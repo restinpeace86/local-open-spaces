@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { formatDDay } from '@/lib/spaces/d-day';
 import { formatDistance } from '@/lib/spaces/format';
@@ -27,6 +28,16 @@ export function ItemListPanel({
   // 스팟별 맞춤형 뱃지(+ "만 x세 이상"). 넘기지 않으면 뱃지 영역을 그리지 않는다.
   badgesBySpotId?: Record<string, SpotBadgeInfo>;
 }) {
+  // [리스트 → 상세 → 닫기 후 포커스 복원](2026-09-10 사용자 지시): 마지막으로 고른
+  // 항목이 목록에 보이면 그 위치로 스크롤한다(하이라이트는 selectedId로 이미 표시).
+  const selectedRef = useRef<HTMLLIElement | null>(null);
+  useEffect(() => {
+    // jsdom 등 일부 환경엔 scrollIntoView가 없다 — 방어적으로 호출한다.
+    if (selectedId && typeof selectedRef.current?.scrollIntoView === 'function') {
+      selectedRef.current.scrollIntoView({ block: 'nearest' });
+    }
+  }, [selectedId, items]);
+
   if (items.length === 0) {
     return (
       <div className="p-6 text-center text-sm text-gray-500">
@@ -47,12 +58,13 @@ export function ItemListPanel({
         ];
 
         return (
-          <li key={item.id}>
+          <li key={item.id} ref={isSelected ? selectedRef : undefined}>
             <button
               type="button"
               onClick={() => onSelect(item)}
-              className={`w-full text-left px-4 py-3 flex flex-col gap-1.5 hover:bg-gray-50 transition-colors ${
-                isSelected ? 'bg-blue-50' : ''
+              aria-current={isSelected ? 'true' : undefined}
+              className={`w-full text-left px-4 py-3 flex flex-col gap-1.5 transition-colors ${
+                isSelected ? 'bg-blue-50 ring-1 ring-inset ring-blue-300' : 'hover:bg-gray-50'
               }`}
             >
               {/* 1영역 1줄: 상호명(좌) + 거리(우) */}

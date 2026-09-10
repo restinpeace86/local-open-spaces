@@ -634,6 +634,50 @@ describe('MapExplorer 마커 클릭 → 상세 카드', () => {
     expect(await screen.findByText('주소')).toBeInTheDocument();
     expect(screen.queryByLabelText('미리보기 닫기')).not.toBeInTheDocument();
   });
+
+  // [리스트 → 상세 → 닫기 후 리스트 포커스 복원](2026-09-10 사용자 지시): "카드
+  // 리스트 → 상세 카드 진입한 거면, 닫았을 때 카드 리스트에 그 누른 지점이
+  // 포커스 되어 있어야 한다."
+  it('리스트에서 항목을 골라 상세를 열고 닫으면, 그 항목이 리스트에서 계속 포커스(aria-current)된다', async () => {
+    rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow()], error: null });
+    render(<MapExplorer />);
+    await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
+
+    const listItemButton = screen
+      .getAllByText('용인어린이상상의숲')
+      .map((el) => el.closest('button'))
+      .find((btn) => btn && !btn.textContent?.startsWith('simulate-marker-click'));
+    fireEvent.click(listItemButton!);
+    await screen.findByText('주소');
+
+    // 상세 카드 닫기(배경 클릭이 아니라 X 버튼) — DetailModal의 "닫기".
+    fireEvent.click(screen.getAllByLabelText('닫기')[0]);
+
+    await waitFor(() => expect(screen.queryByText('주소')).not.toBeInTheDocument());
+    // 리스트의 그 항목 버튼이 여전히 aria-current="true".
+    const focused = screen
+      .getAllByText('용인어린이상상의숲')
+      .map((el) => el.closest('button'))
+      .find((btn) => btn?.getAttribute('aria-current') === 'true');
+    expect(focused).toBeTruthy();
+  });
+
+  it('마커로 상세를 열고 닫으면 리스트 포커스는 남지 않는다', async () => {
+    rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow()], error: null });
+    render(<MapExplorer />);
+    await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
+
+    fireEvent.click(screen.getByText('simulate-marker-click-용인어린이상상의숲'));
+    await screen.findByText('주소');
+    fireEvent.click(screen.getAllByLabelText('닫기')[0]);
+    await waitFor(() => expect(screen.queryByText('주소')).not.toBeInTheDocument());
+
+    const focused = screen
+      .getAllByText('용인어린이상상의숲')
+      .map((el) => el.closest('button'))
+      .find((btn) => btn?.getAttribute('aria-current') === 'true');
+    expect(focused).toBeFalsy();
+  });
 });
 
 // [장소 단위 대표 1건 노출 — 그룹 펼쳐보기](2026-09-09 사용자 지시): "장소기준으로는
