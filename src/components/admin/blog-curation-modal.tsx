@@ -2,6 +2,7 @@
 
 import { ServiceCategory } from '@/lib/admin/service-category';
 import { useSpotCurationForm } from '@/lib/admin/use-spot-curation-form';
+import { AGE_HINT_KEYWORDS } from '@/lib/admin/curation-badges';
 import { BlogReferenceViewer } from '@/components/admin/blog-reference-viewer';
 import { CurationBadgeForm } from '@/components/admin/curation-badge-form';
 
@@ -78,6 +79,7 @@ export function BlogCurationModal({
           sortOption={form.sortOption}
           onSortOptionChange={form.setSortOption}
           regionKeywords={form.regionKeywords}
+          extraHighlightKeywords={AGE_HINT_KEYWORDS}
           hasRegionMismatchWarning={form.hasRegionMismatchWarning}
           curationCategoryId={form.curationCategoryId}
         />
@@ -91,6 +93,9 @@ export function BlogCurationModal({
           selectedBadges={form.selectedBadges}
           savedBadgeKeys={form.savedBadgeKeys}
           onToggleBadge={form.toggleBadge}
+          minAgeRecommended={form.minAgeRecommended}
+          onMinAgeChange={form.setMinAgeRecommended}
+          ageSuggestion={form.ageSuggestion}
           curationNote={form.curationNote}
           onCurationNoteChange={form.setCurationNote}
         />

@@ -184,6 +184,7 @@ describe('BlogCurationModal', () => {
       blog_url_3: 'https://blog.naver.com/3',
       curation_badges: ['parking', 'stroller'],
       curation_note: null,
+      min_age_recommended: 0,
     });
     // 본문(description)은 어디에도 전송되지 않는다(저장/폐기 정책).
     expect(JSON.stringify(body)).not.toContain('주차장이 넓고');

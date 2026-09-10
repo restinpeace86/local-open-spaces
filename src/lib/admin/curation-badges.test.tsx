@@ -1,12 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import { render } from '@testing-library/react';
 import {
+  aggregateMinAgeFromTexts,
+  clampMinAgeRecommended,
   getBadgeGroupsForCategory,
   getBadgeOptionsForCategory,
   highlightKeywords,
   isKnownCurationBadgeKey,
   matchBadgeKeysFromText,
   resolveCurationCategoryId,
+  suggestMinAgeFromText,
 } from './curation-badges';
 
 // [관리자용 블로그 큐레이션 모달](2026-09-05 사용자 지시, Decision 021) 단위 테스트.
@@ -267,6 +270,48 @@ describe('education_farm(체험농장·농원) 카테고리 뱃지', () => {
   it('단일 음절 키워드("양")는 오검출 방지를 위해 "양떼"로 구체화되어 있다', () => {
     expect(matchBadgeKeysFromText('수량이 많고 다양한 프로그램', 'education_farm')).toEqual(new Set());
     expect(matchBadgeKeysFromText('양떼 목장 체험', 'education_farm')).toEqual(new Set(['EDU_ANIMAL_EXPERIENCE']));
+  });
+});
+
+// [동적 연령 추천 시스템 — min_age_recommended](2026-09-10 사용자 지시,
+// implementation/todo.md 개선사항1): 후기 텍스트 → 추천 만 나이 하한 자동 판정.
+describe('suggestMinAgeFromText', () => {
+  it('미취학 제한 맥락("초등 이상"/"미취학 어려움")이면 7을 제안한다', () => {
+    expect(suggestMinAgeFromText('놀이 난이도가 있어서 초등 이상 추천이에요')).toBe(7);
+    expect(suggestMinAgeFromText('미취학 아이는 좀 어려워하더라고요')).toBe(7);
+    expect(suggestMinAgeFromText('초등학생부터 제대로 즐길 수 있어요')).toBe(7);
+  });
+
+  it('영유아 제한 맥락("영유아 힘들다"/"36개월 이하")이면 3을 제안한다', () => {
+    expect(suggestMinAgeFromText('영유아는 힘들 수 있어요')).toBe(3);
+    expect(suggestMinAgeFromText('36개월 이하는 입장이 안 됩니다')).toBe(3);
+  });
+
+  it('명시된 "만 N세 이상 / N세부터"는 그 숫자를 제안한다', () => {
+    expect(suggestMinAgeFromText('만 5세 이상만 이용 가능')).toBe(5);
+    expect(suggestMinAgeFromText('8세부터 참여할 수 있는 프로그램')).toBe(8);
+  });
+
+  it('단순 "3세 아이와 다녀왔어요"처럼 하한 표현이 없으면 제안하지 않는다', () => {
+    expect(suggestMinAgeFromText('3세 아이와 다녀왔는데 좋았어요')).toBeNull();
+    expect(suggestMinAgeFromText('평범한 후기입니다')).toBeNull();
+  });
+
+  it('여러 신호가 잡히면 가장 보수적인(큰) 값을 채택한다', () => {
+    expect(suggestMinAgeFromText('영유아는 어렵고 초등학생 이상이면 딱 좋아요')).toBe(7);
+  });
+
+  it('aggregateMinAgeFromTexts는 여러 본문 중 최댓값을, 신호 없으면 null을 반환한다', () => {
+    expect(aggregateMinAgeFromTexts(['영유아 어렵다는 후기', '초등 이상 추천'])).toBe(7);
+    expect(aggregateMinAgeFromTexts([null, '평범', undefined])).toBeNull();
+  });
+
+  it('clampMinAgeRecommended는 0~19로 제한하고 잘못된 값은 0으로 만든다', () => {
+    expect(clampMinAgeRecommended(7)).toBe(7);
+    expect(clampMinAgeRecommended(-3)).toBe(0);
+    expect(clampMinAgeRecommended(99)).toBe(19);
+    expect(clampMinAgeRecommended('abc')).toBe(0);
+    expect(clampMinAgeRecommended(5.7)).toBe(5);
   });
 });
 

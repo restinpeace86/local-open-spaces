@@ -461,3 +461,81 @@ export function matchBadgeKeysFromText(text: string, categoryId: string = DEFAUL
   }
   return matched;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// [동적 연령 추천 시스템 — min_age_recommended](2026-09-10 사용자 지시,
+// implementation/todo.md 개선사항1 "동적 연령 추천 시스템 (min_age_recommended)")
+//
+// 블로그 후기 본문에서 "이 스팟은 만 몇 세부터 추천하는가"를 1차 자동 판정한다.
+// 뱃지 자동 체크와 동일하게 관리자가 검수하며 숫자를 직접 바꿀 수 있는 세미오토
+// 방식이다(제5장 제4조 — 기존 큐레이션 워크플로 구조 재사용).
+//
+// 판정 규칙(스펙 원문):
+//  - "초등 이상"·"미취학 어려움"·"초등학생부터" 등 미취학 제한 맥락 → 7
+//  - "영유아 힘들다/어렵다"·"36개월 이하" 등 영유아 제한 맥락 → 3
+//  - 그 외 본문에 명시된 "만 N세 이상 / N세부터" → 그 숫자
+//  - 아무 신호 없으면 null(호출부에서 0 = 미노출로 취급)
+//  - 여러 신호가 잡히면 가장 큰(가장 보수적인) 값을 채택한다.
+// [해석 주의] "그 외 명시된 연령"은 "특정 연령 '제한'을 발견"하는 맥락이라, 단순
+// "3세 아이와 다녀왔어요" 같은 서술은 추천 하한이 아니므로 제외하고 "이상/부터"
+// 처럼 하한을 뜻하는 표현이 붙은 경우만 채택한다(제3장 제5조 — 근거 없는 추측
+// 지양).
+export const MIN_AGE_RECOMMENDED_MAX = 19;
+
+// 관리자가 후기를 검수하며 "특정 연령 제한을 발견하기 쉽게" 노란색으로 칠할
+// 나이 관련 키워드(스펙). highlightKeywords의 extraKeywords로 넘겨 뱃지 키워드와
+// 동일한 공백 무시 매칭·<mark> 처리를 그대로 태운다.
+export const AGE_HINT_KEYWORDS: string[] = [
+  '초등학생', '초등 이상', '초등학생 이상', '초등학생부터', '초등부터',
+  '미취학', '영유아', '돌쟁이', '취학 전',
+  '24개월', '36개월', '48개월', '개월 이상', '개월부터',
+  '세 이상', '세부터', '키 제한', '신장 제한', '몸무게 제한',
+];
+
+const PRESCHOOL_LIMIT_PATTERNS: RegExp[] = [
+  /초등\s*학?생?\s*(?:이상|부터)/,
+  /미취학[^.]{0,8}(?:어려|힘들|무리|불가|안\s*돼|비추)/,
+  /(?:어린\s*아이|미취학\s*아이|아기)[^.]{0,8}(?:어려|힘들|무리)/,
+];
+const INFANT_LIMIT_PATTERNS: RegExp[] = [
+  /영유아[^.]{0,10}(?:어려|힘들|무리|불가|비추|부적합)/,
+  /36\s*개월\s*(?:이하|미만)/,
+  /(?:돌쟁이|영아|아기)[^.]{0,8}(?:무리|힘들|어려|비추)/,
+];
+const EXPLICIT_AGE_PATTERN = /(?:만\s*)?(\d{1,2})\s*세\s*(?:이상|부터)/g;
+const EXPLICIT_MONTH_PATTERN = /(\d{2,3})\s*개월\s*(?:이상|부터)/g;
+
+export function suggestMinAgeFromText(text: string): number | null {
+  if (!text) return null;
+  const candidates: number[] = [];
+  if (PRESCHOOL_LIMIT_PATTERNS.some((re) => re.test(text))) candidates.push(7);
+  if (INFANT_LIMIT_PATTERNS.some((re) => re.test(text))) candidates.push(3);
+  for (const m of text.matchAll(EXPLICIT_AGE_PATTERN)) {
+    const n = Number(m[1]);
+    if (Number.isFinite(n) && n >= 1 && n <= MIN_AGE_RECOMMENDED_MAX) candidates.push(n);
+  }
+  for (const m of text.matchAll(EXPLICIT_MONTH_PATTERN)) {
+    const months = Number(m[1]);
+    if (Number.isFinite(months) && months >= 12) {
+      candidates.push(Math.min(MIN_AGE_RECOMMENDED_MAX, Math.floor(months / 12)));
+    }
+  }
+  if (candidates.length === 0) return null;
+  return Math.max(...candidates);
+}
+
+// 여러 블로그 본문을 종합할 때 쓰는 헬퍼 — 각 본문의 추천 하한 중 가장 보수적인
+// (큰) 값을 고른다. 신호가 하나도 없으면 null.
+export function aggregateMinAgeFromTexts(texts: Array<string | null | undefined>): number | null {
+  const values = texts
+    .map((t) => (t ? suggestMinAgeFromText(t) : null))
+    .filter((n): n is number => typeof n === 'number');
+  return values.length > 0 ? Math.max(...values) : null;
+}
+
+// 관리자 수동 입력값 정규화(음수/초과/비정수 방어). 0 = 미지정.
+export function clampMinAgeRecommended(value: unknown): number {
+  const n = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(MIN_AGE_RECOMMENDED_MAX, Math.floor(n));
+}

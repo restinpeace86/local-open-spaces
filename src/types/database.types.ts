@@ -770,6 +770,7 @@ export type Database = {
           is_active: boolean
           last_order: string | null
           menu_items: Json
+          min_age_recommended: number
           naver_booking_url: string | null
           open_time: string | null
           operating_hours_raw: string | null
@@ -793,6 +794,7 @@ export type Database = {
           is_active?: boolean
           last_order?: string | null
           menu_items?: Json
+          min_age_recommended?: number
           naver_booking_url?: string | null
           open_time?: string | null
           operating_hours_raw?: string | null
@@ -816,6 +818,7 @@ export type Database = {
           is_active?: boolean
           last_order?: string | null
           menu_items?: Json
+          min_age_recommended?: number
           naver_booking_url?: string | null
           open_time?: string | null
           operating_hours_raw?: string | null

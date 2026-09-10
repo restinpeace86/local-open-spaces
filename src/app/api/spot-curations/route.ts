@@ -28,7 +28,10 @@ export async function GET(request: NextRequest) {
         // "핵심 뱃지"를 보여주려면 curation_badges(키 배열)와, 그 키를 사람이
         // 읽을 라벨로 바꾸는 데 필요한 노출 중분류 이름(service_categories.
         // category_name, open_spaces를 거쳐 조인)이 함께 필요하다.
-        'id, spot_id, image_url, operating_hours_raw, open_time, close_time, break_start, break_end, last_order, menu_items, child_fee, guardian_fee, naver_booking_url, curation_note, curation_badges, open_spaces(service_categories(category_name))'
+        // [동적 연령 추천 시스템](2026-09-10 사용자 지시, todo.md 개선사항1):
+        // min_age_recommended > 0이면 소비자 화면에서 "만 x세 이상" 뱃지로
+        // 노출한다(0이면 미노출) — 값만 그대로 내려준다.
+        'id, spot_id, image_url, operating_hours_raw, open_time, close_time, break_start, break_end, last_order, menu_items, child_fee, guardian_fee, naver_booking_url, curation_note, curation_badges, min_age_recommended, open_spaces(service_categories(category_name))'
       )
       .eq('spot_id', spotId)
       .eq('is_active', true)

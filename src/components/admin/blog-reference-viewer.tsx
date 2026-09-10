@@ -38,6 +38,7 @@ export function BlogReferenceViewer({
   sortOption,
   onSortOptionChange,
   regionKeywords,
+  extraHighlightKeywords,
   hasRegionMismatchWarning,
   curationCategoryId,
 }: {
@@ -65,6 +66,11 @@ export function BlogReferenceViewer({
   // 경고를 보여준다(추가 크롤링 없음 — 사용자 지시). 둘 다 없으면(기존 호출부
   // 호환) 아무 동작도 하지 않는다.
   regionKeywords?: string[];
+  // [동적 연령 추천 시스템](2026-09-10 사용자 지시, todo.md 개선사항1): 지역명과
+  // 별개로, 나이 관련 키워드("초등학생", "36개월", "세 이상" 등)도 같은 방식으로
+  // 노란색 형광펜 처리해 "관리자가 특정 연령 제한을 발견하기 쉽게" 한다. 지역명
+  // 미스매치 경고 문구에는 포함하지 않으므로 regionKeywords와 분리해서 받는다.
+  extraHighlightKeywords?: string[];
   hasRegionMismatchWarning?: boolean;
   // [카테고리별 뱃지/룰 완전 독립 Config 구조](2026-09-07 개선사항4): "노출
   // 중분류" 콤보박스가 가리키는 카테고리의 키워드로만 하이라이트한다. 안 넘기면
@@ -73,6 +79,9 @@ export function BlogReferenceViewer({
   curationCategoryId?: string;
 }) {
   const activeItem = blogItems?.[activeTab] ?? null;
+  // 지역명 + 나이 키워드를 합쳐 하이라이트한다(미스매치 경고 문구에는 지역명만
+  // 쓰므로 그쪽은 regionKeywords 그대로 사용).
+  const highlightExtras = [...(regionKeywords ?? []), ...(extraHighlightKeywords ?? [])];
   const [isEditingUrl, setIsEditingUrl] = useState(false);
   const [urlDraft, setUrlDraft] = useState('');
 
@@ -231,7 +240,7 @@ export function BlogReferenceViewer({
                   제목도 포함시키고" — 제목도 뱃지 키워드/지역명과 같은 방식으로
                   하이라이트한다(기존엔 제목이 평문이었음). */}
               <p className="font-medium text-sm text-gray-900">
-                {highlightKeywords(activeItem.title, curationCategoryId, regionKeywords)}
+                {highlightKeywords(activeItem.title, curationCategoryId, highlightExtras)}
               </p>
 
               {/* [핵심 기능: 자동 형광펜 하이라이팅](사용자 지시 원문) +
@@ -256,18 +265,18 @@ export function BlogReferenceViewer({
 
               <div className="rounded-lg bg-gray-50 p-3 text-xs leading-relaxed text-gray-700">
                 {activeBody?.text
-                  ? highlightKeywords(activeBody.text, curationCategoryId, regionKeywords)
+                  ? highlightKeywords(activeBody.text, curationCategoryId, highlightExtras)
                   : activeBody?.isLoading
                     ? (
                         <>
                           {activeItem.description
-                            ? highlightKeywords(activeItem.description, curationCategoryId, regionKeywords)
+                            ? highlightKeywords(activeItem.description, curationCategoryId, highlightExtras)
                             : null}
                           <p className="mt-2 text-[11px] text-gray-400">전체 본문 불러오는 중...</p>
                         </>
                       )
                     : activeItem.description
-                      ? highlightKeywords(activeItem.description, curationCategoryId, regionKeywords)
+                      ? highlightKeywords(activeItem.description, curationCategoryId, highlightExtras)
                       : '(요약을 가져오지 못했습니다 — 원문 보기로 확인해주세요.)'}
               </div>
               {activeBody?.text && (

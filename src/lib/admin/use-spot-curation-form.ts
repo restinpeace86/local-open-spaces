@@ -2,7 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { buildSmartBlogQuery, buildFallbackBlogQuery, extractAllSigunguCoreNames } from './naver-blog-search';
-import { getBadgeGroupsForCategory, getBadgeOptionsForCategory, matchBadgeKeysFromText, resolveCurationCategoryId } from './curation-badges';
+import {
+  aggregateMinAgeFromTexts,
+  clampMinAgeRecommended,
+  getBadgeGroupsForCategory,
+  getBadgeOptionsForCategory,
+  matchBadgeKeysFromText,
+  resolveCurationCategoryId,
+} from './curation-badges';
 import { ServiceCategory } from './service-category';
 
 // [All-in-One 모바일 큐레이션 워크벤치](2026-09-05 사용자 지시)를 만들면서
@@ -42,6 +49,9 @@ export type SpotCurationItem = {
   blog_url_3: string | null;
   curation_badges: string[];
   curation_note: string | null;
+  // [동적 연령 추천 시스템](2026-09-10 사용자 지시, todo.md 개선사항1): 이 스팟을
+  // 추천하는 최소 만 나이. 0/null = 미지정(소비자 화면 "만 x세 이상" 뱃지 미노출).
+  min_age_recommended: number | null;
 };
 
 export type SpotForCuration = {
@@ -105,6 +115,13 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
   const [hasCheckedExistingCuration, setHasCheckedExistingCuration] = useState(false);
   const [hasAutoCheckedBadges, setHasAutoCheckedBadges] = useState(false);
   const [selectedBadges, setSelectedBadges] = useState<Set<string>>(new Set());
+  // [동적 연령 추천 시스템](2026-09-10 사용자 지시, todo.md 개선사항1): 만 나이
+  // 추천 하한. 0 = 미지정. 자동 체크는 딱 한 번만(뱃지 자동 체크와 동일한
+  // 경쟁 상태 안전장치) — 그 뒤엔 관리자 수동 입력만 반영한다. ageSuggestion은
+  // "자동으로 채워진 이유"를 화면에 알려주기 위한 참고값(현재 값과 별개).
+  const [minAgeRecommended, setMinAgeRecommendedState] = useState(0);
+  const [hasAutoCheckedAge, setHasAutoCheckedAge] = useState(false);
+  const [ageSuggestion, setAgeSuggestion] = useState<number | null>(null);
   // [뱃지 상태별 시각적 색상 구분](2026-09-08 사용자 지시, todo.md 개선사항2-1):
   // "AI가 키워드 기반으로 1차 자동 체크했으나 아직 DB에 저장되지 않은 상태는
   // 초록색, 기존에 이미 DB에 저장되어 불러와진 상태는 파란색" — "이미 저장됨"의
@@ -140,6 +157,11 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
     const validKeys = new Set(getBadgeOptionsForCategory(nextCurationCategoryId).map((opt) => opt.key));
     setSelectedBadges((prev) => new Set([...prev].filter((key) => validKeys.has(key))));
   }
+  // 관리자 수동 입력(스펙: "기준에 맞춰 수동으로 숫자를 변경입력가능해야 함").
+  function setMinAgeRecommended(next: number) {
+    setMinAgeRecommendedState(clampMinAgeRecommended(next));
+  }
+
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   // [큐레이션 메모 입력란](2026-09-06 사용자 지시): "내가 입력란에 좀.. 붙여넣을
@@ -215,6 +237,11 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
           setSelectedBadges(new Set(item.curation_badges ?? []));
           setSavedBadgeKeys(new Set(item.curation_badges ?? []));
           setCurationNote(item.curation_note ?? '');
+          // 이미 저장된 큐레이션이면 저장된 추천 연령을 그대로 쓰고, 블로그
+          // 본문 기반 자동 판정은 건너뛴다(관리자가 이미 검수한 값을 덮어쓰지
+          // 않음 — 뱃지 자동 체크와 동일 규약).
+          setMinAgeRecommendedState(clampMinAgeRecommended(item.min_age_recommended));
+          setHasAutoCheckedAge(true);
         }
       })
       .catch(() => {
@@ -283,15 +310,27 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
     if (!anyTextAvailable) return;
 
     const aggregated = new Set<string>();
+    const usableTexts: string[] = [];
     for (const item of blogItems) {
       const text = bodyByLink[item.link]?.text;
       if (!text) continue;
       if (hasRegionMismatch(item.title, text, regionKeywords)) continue;
+      usableTexts.push(text);
       for (const key of matchBadgeKeysFromText(text, curationCategoryId)) aggregated.add(key);
     }
     setSelectedBadges(aggregated);
     setHasAutoCheckedBadges(true);
-  }, [hasCheckedExistingCuration, existingCuration, hasAutoCheckedBadges, blogItems, bodyByLink, curationCategoryId, regionKeywords]);
+
+    // [동적 연령 추천 시스템](2026-09-10 개선사항1): 워닝 없는 블로그 본문들을
+    // 종합해 추천 만 나이 하한을 1차 자동 판정한다. 신호가 있을 때만 값을 채우고
+    // (없으면 0=미지정 유지), 이후엔 관리자 수동 입력만 반영한다.
+    if (!hasAutoCheckedAge) {
+      const suggested = aggregateMinAgeFromTexts(usableTexts);
+      setAgeSuggestion(suggested);
+      if (suggested !== null) setMinAgeRecommendedState(clampMinAgeRecommended(suggested));
+      setHasAutoCheckedAge(true);
+    }
+  }, [hasCheckedExistingCuration, existingCuration, hasAutoCheckedBadges, hasAutoCheckedAge, blogItems, bodyByLink, curationCategoryId, regionKeywords]);
 
   // [블로그 자동검색 결과가 실제와 다를 때 수동 교체](2026-09-05 사용자 지시): "가져오는데
   // 네이버 블로그 관련도순 검색했을때 이거아니야.." — 네이버 검색 API의 관련도 순위가
@@ -357,6 +396,7 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
         blog_url_3: blogItems?.[2]?.link ?? null,
         curation_badges: [...selectedBadges],
         curation_note: curationNote.trim() || null,
+        min_age_recommended: clampMinAgeRecommended(minAgeRecommended),
       };
       const res = existingCuration
         ? await fetch('/api/admin/spot-curations', {
@@ -410,6 +450,9 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
     toggleBadge,
     curationNote,
     setCurationNote,
+    minAgeRecommended,
+    setMinAgeRecommended,
+    ageSuggestion,
     serviceCategoryId,
     setServiceCategoryId,
     curationCategoryId,

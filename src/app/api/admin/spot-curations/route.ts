@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { escapeIlikePattern, splitSearchTokens } from '@/lib/search/keyword-search';
+import { clampMinAgeRecommended } from '@/lib/admin/curation-badges';
 
 // [개발 종합 요청] 스팟픽 MVP 스마트 폴백, 관리자 큐레이션 및 배치 안정화 고도화(2026-09-01)
 // 섹션 2: 관리자 전용 "스팟 큐레이션" CRUD. spot_curations는 RLS가 켜져 있고 정책이 없어
@@ -33,6 +34,9 @@ type SpotCurationRow = {
   blog_url_2: string | null;
   blog_url_3: string | null;
   curation_badges: string[];
+  // [동적 연령 추천 시스템](2026-09-10 사용자 지시, todo.md 개선사항1): 이 스팟을
+  // 추천하는 최소 만 나이(0 = 미지정). 관리자가 후기 검수로 채우는 세미오토 값.
+  min_age_recommended: number;
   created_at: string;
   updated_at: string;
   open_spaces: { name: string; address: string | null; category: string } | null;
@@ -143,6 +147,7 @@ export async function POST(request: NextRequest) {
         blog_url_2: normalizeUrl(body.blog_url_2),
         blog_url_3: normalizeUrl(body.blog_url_3),
         curation_badges: normalizeBadges(body.curation_badges),
+        min_age_recommended: clampMinAgeRecommended(body.min_age_recommended),
       })
       .select('*, open_spaces(name, address, category)')
       .single();
@@ -192,6 +197,7 @@ export async function PATCH(request: NextRequest) {
       blog_url_2: string | null;
       blog_url_3: string | null;
       curation_badges: string[];
+      min_age_recommended: number;
     }> = { updated_at: new Date().toISOString() };
     if (typeof body.is_active === 'boolean') updates.is_active = body.is_active;
     if ('image_url' in body) updates.image_url = typeof body.image_url === 'string' && body.image_url.trim() ? body.image_url.trim() : null;
@@ -212,6 +218,7 @@ export async function PATCH(request: NextRequest) {
     if ('blog_url_2' in body) updates.blog_url_2 = normalizeUrl(body.blog_url_2);
     if ('blog_url_3' in body) updates.blog_url_3 = normalizeUrl(body.blog_url_3);
     if ('curation_badges' in body) updates.curation_badges = normalizeBadges(body.curation_badges);
+    if ('min_age_recommended' in body) updates.min_age_recommended = clampMinAgeRecommended(body.min_age_recommended);
 
     if (Object.keys(updates).length === 1) {
       return NextResponse.json({ error: '수정할 필드가 없습니다.' }, { status: 400 });

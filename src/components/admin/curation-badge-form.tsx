@@ -23,6 +23,13 @@ export function CurationBadgeForm({
   // 상태는 파란색" — 이 Set에 들어있는 키만 "이미 저장됨"으로 판정한다.
   savedBadgeKeys,
   onToggleBadge,
+  // [동적 연령 추천 시스템](2026-09-10 사용자 지시, todo.md 개선사항1): "만 x세 이상
+  // 뱃지 / 기본값 0(미지정 시 뱃지 미노출) / 관리자가 후기를 검수하며 기준에 맞춰
+  // 수동으로 숫자를 변경입력가능해야 함". onMinAgeChange가 없으면(기존 호출부
+  // 호환) 이 입력란을 렌더링하지 않는다.
+  minAgeRecommended,
+  onMinAgeChange,
+  ageSuggestion,
   curationNote,
   onCurationNoteChange,
 }: {
@@ -34,6 +41,9 @@ export function CurationBadgeForm({
   selectedBadges: Set<string>;
   savedBadgeKeys: Set<string>;
   onToggleBadge: (key: string) => void;
+  minAgeRecommended?: number;
+  onMinAgeChange?: (value: number) => void;
+  ageSuggestion?: number | null;
   // [큐레이션 메모 입력란](2026-09-06 사용자 지시): "내가 입력란에 좀.. 붙여넣을
   // 수 있게.. 입력가능한 란도 하나 만들어줘" — 태그/키워드/자유 메모 등 무엇이든
   // 붙여넣을 수 있는 자유 입력란. 기존 SpotCurationsPanel의 "큐레이션 메모(선택)"
@@ -89,6 +99,34 @@ export function CurationBadgeForm({
           </div>
         ))}
       </div>
+
+      {onMinAgeChange && (
+        <div className="flex flex-col gap-1 text-sm">
+          <span className="font-medium text-gray-700">추천 연령 하한 (만 나이)</span>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min={0}
+              max={19}
+              value={minAgeRecommended ?? 0}
+              onChange={(e) => onMinAgeChange(Number(e.target.value))}
+              className="w-20 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+            />
+            <span className="text-xs text-gray-500">
+              {(minAgeRecommended ?? 0) > 0 ? `만 ${minAgeRecommended}세 이상 추천으로 노출` : '0 = 미노출(연령 뱃지 안 뜸)'}
+            </span>
+          </div>
+          {typeof ageSuggestion === 'number' && ageSuggestion > 0 && ageSuggestion !== (minAgeRecommended ?? 0) && (
+            <button
+              type="button"
+              onClick={() => onMinAgeChange(ageSuggestion)}
+              className="self-start rounded-full border border-amber-300 bg-amber-50 px-2.5 py-1 text-xs text-amber-700 hover:bg-amber-100"
+            >
+              후기 분석 제안: 만 {ageSuggestion}세 이상 적용
+            </button>
+          )}
+        </div>
+      )}
 
       {onCurationNoteChange && (
         <div className="flex flex-col gap-1 text-sm">
