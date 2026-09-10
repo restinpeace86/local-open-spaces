@@ -345,3 +345,9 @@ NEG_EDU_MACHINE_HAZARD (농기계 이동 구간 등 안전 주의): 농기계 �
       진입 즉시 안내 모달을 띄우지 않고 피드를 배경 프리뷰로 노출, 피드 위 투명 버튼 레이어가
       터치를 가로채 안내 팝업(SaessakMomGuideModal)을 띄운다. 글쓰기 폼은 레이어 밖이라 그대로
       사용 가능. (완료: 2026-09-10)
+
+### 개선사항5 진행 상태 (Harness 자율 실행)
+- [x] 개선사항5 (Step 97): 사용자 글쓰기 스팟 검색 최종 플로우 — SpotPicker 최소 3글자 + 디바운스 0.3초,
+      2단계 검색(내부 `/api/spots/search` → 부족 시 카카오 로컬 `/api/spots/search-external` Fallback 병합),
+      외부(미등록) 장소 탭 시 `/api/spots/upsert-external`로 open_spaces에 Auto-Upsert(external_id UNIQUE
+      dedup) 후 반환 id로 선택 완료. (완료: 2026-09-10)
