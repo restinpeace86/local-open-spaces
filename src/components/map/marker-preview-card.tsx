@@ -57,10 +57,12 @@ export function MarkerPreviewCard({
   const coreBadges = (curation?.badge_labels ?? []).slice(0, 2);
 
   return (
-    // 부모(previewEl)는 마커 꼭지 지점의 0×0 기준점 — 카드는 그 위쪽에 뜨도록
-    // absolute + bottom(=기준점) 기준으로 배치하고 아래로 말꼬리를 단다.
+    // 부모(previewEl)는 마커 핀 꼭지(좌표) 지점의 0×0 기준점. 프리뷰가 뜰 때
+    // 마커는 항상 1.5배로 커져(핀 높이 ≈ 54px, 특가 핀 ≈ 66px), 그 핀 위로
+    // 카드가 오도록 bottom을 핀 높이보다 크게 잡고, 카드 아래 말꼬리가 핀 상단을
+    // 가리키게 한다(예전 bottom-9는 핀 중앙 동그라미를 찔렀음).
     <div
-      className="absolute bottom-9 left-1/2 w-64 -translate-x-1/2"
+      className="absolute bottom-[60px] left-1/2 w-64 -translate-x-1/2"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
     >
