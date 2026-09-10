@@ -54,10 +54,14 @@ export function MomPickView() {
     setProfile(initialProfile);
   }, [initialProfile]);
 
-  // 새싹맘 미달성 상태에 처음 진입할 때 안내 모달을 연다 — 글 등록 후 승급되면
-  // (state가 'allowed'로 바뀌면) 자동으로 닫힌 것처럼 더 이상 조건에 걸리지 않는다.
+  // [맘스픽 메인 화면 투명 오버레이 온보딩 패턴](2026-09-10 사용자 지시, todo.md
+  // 개선사항4): "화면을 아예 숨기지 않고, 메인 화면을 보여주면서 유도" — 예전엔
+  // not_sprout_yet 진입 즉시 안내 모달을 띄웠는데(배경 프리뷰를 가림), 이제는
+  // 모달을 자동으로 띄우지 않고 피드를 프리뷰로 보여준 뒤, 피드를 터치하는 순간
+  // 투명 인터셉트 레이어가 이를 가로채 안내 팝업을 띄운다(아래 렌더 참고).
+  // 승급되면(state!=='not_sprout_yet') 조건에 더 이상 걸리지 않아 자동으로 닫힌다.
   useEffect(() => {
-    setIsGuideModalOpen(state === 'not_sprout_yet');
+    if (state !== 'not_sprout_yet') setIsGuideModalOpen(false);
   }, [state]);
 
   // [todo.md 개선사항 10](2026-09-03): "맘스픽 메인 화면은 비로그인도 View-Only로 접근
@@ -134,7 +138,7 @@ export function MomPickView() {
       </div>
 
       {(state === 'allowed' || state === 'guest' || state === 'not_sprout_yet') && (
-        <>
+        <div className="relative">
           {dashboardError && <p className="text-xs text-red-600">{dashboardError}</p>}
           {!dashboard && !dashboardError ? (
             <p className="text-sm text-gray-400">피드를 불러오는 중...</p>
@@ -160,7 +164,22 @@ export function MomPickView() {
               />
             </div>
           ) : null}
-        </>
+
+          {/* [투명 인터셉트 레이어](2026-09-10 사용자 지시, todo.md 개선사항4):
+              not_sprout_yet(로그인했지만 첫 글 미작성) 유저에게는 피드가 배경으로
+              보이되(미리보기), 피드 위 콘텐츠/링크 터치는 이 투명 버튼이 가로채
+              안내 팝업을 띄운다("누르는 것만 안되고, 눌렀을 때 첫 글 작성 유도").
+              글쓰기 폼(SurveyReviewComposer)은 이 레이어 밖(위쪽)에 있어 그대로
+              사용 가능하다. */}
+          {state === 'not_sprout_yet' && (
+            <button
+              type="button"
+              aria-label="첫 글을 작성하고 맘스픽 모든 기능 이용하기"
+              onClick={() => setIsGuideModalOpen(true)}
+              className="absolute inset-0 z-10 w-full cursor-pointer bg-transparent"
+            />
+          )}
+        </div>
       )}
 
       {isGuideModalOpen && (
