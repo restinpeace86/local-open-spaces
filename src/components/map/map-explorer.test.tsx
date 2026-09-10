@@ -667,19 +667,31 @@ describe('MapExplorer 바텀시트 GPS 거리순 정렬(개선사항3-1)', () =>
     expect(screen.getAllByText('서울시청카페')).toHaveLength(1);
   });
 
-  it('GPS를 가져올 수 없으면(권한 거부) 기존처럼 전체 목록을 그대로 보여준다(폴백)', async () => {
+  // [반경 필터가 GPS 없을 때 통째로 빠지던 버그 수정](2026-09-10 사용자 지시,
+  // todo.md 개선사항2-1·2-5): GPS 권한이 없어도 설정/온보딩한 위치(effectiveCenter,
+  // 테스트 기본값 서울시청 37.5665/126.978)를 기준점으로 폴백해 반경 필터·거리순
+  // 정렬·건수 카운트를 "항상" 적용한다(예전엔 GPS 없으면 전국구 결과를 그대로
+  // 내려줘 경북 칠곡 등 원거리 스팟이 상단에 노출되고 274건처럼 카운트도 틀렸다).
+  it('GPS를 가져올 수 없으면 설정 위치 기준으로 반경 필터/거리순 정렬이 적용된다', async () => {
     const getCurrentPosition = vi.fn((_success, error) => error());
     vi.stubGlobal('navigator', { geolocation: { getCurrentPosition } });
 
     rpcMock.mockResolvedValueOnce({
-      data: [makeSpaceRow({ id: 'seoul-1', name: '서울시청카페', lat: 37.5665, lng: 126.978 })],
+      data: [
+        makeSpaceRow({ id: 'seoul-1', name: '서울시청카페', lat: 37.5665, lng: 126.978 }),
+        // 설정 위치(서울시청)에서 수백 km 떨어진 부산 — 반경 밖이라 바텀시트에서 빠진다.
+        makeSpaceRow({ id: 'busan-1', name: '부산먼곳', lat: 35.1796, lng: 129.0756 }),
+      ],
       error: null,
     });
     render(<MapExplorer />);
     await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
 
     await waitFor(() => expect(getCurrentPosition).toHaveBeenCalled());
+    // 카운트는 반경 내 1건만.
     expect(await screen.findByText(/주변 1건/)).toBeInTheDocument();
+    // 반경 내(설정 위치와 동일 좌표)는 바텀시트에도 노출, 반경 밖 부산은 바텀시트에서 제외.
     expect(screen.getAllByText('서울시청카페').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getAllByText('부산먼곳')).toHaveLength(1); // 데스크톱 목록에만(바텀시트 제외)
   });
 });

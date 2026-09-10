@@ -349,16 +349,28 @@ export function MapExplorer() {
   // 가져왔으면(권한 거부 등) 기존 목록(최대 1,000건)으로 조용히 폴백한다(제5장
   // 제11조). 검색 모드는 "이름으로 콕 짚어 찾는" 목적이라 이 재정렬을 적용하지
   // 않는다(기존 원칙 그대로).
+  // [반경 필터·거리순 정렬이 GPS 없을 때 통째로 빠지던 버그 수정](2026-09-10 사용자
+  // 지시, todo.md 개선사항2-1·2-5): "반경 10km(Default)를 설정했음에도... 전혀
+  // 범위를 벗어난 원거리 지역(예: 경북 칠곡군 등)의 장소들이 상단에 노출... 274건
+  // 카운트가 실제 반경과 맞지 않음". 원인 — 실시간 GPS 좌표(liveGpsPosition)가
+  // 없으면(권한 거부/미허용) 반경 필터·거리순 정렬·거리 표시를 전부 건너뛰고
+  // 노출 중분류 전역 조회 결과(전국구)를 그대로 내려주고 있었다. GPS가 없어도
+  // 사용자가 설정/온보딩한 위치(effectiveCenter)는 항상 있으므로 그걸 기준점으로
+  // 폴백해 반경 필터·거리순 정렬·거리(km) 계산을 "항상" 적용한다. 검색 모드는
+  // "이름으로 콕 짚어 찾는" 목적이라 이 재정렬을 적용하지 않는다(기존 원칙).
+  const originLat = liveGpsPosition?.lat ?? effectiveCenter.lat;
+  const originLng = liveGpsPosition?.lng ?? effectiveCenter.lng;
   const mobileSheetItems = useMemo(() => {
-    if (isSearchMode || !liveGpsPosition) return baseItems.slice(0, MARKER_LIMIT);
+    if (isSearchMode) return baseItems.slice(0, MARKER_LIMIT);
+    const origin = { lat: originLat, lng: originLng };
     return baseItems
-      .map((item) => ({ item, gpsDistance: haversineDistanceMeters(liveGpsPosition, { lat: item.lat, lng: item.lng }) }))
+      .map((item) => ({ item, gpsDistance: haversineDistanceMeters(origin, { lat: item.lat, lng: item.lng }) }))
       .filter(({ gpsDistance }) => gpsDistance <= sheetRadiusKm * 1000)
       .sort((a, b) => a.gpsDistance - b.gpsDistance)
       // ItemListPanel은 item.distance_meters를 그대로 표시하므로, 여기서
-      // GPS 기준 실제 거리로 덮어써야 화면에 보이는 거리도 정렬 기준과 일치한다.
+      // 기준점 기준 실제 거리로 덮어써야 화면에 보이는 거리도 정렬 기준과 일치한다.
       .map(({ item, gpsDistance }) => ({ ...item, distance_meters: gpsDistance }));
-  }, [isSearchMode, baseItems, liveGpsPosition, sheetRadiusKm]);
+  }, [isSearchMode, baseItems, originLat, originLng, sheetRadiusKm]);
 
   const isBusy = isSearchMode ? isSearching : selectedCategoryId ? isCategoryLoading : isLoading;
   const activeError = isSearchMode ? searchError : selectedCategoryId ? categoryError : errorMessage;
