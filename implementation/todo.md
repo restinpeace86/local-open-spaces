@@ -385,3 +385,7 @@ NEG_EDU_MACHINE_HAZARD (농기계 이동 구간 등 안전 주의): 농기계 �
 - [x] Step 104: 제휴 상품 연동 스팟을 노출 중분류와 무관하게 스팟픽에 노출 — `get_deal_spots()` RPC +
       `/api/nearby/deal-spots` 응답에 `items` 추가. 노출 중분류 선택 시 지도 마커(도 스코프)·바텀시트
       (선택 반경, 거리순)에 제휴 스팟 병합. 기본/검색 모드는 미병합. (완료: 2026-09-10)
+- [x] Step 107: 맘스픽 비로그인(guest)/가입맘(not_sprout_yet)은 메인 미리보기만 — 투명 인터셉트
+      레이어를 guest에도 적용(클릭 → 로그인 프롬프트 / 첫 글 유도), 전체보기 API(expert/trending/live)는
+      새싹맘+만(비로그인 401), 메인 대시보드 미리보기는 게이팅 제거. full-list-view 접근 제한 안내 개선.
+      spec/community/mom-pick-grades.md 등급표 갱신. (완료: 2026-09-11)

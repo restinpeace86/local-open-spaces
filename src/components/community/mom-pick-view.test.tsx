@@ -20,6 +20,10 @@ vi.mock('./survey-review-composer', () => ({
   SurveyReviewComposer: () => <div data-testid="composer">설문형 리뷰 작성 폼</div>,
 }));
 vi.mock('./personalized-banner', () => ({ PersonalizedBanner: () => <div /> }));
+// 소셜 로그인 버튼(supabase OAuth)을 실제로 렌더하지 않도록 모달을 가볍게 스텁.
+vi.mock('./login-prompt-modal', () => ({
+  LoginPromptModal: () => <div>👑 맘스픽은 로그인 후 이용할 수 있어요</div>,
+}));
 
 import { MomPickView } from './mom-pick-view';
 
@@ -73,5 +77,30 @@ describe('MomPickView — 투명 오버레이 온보딩(개선사항4)', () => {
 
     await screen.findByText('🔥 인기 · 우수글');
     expect(screen.queryByLabelText('첫 글을 작성하고 맘스픽 모든 기능 이용하기')).not.toBeInTheDocument();
+  });
+
+  // [2026-09-11 사용자 지시] 비로그인(guest)도 미리보기는 보되 '전체보기' 등
+  // 클릭은 막고 로그인으로 유도한다(PC에서 그냥 눌려 들어가지던 문제).
+  it('guest: 피드는 프리뷰로 보이고, 피드 위 투명 레이어를 누르면 로그인 프롬프트가 뜬다', async () => {
+    mockAccessState.current = 'guest';
+    stubDashboardFetch();
+    render(<MomPickView />);
+
+    expect(await screen.findByText('🔥 인기 · 우수글')).toBeInTheDocument();
+    fireEvent.click(screen.getByLabelText('로그인하고 맘스픽 커뮤니티 이용하기'));
+
+    // LoginPromptModal이 뜬다.
+    expect(await screen.findByText('👑 맘스픽은 로그인 후 이용할 수 있어요')).toBeInTheDocument();
+  });
+
+  it('guest: 안내 모달(새싹맘)이 아니라 로그인 프롬프트로 분기한다', async () => {
+    mockAccessState.current = 'guest';
+    stubDashboardFetch();
+    render(<MomPickView />);
+
+    await screen.findByText('🔥 인기 · 우수글');
+    fireEvent.click(screen.getByLabelText('로그인하고 맘스픽 커뮤니티 이용하기'));
+
+    expect(screen.queryByText('🌱 아직 새싹맘 등급이 아니에요!')).not.toBeInTheDocument();
   });
 });

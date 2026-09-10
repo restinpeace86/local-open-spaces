@@ -165,17 +165,25 @@ export function MomPickView() {
             </div>
           ) : null}
 
-          {/* [투명 인터셉트 레이어](2026-09-10 사용자 지시, todo.md 개선사항4):
-              not_sprout_yet(로그인했지만 첫 글 미작성) 유저에게는 피드가 배경으로
-              보이되(미리보기), 피드 위 콘텐츠/링크 터치는 이 투명 버튼이 가로채
-              안내 팝업을 띄운다("누르는 것만 안되고, 눌렀을 때 첫 글 작성 유도").
-              글쓰기 폼(SurveyReviewComposer)은 이 레이어 밖(위쪽)에 있어 그대로
-              사용 가능하다. */}
-          {state === 'not_sprout_yet' && (
+          {/* [투명 인터셉트 레이어](2026-09-10 사용자 지시, todo.md 개선사항4 /
+              2026-09-11 확장): 비로그인(guest)·미등업(not_sprout_yet) 유저에게는
+              피드가 배경으로 보이되(미리보기), 피드 위 콘텐츠/전체보기 링크/카드
+              터치는 이 투명 버튼이 가로채 안내를 띄운다 — "누르는 것만 안되고,
+              눌렀을 때 로그인/첫 글 작성으로 유도". PC에서 '전체보기'가 그냥
+              눌려 들어가지던 문제를 이 레이어가 guest에도 적용되며 해결. 글쓰기
+              영역(SurveyReviewComposer / 로그인 CTA 버튼)은 이 레이어 밖(위쪽)이라
+              그대로 동작한다. */}
+          {(state === 'guest' || state === 'not_sprout_yet') && (
             <button
               type="button"
-              aria-label="첫 글을 작성하고 맘스픽 모든 기능 이용하기"
-              onClick={() => setIsGuideModalOpen(true)}
+              aria-label={
+                state === 'guest'
+                  ? '로그인하고 맘스픽 커뮤니티 이용하기'
+                  : '첫 글을 작성하고 맘스픽 모든 기능 이용하기'
+              }
+              onClick={() =>
+                state === 'guest' ? setIsGuestWritePromptOpen(true) : setIsGuideModalOpen(true)
+              }
               className="absolute inset-0 z-10 w-full cursor-pointer bg-transparent"
             />
           )}

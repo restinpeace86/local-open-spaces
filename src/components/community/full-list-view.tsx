@@ -52,7 +52,16 @@ export function FullListView({ title, apiPath }: { title: string; apiPath: strin
         <h1 className="text-lg font-bold text-gray-900">{title}</h1>
       </div>
 
-      {errorMessage && <p className="text-sm text-red-600">{errorMessage}</p>}
+      {errorMessage && (
+        // [전체보기 접근 제한 안내](2026-09-11 사용자 지시): 비로그인/미등업이 직접
+        // URL로 들어와도 raw 에러 대신 안내 + 맘스픽 메인(미리보기)으로 돌아가는 링크.
+        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 text-center">
+          <p className="text-sm text-gray-600">{errorMessage}</p>
+          <Link href="/mom-pick" className="mt-2 inline-block text-sm font-semibold text-indigo-600 hover:underline">
+            맘스픽 메인으로 돌아가기
+          </Link>
+        </div>
+      )}
 
       {isLoading ? (
         <p className="text-sm text-gray-400">불러오는 중...</p>
