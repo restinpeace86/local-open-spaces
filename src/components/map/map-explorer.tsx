@@ -24,6 +24,7 @@ import { useUserLocation } from '@/hooks/use-user-location';
 import { useGpsSyncCheck } from '@/hooks/use-gps-sync-check';
 import { useLiveGpsPosition } from '@/hooks/use-live-gps-position';
 import { haversineDistanceMeters } from '@/lib/geo/haversine';
+import { getProvinceFromText, getVisibleProvinces, isSpotInProvinces } from '@/lib/spaces/province';
 import { rankAiRecommendedSpots } from '@/lib/spaces/ai-recommend';
 
 // spec/map/spatial-search.md 3.1: 반경 내 최대 1,000개 마커만 우선 렌더링
@@ -134,6 +135,22 @@ export function MapExplorer() {
       cancelled = true;
     };
   }, [selectedCategoryId]);
+
+  // [노출 중분류 선택 시 현재 위치의 도(道) 단위로 제한](2026-09-10 사용자 지시,
+  // project/decision-log.md): 반경 컷오프는 폐지 상태 그대로 두되, 노출 중분류
+  // 전역 조회 결과를 "현재 설정 위치가 포함하는 도" 범위로 좁힌다 — 판교(경기)면
+  // 경기+서울, 강릉이면 강원. 노출 중분류 기준이라 도 단위 데이터가 충분히 커버
+  // 가능한 양이라, RPC를 바꾸지 않고 클라이언트에서 필터한다(회귀 위험 최소화).
+  // 현재 위치의 도를 판별하지 못하면(주소/시군구명에 광역 표기 없음) 필터하지
+  // 않는다(안전 폴백 — 근거 없이 스팟을 숨기지 않음).
+  const currentProvince = getProvinceFromText(addressName) ?? getProvinceFromText(sigunguName);
+  const visibleProvinces = getVisibleProvinces(currentProvince);
+  const provinceScopedCategoryItems = useMemo(() => {
+    if (!visibleProvinces) return categoryItems;
+    return categoryItems.filter((item) => isSpotInProvinces(item.address, item.sigungu_name, visibleProvinces));
+    // visibleProvinces는 매 렌더 새 배열이라 원시값(currentProvince)으로 의존한다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [categoryItems, currentProvince]);
 
   // [바텀시트 반경 선택](2026-09-08 사용자 지시): 5/10/20km 중 사용자가 눌러서
   // 고를 수 있다. 지도(전역 노출)와는 무관하게 바텀시트 결과 리스트에만 적용된다.
@@ -353,7 +370,7 @@ export function MapExplorer() {
   //   전역 노출, 반경 컷오프가 아예 없다.
   // - 둘 다 아니면 기존처럼 반경(5km) 기반 items를 쓴다.
   const isSearchMode = keyword.trim().length > 0;
-  const baseItems = isSearchMode ? (searchResults ?? []) : selectedCategoryId ? categoryItems : items;
+  const baseItems = isSearchMode ? (searchResults ?? []) : selectedCategoryId ? provinceScopedCategoryItems : items;
 
   const visibleItems = useMemo(() => baseItems.slice(0, MARKER_LIMIT), [baseItems]);
   const isOverLimit = baseItems.length > MARKER_LIMIT;
@@ -400,7 +417,7 @@ export function MapExplorer() {
     (isSearchMode
       ? searchResults !== null && visibleItems.length === 0
       : selectedCategoryId
-      ? categoryItems.length === 0
+      ? provinceScopedCategoryItems.length === 0
       : items.length > 0 && visibleItems.length === 0);
 
   // spec/space/space-card.md 3, spec/event/event-card.md 3: 카드/마커 클릭 시 지도 panTo + 상세 모달 활성화

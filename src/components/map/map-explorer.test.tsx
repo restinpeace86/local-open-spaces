@@ -53,6 +53,27 @@ vi.mock('@/lib/spaces/ai-recommend', async (importOriginal) => {
 });
 const { rankAiRecommendedSpots } = await import('@/lib/spaces/ai-recommend');
 
+// [노출 중분류 선택 시 현재 위치 도(道) 단위 노출](2026-09-10 사용자 지시): 도
+// 스코프 필터는 현재 위치의 광역(addressName/sigunguName의 앞 토큰)에 의존한다.
+// 기본값은 "위치 미설정"(addressName/sigunguName null)이라 필터가 걸리지 않아
+// 기존 테스트 동작이 그대로 유지된다 — 도 스코프 테스트에서만 값을 채운다.
+const mockUserLocation: { addressName: string | null; sigunguName: string | null } = {
+  addressName: null,
+  sigunguName: null,
+};
+vi.mock('@/hooks/use-user-location', () => ({
+  DEFAULT_CENTER: { lat: 37.5665, lng: 126.978 },
+  useUserLocation: () => ({
+    center: { lat: 37.5665, lng: 126.978 },
+    addressName: mockUserLocation.addressName,
+    sigunguName: mockUserLocation.sigunguName,
+    isOnboardingOpen: false,
+    confirmLocation: vi.fn(),
+    openOnboarding: vi.fn(),
+    closeOnboarding: vi.fn(),
+  }),
+}));
+
 vi.mock('@/components/map/kakao-map-view', () => ({
   KakaoMapView: ({
     items,
@@ -422,6 +443,8 @@ describe('MapExplorer 노출 중분류 전역 노출(2026-09-08)', () => {
   });
   afterEach(() => {
     vi.unstubAllGlobals();
+    mockUserLocation.addressName = null;
+    mockUserLocation.sigunguName = null;
   });
 
   it('중분류를 선택하면 반경/중심과 무관한 전국 조회 RPC(get_spots_by_service_category)를 그 id로 호출한다', async () => {
@@ -476,6 +499,55 @@ describe('MapExplorer 노출 중분류 전역 노출(2026-09-08)', () => {
 
     await screen.findByText('simulate-marker-click-반경내스팟');
     expect(screen.queryByText('simulate-marker-click-전국스팟')).not.toBeInTheDocument();
+  });
+
+  // [노출 중분류 선택 시 현재 위치 도(道) 단위 노출](2026-09-10 사용자 지시,
+  // project/decision-log.md): 반경 컷오프는 폐지 유지, 단 노출 중분류 데이터는
+  // 현재 설정 위치가 포함하는 도로 제한. 판교(경기) → 경기+서울, 그 외 도 제외.
+  it('중분류 데이터가 현재 위치의 도(경기 → 경기+서울)로 제한되고 다른 도는 지도에서 빠진다', async () => {
+    mockUserLocation.addressName = '경기도 성남시 분당구 판교로 68';
+    rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow({ id: 'near-1', name: '반경내스팟' })], error: null });
+    rpcMock.mockResolvedValueOnce({
+      data: [
+        makeSpaceRow({ id: 'gg-1', name: '경기도서관', address: '경기 성남시 분당구 A로 1' }),
+        makeSpaceRow({ id: 'seoul-1', name: '서울도서관', address: '서울특별시 중구 B로 2' }),
+        makeSpaceRow({ id: 'daegu-1', name: '대구도서관', address: '대구광역시 수성구 C로 3' }),
+        makeSpaceRow({ id: 'sejong-1', name: '세종도서관', address: '세종특별자치시 D로 4' }),
+      ],
+      error: null,
+    });
+
+    render(<MapExplorer />);
+    await screen.findByText('simulate-marker-click-반경내스팟');
+
+    fireEvent.click(screen.getAllByRole('button', { name: '문화시설' })[0]);
+    fireEvent.click(await within(screen.getByTestId('spot-category-sheet')).findByText('어린이 도서관'));
+
+    await screen.findByText('simulate-marker-click-경기도서관');
+    expect(screen.getByText('simulate-marker-click-서울도서관')).toBeInTheDocument();
+    expect(screen.queryByText('simulate-marker-click-대구도서관')).not.toBeInTheDocument();
+    expect(screen.queryByText('simulate-marker-click-세종도서관')).not.toBeInTheDocument();
+  });
+
+  it('현재 위치가 강원이면 강원 데이터만 남는다(인접 도 미포함)', async () => {
+    mockUserLocation.addressName = '강원특별자치도 강릉시 E로 1';
+    rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow({ id: 'near-1', name: '반경내스팟' })], error: null });
+    rpcMock.mockResolvedValueOnce({
+      data: [
+        makeSpaceRow({ id: 'gw-1', name: '강원도서관', address: '강원도 강릉시 F로 2' }),
+        makeSpaceRow({ id: 'gg-2', name: '경기도서관', address: '경기도 수원시 G로 3' }),
+      ],
+      error: null,
+    });
+
+    render(<MapExplorer />);
+    await screen.findByText('simulate-marker-click-반경내스팟');
+
+    fireEvent.click(screen.getAllByRole('button', { name: '문화시설' })[0]);
+    fireEvent.click(await within(screen.getByTestId('spot-category-sheet')).findByText('어린이 도서관'));
+
+    await screen.findByText('simulate-marker-click-강원도서관');
+    expect(screen.queryByText('simulate-marker-click-경기도서관')).not.toBeInTheDocument();
   });
 });
 
