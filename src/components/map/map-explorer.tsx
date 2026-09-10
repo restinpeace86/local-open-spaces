@@ -423,6 +423,36 @@ export function MapExplorer() {
       .map(({ item, gpsDistance }) => ({ ...item, distance_meters: gpsDistance }));
   }, [isSearchMode, sheetSourceItems, originLat, originLng, sheetRadiusKm]);
 
+  // [스팟픽 리스트 카드 뱃지](2026-09-10 사용자 지시, todo.md 개선사항2-3): 목록에
+  // 보이는 스팟들의 맞춤형 뱃지를 배치로 한 번에 가져와 ItemListPanel에 넘긴다.
+  // 목록에 실제로 나오는 항목(바텀시트 + 데스크톱 목록)의 id만 대상으로 한다.
+  const listBadgeIdsKey = useMemo(() => {
+    const ids = new Set<string>();
+    for (const it of mobileSheetItems) ids.add(it.id);
+    for (const it of visibleItems) ids.add(it.id);
+    return [...ids].sort().join(',');
+  }, [mobileSheetItems, visibleItems]);
+  const [badgesBySpotId, setBadgesBySpotId] = useState<Record<string, { labels: string[]; minAge: number }>>({});
+  useEffect(() => {
+    if (!listBadgeIdsKey) {
+      setBadgesBySpotId({});
+      return;
+    }
+    let cancelled = false;
+    const ids = listBadgeIdsKey.split(',').slice(0, 200).join(',');
+    fetch(`/api/nearby/spot-badges?ids=${encodeURIComponent(ids)}`)
+      .then((res) => res.json())
+      .then((data: { badges?: Record<string, { labels: string[]; minAge: number }> }) => {
+        if (!cancelled) setBadgesBySpotId(data.badges ?? {});
+      })
+      .catch(() => {
+        // 실패해도 목록은 상호명/거리/주소로 정상 노출된다(제5장 제11조).
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [listBadgeIdsKey]);
+
   const isBusy = isSearchMode ? isSearching : selectedCategoryId ? isCategoryLoading : isLoading;
   const activeError = isSearchMode ? searchError : selectedCategoryId ? categoryError : errorMessage;
   const isEmptyByFilter =
@@ -543,6 +573,7 @@ export function MapExplorer() {
             onSelectCategory={handleSelectCategory}
             onSelectAiRecommend={handleOpenAiRecommend}
             items={mobileSheetItems}
+            badgesBySpotId={badgesBySpotId}
             isItemsLoading={isBusy}
             onSelectItem={handleSelectItem}
             sheetRadiusKm={sheetRadiusKm}
@@ -556,6 +587,7 @@ export function MapExplorer() {
           {!isBusy && !activeError && !isEmptyByFilter && (
             <ItemListPanel
               items={visibleItems}
+              badgesBySpotId={badgesBySpotId}
               selectedId={selectedItem?.id ?? null}
               onSelect={handleSelectItem}
             />
@@ -622,6 +654,7 @@ export function MapExplorer() {
             onSelectCategory={handleSelectCategory}
             onSelectAiRecommend={handleOpenAiRecommend}
             items={mobileSheetItems}
+            badgesBySpotId={badgesBySpotId}
             isItemsLoading={isBusy}
             onSelectItem={handleSelectItem}
             sheetRadiusKm={sheetRadiusKm}
@@ -684,6 +717,7 @@ export function MapExplorer() {
           {!isBusy && !activeError && !isEmptyByFilter && (
             <ItemListPanel
               items={mobileSheetItems}
+              badgesBySpotId={badgesBySpotId}
               selectedId={selectedItem?.id ?? null}
               onSelect={(item) => {
                 handleSelectItem(item);

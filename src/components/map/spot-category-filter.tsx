@@ -28,6 +28,7 @@ export function SpotCategoryFilter({
   onSelectCategory,
   onSelectAiRecommend,
   items,
+  badgesBySpotId,
   isItemsLoading = false,
   onSelectItem = () => {},
   sheetRadiusKm,
@@ -44,6 +45,9 @@ export function SpotCategoryFilter({
   // (부모가 소유한 단일 진실 공급원 그대로 재사용 — 지도 마커/하단 상시 바텀시트와
   // 항상 같은 값).
   items?: NearbyItem[];
+  // [스팟픽 리스트 카드 뱃지](2026-09-10 개선사항2-3): 부모가 배치 조회한
+  // 스팟별 맞춤형 뱃지 맵을 그대로 ItemListPanel에 넘긴다.
+  badgesBySpotId?: Record<string, { labels: string[]; minAge: number }>;
   isItemsLoading?: boolean;
   onSelectItem?: (item: NearbyItem) => void;
   // [바텀시트 반경 선택](2026-09-08 사용자 지시): "반경 5km 혹은 10km 내 20km
@@ -216,6 +220,7 @@ export function SpotCategoryFilter({
                 {selectedCategory && selectedCategory.parent_category === openMajorLabel ? (
                   <ItemListPanel
                     items={items ?? []}
+                    badgesBySpotId={badgesBySpotId}
                     selectedId={null}
                     onSelect={(item) => {
                       onSelectItem(item);
