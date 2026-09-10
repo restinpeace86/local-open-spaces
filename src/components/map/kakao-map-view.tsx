@@ -27,6 +27,7 @@ export function KakaoMapView({
   items,
   dealSpotIds,
   dealBySpotId,
+  focusedItemId,
   originLat,
   originLng,
   focusPosition,
@@ -42,6 +43,10 @@ export function KakaoMapView({
   dealSpotIds?: Set<string>;
   // [마커 프리뷰 카드](2026-09-10 사용자 지시): 프리뷰 카드에 표시할 제휴 상품 맵.
   dealBySpotId?: Record<string, { title: string; bookingUrl: string }>;
+  // [포커스 마커 강조](2026-09-10 사용자 지시): "어떤 마커 눌렀는지 알 수 있게
+  // 포커스 동안은 마커 크기를 기본의 2배 이상으로." 현재 상세 카드가 열려 있는
+  // 스팟(또는 리스트에서 마지막으로 고른 스팟)의 마커를 크게 그린다.
+  focusedItemId?: string | null;
   // 거리 기준점(GPS 또는 설정 위치) — 노출 중분류 전역 조회 결과는 서버 거리가
   // -1이라, 프리뷰/상세 진입 시 이 좌표로 실제 거리를 계산해 채운다.
   originLat?: number;
@@ -89,6 +94,34 @@ export function KakaoMapView({
   const dealBySpotIdRef = useRef(dealBySpotId);
   dealBySpotIdRef.current = dealBySpotId;
 
+  // [포커스 마커 강조](2026-09-10 사용자 지시): id → { marker, 기본 이미지, 2배 이미지 }.
+  // 마커를 매번 다시 만들지 않고, 포커스/호버가 바뀔 때 해당 마커의 이미지만 교체한다.
+  const markerRegistryRef = useRef<Map<string, { marker: kakao.maps.Marker; normal: kakao.maps.MarkerImage; big: kakao.maps.MarkerImage }>>(new Map());
+  const emphasizedIdRef = useRef<string | null>(null);
+  const focusedItemIdRef = useRef<string | null>(focusedItemId ?? null);
+  focusedItemIdRef.current = focusedItemId ?? null;
+
+  function applyEmphasis(nextId: string | null) {
+    const reg = markerRegistryRef.current;
+    const prev = emphasizedIdRef.current;
+    if (prev && prev !== nextId) {
+      const e = reg.get(prev);
+      if (e) (e.marker as unknown as { setImage?: (i: kakao.maps.MarkerImage) => void }).setImage?.(e.normal);
+    }
+    if (nextId) {
+      const e = reg.get(nextId);
+      if (e) {
+        (e.marker as unknown as { setImage?: (i: kakao.maps.MarkerImage) => void; setZIndex?: (z: number) => void }).setImage?.(e.big);
+        (e.marker as unknown as { setZIndex?: (z: number) => void }).setZIndex?.(9);
+      }
+    }
+    emphasizedIdRef.current = nextId;
+  }
+  // 호버 프리뷰가 떠 있으면 그 마커를, 아니면 상세 카드가 연 마커를 강조한다.
+  function refreshEmphasis() {
+    applyEmphasis(previewItemRef.current?.id ?? focusedItemIdRef.current);
+  }
+
   // 노출 중분류 전역 조회 결과는 서버 거리가 -1 — 프리뷰/상세 진입 시 기준점으로 보정.
   function withDistance(item: NearbyItem): NearbyItem {
     const { lat, lng } = originRef.current;
@@ -106,16 +139,20 @@ export function KakaoMapView({
     clearHideTimer();
     const enriched = withDistance(item);
     setPreviewItem(enriched);
+    previewItemRef.current = enriched;
     const ov = previewOverlayRef.current;
     if (ov && mapRef.current) {
       ov.setPosition(new window.kakao.maps.LatLng(item.lat, item.lng));
       ov.setMap(mapRef.current);
     }
+    refreshEmphasis();
   }
   function hidePreview() {
     clearHideTimer();
     setPreviewItem(null);
+    previewItemRef.current = null;
     previewOverlayRef.current?.setMap(null);
+    refreshEmphasis();
   }
   function scheduleHide() {
     clearHideTimer();
@@ -311,6 +348,8 @@ export function KakaoMapView({
     // 비용이 있지만(최대 200개), 데이터 정합성이 성능보다 우선한다.
     clustererRef.current.clear();
     markersRef.current.forEach((marker) => marker.setMap(null));
+    markerRegistryRef.current.clear();
+    emphasizedIdRef.current = null;
 
     // 좌표가 완전히 동일한(소수 6자리 기준, 약 0.1m 이내) 항목들을 한 그룹으로 묶어,
     // 마커 클릭 시 몇 건이 겹쳐 있는지 판별한다.
@@ -325,24 +364,30 @@ export function KakaoMapView({
       }
     }
 
+    // 포커스 마커는 기본 크기의 2.4배로 그린다(사용자 지시: "기본크기의 2배 이상").
+    const EMPHASIS = 2.4;
     const markers = items.map((item) => {
       const meta = getCategoryMeta(item.category);
       const isDeal = dealSpotIds?.has(item.id) ?? false;
-      const image = isDeal
-        ? new window.kakao.maps.MarkerImage(buildDealMarkerSvgDataUrl(), new window.kakao.maps.Size(34, 44), {
-            offset: new window.kakao.maps.Point(17, 44),
-          })
-        : new window.kakao.maps.MarkerImage(buildMarkerSvgDataUrl(meta.color), new window.kakao.maps.Size(28, 36), {
-            offset: new window.kakao.maps.Point(14, 36),
-          });
+      const src = isDeal ? buildDealMarkerSvgDataUrl() : buildMarkerSvgDataUrl(meta.color);
+      const [w, h] = isDeal ? [34, 44] : [28, 36];
+      const normal = new window.kakao.maps.MarkerImage(src, new window.kakao.maps.Size(w, h), {
+        offset: new window.kakao.maps.Point(w / 2, h),
+      });
+      const big = new window.kakao.maps.MarkerImage(
+        src,
+        new window.kakao.maps.Size(Math.round(w * EMPHASIS), Math.round(h * EMPHASIS)),
+        { offset: new window.kakao.maps.Point(Math.round((w * EMPHASIS) / 2), Math.round(h * EMPHASIS)) }
+      );
 
       const marker = new window.kakao.maps.Marker({
         position: new window.kakao.maps.LatLng(item.lat, item.lng),
-        image,
+        image: normal,
       });
       // 특가 마커는 일반 마커 위로 올려 겹칠 때 가려지지 않게 한다(로컬 kakao 타입
       // 정의에 setZIndex가 빠져 있어 캐스팅해서 호출한다 — 실제 SDK엔 존재).
       if (isDeal) (marker as unknown as { setZIndex?: (z: number) => void }).setZIndex?.(5);
+      markerRegistryRef.current.set(item.id, { marker, normal, big });
 
       const key = `${item.lat.toFixed(6)},${item.lng.toFixed(6)}`;
       const isGrouped = (groupsByPosition.get(key)?.length ?? 1) > 1;
@@ -383,9 +428,18 @@ export function KakaoMapView({
 
     markersRef.current = markers;
     clustererRef.current.addMarkers(markers);
+    // 마커를 다시 만든 직후, 현재 포커스/호버 대상 마커를 크게 반영한다.
+    refreshEmphasis();
     // onSelectItem/onSelectGroup은 ref로 최신값을 읽으므로 의존성에서 제외한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, dealSpotIds]);
+
+  // [포커스 마커 강조](2026-09-10 사용자 지시): 상세 카드가 연 스팟(focusedItemId)이
+  // 바뀌면 해당 마커만 크게/원래대로 이미지 교체.
+  useEffect(() => {
+    refreshEmphasis();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusedItemId]);
 
   // 언마운트 시 프리뷰 타이머/오버레이 정리.
   useEffect(() => {

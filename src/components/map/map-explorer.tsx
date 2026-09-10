@@ -581,6 +581,7 @@ export function MapExplorer() {
           items={visibleItems}
           dealSpotIds={dealSpotIds}
           dealBySpotId={dealBySpotId}
+          focusedItemId={selectedItem?.id ?? null}
           originLat={originLat}
           originLng={originLng}
           focusPosition={focusPosition}
