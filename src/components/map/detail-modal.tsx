@@ -43,6 +43,12 @@ type SpotCuration = {
   guardian_fee: number | null;
   naver_booking_url: string | null;
   curation_note: string | null;
+  // [스팟픽 상세 카드 뱃지 영역](2026-09-10 사용자 지시, todo.md 개선사항3-2·2-2):
+  // 구형 레거시 뱃지(5대 UI 카테고리) 대신 노출 중분류에 맞는 맞춤형 뱃지만
+  // 보여준다. `/api/spot-curations`가 뱃지 키를 사람이 읽을 라벨로 미리 바꿔
+  // badge_labels로 내려준다. min_age_recommended > 0이면 "만 x세 이상" 뱃지.
+  badge_labels?: string[];
+  min_age_recommended?: number | null;
 };
 
 // 있는 것만 이어붙인다(추측으로 빈 칸을 채우지 않음) — formatCuratedHours와 동일한
@@ -82,6 +88,7 @@ export function DetailModal({
   hideMapSection = false,
   onExpandGroup,
   isExpandingGroup = false,
+  spotPickCard = false,
 }: {
   item: NearbyItem;
   onClose: () => void;
@@ -102,6 +109,12 @@ export function DetailModal({
   onExpandGroup?: (groupId: string) => void;
   // onExpandGroup 호출 후 결과를 기다리는 동안(부모 상태) 버튼을 잠가 중복 클릭을 막는다.
   isExpandingGroup?: boolean;
+  // [스팟픽 상세 카드 최종 UI](2026-09-10 사용자 지시, todo.md 개선사항3): 스팟픽
+  // 지도에서 여는 상세 카드에만 적용되는 재설계 — 구형 레거시 뱃지 배제 + 맞춤형
+  // 뱃지 노출, 거리 클릭 시 인앱 길찾기, 외부 예약 링크 없으면 예약 버튼 완전
+  // 숨김, 네이버 블로그 후기 동적 버튼. map-explorer.tsx만 이 값을 넘긴다 —
+  // 다른 화면(홈/이벤트픽/캘린더/지역별)은 기존 구조를 그대로 유지한다.
+  spotPickCard?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
   const [isMapPreviewOpen, setIsMapPreviewOpen] = useState(false);
@@ -110,6 +123,10 @@ export function DetailModal({
   // undefined = 아직 조회 전(로딩), null = 큐레이션 없음(정상), 객체 = 큐레이션 있음.
   // spot_curations는 open_spaces에만 FK가 있어(이벤트는 대상 아님) 이벤트는 조회하지 않는다.
   const [curation, setCuration] = useState<SpotCuration | null | undefined>(undefined);
+  // [스팟픽 상세 카드 네이버 블로그 후기](2026-09-10 사용자 지시, todo.md
+  // 개선사항3-5): 10일 캐싱(TTL)이 적용된 /api/spot-blog-reviews를 스팟픽 카드에서만
+  // 조회한다(다른 화면은 불필요한 요청을 만들지 않는다). URL이 0개면 영역 숨김.
+  const [blogUrls, setBlogUrls] = useState<string[]>([]);
   // [실측 디버깅 발견 — 뒤로가기 인터셉트 제거](2026-08-29): 이 모달을 React onClick 경로
   // (리스트/카드 클릭 등)로 열면 useModalBackClose 내부의 history.pushState 호출이 Next.js
   // App Router의 자체 라우팅 감지와 충돌해 모달이 아예 커밋되지 않거나(상태가 조용히
@@ -123,6 +140,13 @@ export function DetailModal({
   // 제거하고 핵심 기능(모달 열기/닫기)은 안전하게 복구한다.
   const meta = getCategoryMeta(item.category);
   const isEvent = item.item_type === 'EVENT';
+
+  // [스팟픽 상세 카드 뱃지 영역](2026-09-10 사용자 지시, todo.md 개선사항3-2·2-2):
+  // 구형 레거시 뱃지(meta.label — '키즈·액티비티' 등 5대 UI 카테고리)를 배제하고
+  // 노출 중분류 맞춤형 뱃지(badge_labels)와 "만 x세 이상"(min_age_recommended > 0)만
+  // 컴팩트하게 보여준다. 스팟픽 카드가 아닐 때는 기존 meta.label 그대로.
+  const spotBadgeLabels = spotPickCard && !isEvent && Array.isArray(curation?.badge_labels) ? curation!.badge_labels! : [];
+  const minAgeRecommended = spotPickCard && !isEvent ? curation?.min_age_recommended ?? 0 : 0;
 
   // [View/Reservation Fallback](2026-09-01 사용자 지시): 스팟(공간)에 한해 관리자가
   // 보강한 큐레이션 데이터를 조회한다. is_active=true인 것만 내려주는 공개 엔드포인트를
@@ -147,6 +171,28 @@ export function DetailModal({
       cancelled = true;
     };
   }, [item.id, isEvent]);
+
+  // [스팟픽 상세 카드 네이버 블로그 후기](2026-09-10 개선사항3-5): 스팟픽 카드에서만,
+  // 스팟(공간)에 한해 조회한다. 실패/0건이면 조용히 빈 배열 — 영역이 숨겨진다.
+  useEffect(() => {
+    if (!spotPickCard || isEvent) {
+      setBlogUrls([]);
+      return;
+    }
+    let cancelled = false;
+    setBlogUrls([]);
+    fetch(`/api/spot-blog-reviews?spot_id=${encodeURIComponent(item.id)}`)
+      .then((res) => res.json())
+      .then((data: { item?: { urls?: string[] } }) => {
+        if (!cancelled) setBlogUrls(Array.isArray(data.item?.urls) ? data.item!.urls! : []);
+      })
+      .catch(() => {
+        if (!cancelled) setBlogUrls([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [item.id, isEvent, spotPickCard]);
   // Task 9-6-2(2026-08-23, Decision 009): location_precision이 없으면(SPACE, 기존 EXACT 전용
   // 경로) EXACT로 간주한다. CITY_APPROX/UNKNOWN은 정확한 행사장 위치가 아니므로 지도/길찾기를
   // 보여주면 사용자를 오도한다 — 근사·미상 좌표를 정확한 핀처럼 그리지 않는다.
@@ -222,12 +268,21 @@ export function DetailModal({
   // 컬럼을 만들지 않았다). 셋 다 없는(비큐레이션) 절대다수의 공공데이터 스팟은 이제
   // 예약 버튼 대신 안내 텍스트만 보여준다 — 무료 시설은 "예약 필요 없음", 그 외는
   // 정보 없음 안내로 오해를 방지한다.
+  // [스팟픽 상세 카드 예약 버튼 조건부 렌더링](2026-09-10 사용자 지시, todo.md
+  // 개선사항3-7·2-4): "현재 자사 예약 시스템이 구축되지 않은 상태이므로, 하단
+  // 버튼은 스팟별 DB에 등록된 외부 예약 링크(예: 네이버 예약 URL 등)의 유무에
+  // 따라 조건부로 노출". case 1(링크 있음) → 외부 연동 버튼, case 2(링크 없음) →
+  // "뜬금없는 '간편 예약/신청하기' 버튼이 노출되지 않도록" 영역 완전 숨김.
+  // 스팟픽 카드에서는 자체 간편 예약 폼(2026-08-29 도입)과 안내 텍스트를 쓰지
+  // 않는다 — 다른 화면(홈/이벤트픽/캘린더/지역별)은 기존 폴백 체인을 그대로 유지.
   const secondaryAction = isEvent
     ? null
     : item.info_url
     ? { type: 'link' as const, label: '🌐 공식 홈페이지 바로가기', href: item.info_url }
     : curation?.naver_booking_url
     ? { type: 'link' as const, label: '🟢 네이버로 예약하기', href: curation.naver_booking_url }
+    : spotPickCard
+    ? null
     : curation
     ? { type: 'reservation' as const, label: '📝 간편 예약/신청하기' }
     : {
@@ -279,14 +334,33 @@ export function DetailModal({
           <div className="flex items-start justify-between gap-3">
             <div className="flex items-center gap-2 flex-wrap">
               {/* [카드 표준 중분류 표시](2026-08-27 사용자 지시): event_type 기반 5대 UI
-                  카테고리 대신 실제 표준 중분류(category_min)를 보여준다(이벤트 한정 —
-                  공간은 이 컬럼을 조회하지 않아 기존 라벨 그대로 유지). */}
-              <span
-                className="text-xs font-semibold px-2 py-0.5 rounded-full text-white"
-                style={{ backgroundColor: meta.color }}
-              >
-                {isEvent ? (item.category_min ?? meta.label) : meta.label}
-              </span>
+                  카테고리 대신 실제 표준 중분류(category_min)를 보여준다(이벤트 한정).
+                  [스팟픽 상세 카드 뱃지 영역](2026-09-10 개선사항3-2·2-2): 스팟픽
+                  카드는 구형 레거시 뱃지(meta.label)를 배제하고 맞춤형 뱃지만 노출. */}
+              {spotPickCard && !isEvent ? (
+                <>
+                  {minAgeRecommended > 0 && (
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                      만 {minAgeRecommended}세 이상
+                    </span>
+                  )}
+                  {spotBadgeLabels.map((label) => (
+                    <span
+                      key={label}
+                      className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700"
+                    >
+                      {label}
+                    </span>
+                  ))}
+                </>
+              ) : (
+                <span
+                  className="text-xs font-semibold px-2 py-0.5 rounded-full text-white"
+                  style={{ backgroundColor: meta.color }}
+                >
+                  {isEvent ? (item.category_min ?? meta.label) : meta.label}
+                </span>
+              )}
               {dDay && <span className="text-xs font-semibold text-red-600">{dDay}</span>}
               {!isEvent && item.is_free !== null && (
                 <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">
@@ -308,9 +382,23 @@ export function DetailModal({
             <h2 className="text-lg font-bold text-gray-900">{item.name}</h2>
             <BookmarkButton target={isEvent ? { kind: 'event', eventId: item.id } : { kind: 'spot', spotId: item.id }} />
           </div>
-          {item.distance_meters >= 0 && (
-            <p className="text-sm text-gray-400">현재 위치에서 {formatDistance(item.distance_meters)}</p>
-          )}
+          {/* [스팟픽 상세 카드 인터랙티브 거리/길찾기](2026-09-10 사용자 지시, todo.md
+              개선사항3-3·2-4): "현재 거리 클릭 시 서비스 내에 구현되어 있는 인앱 길찾기
+              API를 정상 호출하여 내 위치 기준 길안내 실행. 해당 거리 누르면 길 찾기가
+              될 거라는걸 직관적으로 알수 있게 노출." 정확한 좌표가 있을 때만 버튼으로,
+              아니면 기존처럼 단순 텍스트. */}
+          {item.distance_meters >= 0 &&
+            (spotPickCard && hasExactLocation ? (
+              <button
+                type="button"
+                onClick={() => setIsMapPreviewOpen(true)}
+                className="mt-0.5 inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:underline"
+              >
+                🧭 현재 위치에서 {formatDistance(item.distance_meters)} · 길찾기 <span aria-hidden>›</span>
+              </button>
+            ) : (
+              <p className="text-sm text-gray-400">현재 위치에서 {formatDistance(item.distance_meters)}</p>
+            ))}
 
           {!isEvent && item.group_id && onExpandGroup && (
             <button
@@ -321,6 +409,26 @@ export function DetailModal({
             >
               {isExpandingGroup ? '불러오는 중...' : '🔗 이 장소의 다른 예약 옵션 보기'}
             </button>
+          )}
+
+          {/* [스팟픽 상세 카드 네이버 블로그 후기 바로가기](2026-09-10 사용자 지시,
+              todo.md 개선사항3-5): 10일 캐싱(TTL)이 적용된 blog_urls를 활용해 저장된
+              URL 개수(최대 3개)만큼 동적으로 버튼을 노출한다. 터치 시 새 창(아웃바운드)
+              으로 열려 우리 앱 상태가 그대로 유지된다. URL이 없으면 영역 숨김. */}
+          {spotPickCard && !isEvent && blogUrls.length > 0 && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {blogUrls.map((url, i) => (
+                <a
+                  key={url}
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 rounded-full border border-green-500 bg-green-50 px-3 py-1 text-xs font-semibold text-green-700 hover:bg-green-100"
+                >
+                  📝 블로그 후기 {i + 1}
+                </a>
+              ))}
+            </div>
           )}
 
           {/* [상세보기 설명 추가](2026-08-27 사용자 지시): 제목만으로 내용을 파악하기 어려운

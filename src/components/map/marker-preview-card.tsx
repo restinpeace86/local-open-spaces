@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
+import { formatDistance } from '@/lib/spaces/format';
 
 // [스팟픽 UI/UX 개선 4종](2026-09-01 사용자 지시) 항목 1 "지도 마커 인터랙션 2단계 UX
 // 개편(표준 지도 앱 방식)": 마커 클릭 즉시 무거운 전체 상세 모달을 띄우지 않고, 먼저
@@ -95,8 +96,18 @@ export function MarkerPreviewCard({
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-gray-900 truncate">{item.name}</p>
-            <p className="text-xs text-gray-500 truncate">{item.address || meta.label}</p>
+            {/* [마커 카드 ↔ 상세 카드 일원화](2026-09-10 개선사항2-6): 상호명 + 거리
+                한 줄, 주소 다음 줄, 맞춤형 뱃지. 구형 레거시 라벨(meta.label)은 더
+                이상 폴백으로 쓰지 않는다(개선사항2-2·3-2). */}
+            <div className="flex items-baseline justify-between gap-2">
+              <p className="text-sm font-semibold text-gray-900 truncate">{item.name}</p>
+              {item.distance_meters >= 0 && (
+                <span className="shrink-0 text-xs font-semibold text-blue-600">
+                  🧭 {formatDistance(item.distance_meters)}
+                </span>
+              )}
+            </div>
+            {item.address && <p className="text-xs text-gray-500 truncate">{item.address}</p>}
             {coreBadges.length > 0 && (
               <div className="mt-1 flex gap-1">
                 {coreBadges.map((label) => (

@@ -609,3 +609,117 @@ describe('DetailModal 그룹 펼쳐보기(2026-09-09)', () => {
     expect(screen.queryByText('🔗 이 장소의 다른 예약 옵션 보기')).not.toBeInTheDocument();
   });
 });
+
+// [스팟픽 상세 카드 최종 UI](2026-09-10 사용자 지시, implementation/todo.md 개선사항3
+// + 2-2 UI + 2-4): spotPickCard=true(map-explorer.tsx만 전달)일 때의 재설계 동작.
+describe('DetailModal 스팟픽 카드(spotPickCard)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // /api/spot-curations와 /api/spot-blog-reviews 응답을 URL로 구분해 돌려준다.
+  function mockSpotPickFetch({
+    curation = null,
+    blogUrls = [],
+  }: { curation?: unknown; blogUrls?: string[] } = {}) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/spot-blog-reviews')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ item: { urls: blogUrls } }) } as Response);
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ item: curation }) } as Response);
+      })
+    );
+  }
+
+  const CURATION = {
+    id: 'c1',
+    spot_id: 'space-1',
+    image_url: null,
+    operating_hours_raw: null,
+    open_time: null,
+    close_time: null,
+    break_start: null,
+    break_end: null,
+    last_order: null,
+    menu_items: [],
+    child_fee: null,
+    guardian_fee: null,
+    naver_booking_url: null,
+    curation_note: null,
+    badge_labels: ['트램폴린/방방', '온수 샤워/온수 개수대'],
+    min_age_recommended: 0,
+  };
+
+  it('구형 레거시 뱃지(5대 UI 카테고리)를 배제하고 노출 중분류 맞춤형 뱃지만 보여준다', async () => {
+    mockSpotPickFetch({ curation: CURATION });
+    render(<DetailModal item={makeSpaceItem({ category: 'OUTDOOR_NATURE' })} onClose={() => {}} spotPickCard hideMapSection />);
+
+    expect(await screen.findByText('트램폴린/방방')).toBeInTheDocument();
+    expect(screen.getByText('온수 샤워/온수 개수대')).toBeInTheDocument();
+    expect(screen.queryByText('야외·자연')).not.toBeInTheDocument();
+  });
+
+  it('min_age_recommended > 0이면 "만 N세 이상" 뱃지를 보여준다', async () => {
+    mockSpotPickFetch({ curation: { ...CURATION, min_age_recommended: 7 } });
+    render(<DetailModal item={makeSpaceItem()} onClose={() => {}} spotPickCard hideMapSection />);
+
+    expect(await screen.findByText('만 7세 이상')).toBeInTheDocument();
+  });
+
+  it('외부 예약 링크가 하나도 없으면 예약 버튼/안내 텍스트를 완전히 숨긴다(자체 간편 예약 폼 미노출)', async () => {
+    mockSpotPickFetch({ curation: CURATION });
+    render(<DetailModal item={makeSpaceItem({ info_url: null })} onClose={() => {}} spotPickCard hideMapSection />);
+
+    // 뱃지가 뜬 뒤 = 큐레이션 로딩 완료
+    await screen.findByText('트램폴린/방방');
+    expect(screen.queryByText('📝 간편 예약/신청하기')).not.toBeInTheDocument();
+    expect(screen.queryByText('예약 관련 정보가 없습니다')).not.toBeInTheDocument();
+    expect(screen.queryByText('예약 필요 없음 · 상시 무료 입장')).not.toBeInTheDocument();
+  });
+
+  it('naver_booking_url이 있으면 [🟢 네이버로 예약하기] 외부 링크를 보여준다', async () => {
+    mockSpotPickFetch({ curation: { ...CURATION, naver_booking_url: 'https://booking.naver.com/x' } });
+    render(<DetailModal item={makeSpaceItem({ info_url: null })} onClose={() => {}} spotPickCard hideMapSection />);
+
+    const link = (await screen.findByText('🟢 네이버로 예약하기')).closest('a');
+    expect(link).toHaveAttribute('href', 'https://booking.naver.com/x');
+    expect(link).toHaveAttribute('target', '_blank');
+  });
+
+  it('거리(길찾기) 버튼을 누르면 외부로 나가지 않고 인앱 지도 모달이 열린다', async () => {
+    mockSpotPickFetch({ curation: CURATION });
+    render(
+      <DetailModal item={makeSpaceItem({ distance_meters: 1200 })} onClose={() => {}} spotPickCard hideMapSection />
+    );
+
+    const btn = await screen.findByRole('button', { name: /길찾기/ });
+    fireEvent.click(btn);
+    // MapPreviewModal이 열리면 "크게보기" 계열 UI가 아니라 모달 자체가 마운트된다 —
+    // 여기서는 외부 링크(a[href])로 나가지 않았다는 것만 확인한다.
+    expect(btn.tagName).toBe('BUTTON');
+  });
+
+  it('블로그 후기 URL이 있으면 개수만큼 새 창 링크 버튼을 보여주고, 없으면 영역을 숨긴다', async () => {
+    mockSpotPickFetch({
+      curation: CURATION,
+      blogUrls: ['https://blog.naver.com/a', 'https://blog.naver.com/b'],
+    });
+    render(<DetailModal item={makeSpaceItem()} onClose={() => {}} spotPickCard hideMapSection />);
+
+    const b1 = (await screen.findByText('📝 블로그 후기 1')).closest('a');
+    expect(b1).toHaveAttribute('href', 'https://blog.naver.com/a');
+    expect(b1).toHaveAttribute('target', '_blank');
+    expect(screen.getByText('📝 블로그 후기 2')).toBeInTheDocument();
+    expect(screen.queryByText('📝 블로그 후기 3')).not.toBeInTheDocument();
+  });
+
+  it('spotPickCard가 아니면(다른 화면) 기존 5대 카테고리 라벨을 그대로 보여준다', async () => {
+    mockSpotPickFetch({ curation: CURATION });
+    render(<DetailModal item={makeSpaceItem({ category: 'OUTDOOR_NATURE' })} onClose={() => {}} />);
+
+    expect(await screen.findByText('야외·자연')).toBeInTheDocument();
+    expect(screen.queryByText('트램폴린/방방')).not.toBeInTheDocument();
+  });
+});

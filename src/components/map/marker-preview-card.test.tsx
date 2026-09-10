@@ -80,6 +80,29 @@ describe('MarkerPreviewCard', () => {
     expect(screen.getByText('🖼️')).toBeInTheDocument();
   });
 
+  // [마커 카드 ↔ 상세 카드 일원화](2026-09-10 사용자 지시, todo.md 개선사항2-6):
+  // 상호명 + 거리(km) 한 줄, 주소 다음 줄, 맞춤형 뱃지. 구형 레거시 라벨은 폴백에서도 배제.
+  it('거리(km)를 상호명 옆에 보여준다', async () => {
+    mockCurationResponse(null);
+    render(<MarkerPreviewCard item={makeItem({ distance_meters: 1200 })} onOpenDetail={vi.fn()} onClose={vi.fn()} />);
+
+    expect(await screen.findByText(/🧭\s*1\.2km/)).toBeInTheDocument();
+  });
+
+  it('주소가 없어도 구형 레거시 카테고리 라벨을 대신 보여주지 않는다', async () => {
+    mockCurationResponse(null);
+    render(
+      <MarkerPreviewCard
+        item={makeItem({ address: null, category: 'OUTDOOR_NATURE' })}
+        onOpenDetail={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    await screen.findByText('행복키즈카페');
+    expect(screen.queryByText('야외·자연')).not.toBeInTheDocument();
+  });
+
   it('카드를 클릭하면 상세보기가, ✕를 클릭하면 닫기가 호출된다', async () => {
     mockCurationResponse(null);
     const onOpenDetail = vi.fn();

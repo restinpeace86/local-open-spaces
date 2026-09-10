@@ -400,10 +400,24 @@ export function MapExplorer() {
   // 펼쳐진(70vh) 상태에서 마커를 누르면 그 큰 시트가 카드를 다시 가릴 수 있어, 마커를
   // 누르는 순간 시트를 접어 항상 카드가 보이게 한다(리스트에서 항목을 고를 때 이미
   // 동일하게 처리하던 것과 같은 정책 — 위 handleSelectItem 참고).
-  const handleMarkerSelectItem = useCallback((item: NearbyItem) => {
-    setPreviewItem(item);
-    setIsSheetExpanded(false);
-  }, []);
+  // [마커 카드 ↔ 상세 카드 일원화](2026-09-10 사용자 지시, todo.md 개선사항2-6):
+  // "마커 클릭 시 뜨는 카드의 레이아웃을 상세 카드와 동일한 구조(좌측 이미지,
+  // 상호명, 거리, 주소, 카테고리 맞춤형 뱃지)로 통일". 노출 중분류 전역 조회는
+  // 서버 distance_meters가 -1이라(거리 기준점이 없음), 바텀시트와 동일하게 여기서
+  // 기준점(GPS 또는 설정 위치)으로부터의 실제 거리를 계산해 채워 넣는다 — 이
+  // 카드를 다시 눌러 여는 상세 카드(handleOpenDetailFromPreview)도 이 값을 그대로
+  // 물려받아 거리/길찾기가 동작한다.
+  const handleMarkerSelectItem = useCallback(
+    (item: NearbyItem) => {
+      const gpsDistance = haversineDistanceMeters(
+        { lat: originLat, lng: originLng },
+        { lat: item.lat, lng: item.lng }
+      );
+      setPreviewItem({ ...item, distance_meters: gpsDistance });
+      setIsSheetExpanded(false);
+    },
+    [originLat, originLng]
+  );
 
   const handleOpenDetailFromPreview = useCallback(() => {
     setSelectedItem(previewItem);
@@ -644,6 +658,7 @@ export function MapExplorer() {
           item={selectedItem}
           onClose={() => setSelectedItem(null)}
           hideMapSection
+          spotPickCard
           onExpandGroup={handleExpandGroup}
           isExpandingGroup={isExpandingGroup}
         />
