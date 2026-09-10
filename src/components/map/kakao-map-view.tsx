@@ -1,10 +1,13 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { loadKakaoMapSdk } from '@/lib/kakao/load-kakao-sdk';
 import { buildMarkerSvgDataUrl, buildDealMarkerSvgDataUrl } from '@/lib/kakao/marker-image';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
+import { haversineDistanceMeters } from '@/lib/geo/haversine';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
+import { MarkerPreviewCard } from '@/components/map/marker-preview-card';
 
 // Task 9-6-10(2026-08-23): 파란 반경 원(Circle)이 하던 "반경에 맞춰 지도를 자동으로 맞춤"
 // 역할을 원 없이 대체한다. 카카오맵 레벨은 숫자가 커질수록 축소(더 넓은 범위)되는데, 정확한
@@ -23,6 +26,9 @@ export function KakaoMapView({
   radius,
   items,
   dealSpotIds,
+  dealBySpotId,
+  originLat,
+  originLng,
   focusPosition,
   onSelectItem,
   onSelectGroup,
@@ -34,7 +40,16 @@ export function KakaoMapView({
   // [제휴 상품 연동 특별 마커](2026-09-10 사용자 지시, todo.md 개선사항6): 노출
   // 활성화된 제휴 상품이 연동된 스팟 id 집합. 이 스팟들은 🔥 특가 마커로 그린다.
   dealSpotIds?: Set<string>;
+  // [마커 프리뷰 카드](2026-09-10 사용자 지시): 프리뷰 카드에 표시할 제휴 상품 맵.
+  dealBySpotId?: Record<string, { title: string; bookingUrl: string }>;
+  // 거리 기준점(GPS 또는 설정 위치) — 노출 중분류 전역 조회 결과는 서버 거리가
+  // -1이라, 프리뷰/상세 진입 시 이 좌표로 실제 거리를 계산해 채운다.
+  originLat?: number;
+  originLng?: number;
   focusPosition?: { lat: number; lng: number } | null;
+  // [마커 클릭/호버 → 상세 진입](2026-09-10 사용자 지시): PC는 마커 호버 시
+  // 프리뷰 카드(마커에 앵커), 클릭 시 상세. 모바일은 첫 탭에 프리뷰, 프리뷰
+  // 탭에 상세. onSelectItem은 "상세 카드로 진입"을 의미한다.
   onSelectItem: (item: NearbyItem) => void;
   // [겹친 마커 처리](2026-08-29 사용자 지시): 원본 데이터가 동일 좌표를 공유하는 경우
   // (예: 아파트 단지 내 개별 놀이터가 단지 대표 주소 좌표로만 등록된 경우) 마커가 완전히
@@ -53,6 +68,63 @@ export function KakaoMapView({
   const userPulseOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null);
   const onDragEndRef = useRef(onDragEnd);
   onDragEndRef.current = onDragEnd;
+
+  // [마커 프리뷰 카드 — 마커에 앵커](2026-09-10 사용자 지시): 프리뷰 카드를 마커
+  // 좌표에 붙은 CustomOverlay 안(포털)으로 렌더링해, 지도를 움직여도 마커와 함께
+  // 이동하게 한다("가운데 고정으로 뜨면 마커랑 따로 노는 것처럼 보임").
+  const previewOverlayRef = useRef<kakao.maps.CustomOverlay | null>(null);
+  const [previewAnchorEl, setPreviewAnchorEl] = useState<HTMLElement | null>(null);
+  const [previewItem, setPreviewItem] = useState<NearbyItem | null>(null);
+  const previewItemRef = useRef<NearbyItem | null>(null);
+  previewItemRef.current = previewItem;
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // PC(정밀 포인터 + 호버 지원) 여부 — 호버로 프리뷰, 클릭으로 상세.
+  const canHoverRef = useRef(false);
+  const onSelectItemRef = useRef(onSelectItem);
+  onSelectItemRef.current = onSelectItem;
+  const onSelectGroupRef = useRef(onSelectGroup);
+  onSelectGroupRef.current = onSelectGroup;
+  const originRef = useRef<{ lat?: number; lng?: number }>({ lat: originLat, lng: originLng });
+  originRef.current = { lat: originLat, lng: originLng };
+  const dealBySpotIdRef = useRef(dealBySpotId);
+  dealBySpotIdRef.current = dealBySpotId;
+
+  // 노출 중분류 전역 조회 결과는 서버 거리가 -1 — 프리뷰/상세 진입 시 기준점으로 보정.
+  function withDistance(item: NearbyItem): NearbyItem {
+    const { lat, lng } = originRef.current;
+    if (item.distance_meters >= 0 || lat == null || lng == null) return item;
+    return { ...item, distance_meters: haversineDistanceMeters({ lat, lng }, { lat: item.lat, lng: item.lng }) };
+  }
+
+  function clearHideTimer() {
+    if (hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
+    }
+  }
+  function showPreview(item: NearbyItem) {
+    clearHideTimer();
+    const enriched = withDistance(item);
+    setPreviewItem(enriched);
+    const ov = previewOverlayRef.current;
+    if (ov && mapRef.current) {
+      ov.setPosition(new window.kakao.maps.LatLng(item.lat, item.lng));
+      ov.setMap(mapRef.current);
+    }
+  }
+  function hidePreview() {
+    clearHideTimer();
+    setPreviewItem(null);
+    previewOverlayRef.current?.setMap(null);
+  }
+  function scheduleHide() {
+    clearHideTimer();
+    hideTimerRef.current = setTimeout(hidePreview, 220);
+  }
+  function goDetail(item: NearbyItem) {
+    hidePreview();
+    onSelectItemRef.current(withDistance(item));
+  }
   // [지도 중심 불일치 버그 수정](2026-08-29 사용자 제보: "위치는 성남시 분당구인데 지도는
   // 서울시청"): 아래 최초 지도 생성 effect는 deps가 []라 마운트 시점 단 한 번만 실행되는데,
   // `loadKakaoMapSdk()`가 비동기(스크립트 로드)라 그 콜백이 실제로 실행되는 시점은 항상
@@ -134,6 +206,24 @@ export function KakaoMapView({
       });
       pulseOverlay.setMap(map);
       userPulseOverlayRef.current = pulseOverlay;
+
+      // [마커 프리뷰 카드 앵커](2026-09-10): 마커 좌표에 붙는 빈 컨테이너 오버레이.
+      // 실제 카드는 아래 createPortal로 이 div에 렌더링한다. yAnchor=1이면 오버레이
+      // 아래 끝이 마커 위치 — 카드가 마커 위쪽에 뜬다.
+      canHoverRef.current =
+        typeof window !== 'undefined' &&
+        typeof window.matchMedia === 'function' &&
+        window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+      const previewEl = document.createElement('div');
+      const previewOverlay = new window.kakao.maps.CustomOverlay({
+        position: initialPosition,
+        content: previewEl,
+        zIndex: 40,
+        xAnchor: 0.5,
+        yAnchor: 1,
+      });
+      previewOverlayRef.current = previewOverlay;
+      setPreviewAnchorEl(previewEl);
 
       const handleResize = () => {
         map.relayout();
@@ -254,24 +344,75 @@ export function KakaoMapView({
       // 정의에 setZIndex가 빠져 있어 캐스팅해서 호출한다 — 실제 SDK엔 존재).
       if (isDeal) (marker as unknown as { setZIndex?: (z: number) => void }).setZIndex?.(5);
 
+      const key = `${item.lat.toFixed(6)},${item.lng.toFixed(6)}`;
+      const isGrouped = (groupsByPosition.get(key)?.length ?? 1) > 1;
+
       window.kakao.maps.event.addListener(marker, 'click', () => {
-        const key = `${item.lat.toFixed(6)},${item.lng.toFixed(6)}`;
         const group = groupsByPosition.get(key) ?? [item];
-        if (group.length > 1 && onSelectGroup) {
-          onSelectGroup(group);
+        // 좌표가 겹친 여러 건 → 기존처럼 선택 목록(MarkerGroupModal) 먼저.
+        if (group.length > 1 && onSelectGroupRef.current) {
+          hidePreview();
+          onSelectGroupRef.current(group);
+          return;
+        }
+        // [마커 클릭/호버 → 상세](2026-09-10 사용자 지시): PC(호버 가능)는 클릭 시
+        // 바로 상세. 모바일은 첫 탭에 프리뷰, 같은 마커 재탭에 상세.
+        if (canHoverRef.current) {
+          goDetail(item);
+        } else if (previewItemRef.current?.id === item.id) {
+          goDetail(item);
         } else {
-          onSelectItem(item);
+          showPreview(item);
         }
       });
+
+      // PC 전용: 마커에 마우스를 올리면 프리뷰가 마커 위에 뜨고, 벗어나면 잠시 뒤
+      // 사라진다(마커→카드로 옮기는 사이 유지되도록 지연). 겹친 마커는 호버 프리뷰
+      // 대상이 아니다(클릭 시 선택 목록으로).
+      if (!isGrouped) {
+        window.kakao.maps.event.addListener(marker, 'mouseover', () => {
+          if (canHoverRef.current) showPreview(item);
+        });
+        window.kakao.maps.event.addListener(marker, 'mouseout', () => {
+          if (canHoverRef.current) scheduleHide();
+        });
+      }
 
       return marker;
     });
 
     markersRef.current = markers;
     clustererRef.current.addMarkers(markers);
-    // onSelectItem은 상위에서 안정적으로 전달되지 않을 수 있어 의도적으로 의존성에서 제외한다.
+    // onSelectItem/onSelectGroup은 ref로 최신값을 읽으므로 의존성에서 제외한다.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, dealSpotIds]);
 
-  return <div ref={containerRef} className="w-full h-full bg-gray-100" />;
+  // 언마운트 시 프리뷰 타이머/오버레이 정리.
+  useEffect(() => {
+    return () => {
+      clearHideTimer();
+      previewOverlayRef.current?.setMap(null);
+    };
+  }, []);
+
+  return (
+    <>
+      <div ref={containerRef} className="w-full h-full bg-gray-100" />
+      {previewAnchorEl &&
+        previewItem &&
+        createPortal(
+          <MarkerPreviewCard
+            item={previewItem}
+            deal={dealBySpotIdRef.current?.[previewItem.id] ?? null}
+            onOpenDetail={() => goDetail(previewItem)}
+            onClose={hidePreview}
+            onMouseEnter={clearHideTimer}
+            onMouseLeave={() => {
+              if (canHoverRef.current) scheduleHide();
+            }}
+          />,
+          previewAnchorEl
+        )}
+    </>
+  );
 }

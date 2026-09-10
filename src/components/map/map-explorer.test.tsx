@@ -581,9 +581,14 @@ describe('MapExplorer 노출 중분류 전역 노출(2026-09-08)', () => {
   });
 });
 
-// [스팟픽 UI/UX 개선 4종](2026-09-01 사용자 지시) 항목 1: 마커 클릭 2단계 UX(표준 지도
-// 앱 방식) — 1단계는 가벼운 미리보기 카드만, 2단계(카드 터치)에서만 전체 상세 모달.
-describe('MapExplorer 마커 클릭 2단계 UX (2026-09-01)', () => {
+// [마커 클릭/호버 → 상세 카드 바로 진입](2026-09-10 사용자 지시): 예전엔 마커 클릭 →
+// 화면 중앙/하단 고정 프리뷰 카드 → 재탭 → 상세(2단계)였다. 사용자가 "프리뷰 카드가
+// 마커랑 따로 노는 것처럼 보임 / 마커 누르면 바로 상세로 가야 하는 거 아니냐"고 지적 →
+// 프리뷰 카드를 KakaoMapView가 마커 좌표에 앵커한 오버레이로 옮기고(PC 호버 시 프리뷰,
+// 클릭 시 상세 / 모바일 첫 탭 프리뷰, 재탭 상세). KakaoMapView는 이 파일에서 mock되므로
+// 여기서는 "마커 클릭(=onSelectItem) → 상세 카드"만 검증한다(호버/앵커 프리뷰는
+// KakaoMapView 내부라 별도 단위 테스트 대상이 아님 — 기존 관례).
+describe('MapExplorer 마커 클릭 → 상세 카드', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ item: null }) } as Response)));
   });
@@ -592,45 +597,16 @@ describe('MapExplorer 마커 클릭 2단계 UX (2026-09-01)', () => {
   // aria-label="닫기" 버튼이 있다 — DetailModal이 실제로 열렸는지는 그 안에만 있는
   // "주소" dt 텍스트로 판별한다(스팟 상세는 항상 이 필드를 렌더링함).
 
-  it('마커를 클릭하면 전체 상세 모달 대신 미리보기 카드가 먼저 뜬다', async () => {
+  it('마커를 클릭하면 상세 카드가 바로 열린다(중간 프리뷰 단계 없음)', async () => {
     rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow()], error: null });
     render(<MapExplorer />);
     await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
 
     fireEvent.click(screen.getByText('simulate-marker-click-용인어린이상상의숲'));
-
-    expect(screen.getAllByText('용인어린이상상의숲').length).toBeGreaterThan(0);
-    expect(screen.queryByText('주소')).not.toBeInTheDocument();
-    expect(screen.getByLabelText('미리보기 닫기')).toBeInTheDocument();
-  });
-
-  it('미리보기 카드를 한 번 더 터치하면 전체 상세 모달이 열린다', async () => {
-    rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow()], error: null });
-    render(<MapExplorer />);
-    await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
-
-    fireEvent.click(screen.getByText('simulate-marker-click-용인어린이상상의숲'));
-    fireEvent.click(screen.getByLabelText('용인어린이상상의숲 상세보기'));
 
     expect(await screen.findByText('주소')).toBeInTheDocument();
-    expect(screen.queryByLabelText('미리보기 닫기')).not.toBeInTheDocument();
   });
 
-  it('미리보기 카드의 닫기(✕) 버튼을 누르면 아무것도 열리지 않고 카드만 사라진다', async () => {
-    rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow()], error: null });
-    render(<MapExplorer />);
-    await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
-
-    fireEvent.click(screen.getByText('simulate-marker-click-용인어린이상상의숲'));
-    fireEvent.click(screen.getByLabelText('미리보기 닫기'));
-
-    expect(screen.queryByLabelText('미리보기 닫기')).not.toBeInTheDocument();
-    expect(screen.queryByText('주소')).not.toBeInTheDocument();
-  });
-
-  // [마커 미리보기 카드가 바텀시트를 가리는 문제 수정](2026-09-05 사용자 지시): 바텀시트가
-  // 펼쳐진(70vh) 상태에서 마커를 누르면 미리보기 카드를 다시 가릴 수 있어, 마커 클릭 시
-  // 시트를 자동으로 접는다(리스트 클릭 시 이미 접던 것과 동일 정책).
   it('바텀시트가 펼쳐진 상태에서 마커를 클릭하면 시트가 자동으로 접힌다', async () => {
     rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow()], error: null });
     render(<MapExplorer />);
@@ -688,7 +664,6 @@ describe('MapExplorer 그룹 펼쳐보기(2026-09-09)', () => {
     await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
 
     fireEvent.click(screen.getByText('simulate-marker-click-용인어린이상상의숲'));
-    fireEvent.click(screen.getByLabelText('용인어린이상상의숲 상세보기'));
 
     expect(await screen.findByText('🔗 이 장소의 다른 예약 옵션 보기')).toBeInTheDocument();
   });
@@ -699,7 +674,6 @@ describe('MapExplorer 그룹 펼쳐보기(2026-09-09)', () => {
     await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
 
     fireEvent.click(screen.getByText('simulate-marker-click-용인어린이상상의숲'));
-    fireEvent.click(screen.getByLabelText('용인어린이상상의숲 상세보기'));
 
     await screen.findByText('주소');
     expect(screen.queryByText('🔗 이 장소의 다른 예약 옵션 보기')).not.toBeInTheDocument();
@@ -718,7 +692,6 @@ describe('MapExplorer 그룹 펼쳐보기(2026-09-09)', () => {
     await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
 
     fireEvent.click(screen.getByText('simulate-marker-click-용인어린이상상의숲'));
-    fireEvent.click(screen.getByLabelText('용인어린이상상의숲 상세보기'));
     fireEvent.click(await screen.findByText('🔗 이 장소의 다른 예약 옵션 보기'));
 
     await waitFor(() =>

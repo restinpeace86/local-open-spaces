@@ -8,7 +8,6 @@ import { SpotCategoryFilter } from '@/components/map/spot-category-filter';
 import { ItemListPanel } from '@/components/map/item-list-panel';
 import { EmptyState } from '@/components/map/empty-state';
 import { DetailModal } from '@/components/map/detail-modal';
-import { MarkerPreviewCard } from '@/components/map/marker-preview-card';
 import { MarkerGroupModal } from '@/components/map/marker-group-modal';
 import { AiRecommendSheet } from '@/components/map/ai-recommend-sheet';
 import { AiChatFab } from '@/components/chat/ai-chat-fab';
@@ -171,7 +170,6 @@ export function MapExplorer() {
   // 열린다(표준 지도 앱의 2단계 UX). 리스트 패널/AI 추천/겹친 마커 그룹 클릭은 이미
   // 목록에서 한 번 골라 들어오는 별도의 명시적 선택 행위라 이 2단계를 거치지 않고 기존처럼
   // 바로 전체 상세로 진입한다(요구사항이 명시한 "마커 클릭"에 한정된 변경).
-  const [previewItem, setPreviewItem] = useState<NearbyItem | null>(null);
   // [스팟픽 AI 추천](2026-08-29 사용자 지시): "AI 추천" 칩 클릭 시 페이지 이동 없이 지도
   // 화면 위 바텀시트로 나들이 장소를 바로 추천한다. 다른 카테고리 필터와 무관하게 항상
   // 반경 내 전체 items(원본, 필터링 전)를 대상으로 추천한다.
@@ -465,48 +463,21 @@ export function MapExplorer() {
       : items.length > 0 && visibleItems.length === 0);
 
   // spec/space/space-card.md 3, spec/event/event-card.md 3: 카드/마커 클릭 시 지도 panTo + 상세 모달 활성화
-  // 리스트 패널 등에서 바로 전체 상세로 들어가는 경로라 열려 있던 마커 미리보기 카드가
-  // 있었다면 함께 정리한다(둘이 동시에 남아있지 않도록).
   const handleSelectItem = useCallback((item: NearbyItem) => {
-    setPreviewItem(null);
     setSelectedItem(item);
   }, []);
 
-  // [스팟픽 UI/UX 개선 4종](2026-09-01 사용자 지시) 항목 1: 마커 클릭은 리스트/그룹
-  // 클릭과 달리 전체 상세로 바로 가지 않고 미리보기 카드부터 연다. 다른 미리보기가
-  // 열려 있었다면 새 마커 클릭으로 교체한다.
-  // [마커 미리보기 카드가 바텀시트를 가리는 문제 수정](2026-09-05 사용자 지시): "마커
-  // 누르면 하단에 정보가 뜨는데.. 하단의 바텀시트를 가리게 됨." 미리보기 카드 자체는
-  // 접힌 바텀시트 위쪽으로 옮겨 겹치지 않게 했지만(marker-preview-card.tsx), 바텀시트가
-  // 펼쳐진(70vh) 상태에서 마커를 누르면 그 큰 시트가 카드를 다시 가릴 수 있어, 마커를
-  // 누르는 순간 시트를 접어 항상 카드가 보이게 한다(리스트에서 항목을 고를 때 이미
-  // 동일하게 처리하던 것과 같은 정책 — 위 handleSelectItem 참고).
-  // [마커 카드 ↔ 상세 카드 일원화](2026-09-10 사용자 지시, todo.md 개선사항2-6):
-  // "마커 클릭 시 뜨는 카드의 레이아웃을 상세 카드와 동일한 구조(좌측 이미지,
-  // 상호명, 거리, 주소, 카테고리 맞춤형 뱃지)로 통일". 노출 중분류 전역 조회는
-  // 서버 distance_meters가 -1이라(거리 기준점이 없음), 바텀시트와 동일하게 여기서
-  // 기준점(GPS 또는 설정 위치)으로부터의 실제 거리를 계산해 채워 넣는다 — 이
-  // 카드를 다시 눌러 여는 상세 카드(handleOpenDetailFromPreview)도 이 값을 그대로
-  // 물려받아 거리/길찾기가 동작한다.
-  const handleMarkerSelectItem = useCallback(
-    (item: NearbyItem) => {
-      const gpsDistance = haversineDistanceMeters(
-        { lat: originLat, lng: originLng },
-        { lat: item.lat, lng: item.lng }
-      );
-      setPreviewItem({ ...item, distance_meters: gpsDistance });
-      setIsSheetExpanded(false);
-    },
-    [originLat, originLng]
-  );
-
-  const handleOpenDetailFromPreview = useCallback(() => {
-    setSelectedItem(previewItem);
-    setPreviewItem(null);
-  }, [previewItem]);
-
-  const handleClosePreview = useCallback(() => {
-    setPreviewItem(null);
+  // [마커 클릭/호버 → 상세 카드 바로 진입](2026-09-10 사용자 지시): 예전엔 마커
+  // 클릭 → 화면 중앙/하단 고정 프리뷰 카드 → 다시 탭 → 상세(2단계)였다. 사용자가
+  // "프리뷰 카드가 마커랑 따로 노는 것처럼 보임 / 마커 누르면 바로 상세로 가야 하는
+  // 거 아니냐"고 지적 → 프리뷰 카드를 KakaoMapView가 마커 좌표에 앵커한 오버레이로
+  // 옮기고(마커와 함께 이동), PC는 호버 시 프리뷰·클릭 시 상세, 모바일은 첫 탭
+  // 프리뷰·재탭 상세로 재설계했다. map-explorer는 KakaoMapView의 onSelectItem
+  // (="상세로 진입") 콜백만 받는다. 거리 보정(distance_meters -1 → 실제 거리)은
+  // KakaoMapView가 originLat/originLng로 수행해 넘겨준다.
+  const handleMarkerSelectItem = useCallback((item: NearbyItem) => {
+    setSelectedItem(item);
+    setIsSheetExpanded(false);
   }, []);
 
   // [겹친 마커 처리](2026-08-29 사용자 지시): 같은 좌표에 여러 건이 겹쳐 있는 마커를
@@ -519,7 +490,6 @@ export function MapExplorer() {
   const handleSelectFromGroup = useCallback((item: NearbyItem) => {
     setSelectedGroup(null);
     setGroupModalTitle(null);
-    setPreviewItem(null);
     setSelectedItem(item);
   }, []);
 
@@ -543,15 +513,7 @@ export function MapExplorer() {
     }
   }, []);
 
-  // [스팟픽 UI/UX 개선 4종](2026-09-01 사용자 지시) 항목 1: 마커를 1단계로 클릭해
-  // 미리보기 카드만 뜬 상태에서도 "마커 클릭 시 지도가 해당 위치로 이동" 요구사항을
-  // 만족해야 하므로 previewItem도 focusPosition의 대상으로 삼는다(selectedItem이
-  // 우선 — 2단계로 전체 상세가 열리면 그쪽 좌표로 유지).
-  const focusPosition = selectedItem
-    ? { lat: selectedItem.lat, lng: selectedItem.lng }
-    : previewItem
-    ? { lat: previewItem.lat, lng: previewItem.lng }
-    : null;
+  const focusPosition = selectedItem ? { lat: selectedItem.lat, lng: selectedItem.lng } : null;
 
   // [노출 중분류 전역 노출 시 지도 줌 레벨](2026-09-08 사용자 지시): 중분류를
   // 선택하면 데이터가 전국 단위로 흩어져 있어, 기존 5km 기준 줌 레벨 그대로면
@@ -597,29 +559,21 @@ export function MapExplorer() {
 
       {/* 지도 영역 */}
       <div className="relative flex-1">
+        {/* [마커 프리뷰 카드는 KakaoMapView 안에서 마커에 앵커되어 렌더링된다](2026-09-10
+            사용자 지시). PC 호버 → 프리뷰, 클릭 → 상세 / 모바일 첫 탭 → 프리뷰, 재탭 → 상세. */}
         <KakaoMapView
           center={effectiveCenter}
           radius={mapRadius}
           items={visibleItems}
           dealSpotIds={dealSpotIds}
+          dealBySpotId={dealBySpotId}
+          originLat={originLat}
+          originLng={originLng}
           focusPosition={focusPosition}
           onSelectItem={handleMarkerSelectItem}
           onSelectGroup={handleSelectGroup}
           onDragEnd={handleMapDragEnd}
         />
-
-        {/* [스팟픽 UI/UX 개선 4종](2026-09-01 사용자 지시) 항목 1: 마커 클릭 1단계 —
-            전체 상세 대신 이 가벼운 미니 카드를 먼저 보여준다. 전체 상세(selectedItem)가
-            열려 있을 때는 이미 handleOpenDetailFromPreview/handleSelectItem 등에서
-            previewItem을 함께 정리하므로 중복 노출되지 않는다. */}
-        {previewItem && (
-          <MarkerPreviewCard
-            item={previewItem}
-            deal={dealBySpotId[previewItem.id] ?? null}
-            onOpenDetail={handleOpenDetailFromPreview}
-            onClose={handleClosePreview}
-          />
-        )}
 
         {/* 데스크톱: 지도 상단 중앙에 재검색 Floating 버튼 노출 (지도 위 별도 오버레이 없어 최상단 사용 가능) */}
         {pendingRecenter && (

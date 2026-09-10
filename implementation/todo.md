@@ -367,3 +367,9 @@ NEG_EDU_MACHINE_HAZARD (농기계 이동 구간 등 안전 주의): 농기계 �
         `map-explorer`가 한 번 조회해 `KakaoMapView`에 `dealSpotIds` 전달 → 🔥 특가 마커(buildDealMarkerSvgDataUrl,
         34x44, zIndex 상향). 마커 프리뷰 카드 "🔥" 표기, 상세 카드(spotPickCard) "🔥 특가" 뱃지 +
         "🔥 <상품명> · 특가 보기" 제휴 링크 CTA. (완료: 2026-09-10)
+
+### 마커 인터랙션 재설계 (Harness 자율 실행)
+- [x] Step 101: 마커 프리뷰 카드를 마커 좌표에 앵커(CustomOverlay+portal)해 지도와 함께 이동. PC는
+      마커 호버 → 프리뷰 / 클릭 → 상세 카드 바로. 모바일은 첫 탭 프리뷰 / 재탭 상세. 화면 고정
+      프리뷰 카드(2026-09-01 "2단계 UX")·map-explorer의 previewItem 폐지. spec/map/spatial-search.md
+      §2.2 개정. (완료: 2026-09-10)
