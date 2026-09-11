@@ -176,6 +176,47 @@ describe('EventBrowseSheet', () => {
     expect(screen.getByRole('status', { name: '전체보기 목록 불러오는 중' })).toBeInTheDocument();
   });
 
+  // [개선사항5](2026-09-11 사용자 지시): 서버가 실제 거리를 계산해 정렬하려면 유저 좌표가
+  // 필요하다 — userLocation prop을 lat/lng/address 쿼리 파라미터로 그대로 전달하는지 확인.
+  it('userLocation을 넘기면 lat/lng/address 쿼리 파라미터로 요청한다', async () => {
+    const fetchMock = vi.fn((_url: string) =>
+      Promise.resolve({ json: () => Promise.resolve({ items: [], total: 0 }) } as Response)
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <EventBrowseSheet
+        mode="ongoing"
+        onClose={() => {}}
+        onSelectItem={() => {}}
+        userLocation={{ lat: 37.4, lng: 127.1, addressName: '경기 성남시 분당구' }}
+      />
+    );
+
+    await waitFor(() => {
+      const lastUrl = fetchMock.mock.calls.at(-1)?.[0] as string;
+      const url = new URL(lastUrl, 'http://localhost');
+      expect(url.searchParams.get('lat')).toBe('37.4');
+      expect(url.searchParams.get('lng')).toBe('127.1');
+      expect(url.searchParams.get('address')).toBe('경기 성남시 분당구');
+    });
+  });
+
+  it('userLocation을 넘기지 않으면(위치 미설정) lat/lng 파라미터를 보내지 않는다', async () => {
+    const fetchMock = vi.fn((_url: string) =>
+      Promise.resolve({ json: () => Promise.resolve({ items: [], total: 0 }) } as Response)
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<EventBrowseSheet mode="ongoing" onClose={() => {}} onSelectItem={() => {}} />);
+
+    await waitFor(() => {
+      const lastUrl = fetchMock.mock.calls.at(-1)?.[0] as string;
+      const url = new URL(lastUrl, 'http://localhost');
+      expect(url.searchParams.has('lat')).toBe(false);
+    });
+  });
+
   it('결과가 없으면 빈 상태 안내를 보여준다', async () => {
     render(<EventBrowseSheet mode="today" onClose={() => {}} onSelectItem={() => {}} />);
     expect(await screen.findByText('🎪 오늘 전체보기')).toBeInTheDocument();

@@ -549,6 +549,10 @@ export function HomeView({
             setBrowseSheetMode(null);
             setSelectedItem(item);
           }}
+          // [개선사항5](2026-09-11 사용자 지시): "전체보기" 목록 거리순 정렬용 — 위치를
+          // 아직 설정하지 않은 사용자(addressName === null)에게는 null을 넘겨 서버가
+          // 폴백 정렬(마감임박순)로 동작하게 한다.
+          userLocation={addressName ? { lat: center.lat, lng: center.lng, addressName } : null}
         />
       )}
       {selectedItem && <DetailModal item={selectedItem} onClose={() => setSelectedItem(null)} />}

@@ -1441,6 +1441,169 @@ describe('getReservationOpenEventsPage', () => {
   });
 });
 
+// [개선사항5](2026-09-11 사용자 지시, implementation/todo.md): "전체보기 목록도 도(道) 단위
+// 1차 필터 → 거리 가까운 순 정렬". getTodayEventsPage(신규)/getCurrentlyOngoingEventsPage/
+// getReservationOpenEventsPage 세 함수가 공유하는 finalizeBrowsePage 로직을 검증한다.
+describe('전체보기 페이지 — 개선사항5: 도 단위 필터 + 거리순 정렬', () => {
+  afterEach(() => {
+    vi.doUnmock('@/lib/supabase/server');
+    vi.resetModules();
+  });
+
+  it('getCurrentlyOngoingEventsPage: 유저 위치의 도(道)에 속하지 않는 행사는 결과에서 제외된다', async () => {
+    const nearRow = eventRow({
+      id: 'near-1',
+      is_active: true,
+      venue_name: '율동공원 야외무대',
+      sigungu_name: '성남시 분당구',
+      location: { coordinates: [127.1287, 37.3809] }, // 유저와 동일 좌표(거리 0)
+    });
+    const jejuRow = eventRow({
+      id: 'jeju-1',
+      is_active: true,
+      venue_name: '제주 함덕해변 축제',
+      sigungu_name: '제주시',
+      location: { coordinates: [126.66, 33.54] },
+    });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeRangeChainable([nearRow, jejuRow]) }),
+    }));
+
+    const { getCurrentlyOngoingEventsPage } = await import('./get-home-feed');
+    const result = await getCurrentlyOngoingEventsPage(1, 10, undefined, {
+      sigunguName: null,
+      addressName: '경기 성남시 분당구',
+      lat: 37.3809,
+      lng: 127.1287,
+    });
+
+    expect(result.items.map((i) => i.id)).toEqual(['near-1']);
+    expect(result.total).toBe(1);
+  });
+
+  it('getCurrentlyOngoingEventsPage: 같은 도 안에서는 유저 위치 기준 거리 가까운 순으로 정렬한다', async () => {
+    const far = eventRow({
+      id: 'far',
+      is_active: true,
+      venue_name: '수원 화성행궁',
+      location: { coordinates: [127.03, 37.28] }, // 유저(판교)에서 더 먼 좌표
+    });
+    const near = eventRow({
+      id: 'near',
+      is_active: true,
+      venue_name: '판교 공원',
+      location: { coordinates: [127.1, 37.4] }, // 유저에서 더 가까운 좌표
+    });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      // 일부러 far를 먼저 반환해도(원래 순서), 거리 재정렬이 실제로 일어나는지 검증한다.
+      createClient: () => Promise.resolve({ from: () => makeRangeChainable([far, near]) }),
+    }));
+
+    const { getCurrentlyOngoingEventsPage } = await import('./get-home-feed');
+    const result = await getCurrentlyOngoingEventsPage(1, 10, undefined, {
+      sigunguName: null,
+      addressName: '경기 성남시 분당구',
+      lat: 37.3809,
+      lng: 127.1287,
+    });
+
+    expect(result.items.map((i) => i.id)).toEqual(['near', 'far']);
+  });
+
+  it('유저 위치를 모르면(lat/lng 없음) 기존처럼 도 단위 필터/거리 정렬 없이 마감임박순 폴백을 유지한다', async () => {
+    const farFutureDate = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+    const nearFutureDate = new Date(Date.now() + 20 * 86400000).toISOString().slice(0, 10);
+    const rows = [
+      eventRow({ id: 'a', is_active: true, end_date: farFutureDate }),
+      eventRow({ id: 'jeju', is_active: true, sigungu_name: '제주시', end_date: nearFutureDate }),
+    ];
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeRangeChainable(rows) }),
+    }));
+
+    const { getCurrentlyOngoingEventsPage } = await import('./get-home-feed');
+    const result = await getCurrentlyOngoingEventsPage(1, 10);
+
+    // 위치를 모르므로 제주 행사도 배제되지 않고, end_date 오름차순(마감임박순) 그대로다.
+    expect(result.items.map((i) => i.id)).toEqual(['jeju', 'a']);
+  });
+
+  it('getReservationOpenEventsPage에도 동일하게 도 단위 필터 + 거리순 정렬이 적용된다', async () => {
+    const near = eventRow({
+      id: 'near',
+      is_active: true,
+      booking_status: '접수중',
+      location: { coordinates: [127.1287, 37.3809] },
+    });
+    const jeju = eventRow({
+      id: 'jeju',
+      is_active: true,
+      booking_status: '접수중',
+      sigungu_name: '제주시',
+      location: { coordinates: [126.66, 33.54] },
+    });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeRangeChainable([near, jeju]) }),
+    }));
+
+    const { getReservationOpenEventsPage } = await import('./get-home-feed');
+    const result = await getReservationOpenEventsPage(1, 10, undefined, {
+      sigunguName: null,
+      addressName: '경기 성남시 분당구',
+      lat: 37.3809,
+      lng: 127.1287,
+    });
+
+    expect(result.items.map((i) => i.id)).toEqual(['near']);
+  });
+
+  // [개선사항5] "오늘 전체보기"는 heroRegionTier 그룹핑 없는 전용 페이지 함수를 쓴다.
+  it('getTodayEventsPage: 기존 getTodayEvents와 동일한 조건(오늘 종료/활성/예약 미마감)으로 필터링하고 거리순 정렬한다', async () => {
+    const todayRow = eventRow({
+      id: 'today-near',
+      is_active: true,
+      end_date: TODAY_STR,
+      location: { coordinates: [127.1287, 37.3809] },
+    });
+    const notTodayRow = eventRow({ id: 'not-today', is_active: true, end_date: '2099-01-01' });
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeRangeChainable([todayRow, notTodayRow]) }),
+    }));
+
+    const { getTodayEventsPage } = await import('./get-home-feed');
+    const result = await getTodayEventsPage(1, 10, undefined, {
+      sigunguName: '성남시 분당구',
+      lat: 37.3809,
+      lng: 127.1287,
+    });
+
+    expect(result.items.map((i) => i.id)).toEqual(['today-near']);
+  });
+
+  it('getTodayEventsPage: page/pageSize로 정렬된 결과를 정확히 잘라 반환한다', async () => {
+    const rows = Array.from({ length: 15 }, (_, i) =>
+      eventRow({ id: `today-${i}`, is_active: true, end_date: TODAY_STR })
+    );
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => makeRangeChainable(rows) }),
+    }));
+
+    const { getTodayEventsPage } = await import('./get-home-feed');
+    const page1 = await getTodayEventsPage(1, 10);
+    const page2 = await getTodayEventsPage(2, 10);
+
+    expect(page1.total).toBe(15);
+    expect(page1.items).toHaveLength(10);
+    expect(page2.items).toHaveLength(5);
+  });
+});
+
 // [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "GNB 헤더 & 검색")
 // [검색창/지도 검색 키워드 유연성 대폭 개선](2026-08-30 사용자 지시): title 단일 필드
 // ilike 한 번 대신, 공백 기준 토큰마다 title/description/venue_name을 아우르는 .or()를

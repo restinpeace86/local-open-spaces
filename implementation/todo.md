@@ -37,8 +37,16 @@
       스켈레톤을 신규 `EventListSkeleton`(1열 리스트 모양)으로 통일. 중복 fetch 점검
       결과 실제 중복 호출 지점 없음(코드 변경 없이 점검 결과만 기록).
       (완료: 2026-09-11, 상세: implementation/2026-09-11-eventpick-browse-sheets-autofocus-and-skeleton.md)
-- [ ] 개선사항5: 동일 바텀시트 2곳 결과를 도(道) 단위 1차 필터 + 거리순 정렬, 무한
-      스크롤 중복/정렬 붕괴 없이 페이지네이션.
+- [x] 개선사항5 (Step 111): "전체보기" 3곳(오늘/알찬 픽/예약 픽)에 스팟픽과 동일한
+      도(道) 단위 1차 필터(province.ts 재사용) + 거리순 정렬(sortByDistanceIfKnown
+      재사용) 적용. 신규 getTodayEventsPage(오늘 전체보기 전용, Hero 미리보기용
+      getTodayEvents는 그대로 유지) + getCurrentlyOngoingEventsPage/
+      getReservationOpenEventsPage를 fetchAllRowsChunked 기반으로 재작성(PostgREST
+      max_rows=1000이 프로덕션에도 적용됨을 실측 확인 — 단일 range() 요청은 최대
+      1,000건까지만 반환됨). EventBrowseSheet에 userLocation prop 추가로 실제 GPS
+      좌표를 서버에 전달. MajorCategoryGrid(4번째, "검토" 대상)는 이미 distance 정렬
+      중이라 이번엔 현황만 기록, 추가 변경 없음.
+      (완료: 2026-09-11, 상세: implementation/2026-09-11-eventpick-browse-sheets-distance-sort.md)
 - [ ] 개선사항6~10: 아직 착수 전.
 
 # To-Do List

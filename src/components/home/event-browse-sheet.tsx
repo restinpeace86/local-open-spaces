@@ -16,8 +16,11 @@ const PAGE_SIZE = 24;
 // 함께하기 좋은 알찬 픽", "예약 가능"→"놓치면 후회하는 인기 만점 예약 픽")이 바뀌어
 // 이 바텀시트의 "전체보기" 제목도 일관되게 맞춘다 — 목록에서 "전체보기"를 눌렀는데
 // 다른 이름의 시트가 뜨면 혼란을 준다.
+// [개선사항5](2026-09-11 사용자 지시): "오늘 전체보기"도 정렬(거리순)·페이지네이션(무한
+// 스크롤) 요구사항 적용 대상이라 paginated: true로 바꾼다(기존엔 limit=60 단일 조회라
+// false였음, /api/events/today가 이제 getTodayEventsPage로 실제 페이지네이션을 지원).
 const MODE_META: Record<EventBrowseSheetMode, { title: string; endpoint: string; paginated: boolean }> = {
-  today: { title: '🎪 오늘 전체보기', endpoint: '/api/events/today', paginated: false },
+  today: { title: '🎪 오늘 전체보기', endpoint: '/api/events/today', paginated: true },
   ongoing: { title: '지금 이 순간 함께하기 좋은 알찬 픽 전체보기', endpoint: '/api/events/ongoing', paginated: true },
   'reservation-open': {
     title: '놓치면 후회하는 인기 만점 예약 픽 전체보기',
@@ -25,6 +28,14 @@ const MODE_META: Record<EventBrowseSheetMode, { title: string; endpoint: string;
     paginated: true,
   },
 };
+
+// [개선사항5](2026-09-11 사용자 지시): "전체보기 목록 정렬을 현재 위치 기준 거리 가까운
+// 순으로" — 서버가 실제 거리를 계산하려면 유저의 현재 좌표가 필요하다. 부모(HomeView)가
+// useUserLocation으로 이미 들고 있는 값을 그대로 넘겨받는다(이 컴포넌트가 직접 위치를
+// 다시 구하지 않는다 — 제5장 제4조 기존 구조 우선). 위치를 아직 설정하지 않은 사용자
+// (addressName === null)에게는 null을 넘겨 거리 정렬 없이 기존 폴백 정렬(마감임박순)로
+// 동작한다(안전 폴백 — 위치 정보 없이 임의로 추정하지 않는다).
+export type EventBrowseUserLocation = { lat: number; lng: number; addressName: string | null } | null;
 
 // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시) 요구사항 3/4: 기존 3개 전체보기 페이지
 // (/events/today, /events/ongoing, /events/reservation-open)의 새 페이지 전환 방식을 폐기하고,
@@ -43,10 +54,12 @@ export function EventBrowseSheet({
   mode,
   onClose,
   onSelectItem,
+  userLocation = null,
 }: {
   mode: EventBrowseSheetMode;
   onClose: () => void;
   onSelectItem: (item: NearbyItem) => void;
+  userLocation?: EventBrowseUserLocation;
 }) {
   const meta = MODE_META[mode];
   const [regionKey, setRegionKey] = useState(DEFAULT_REGION_OPTION.key);
@@ -60,16 +73,20 @@ export function EventBrowseSheet({
   const buildUrl = useCallback(
     (targetPage: number) => {
       const params = new URLSearchParams();
-      if (mode === 'today') {
-        params.set('region', regionKey);
-      } else {
-        params.set('page', String(targetPage));
-        params.set('page_size', String(PAGE_SIZE));
-      }
+      if (mode === 'today') params.set('region', regionKey);
+      params.set('page', String(targetPage));
+      params.set('page_size', String(PAGE_SIZE));
       if (selectedMaj) params.set('category_maj', selectedMaj);
+      // [개선사항5] 거리순 정렬을 위해 유저의 현재 좌표를 함께 보낸다(모르면 생략 — 서버가
+      // 마감임박순 폴백 정렬로 동작).
+      if (userLocation) {
+        params.set('lat', String(userLocation.lat));
+        params.set('lng', String(userLocation.lng));
+        if (userLocation.addressName) params.set('address', userLocation.addressName);
+      }
       return `${meta.endpoint}?${params.toString()}`;
     },
-    [mode, meta.endpoint, regionKey, selectedMaj]
+    [mode, meta.endpoint, regionKey, selectedMaj, userLocation]
   );
 
   // 지역/칩 필터가 바뀌면 항상 1페이지부터 새로 조회한다.
