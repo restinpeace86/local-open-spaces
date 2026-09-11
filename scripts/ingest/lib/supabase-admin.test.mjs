@@ -128,6 +128,92 @@ describe('upsertRowsSafeMerge', () => {
     expect(result.mergedWithExisting).toBe(1);
   });
 
+  // [예약/운영 상태 필드는 항상 최신값으로 갱신](2026-09-12 사용자 지시): "시간관련
+  // 필드.. 예약 일자들도 항상 최신값으로 갱신에 포함하는게 맞을거같은데.. 주기적으로
+  // 바뀌어야 하는 필드에 대하여.. 최신값으로 갱신해" — 서울형 키즈카페 실측 확인(회차가
+  // 바뀌었는데도 옛 예약기간에 고정)에서 발견된 버그의 재발 방지 테스트.
+  describe('events의 예약/운영 상태 필드는 기존 값이 있어도 항상 최신 incoming 값으로 갱신한다', () => {
+    it('start_date/end_date/reservation_start_date/reservation_end_date/is_active/booking_status는 기존 값을 덮어쓴다', async () => {
+      const { client, upsert } = makeSafeMergeMockClient({
+        existingRows: [
+          {
+            external_id: 'A',
+            start_date: '2026-08-25',
+            end_date: '2026-09-07',
+            reservation_start_date: '2026-08-25T00:00:00Z',
+            reservation_end_date: '2026-09-07T23:59:59Z',
+            is_active: false,
+            booking_status: 'CLOSED',
+          },
+        ],
+      });
+
+      await upsertRowsSafeMerge(client, 'events', [
+        {
+          external_id: 'A',
+          start_date: '2026-09-10',
+          end_date: '2026-09-21',
+          reservation_start_date: '2026-09-10T00:00:00Z',
+          reservation_end_date: '2026-09-21T23:59:59Z',
+          is_active: true,
+          booking_status: 'OPEN',
+        },
+      ]);
+
+      const [sentRows] = upsert.mock.calls[0];
+      expect(sentRows).toEqual([
+        {
+          external_id: 'A',
+          start_date: '2026-09-10',
+          end_date: '2026-09-21',
+          reservation_start_date: '2026-09-10T00:00:00Z',
+          reservation_end_date: '2026-09-21T23:59:59Z',
+          is_active: true,
+          booking_status: 'OPEN',
+        },
+      ]);
+    });
+
+    it('이번 재가공이 해당 필드를 못 채웠으면(null/undefined) 예외적으로 기존 값을 보존한다', async () => {
+      const { client, upsert } = makeSafeMergeMockClient({
+        existingRows: [{ external_id: 'A', start_date: '2026-08-25', is_active: true }],
+      });
+
+      await upsertRowsSafeMerge(client, 'events', [{ external_id: 'A', start_date: null, is_active: undefined }]);
+
+      const [sentRows] = upsert.mock.calls[0];
+      expect(sentRows).toEqual([{ external_id: 'A', start_date: '2026-08-25', is_active: true }]);
+    });
+
+    it('open_spaces는 이런 시간 필드 대상이 없어 기존 SafeMerge 규칙(기존 값 보존)이 그대로 적용된다', async () => {
+      const { client, upsert } = makeSafeMergeMockClient({
+        existingRows: [{ external_id: 'A', is_active: false }],
+      });
+
+      await upsertRowsSafeMerge(client, 'open_spaces', [{ external_id: 'A', is_active: true }]);
+
+      const [sentRows] = upsert.mock.calls[0];
+      expect(sentRows).toEqual([{ external_id: 'A', is_active: false }]);
+    });
+
+    it('관리자가 수동으로 덮어쓸 수 있는 category_min/target_audience는 항상 최신화 대상에 포함하지 않는다(기존 값 보존)', async () => {
+      const { client, upsert } = makeSafeMergeMockClient({
+        existingRows: [
+          { external_id: 'A', category_min: '관리자수동분류', category_min_source: 'MANUAL', target_audience: 'FAMILY', target_audience_source: 'MANUAL' },
+        ],
+      });
+
+      await upsertRowsSafeMerge(client, 'events', [
+        { external_id: 'A', category_min: '원본재분류', category_min_source: 'RAW', target_audience: null, target_audience_source: null },
+      ]);
+
+      const [sentRows] = upsert.mock.calls[0];
+      expect(sentRows).toEqual([
+        { external_id: 'A', category_min: '관리자수동분류', category_min_source: 'MANUAL', target_audience: 'FAMILY', target_audience_source: 'MANUAL' },
+      ]);
+    });
+  });
+
   // Decision 017(2026-08-25) 3항: 같은 배치(같은 fetch 결과) 안에서 동일 SVCID(external_id)가
   // 중복되는 경우도 마지막 값 우선이 아니라 컬럼별 NULL 병합이어야 한다.
   it('배치 내 동일 external_id 중복도 컬럼별 NULL 병합한다(마지막 값 우선 아님)', async () => {

@@ -185,6 +185,23 @@ function dedupeByExternalIdMergeNulls(rows) {
 // 더 작은 단위로 쪼갠다.
 const SELECT_LOOKUP_BATCH_SIZE = 200;
 
+// [예약/운영 상태 필드는 항상 최신값으로 갱신](2026-09-12 사용자 지시): "서울형 키즈카페"
+// 실측 확인 결과, 위 SafeMerge의 "기존 값이 있으면 보존" 규칙이 events.start_date/
+// end_date/reservation_start_date/reservation_end_date/is_active/booking_status처럼
+// *원본에서 주기적으로(회차가 바뀔 때마다) 실제로 달라지는* 필드에도 그대로 적용돼,
+// 한 번 채워진 뒤로는 새 예약 회차가 열려도 옛날 값에 영원히 멈춰 있는 버그가 있었다
+// (실측: 관악구 난곡동점 등 서울형 키즈카페 대부분이 2026-08-25에 적재된 2026-08-25~
+// 09-07 회차에 고정된 채, 09-10 재수집 시점엔 원본이 이미 09-10~09-21 새 회차로
+// 넘어갔는데도 갱신되지 않음). 이 필드들은 "이 자리가 지금 언제까지 유효한가"를
+// 나타내므로 최신 수집 결과가 항상 이겨야 한다 — category_min/target_audience처럼
+// 관리자가 수동으로 덮어쓸 수 있는 필드(_source 컬럼이 있는 것들)는 절대 포함하지
+// 않는다(포함하면 관리자의 수동 분류 작업이 재수집 때마다 사라짐).
+// open_spaces는 이런 "회차성" 시간 필드 자체가 없어(상시 시설 전제) 대상에서 제외했다
+// (project/database_schema.md 실측 확인 — start_date/end_date/booking_status 등 없음).
+const ALWAYS_REFRESH_FIELDS = {
+  events: ['start_date', 'end_date', 'reservation_start_date', 'reservation_end_date', 'is_active', 'booking_status'],
+};
+
 export async function upsertRowsSafeMerge(client, table, rows) {
   if (rows.length === 0) return { count: 0, duplicateWithinBatch: 0, mergedWithExisting: 0 };
 
@@ -211,6 +228,7 @@ export async function upsertRowsSafeMerge(client, table, rows) {
       }
     }
 
+    const alwaysRefreshFields = ALWAYS_REFRESH_FIELDS[table] ?? [];
     const mergedBatch = batch.map((row) => {
       const existing = existingById.get(row.external_id);
       if (!existing) return row;
@@ -218,6 +236,16 @@ export async function upsertRowsSafeMerge(client, table, rows) {
       mergedWithExisting += 1;
       const merged = { ...row };
       for (const key of Object.keys(row)) {
+        if (alwaysRefreshFields.includes(key)) {
+          // 최신 수집 결과를 우선하되, 이번 재가공이 일시적으로 이 필드를 못 채웠을
+          // 때(null/undefined)만 예외적으로 기존 값을 보존한다 — "항상 최신화"의
+          // 목적은 원본이 실제로 바뀐 걸 반영하는 것이지, 일시적 파싱 실패로 멀쩡한
+          // 기존 값을 지우는 것이 아니다.
+          if (row[key] === null || row[key] === undefined) {
+            merged[key] = existing[key];
+          }
+          continue;
+        }
         if (existing[key] !== null && existing[key] !== undefined) {
           merged[key] = existing[key];
         }

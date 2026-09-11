@@ -116,6 +116,19 @@
       `ServiceCategoryEditor`와 동일한 선택 UI(저장은 기존 bulk-category-mapping
       POST 재사용)를 그 자리에서 보여준다.
       (완료: 2026-09-12, 상세: implementation/2026-09-12-space-link-service-category-check.md)
+- [x] 개선사항9 후속 (Step 119, 사용자 추가 지시): "시간관련 필드.. 예약 일자들도 항상
+      최신값으로 갱신에 포함하는게 맞을거같은데... 주기적으로 바뀌어야 하는 필드에
+      대하여 좀더 확인하고.. 최신값으로 갱신해" — 서울형 키즈카페 실측 조사 중 발견한
+      버그: `upsertRowsSafeMerge`의 "기존 값 있으면 보존" 규칙이 events.start_date/
+      end_date/reservation_start_date/reservation_end_date/is_active/booking_status
+      처럼 회차가 바뀔 때마다 실제로 달라지는 필드에도 적용돼, 한 번 채워진 뒤로는
+      새 예약 회차가 열려도 옛날 값에 영원히 고정되는 문제가 있었음(관악구 난곡동점 등
+      대부분의 지점이 2026-08-25~09-07 회차에 고정, 실제 원본은 이미 09-10~09-21로
+      넘어감). `ALWAYS_REFRESH_FIELDS` 신규 도입해 이 6개 필드만 예외적으로 "최신
+      incoming이 항상 이김"으로 뒤집었다(category_min/target_audience 같은 관리자
+      수동 분류 필드는 절대 포함하지 않음 — 회귀 방지 테스트로 확인). SEOUL_YEYAK
+      1회 수동 재수집으로 기존 데이터도 즉시 반영.
+      (완료: 2026-09-12, 상세: implementation/2026-09-12-safe-merge-always-refresh-time-fields.md)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.
