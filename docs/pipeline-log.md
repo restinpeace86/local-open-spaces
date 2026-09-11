@@ -49,6 +49,7 @@ GitHub Actions cron으로 직접 표현할 수 없다는 사실을 확인했다 
 
 | 실행 일시 | 수집 권역 | RAW 적재 건수 | Service 적재 건수 | 파싱 에러 | 상태 | 비고 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 2026-09-12 01:21 | SEOUL_YEYAK | 2636 | 0 | 2664 | 🚨 [CRITICAL] | 테이블별 부분 실패: events(events upsert 실패: canceling statement due to statement timeout) |
 | 2026-09-11 05:57 | SEOUL_YEYAK | 2625 | 2625 | 28 | ✅ [OK] |  |
 | 2026-09-11 05:45 | GG_CULTURE_EVENTS | 3266 | 2954 | 312 | ✅ [OK] |  |
 | 2026-09-11 05:20 | SEOUL_YEYAK | 2625 | 2625 | 28 | ✅ [OK] |  |
@@ -1377,3 +1378,23 @@ The server returned an invalid or incomplete response.
 | REFRESH_SIGUNGU_OPTIONS_CACHE | 0 | 0 | 0 | 0 | 0 | 시/군/구 목록 캐시 갱신 완료(오늘 배치로 새로 추가된 지역이 있다면 반영됨) |
 
 **검증**: 전체 RAW 수신 25719건(일부 소스 실패/미확인 — 완전한 대조 불가) vs DB 적재 24835건 (+에러 856건 +범위제외 28건)
+
+<details>
+<summary>2026-09-12 01:21 SEOUL_YEYAK 상세 리포트</summary>
+
+**테이블별 적재**
+
+| 테이블 | 가져온 건수 | DB 적재 건수 | 배치 내 중복(NULL 병합) | 기존 DB 병합 |
+| :--- | ---: | ---: | ---: | ---: |
+| open_spaces | 0 | 0 | 0 | 0 |
+| events | 2636 | 0 | 0 | 0 |
+
+**범위 제외**: 28건
+
+**에러 상세**
+
+| 원인 | 건수 |
+| :--- | ---: |
+| COORDINATE_PARSE_FAIL | 13 |
+
+</details>
