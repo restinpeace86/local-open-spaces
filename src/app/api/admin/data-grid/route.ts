@@ -111,14 +111,18 @@ function nextDateString(dateStr: string): string {
   return d.toISOString().slice(0, 10);
 }
 
-function applyCreatedAtRange<Q extends { gte: (c: string, v: string) => Q; lt: (c: string, v: string) => Q }>(
+// [events.updated_at 컬럼 + 자동 갱신 트리거](2026-09-12 사용자 지시): 원래 created_at
+// 전용이었던 이 헬퍼를 컬럼명을 받는 범용 함수로 넓혀 updated_at 범위 필터에도
+// 그대로 재사용한다(제5장 제4조 기존 구조 우선 — 날짜 범위 변환 로직을 중복 작성하지 않음).
+function applyDateRange<Q extends { gte: (c: string, v: string) => Q; lt: (c: string, v: string) => Q }>(
   query: Q,
-  createdFrom: string | null,
-  createdTo: string | null
+  column: string,
+  from: string | null,
+  to: string | null
 ): Q {
   let next = query;
-  if (createdFrom) next = next.gte('created_at', `${createdFrom}T00:00:00.000Z`);
-  if (createdTo) next = next.lt('created_at', `${nextDateString(createdTo)}T00:00:00.000Z`);
+  if (from) next = next.gte(column, `${from}T00:00:00.000Z`);
+  if (to) next = next.lt(column, `${nextDateString(to)}T00:00:00.000Z`);
   return next;
 }
 
@@ -137,8 +141,10 @@ const OPEN_SPACES_COLUMNS =
 
 // [개선사항10](2026-09-11 사용자 지시): space_id(기존 FK 컬럼) 추가 — 관리자 화면이
 // "연결된 스팟" 편집기에서 현재 연결 상태를 보여주려면 목록 조회에도 포함돼야 한다.
+// [events.updated_at 컬럼 + 자동 갱신 트리거](2026-09-12 사용자 지시): 목록 조회에도
+// 포함해야 상세 모달 등에서 실제 갱신 시각을 확인할 수 있다.
 const EVENTS_COLUMNS =
-  'id, external_id, source, title, event_type, category_maj, category_min, category_min_source, target_audience, target_audience_source, venue_name, sigungu_name, start_date, end_date, location, location_precision, is_reservation_required, reservation_url, reservation_start_date, reservation_end_date, is_free, thumbnail_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, is_active, raw_data, created_at, space_id';
+  'id, external_id, source, title, event_type, category_maj, category_min, category_min_source, target_audience, target_audience_source, venue_name, sigungu_name, start_date, end_date, location, location_precision, is_reservation_required, reservation_url, reservation_start_date, reservation_end_date, is_free, thumbnail_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, is_active, raw_data, created_at, updated_at, space_id';
 
 const RAW_INGEST_COLUMNS = 'source, source_id, fetched_at, raw_payload';
 
@@ -355,7 +361,7 @@ async function queryOpenSpaces(supabase: Ctx, searchParams: URLSearchParams, pag
     const curatedIds = (curatedRows ?? []).map((r) => r.spot_id).filter((id): id is string => Boolean(id));
     if (curatedIds.length > 0) query = query.not('id', 'in', `(${curatedIds.join(',')})`);
   }
-  query = applyCreatedAtRange(query, createdFrom, createdTo);
+  query = applyDateRange(query, 'created_at', createdFrom, createdTo);
   // [개선사항2](todo.md, 2026-09-09) "관리자 검수/큐레이션 화면에서는 무조건
   // 하나의 깔끔한 레코드로 노출" — 그룹에 속했지만 대표가 아닌 행(이미 병합된
   // 원본 멤버)은 목록에서 숨긴다. 그룹 미소속 행(group_id is null)은 항상
@@ -389,6 +395,11 @@ async function queryEvents(supabase: Ctx, searchParams: URLSearchParams, page: n
   const missingFee = searchParams.get('missing_fee') === 'true';
   const createdFrom = parseDateFilter(searchParams.get('created_from'));
   const createdTo = parseDateFilter(searchParams.get('created_to'));
+  // [events.updated_at 컬럼 + 자동 갱신 트리거](2026-09-12 사용자 지시): "오늘 등록건"
+  // (created_at)만으로는 external_id가 안정적인 소스가 오늘 실제로 갱신됐어도 안
+  // 잡히던 사각지대를 메우는 별도 필터.
+  const updatedFrom = parseDateFilter(searchParams.get('updated_from'));
+  const updatedTo = parseDateFilter(searchParams.get('updated_to'));
 
   // events(약 2.6만 건)는 open_spaces보다 훨씬 작아 raw_data JSONB 조건을 SQL에 그대로 넣어도
   // 실측상 문제없이 빠르다(별도 우회 경로 불필요).
@@ -414,7 +425,8 @@ async function queryEvents(supabase: Ctx, searchParams: URLSearchParams, page: n
   if (isKidsFriendly !== null) query = query.eq('is_kids_friendly', isKidsFriendly);
   if (missingLocation) query = query.is('location', null);
   if (missingFee) query = query.is('is_free', null);
-  query = applyCreatedAtRange(query, createdFrom, createdTo);
+  query = applyDateRange(query, 'created_at', createdFrom, createdTo);
+  query = applyDateRange(query, 'updated_at', updatedFrom, updatedTo);
 
   const from = (page - 1) * pageSize;
   // [행사 데이터 수집/정제 파이프라인 및 홈 피드 필터링 개선](2026-08-27) 사용자 지시 4번:

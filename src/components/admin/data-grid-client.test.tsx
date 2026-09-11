@@ -547,3 +547,103 @@ describe('AdminDataGridClient — open_spaces 목록 일괄 편집(2026-09-07)',
     expect(await screen.findByText(/적용했습니다/)).toBeInTheDocument();
   });
 });
+
+// [events.updated_at 컬럼 + 자동 갱신 트리거](2026-09-12 사용자 지시): "updated_at
+// 어 이거 추가해.. 자동 갱신 트리거도 하고" — "오늘 등록건"(created_at)만으로는
+// 오늘 실제로 내용이 갱신된(예: 예약 회차가 바뀐) 이벤트가 잡히지 않던 사각지대를
+// 메우는 별도 필터.
+describe('AdminDataGridClient — 수정일(updated_at) 필터(2026-09-12)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function todayDateStr(): string {
+    return new Date().toISOString().slice(0, 10);
+  }
+
+  it('open_spaces 탭에는 수정일 필터가 없다(events 전용)', () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ rows: [], total: 0 }) } as Response)));
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+
+    expect(screen.queryByText('수정일(updated_at)')).not.toBeInTheDocument();
+  });
+
+  it('events 탭에서 "오늘 갱신건 보기"를 누르면 updated_from/updated_to로 조회하고, 등록일 필터는 비운다', async () => {
+    const fetchMock = vi.fn((_url: string) => Promise.resolve({ ok: true, json: () => Promise.resolve({ rows: [], total: 0 }) } as Response));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+
+    fireEvent.click(screen.getByText('events (행사·체험)'));
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await screen.findByText('조건에 맞는 데이터가 없습니다.');
+    fetchMock.mockClear();
+
+    fireEvent.click(screen.getByText('오늘 갱신건 보기'));
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/data-grid'));
+      expect(call).toBeDefined();
+      const url = call![0] as string;
+      expect(url).toContain(`updated_from=${todayDateStr()}`);
+      expect(url).toContain(`updated_to=${todayDateStr()}`);
+      // 기본값이 "오늘"로 고정된 등록일 필터는 함께 걸리면 서로 좁혀버리므로 비워야 한다.
+      expect(url).not.toContain('created_from=');
+      expect(url).not.toContain('created_to=');
+    });
+  });
+
+  it('수정일 필터가 켜진 상태에서 "오늘 등록건 보기"를 누르면 반대로 수정일 필터를 비운다', async () => {
+    const fetchMock = vi.fn((_url: string) => Promise.resolve({ ok: true, json: () => Promise.resolve({ rows: [], total: 0 }) } as Response));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+
+    fireEvent.click(screen.getByText('events (행사·체험)'));
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await screen.findByText('조건에 맞는 데이터가 없습니다.');
+    fetchMock.mockClear();
+
+    fireEvent.click(screen.getByText('오늘 갱신건 보기'));
+    await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(0));
+    fetchMock.mockClear();
+
+    fireEvent.click(screen.getByText('오늘 등록건 보기'));
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/data-grid'));
+      expect(call).toBeDefined();
+      const url = call![0] as string;
+      expect(url).toContain(`created_from=${todayDateStr()}`);
+      expect(url).not.toContain('updated_from=');
+      expect(url).not.toContain('updated_to=');
+    });
+  });
+});
+
+// [events.updated_at 컬럼 + 자동 갱신 트리거](2026-09-12 사용자 지시) 참고: 요약
+// 카드가 "오늘 갱신" 건수도 함께 보여주는지 검증한다.
+describe('AdminDataGridClient — 오늘 반영 현황에 events 갱신 건수 표시(2026-09-12)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('요약 카드가 events_updated_today를 "오늘 갱신" 건수로 보여준다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/admin/data-grid/summary')) {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({ open_spaces_created_today: 1, events_created_today: 2, events_updated_today: 331 }),
+          } as Response);
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ rows: [], total: 0 }) } as Response);
+      })
+    );
+
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+    fireEvent.click(screen.getByText('▾ 오늘 반영 현황 / 재수집 도구 보기'));
+
+    expect(await screen.findByText(/오늘 갱신\(내용 변경\): 331건/)).toBeInTheDocument();
+  });
+});

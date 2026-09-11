@@ -108,6 +108,10 @@ export type AdminEventRow = {
   is_active: boolean | null;
   raw_data: unknown;
   created_at: string | null;
+  // [events.updated_at 컬럼 + 자동 갱신 트리거](2026-09-12 사용자 지시): 실제 값이
+  // 바뀔 때만 트리거가 갱신한다(raw_data 등 잡음 컬럼은 제외) — 컬럼이 없던 동안
+  // 만들어진 과거 행은 마이그레이션 시점에 created_at으로 백필됐다.
+  updated_at?: string | null;
   // [개선사항10](2026-09-11 사용자 지시): 연결된 open_spaces 행(기존 FK 컬럼,
   // events_space_id_fkey). null이면 미연결.
   space_id?: string | null;
@@ -198,13 +202,18 @@ function daysAgoDateStr(days: number): string {
 type DataGridSummary = {
   open_spaces_created_today: number | null;
   events_created_today: number | null;
+  // [events.updated_at 컬럼 + 자동 갱신 트리거](2026-09-12 사용자 지시) 참고: events만
+  // 트리거 기반 updated_at이 생겨 "오늘 갱신" 집계가 가능해졌다.
+  events_updated_today: number | null;
 };
 
-// 요구사항 1: "/admin/data-grid 상단 요약 카드". 실측 확인(2026-08-28): events는 updated_at
-// 컬럼이 없고 open_spaces의 updated_at은 트리거가 없어 created_at과 항상 같은 값이라(1000건
-// 샘플 전수 확인) "내용 갱신 건수"는 현재 스키마로 집계할 근거가 없다 — 사용자 확인 후
-// 이번에는 신규(created_at) 집계만 구현하고 업데이트 집계는 스키마 변경 결정이 있을 때까지
-// 보류한다(추측으로 0건을 표시하면 "갱신이 없었다"는 오해를 주므로 아예 표시하지 않는다).
+// 요구사항 1: "/admin/data-grid 상단 요약 카드". [events.updated_at 컬럼 + 자동 갱신
+// 트리거](2026-09-12 사용자 지시): "updated_at 어 이거 추가해.. 자동 갱신 트리거도
+// 하고" — 2026-08-28 당시엔 events에 updated_at 컬럼이 아예 없어 "내용 갱신 건수"를
+// 집계할 근거가 없었다(추측으로 0건을 표시하면 "갱신이 없었다"는 오해를 줌). 이제
+// events에 실제 값이 바뀔 때만 갱신되는 트리거 기반 updated_at이 생겨 이 카드에 함께
+// 보여준다. open_spaces는 여전히 트리거가 없어(관리자가 수동 수정할 때만 JS가 직접
+// 채움) 갱신 집계에서 계속 제외한다.
 function TodayBatchSummary() {
   const [summary, setSummary] = useState<DataGridSummary | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -229,6 +238,7 @@ function TodayBatchSummary() {
 
   const openToday = summary.open_spaces_created_today;
   const eventsToday = summary.events_created_today;
+  const eventsUpdatedToday = summary.events_updated_today;
   const total = (openToday ?? 0) + (eventsToday ?? 0);
 
   return (
@@ -236,8 +246,12 @@ function TodayBatchSummary() {
       <span className="text-xs font-semibold text-blue-900">📅 오늘 신규 반영: Total {total.toLocaleString('ko-KR')}건</span>
       <span className="text-xs text-blue-800">open_spaces {openToday ?? '-'}건</span>
       <span className="text-xs text-blue-800">events {eventsToday ?? '-'}건</span>
+      <span className="text-xs font-semibold text-emerald-800">
+        ✏️ events 오늘 갱신(내용 변경): {eventsUpdatedToday ?? '-'}건
+      </span>
       <span className="text-[11px] text-blue-400">
-        ※ 내용 변경(업데이트) 건수는 현재 스키마(updated_at 자동 갱신 트리거 없음)로는 집계할 수 없습니다.
+        ※ open_spaces는 아직 updated_at 자동 갱신 트리거가 없어(관리자가 수동 수정할 때만
+        갱신) 갱신 건수를 집계하지 않습니다.
       </span>
     </div>
   );
@@ -723,6 +737,17 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
   // (isActive 필터가 기본값을 'all'이 아니라 'true'로 두는 것과 동일한 관례).
   const [createdFrom, setCreatedFrom] = useState(todayDateStr());
   const [createdTo, setCreatedTo] = useState(todayDateStr());
+  // [events.updated_at 컬럼 + 자동 갱신 트리거](2026-09-12 사용자 지시): "updated_at
+  // 어 이거 추가해.. 자동 갱신 트리거도 하고" — "오늘 등록건"(created_at)만으로는
+  // external_id가 안정적인 소스(예: 서울형 키즈카페)가 오늘 실제로 갱신(예약 회차
+  // 변경)됐어도 절대 안 잡히는 사각지대가 있었다(실측으로 확인된 사용자 혼란).
+  // 등록일과 독립된 별도 필터라 기본값은 빈 문자열(필터 없음) — 등록일 기본값(오늘)과
+  // 동시에 걸리면 "오늘 생성 AND 오늘 갱신"으로 좁아져 정작 찾으려는(옛날에 생성,
+  // 오늘 갱신) 행이 다시 안 잡히는 동일한 함정에 빠진다. 그래서 한쪽 단축 버튼을
+  // 누르면 다른 쪽 범위를 항상 비워 두 필터가 함께 걸리지 않게 한다(events 탭 전용 —
+  // open_spaces는 updated_at이 트리거 기반이 아니라 이 필터를 두지 않는다).
+  const [updatedFrom, setUpdatedFrom] = useState('');
+  const [updatedTo, setUpdatedTo] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0]);
 
@@ -907,7 +932,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedQ, sourceTypes, sources, categories, minClassName, appliedCategoryMin, appliedTargetAudience, isActive, createdFrom, createdTo]);
+  }, [debouncedQ, sourceTypes, sources, categories, minClassName, appliedCategoryMin, appliedTargetAudience, isActive, createdFrom, createdTo, updatedFrom, updatedTo]);
 
   // [행사 데이터 수집/정제 파이프라인 및 홈 피드 필터링 개선](2026-08-27) 사용자 지시 4번:
   // [조회하기] 버튼 클릭 시 pending → applied로 한 번에 반영한다 — 이 시점에만 아래 fetch
@@ -938,6 +963,10 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     if (tab === 'open_spaces' && onlyUncurated) params.set('only_uncurated', 'true');
     if (tab !== 'raw_ingest_data' && createdFrom) params.set('created_from', createdFrom);
     if (tab !== 'raw_ingest_data' && createdTo) params.set('created_to', createdTo);
+    // [events.updated_at 컬럼 + 자동 갱신 트리거](2026-09-12 사용자 지시): events 탭
+    // 전용(트리거 기반 updated_at이 있는 테이블만).
+    if (tab === 'events' && updatedFrom) params.set('updated_from', updatedFrom);
+    if (tab === 'events' && updatedTo) params.set('updated_to', updatedTo);
     params.set('page', String(page));
     params.set('page_size', String(pageSize));
 
@@ -963,7 +992,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, hasLoaded, debouncedQ, sourceTypes, sources, categories, minClassName, appliedCategoryMin, appliedTargetAudience, isActive, onlyUnmapped, onlyUncurated, createdFrom, createdTo, page, pageSize]);
+  }, [tab, hasLoaded, debouncedQ, sourceTypes, sources, categories, minClassName, appliedCategoryMin, appliedTargetAudience, isActive, onlyUnmapped, onlyUncurated, createdFrom, createdTo, updatedFrom, updatedTo, page, pageSize]);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
   const currentOptions = filterOptions[tab];
@@ -1147,6 +1176,12 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
               onClick={() => {
                 setCreatedFrom(todayDateStr());
                 setCreatedTo(todayDateStr());
+                // [events.updated_at 컬럼 + 자동 갱신 트리거](2026-09-12 사용자 지시):
+                // 등록일/수정일 필터가 동시에 걸리면 "오늘 생성 AND 오늘 갱신"으로
+                // 좁아져 옛날에 생성되고 오늘 갱신만 된 행을 다시 놓친다 — 등록일
+                // 단축 버튼을 누르면 수정일 필터는 항상 비운다.
+                setUpdatedFrom('');
+                setUpdatedTo('');
               }}
               className={`rounded-full px-2.5 py-1 text-xs font-medium border transition-colors ${
                 createdFrom === todayDateStr() && createdTo === todayDateStr()
@@ -1161,6 +1196,8 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
               onClick={() => {
                 setCreatedFrom(daysAgoDateStr(2));
                 setCreatedTo(todayDateStr());
+                setUpdatedFrom('');
+                setUpdatedTo('');
               }}
               className={`rounded-full px-2.5 py-1 text-xs font-medium border transition-colors ${
                 createdFrom === daysAgoDateStr(2) && createdTo === todayDateStr()
@@ -1206,6 +1243,75 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
             >
               🔍 조회하기
             </button>
+          </div>
+        )}
+
+        {/* [events.updated_at 컬럼 + 자동 갱신 트리거](2026-09-12 사용자 지시): "updated_at
+            어 이거 추가해.. 자동 갱신 트리거도 하고" — 등록일(created_at)만으로는
+            external_id가 안정적인 소스가 오늘 실제로 내용이 갱신됐어도 안 잡히던
+            사각지대를 메운다. events 탭 전용(트리거 기반 updated_at이 있는 테이블만). */}
+        {tab === 'events' && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="text-xs text-gray-500 shrink-0">수정일(updated_at)</span>
+            <button
+              type="button"
+              onClick={() => {
+                setUpdatedFrom(todayDateStr());
+                setUpdatedTo(todayDateStr());
+                // 등록일 필터와 동시에 걸리면 서로 좁혀버리므로 항상 비운다(위 등록일
+                // 버튼과 대칭).
+                setCreatedFrom('');
+                setCreatedTo('');
+              }}
+              className={`rounded-full px-2.5 py-1 text-xs font-medium border transition-colors ${
+                updatedFrom === todayDateStr() && updatedTo === todayDateStr()
+                  ? 'bg-emerald-700 text-white border-emerald-700'
+                  : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              오늘 갱신건 보기
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setUpdatedFrom(daysAgoDateStr(2));
+                setUpdatedTo(todayDateStr());
+                setCreatedFrom('');
+                setCreatedTo('');
+              }}
+              className={`rounded-full px-2.5 py-1 text-xs font-medium border transition-colors ${
+                updatedFrom === daysAgoDateStr(2) && updatedTo === todayDateStr()
+                  ? 'bg-emerald-700 text-white border-emerald-700'
+                  : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              최근 3일 갱신건 보기
+            </button>
+            <input
+              type="date"
+              value={updatedFrom}
+              onChange={(e) => setUpdatedFrom(e.target.value)}
+              className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
+            />
+            <span className="text-xs text-gray-400">~</span>
+            <input
+              type="date"
+              value={updatedTo}
+              onChange={(e) => setUpdatedTo(e.target.value)}
+              className="rounded-lg border border-gray-300 px-2 py-1 text-xs"
+            />
+            {(updatedFrom || updatedTo) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setUpdatedFrom('');
+                  setUpdatedTo('');
+                }}
+                className="text-xs text-gray-500 hover:text-gray-800 underline"
+              >
+                날짜 초기화
+              </button>
+            )}
           </div>
         )}
         {tab !== 'raw_ingest_data' && hasPendingFilterChanges && (
