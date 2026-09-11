@@ -105,6 +105,17 @@
       불꽃놀이/동화/공연/인형극/마술쇼/캐릭터/야경 등 + "아이들과 가기 좋은" 류
       문구) — "원" 같은 단일 글자·오탐 위험 단어는 제외.
       (완료: 2026-09-11, 상세: implementation/2026-09-11-event-curation-price-target-audience-kid-keywords.md)
+- [x] 개선사항10 후속 (Step 118, 사용자 추가 지시): "이벤트픽에 스팟 연결하면 연결됨이라고
+      뜨는데.. 해당 장소가 노출 중분류가 있는지 확인하고.. 없으면 노출 중분류를
+      입력하라고 하고 해당 팝업화면에서 선택 및 저장 가능하도록 해줘" — 실측 확인
+      결과 노출 중분류(service_category_id)가 없어도 필터 없는 기본 스팟픽 지도엔
+      나오지만(location_precision=EXACT만 요구), 카테고리 필터(get_spots_by_service_
+      category RPC)로는 전혀 걸리지 않음. `/api/admin/data-grid/space-link`에 GET
+      추가(연결된 open_spaces의 name/service_category_id 조회), `SpaceLinkEditor`가
+      스팟 연결/로드 시마다 이를 조회해 있으면 초록 배지, 없으면 경고 + 기존
+      `ServiceCategoryEditor`와 동일한 선택 UI(저장은 기존 bulk-category-mapping
+      POST 재사용)를 그 자리에서 보여준다.
+      (완료: 2026-09-12, 상세: implementation/2026-09-12-space-link-service-category-check.md)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.

@@ -755,10 +755,12 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     category_mapping: false,
   });
 
-  // [노출 중분류 개별 행 수정](2026-09-05 사용자 지시) 참고: open_spaces 행을 열 때만
-  // (events/raw_ingest_data는 이 컬럼이 없어 필요 없음) 노출 중분류 목록을 처음 한
-  // 번만 조용히 가져온다. 이 핸들러 자체는 open_spaces/events 테이블 행 클릭에 공용으로
-  // 쓰이므로(아래 호출부), tab으로 한 번 더 좁힌다.
+  // [노출 중분류 개별 행 수정](2026-09-05 사용자 지시) 참고: open_spaces 행을 열 때
+  // 노출 중분류 목록을 처음 한 번만 조용히 가져온다(raw_ingest_data는 이 컬럼이 없어
+  // 필요 없음). [연결된 스팟의 노출 중분류 확인/입력](2026-09-12 사용자 지시)부터
+  // events 행을 열 때도 함께 가져온다 — 연결된 스팟(open_spaces)의 노출 중분류를
+  // 이 목록으로 표시/선택하기 때문. 이 핸들러 자체는 open_spaces/events 테이블 행
+  // 클릭에 공용으로 쓰이므로(아래 호출부), tab으로 한 번 더 좁힌다.
   // handleOpenDataRow(상세 모달 열기)와 체크박스 선택(일괄 편집) 둘 다 노출
   // 중분류 옵션이 필요해 이 지연 로딩을 공유한다(제5장 제4조 — 새 fetch 경로를
   // 또 만들지 않음).
@@ -778,7 +780,9 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
 
   function handleOpenDataRow(row: AdminRow) {
     setSelectedRow(row);
-    if (tab === 'open_spaces') ensureServiceCategoriesLoaded();
+    // [연결된 스팟의 노출 중분류 확인/입력](2026-09-12 사용자 지시): events 탭 상세도
+    // SpaceLinkEditor가 노출 중분류 목록/선택 UI를 보여줘야 해 함께 로드한다.
+    if (tab === 'open_spaces' || tab === 'events') ensureServiceCategoriesLoaded();
   }
 
   function toggleRowSelection(id: string) {
@@ -1587,7 +1591,9 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
           row={selectedRow}
           categoryMinOptions={currentOptions && 'categoryMins' in currentOptions ? currentOptions.categoryMins : []}
           targetAudienceOptions={tab === 'events' ? [...TARGET_AUDIENCE_TAGS] : []}
-          serviceCategories={tab === 'open_spaces' ? serviceCategories : []}
+          // [연결된 스팟의 노출 중분류 확인/입력](2026-09-12 사용자 지시): events 탭의
+          // SpaceLinkEditor도 노출 중분류 목록이 필요해 open_spaces와 함께 전달한다.
+          serviceCategories={tab === 'open_spaces' || tab === 'events' ? serviceCategories : []}
           onClose={() => setSelectedRow(null)}
           onCategoryMinUpdated={(id, nextCategoryMin, nextSource) => {
             // [수정/적재일 클라이언트 즉시 반영](2026-09-08 사용자 지시): "여전히 수정

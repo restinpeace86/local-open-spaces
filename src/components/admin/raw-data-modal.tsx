@@ -374,21 +374,64 @@ function LocationEditor({ row, onUpdated }: { row: AdminEventRow; onUpdated: (id
 // 툴 플로우를 지원". 기존 SpotPicker(맘스픽 글쓰기 스팟 검색, /api/spots/search +
 // 카카오 로컬 Fallback + Auto-Upsert)를 그대로 재사용한다(제5장 제4조 기존 구조
 // 우선 — 검색·신규 등록 로직을 다시 만들지 않음).
+//
+// [연결된 스팟의 노출 중분류 확인/입력](2026-09-12 사용자 지시): "연결하면 연결됨이라고
+// 뜨는데.. 해당 장소가 노출 중분류가 있는지 확인하고.. 없으면 노출 중분류를 입력하라고
+// 하고 해당 팝업화면에서 노출 중분류 선택 및 저장 가능하도록 해줘" — get-nearby.ts
+// 실측 확인 결과, 노출 중분류(service_category_id)가 없어도 필터 없는 기본 스팟픽
+// 지도에는 나오지만, 노출 중분류로 필터링하는 순간(get_spots_by_service_category)
+// 전혀 걸리지 않는다. 스팟을 고르거나(SpotPicker) 이미 연결된 스팟을 불러올 때마다
+// 그 스팟의 service_category_id를 함께 조회해 경고/입력 UI를 보여준다.
 function SpaceLinkEditor({
   row,
+  serviceCategories,
   onUpdated,
 }: {
   row: AdminEventRow;
+  serviceCategories: ServiceCategory[];
   onUpdated: (id: string, nextSpaceId: string | null) => void;
 }) {
   const [selected, setSelected] = useState<SpotOption | null>(
-    row.space_id ? { id: row.space_id, name: '(연결됨 — 이름 확인은 스팟픽에서)', address: null } : null
+    row.space_id ? { id: row.space_id, name: '(연결됨 — 이름 확인 중...)', address: null } : null
   );
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // undefined = 아직 조회 전, null = 조회 완료했지만 노출 중분류 없음.
+  const [spaceServiceCategoryId, setSpaceServiceCategoryId] = useState<string | null | undefined>(undefined);
+  const [isLoadingSpaceInfo, setIsLoadingSpaceInfo] = useState(false);
+  const [categoryDraft, setCategoryDraft] = useState('');
+  const [isSavingCategory, setIsSavingCategory] = useState(false);
+  const [categoryErrorMessage, setCategoryErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    const spaceId = selected?.id ?? null;
+    if (!spaceId) {
+      setSpaceServiceCategoryId(undefined);
+      return;
+    }
+    setIsLoadingSpaceInfo(true);
+    fetch(`/api/admin/data-grid/space-link?space_id=${encodeURIComponent(spaceId)}`)
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok || !data.space) return;
+        setSelected((prev) =>
+          prev && prev.id === spaceId ? { ...prev, name: data.space.standard_name ?? data.space.name ?? prev.name } : prev
+        );
+        setSpaceServiceCategoryId(data.space.service_category_id ?? null);
+        setCategoryDraft(data.space.service_category_id ?? '');
+      })
+      .catch(() => {
+        // 조용한 부가 조회 실패는 연결 자체를 막지 않는다(제5장 제11조).
+      })
+      .finally(() => setIsLoadingSpaceInfo(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected?.id]);
+
   async function handleSelect(spot: SpotOption | null) {
     setSelected(spot);
+    setSpaceServiceCategoryId(undefined);
+    setCategoryErrorMessage(null);
     setIsSaving(true);
     setErrorMessage(null);
     try {
@@ -407,6 +450,28 @@ function SpaceLinkEditor({
     }
   }
 
+  async function handleSaveCategory() {
+    if (!selected) return;
+    setIsSavingCategory(true);
+    setCategoryErrorMessage(null);
+    try {
+      const res = await fetch('/api/admin/open-spaces/bulk-category-mapping', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [selected.id], service_category_id: categoryDraft || null }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? '노출 중분류 저장 실패');
+      setSpaceServiceCategoryId(categoryDraft || null);
+    } catch (err) {
+      setCategoryErrorMessage(err instanceof Error ? err.message : '노출 중분류 저장 실패');
+    } finally {
+      setIsSavingCategory(false);
+    }
+  }
+
+  const currentCategory = serviceCategories.find((c) => c.id === spaceServiceCategoryId);
+
   return (
     <div className="mt-3 rounded-xl border border-gray-200 p-3">
       <h3 className="text-xs font-semibold text-gray-500 mb-2">
@@ -422,6 +487,47 @@ function SpaceLinkEditor({
       </h3>
       <SpotPicker selected={selected} onSelect={handleSelect} />
       {errorMessage && <p className="mt-1.5 text-xs text-red-500">{errorMessage}</p>}
+
+      {selected && isLoadingSpaceInfo && spaceServiceCategoryId === undefined && (
+        <p className="mt-2 text-[11px] text-gray-400">노출 중분류 확인 중...</p>
+      )}
+
+      {selected && !isLoadingSpaceInfo && spaceServiceCategoryId && (
+        <p className="mt-2 text-[11px] font-medium text-emerald-700">
+          ✅ 노출 중분류: {currentCategory ? `${currentCategory.parent_category} > ${currentCategory.category_name}` : spaceServiceCategoryId}
+        </p>
+      )}
+
+      {selected && !isLoadingSpaceInfo && spaceServiceCategoryId === null && (
+        <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50/60 p-2.5">
+          <p className="text-[11px] font-semibold text-amber-800 mb-1.5">
+            ⚠️ 이 스팟은 노출 중분류가 없어요 — 카테고리 필터로는 스팟픽에서 찾을 수 없어요. 지금 지정해 주세요.
+          </p>
+          <div className="flex items-center gap-2">
+            <select
+              value={categoryDraft}
+              onChange={(e) => setCategoryDraft(e.target.value)}
+              className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs flex-1"
+            >
+              <option value="">(선택 안 함)</option>
+              {serviceCategories.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.parent_category} &gt; {c.category_name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              onClick={handleSaveCategory}
+              disabled={isSavingCategory || !categoryDraft}
+              className="shrink-0 rounded-full bg-purple-600 text-white text-xs font-semibold px-3 py-1.5 disabled:opacity-40 hover:bg-purple-700"
+            >
+              {isSavingCategory ? '저장 중...' : '저장'}
+            </button>
+          </div>
+          {categoryErrorMessage && <p className="mt-1.5 text-xs text-red-500">{categoryErrorMessage}</p>}
+        </div>
+      )}
     </div>
   );
 }
@@ -445,7 +551,9 @@ export function RawDataModal({
   row: AdminRow;
   categoryMinOptions: string[];
   targetAudienceOptions?: string[];
-  // [노출 중분류 개별 행 수정](2026-09-05 사용자 지시): open_spaces 탭에서만 쓰인다.
+  // [노출 중분류 개별 행 수정](2026-09-05 사용자 지시): 원래 open_spaces 탭 전용이었으나,
+  // [연결된 스팟의 노출 중분류 확인/입력](2026-09-12 사용자 지시)부터 events 탭의
+  // SpaceLinkEditor도 이 목록을 재사용한다(제5장 제4조 — 같은 목록을 또 조회하지 않음).
   serviceCategories?: ServiceCategory[];
   onClose: () => void;
   onCategoryMinUpdated?: (id: string, nextCategoryMin: string | null, nextSource: string | null) => void;
@@ -581,7 +689,7 @@ export function RawDataModal({
           {table === 'events' && onLocationUpdated && <LocationEditor row={row as AdminEventRow} onUpdated={onLocationUpdated} />}
 
           {table === 'events' && onSpaceLinkUpdated && (
-            <SpaceLinkEditor row={row as AdminEventRow} onUpdated={onSpaceLinkUpdated} />
+            <SpaceLinkEditor row={row as AdminEventRow} serviceCategories={serviceCategories} onUpdated={onSpaceLinkUpdated} />
           )}
 
           {/* [이벤트픽 관리자 블로그 큐레이션](2026-09-11 사용자 지시, todo.md

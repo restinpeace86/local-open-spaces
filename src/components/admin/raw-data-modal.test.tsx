@@ -676,6 +676,13 @@ describe('RawDataModal — 연결된 스팟(space_id) 편집기 (개선사항10,
   });
 
   it('space_id가 있으면 "연결됨" 배지를 보여준다', () => {
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ space: { id: 'space-1', name: '오름공원', standard_name: null, service_category_id: null } }),
+      } as Response)
+    );
+    vi.stubGlobal('fetch', fetchMock);
     const row = { ...buildRow(), title: '가을 축제', space_id: 'space-1' };
     render(
       <RawDataModal
@@ -721,9 +728,85 @@ describe('RawDataModal — 연결된 스팟(space_id) 편집기 (개선사항10,
     fireEvent.mouseDown(await screen.findByText('오름공원'));
 
     await waitFor(() => expect(onSpaceLinkUpdated).toHaveBeenCalledWith('row-1', 'space-9'));
-    const patchCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/data-grid/space-link'));
+    // [연결된 스팟의 노출 중분류 확인/입력](2026-09-12): 선택 직후 같은 URL로 노출
+    // 중분류 조회(GET)도 함께 나가므로 method로 PATCH 호출만 콕 집어 검증한다.
+    const patchCall = fetchMock.mock.calls.find(
+      (c) => (c[0] as string).includes('/api/admin/data-grid/space-link') && (c[1] as RequestInit)?.method === 'PATCH'
+    );
     expect(patchCall).toBeDefined();
     expect(JSON.parse((patchCall![1] as RequestInit).body as string)).toEqual({ id: 'row-1', space_id: 'space-9' });
+  });
+
+  // [연결된 스팟의 노출 중분류 확인/입력](2026-09-12 사용자 지시): "연결하면 연결됨이라고
+  // 뜨는데.. 해당 장소가 노출 중분류가 있는지 확인하고 알려줘.. 없으면 입력하라고 하고
+  // 저장 가능하도록 해줘".
+  it('연결된 스팟에 노출 중분류가 있으면 초록 배지로 보여준다', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/api/admin/data-grid/space-link')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({ space: { id: 'space-1', name: '오름공원', standard_name: null, service_category_id: 'cat-1' } }),
+        } as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const row = { ...buildRow(), title: '가을 축제', space_id: 'space-1' };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        serviceCategories={[{ id: 'cat-1', parent_category: '체험', category_name: '생태학습' }]}
+        onClose={vi.fn()}
+        onSpaceLinkUpdated={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText(/노출 중분류: 체험 > 생태학습/)).toBeInTheDocument();
+    expect(screen.queryByText(/노출 중분류가 없어요/)).not.toBeInTheDocument();
+  });
+
+  it('연결된 스팟에 노출 중분류가 없으면 경고와 선택·저장 UI를 보여주고, 저장하면 배지로 바뀐다', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/api/admin/data-grid/space-link')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({ space: { id: 'space-1', name: '방이동생태학습관', standard_name: null, service_category_id: null } }),
+        } as Response);
+      }
+      if (url.includes('/api/admin/open-spaces/bulk-category-mapping')) {
+        void init;
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ updated: 1 }) } as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const row = { ...buildRow(), title: '가을 축제', space_id: 'space-1' };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        serviceCategories={[{ id: 'cat-1', parent_category: '체험', category_name: '생태학습' }]}
+        onClose={vi.fn()}
+        onSpaceLinkUpdated={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText(/노출 중분류가 없어요/)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'cat-1' } });
+    fireEvent.click(screen.getByText('저장'));
+
+    await waitFor(() => expect(screen.getByText(/노출 중분류: 체험 > 생태학습/)).toBeInTheDocument());
+    expect(screen.queryByText(/노출 중분류가 없어요/)).not.toBeInTheDocument();
+
+    const mappingCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/open-spaces/bulk-category-mapping'));
+    expect(mappingCall).toBeDefined();
+    expect(JSON.parse((mappingCall![1] as RequestInit).body as string)).toEqual({ ids: ['space-1'], service_category_id: 'cat-1' });
   });
 
   it('open_spaces 탭에는 이 편집기가 없다', () => {

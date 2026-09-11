@@ -8,6 +8,36 @@ import { createAdminClient } from '@/lib/supabase/admin';
 // open_spaces(id) ON DELETE SET NULL) — 신규 컬럼을 추가하지 않고 그대로 재사용한다
 // (제5장 제4조 기존 구조 우선). location.ts PATCH 라우트와 동일한 관례(id 필수,
 // service_role로 갱신).
+
+// [연결된 스팟의 노출 중분류 확인](2026-09-12 사용자 지시): "이벤트픽에 스팟 연결하면
+// 연결됨이라고 뜨는데.. 해당 장소가 노출 중분류가 있는지 확인하고 알려줘" — SpotPicker는
+// {id, name, address}만 알고 있어 service_category_id를 모른다. 이 라우트가 이미 events↔
+// open_spaces 연결을 다루므로 새 엔드포인트를 만들지 않고 GET을 추가해 연결된 open_spaces
+// 행의 이름/노출 중분류를 함께 조회한다(제5장 제4조 기존 구조 우선).
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const spaceId = searchParams.get('space_id');
+    if (!spaceId) {
+      return NextResponse.json({ error: 'space_id가 필요합니다.' }, { status: 400 });
+    }
+
+    const admin = createAdminClient();
+    const { data, error } = await admin
+      .from('open_spaces')
+      .select('id, name, standard_name, service_category_id')
+      .eq('id', spaceId)
+      .single();
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+    return NextResponse.json({ space: data });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : '연결된 스팟 조회 실패';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
