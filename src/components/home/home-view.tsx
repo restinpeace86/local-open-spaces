@@ -206,6 +206,11 @@ export function HomeView({
   const { center, addressName, sigunguName, isOnboardingOpen, confirmLocation, openOnboarding, closeOnboarding } =
     useUserLocation();
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
+  // [전체보기 목록 복귀 포커스](2026-09-12 사용자 지시): "상세카드 취소시 바로 전단계인
+  // 리스트 목록 열리고 방금전에 누른 리스트가 포커스되어야 하는데.. 그냥 사라져버리고
+  // 이벤트픽 화면이 뜬다" — 목록에서 항목을 선택한 시점의 item.id를 들고 있다가, 상세
+  // 카드를 닫아도 그대로 남겨둬 돌아간 목록에서 그 행을 강조 표시한다.
+  const [focusedListItemId, setFocusedListItemId] = useState<string | null>(null);
   // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시) 요구사항 3: "전체보기"가 페이지 이동 대신
   // 이 화면 위 바텀시트로 뜬다 — 어떤 종류의 전체보기를 열지만 상태로 들고 있으면 된다.
   const [browseSheetMode, setBrowseSheetMode] = useState<EventBrowseSheetMode | null>(null);
@@ -385,7 +390,11 @@ export function HomeView({
                 isCategoryFeedLoadingMore={isCategoryFeedLoadingMore}
                 categoryFeedHasMore={categoryFeedHasMore}
                 onLoadMoreCategoryFeed={loadMoreCategoryFeed}
-                onSelectResultItem={setSelectedItem}
+                onSelectResultItem={(item) => {
+                  setFocusedListItemId(item.id);
+                  setSelectedItem(item);
+                }}
+                focusedItemId={focusedListItemId}
               />
             </section>
 
@@ -544,15 +553,26 @@ export function HomeView({
       {browseSheetMode && (
         <EventBrowseSheet
           mode={browseSheetMode}
-          onClose={() => setBrowseSheetMode(null)}
-          onSelectItem={(item) => {
+          onClose={() => {
             setBrowseSheetMode(null);
+            setFocusedListItemId(null);
+          }}
+          // [전체보기 목록 복귀 포커스](2026-09-12 사용자 지시): 이전에는 여기서 시트를
+          // 곧바로 닫아버려(setBrowseSheetMode(null)) 상세카드를 취소하면 시트 자체가
+          // 이미 사라진 상태라 이벤트픽 기본 화면으로 튕겨 나갔다 — "다시 전체보기
+          // 누르고 처음부터 봐야" 하는 불편함의 원인이었다. 시트는 계속 열어두고 상세
+          // 카드만 그 위에 겹쳐 띄운다(DetailModal이 아래쪽 JSX에서 나중에 렌더링되므로
+          // 별도 z-index 조정 없이 자연스럽게 위에 쌓인다) — 상세를 닫으면 시트가 그
+          // 자리(스크롤 위치 그대로) 그대로 다시 보인다.
+          onSelectItem={(item) => {
+            setFocusedListItemId(item.id);
             setSelectedItem(item);
           }}
           // [개선사항5](2026-09-11 사용자 지시): "전체보기" 목록 거리순 정렬용 — 위치를
           // 아직 설정하지 않은 사용자(addressName === null)에게는 null을 넘겨 서버가
           // 폴백 정렬(마감임박순)로 동작하게 한다.
           userLocation={addressName ? { lat: center.lat, lng: center.lng, addressName } : null}
+          focusedItemId={focusedListItemId}
         />
       )}
       {selectedItem && <DetailModal item={selectedItem} onClose={() => setSelectedItem(null)} />}

@@ -583,6 +583,53 @@ describe('HomeView', () => {
     expect(await screen.findByText('놓치면 후회하는 인기 만점 예약 픽 전체보기')).toBeInTheDocument();
   });
 
+  // [전체보기 목록 복귀 포커스](2026-09-12 사용자 지시): "상세카드 취소시 바로 전단계인
+  // 리스트 목록 열리고 방금전에 누른 리스트가 포커스되어야 하는데.. 그냥 사라져버리고
+  // 이벤트픽 화면이 뜬다.. 다시 전체보기 누르고 처음부터 봐야 하는 상황" — EventBrowseSheet에서
+  // 항목을 눌러 상세카드를 연 뒤 상세카드를 닫아도, 시트 자체는 사라지지 않고 그대로
+  // 남아 있어야 한다.
+  it('전체보기 바텀시트에서 항목을 눌러 상세카드를 열고 닫아도 바텀시트는 그대로 남아 있다', async () => {
+    // 위치 온보딩 모달도 동일한 aria-label="닫기" 닫기 버튼을 쓰므로, 위치를 미리 설정해
+    // 온보딩 모달이 함께 뜨는 것을 막아 "닫기" 버튼이 시트/상세카드 2개만 남게 한다.
+    localStorage.setItem(
+      'user_location',
+      JSON.stringify({ lat: 37.4, lng: 127.2, address_name: '경기도 성남시 분당구', sigungu_name: '성남시 분당구' })
+    );
+    const heroEvents = Array.from({ length: 12 }, (_, i) =>
+      makeEventItem({ id: `hero-${i}`, name: `오늘의 행사 ${i}` })
+    );
+    const fetchMock = vi.fn((url: string) => {
+      if (url.startsWith('/api/events/today')) {
+        return Promise.resolve({
+          json: () =>
+            Promise.resolve({ items: [makeEventItem({ id: 'today-1', name: '오늘 전체보기용 행사' })], total: 1 }),
+        } as Response);
+      }
+      if (url.startsWith('/api/home/free-feed')) {
+        return Promise.resolve({ json: () => Promise.resolve({ freeFeed: [] }) } as Response);
+      }
+      return Promise.resolve({ json: () => Promise.resolve({ heroEvents: [] }) } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<HomeView initialHeroEvents={heroEvents} />);
+
+    fireEvent.click(screen.getByText('오늘 진행 중인 전체 행사 보기'));
+    expect(await screen.findByText('🎪 오늘 전체보기')).toBeInTheDocument();
+
+    fireEvent.click(await screen.findByText('오늘 전체보기용 행사'));
+    // 상세카드가 열려 같은 텍스트가 시트(목록)와 상세카드 양쪽에 나타난다.
+    expect(screen.getAllByText('오늘 전체보기용 행사').length).toBeGreaterThan(1);
+
+    // 상세카드의 닫기 버튼(시트 뒤에 나중에 렌더링되므로 마지막 버튼)만 누른다.
+    const closeButtons = screen.getAllByLabelText('닫기');
+    fireEvent.click(closeButtons[closeButtons.length - 1]);
+
+    // 바텀시트는 사라지지 않고 그대로 남아, 방금 눌렀던 항목도 목록에 계속 보인다.
+    expect(screen.getByText('🎪 오늘 전체보기')).toBeInTheDocument();
+    expect(screen.getByText('오늘 전체보기용 행사')).toBeInTheDocument();
+  });
+
   // [홈 화면 성능 최적화](2026-08-29 사용자 지시) 요구사항 2: "지금 이 순간 함께하기 좋은 알찬 픽"/"놓치면 후회하는 인기 만점 예약 픽"은
   // 더 이상 SSR로 채워지지 않고 마운트 후 클라이언트에서 지연 페칭된다 — 그동안 스켈레톤을
   // 먼저 보여줘야 한다.

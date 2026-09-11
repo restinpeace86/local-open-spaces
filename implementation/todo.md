@@ -129,6 +129,15 @@
       수동 분류 필드는 절대 포함하지 않음 — 회귀 방지 테스트로 확인). SEOUL_YEYAK
       1회 수동 재수집으로 기존 데이터도 즉시 반영.
       (완료: 2026-09-12, 상세: implementation/2026-09-12-safe-merge-always-refresh-time-fields.md)
+- [x] 개선사항3 후속 (Step 120, 사용자 버그 신고): "이벤트픽 전체보기 바텀시트에서
+      리스트 누르면 상세카드 뜨는데, 취소하면 바로 전단계 리스트로 안 돌아가고
+      그냥 사라져버리고 이벤트픽 화면이 뜬다.. 다시 전체보기부터 눌러야 함" — 원인:
+      EventBrowseSheet(오늘 전체보기/알찬 픽/예약 픽 3곳)의 onSelectItem이 상세카드를
+      열면서 동시에 시트 자체를 닫아버렸음(MajorCategoryGrid는 자체 로컬 상태라
+      원래 문제 없었음). 시트를 닫지 않고 상세카드만 위에 겹쳐 띄우도록 수정 +
+      "방금 누른 항목 포커스 표시"(파란 테두리 강조 + scrollIntoView) 신규 추가,
+      전체보기 4곳 모두 일관 적용.
+      (완료: 2026-09-12, 상세: implementation/2026-09-12-eventpick-browse-sheet-detail-return-focus.md)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.

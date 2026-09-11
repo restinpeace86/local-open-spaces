@@ -55,11 +55,15 @@ export function EventBrowseSheet({
   onClose,
   onSelectItem,
   userLocation = null,
+  focusedItemId = null,
 }: {
   mode: EventBrowseSheetMode;
   onClose: () => void;
   onSelectItem: (item: NearbyItem) => void;
   userLocation?: EventBrowseUserLocation;
+  // [전체보기 목록 복귀 포커스](2026-09-12 사용자 지시): 상세카드를 취소하고 이 시트로
+  // 돌아왔을 때 방금 눌렀던 항목을 표시하기 위해 부모(HomeView)가 넘겨준다.
+  focusedItemId?: string | null;
 }) {
   const meta = MODE_META[mode];
   const [regionKey, setRegionKey] = useState(DEFAULT_REGION_OPTION.key);
@@ -226,7 +230,7 @@ export function EventBrowseSheet({
             // 이미지 없는 1열 리스트(EventListRow)로 통일 — 대량 리스트 렌더링 성능 최적화.
             <div className="flex flex-col gap-2">
               {items.map((item) => (
-                <EventListRow key={item.id} item={item} onSelect={onSelectItem} />
+                <EventListRow key={item.id} item={item} onSelect={onSelectItem} isFocused={item.id === focusedItemId} />
               ))}
             </div>
           )}

@@ -167,6 +167,32 @@ describe('EventBrowseSheet', () => {
     expect(onSelectItem).toHaveBeenCalledWith(expect.objectContaining({ id: 'e1' }));
   });
 
+  // [전체보기 목록 복귀 포커스](2026-09-12 사용자 지시): "상세카드 취소시.. 방금전에
+  // 누른 리스트가 포커스되어야 하는데.. 그냥 사라져버리고 이벤트픽 화면이 뜬다" —
+  // 시트가 계속 열려 있는 상태에서 focusedItemId로 그 항목을 강조 표시할 수 있어야 한다.
+  it('focusedItemId를 넘기면 해당 항목만 강조 표시된다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          json: () =>
+            Promise.resolve({
+              items: [makeEventItem({ id: 'e1', name: '첫번째 행사' }), makeEventItem({ id: 'e2', name: '두번째 행사' })],
+              total: 2,
+            }),
+        } as Response)
+      )
+    );
+
+    render(<EventBrowseSheet mode="today" onClose={() => {}} onSelectItem={() => {}} focusedItemId="e2" />);
+    await screen.findByText('첫번째 행사');
+
+    const firstButton = screen.getByText('첫번째 행사').closest('button');
+    const secondButton = screen.getByText('두번째 행사').closest('button');
+    expect(firstButton?.className).not.toContain('ring-2');
+    expect(secondButton?.className).toContain('ring-2');
+  });
+
   // [개선사항4](2026-09-11 사용자 지시): 초기 로딩 중 빈 화면처럼 보이지 않도록 1열
   // 리스트 모양 스켈레톤을 보여준다(텍스트만 있던 이전 방식 대체).
   it('초기 로딩 중에는 1열 리스트 모양 스켈레톤을 보여준다', () => {

@@ -94,4 +94,24 @@ describe('EventListRow', () => {
     fireEvent.click(screen.getByText('도시농업 체험'));
     expect(onSelect).toHaveBeenCalledWith(item);
   });
+
+  // [전체보기 목록 복귀 포커스](2026-09-12 사용자 지시): "상세카드 취소시.. 방금전에
+  // 누른 리스트가 포커스되어야 하는데.. 그냥 사라져버리고 이벤트픽 화면이 뜬다".
+  it('isFocused가 true면 강조 스타일을 적용하고, 화면 안으로 스크롤한다', () => {
+    const scrollIntoViewMock = vi.fn();
+    Element.prototype.scrollIntoView = scrollIntoViewMock;
+
+    render(<EventListRow item={makeEventItem()} onSelect={() => {}} isFocused />);
+
+    const button = screen.getByRole('button');
+    expect(button.className).toContain('ring-2');
+    expect(scrollIntoViewMock).toHaveBeenCalledWith({ block: 'nearest' });
+  });
+
+  it('isFocused가 false(기본값)이면 강조 스타일을 적용하지 않는다', () => {
+    render(<EventListRow item={makeEventItem()} onSelect={() => {}} />);
+
+    const button = screen.getByRole('button');
+    expect(button.className).not.toContain('ring-2');
+  });
 });

@@ -61,6 +61,7 @@ export function MajorCategoryGrid({
   categoryFeedHasMore = false,
   onLoadMoreCategoryFeed = () => {},
   onSelectResultItem = () => {},
+  focusedItemId = null,
 }: {
   selectedMaj: string | null;
   onSelectMaj: (maj: string) => void;
@@ -73,6 +74,9 @@ export function MajorCategoryGrid({
   categoryFeedHasMore?: boolean;
   onLoadMoreCategoryFeed?: () => void;
   onSelectResultItem?: (item: NearbyItem) => void;
+  // [전체보기 목록 복귀 포커스](2026-09-12 사용자 지시): 상세카드를 취소하고 이 시트로
+  // 돌아왔을 때 방금 눌렀던 항목을 표시하기 위해 부모(HomeView)가 넘겨준다.
+  focusedItemId?: string | null;
 }) {
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const activeOption = CATEGORY_MAJ_OPTIONS.find((opt) => opt.maj === selectedMaj) ?? null;
@@ -214,7 +218,12 @@ export function MajorCategoryGrid({
                         쓰므로 타입 분기 없이 그대로 재사용한다. */}
                     <div className="flex flex-col gap-2">
                       {categoryFeedItems.map((item) => (
-                        <EventListRow key={item.id} item={item} onSelect={onSelectResultItem} />
+                        <EventListRow
+                          key={item.id}
+                          item={item}
+                          onSelect={onSelectResultItem}
+                          isFocused={item.id === focusedItemId}
+                        />
                       ))}
                     </div>
                     {/* [무한 스크롤 도입](2026-09-04 사용자 지시): "더보기" 버튼 대신 스크롤이

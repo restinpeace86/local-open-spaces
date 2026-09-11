@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
 import { getParentalBadges } from '@/lib/spaces/parental-badges';
@@ -22,7 +23,20 @@ import { formatDateRange, formatDistance, formatReservationPeriod } from '@/lib/
 // 3/4번째 줄은 해당 데이터가 없으면(예: 상시 운영 공간에 예약기간이 없는 경우) 그 줄
 // 자체를 생략한다 — 없는 정보를 지어내지 않는다(제3장 제5조 추측 금지, EventCard의
 // 기존 조건부 렌더링 패턴과 동일).
-export function EventListRow({ item, onSelect }: { item: NearbyItem; onSelect: (item: NearbyItem) => void }) {
+// [전체보기 목록 복귀 포커스](2026-09-12 사용자 지시): "상세카드 취소시 바로 전단계인
+// 리스트 목록 열리고 방금전에 누른 리스트가 포커스되어야 하는데.. 그냥 사라져버리고
+// 이벤트픽 화면이 뜬다" — 상세카드에서 취소해 목록으로 돌아왔을 때 방금 눌렀던 행을
+// 시각적으로 표시(테두리 강조)하고 화면 안으로 스크롤해 준다. isFocused는 부모
+// (EventBrowseSheet/MajorCategoryGrid)가 "마지막으로 선택한 item.id"와 비교해 넘긴다.
+export function EventListRow({
+  item,
+  onSelect,
+  isFocused = false,
+}: {
+  item: NearbyItem;
+  onSelect: (item: NearbyItem) => void;
+  isFocused?: boolean;
+}) {
   const meta = getCategoryMeta(item.category);
   const badges = getParentalBadges(item);
   const period = formatDateRange(item.start_date, item.end_date);
@@ -32,11 +46,23 @@ export function EventListRow({ item, onSelect }: { item: NearbyItem; onSelect: (
   const periodLabel = period ?? (!item.start_date && !item.end_date ? '상시' : null);
   const reservationPeriod = formatReservationPeriod(item.reservation_start_date, item.reservation_end_date);
 
+  const rowRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    // jsdom(테스트 환경)에는 scrollIntoView 구현체가 없어 존재 여부를 방어적으로
+    // 확인한다(제5장 제11조 — 없는 환경에서도 화면이 죽지 않아야 함).
+    if (isFocused && typeof rowRef.current?.scrollIntoView === 'function') {
+      rowRef.current.scrollIntoView({ block: 'nearest' });
+    }
+  }, [isFocused]);
+
   return (
     <button
+      ref={rowRef}
       type="button"
       onClick={() => onSelect(item)}
-      className="w-full text-left rounded-xl border border-gray-200 bg-white px-3 py-2.5 hover:shadow-md transition-shadow flex flex-col gap-1"
+      className={`w-full text-left rounded-xl border px-3 py-2.5 hover:shadow-md transition-shadow flex flex-col gap-1 ${
+        isFocused ? 'border-blue-300 ring-2 ring-blue-200 bg-blue-50/50' : 'border-gray-200 bg-white'
+      }`}
     >
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-bold text-gray-900 line-clamp-1">{item.name}</p>
