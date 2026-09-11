@@ -6,8 +6,11 @@ import {
   getBadgeGroupsForCategory,
   getBadgeOptionsForCategory,
   highlightKeywords,
+  highlightKeywordsOnly,
   isKnownCurationBadgeKey,
   matchBadgeKeysFromText,
+  PRICE_AMOUNT_PATTERN,
+  PRICE_HINT_KEYWORDS,
   resolveCurationCategoryId,
   suggestMinAgeFromText,
 } from './curation-badges';
@@ -392,6 +395,46 @@ describe('highlightKeywords', () => {
 
     const { container: kidsCafeView } = render(<div>{highlightKeywords(text, 'kids_cafe')}</div>);
     expect(Array.from(kidsCafeView.querySelectorAll('mark')).map((m) => m.textContent)).toEqual(['트램폴린']);
+  });
+});
+
+// [이벤트픽 블로그 큐레이션 하이라이팅](2026-09-11 사용자 지시, implementation/todo.md):
+// "블로그 1,2,3에서 가격이나 연령과 관련된 단어들을 찾아서 노란색 형광펜 색칠해줘" —
+// 이벤트는 "노출 중분류" 개념이 없어(스팟 전용) 카테고리 뱃지 키워드 없이 주어진
+// 키워드/패턴만으로 하이라이트하는 highlightKeywordsOnly를 검증한다.
+describe('highlightKeywordsOnly', () => {
+  it('주어진 리터럴 키워드만 하이라이트한다(카테고리 뱃지 키워드는 섞이지 않음)', () => {
+    // '주차'는 식당 카테고리 뱃지 키워드지만 categoryId를 아예 안 넘기므로 매칭되지 않아야 한다.
+    const { container } = render(<div>{highlightKeywordsOnly('무료 행사이고 주차도 가능해요', ['무료'])}</div>);
+    const marks = container.querySelectorAll('mark');
+    expect(Array.from(marks).map((m) => m.textContent)).toEqual(['무료']);
+  });
+
+  it('rawPatterns로 넘긴 정규식(숫자+원 금액)도 함께 하이라이트한다', () => {
+    const { container } = render(
+      <div>{highlightKeywordsOnly('성인 15,000원 어린이 10,000원', [], [PRICE_AMOUNT_PATTERN])}</div>
+    );
+    const marks = container.querySelectorAll('mark');
+    expect(Array.from(marks).map((m) => m.textContent)).toEqual(['15,000원', '10,000원']);
+  });
+
+  it('PRICE_HINT_KEYWORDS와 PRICE_AMOUNT_PATTERN을 함께 넘기면 라벨과 금액 모두 하이라이트한다', () => {
+    const { container } = render(
+      <div>{highlightKeywordsOnly('이용료는 10,000원이고 무료 체험존도 있어요', PRICE_HINT_KEYWORDS, [PRICE_AMOUNT_PATTERN])}</div>
+    );
+    const marks = container.querySelectorAll('mark');
+    expect(Array.from(marks).map((m) => m.textContent)).toEqual(['이용료', '10,000원', '무료']);
+  });
+
+  it('"원" 한 글자만으로는 매칭하지 않는다(공원/회원 등 오탐 방지)', () => {
+    const { container } = render(<div>{highlightKeywordsOnly('근처 공원에서 회원들과 모였어요', PRICE_HINT_KEYWORDS)}</div>);
+    expect(container.querySelectorAll('mark')).toHaveLength(0);
+  });
+
+  it('키워드/패턴이 모두 없으면 원문 그대로 반환한다', () => {
+    const { container } = render(<div>{highlightKeywordsOnly('아무 키워드도 없어요', [])}</div>);
+    expect(container.querySelectorAll('mark')).toHaveLength(0);
+    expect(container.textContent).toBe('아무 키워드도 없어요');
   });
 });
 

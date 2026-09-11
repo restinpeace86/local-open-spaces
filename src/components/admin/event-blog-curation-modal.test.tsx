@@ -126,4 +126,37 @@ describe('EventBlogCurationModal', () => {
 
     await waitFor(() => expect(screen.getByLabelText(/블로그 1/)).toBeChecked());
   });
+
+  // [블로그 하이라이팅](2026-09-11 사용자 지시): "가격이나 연령과 관련된 단어들을..
+  // 노란색 형광펜 색칠해줘".
+  it('블로그 제목/본문에서 가격·연령 관련 단어를 노란색으로 하이라이트한다', async () => {
+    const fetchMock = mockFetchByUrl({
+      blogSearch: {
+        items: [makeBlogItem({ title: '초등학생 이상 참가비 15,000원 행사 후기' })],
+        hasRecentReview: true,
+        hasNoResults: false,
+      },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { container } = render(<EventBlogCurationModal event={EVENT} onClose={vi.fn()} />);
+
+    await waitFor(() => expect(container.querySelectorAll('mark').length).toBeGreaterThan(0));
+    const markedTexts = Array.from(container.querySelectorAll('mark')).map((m) => m.textContent);
+    expect(markedTexts).toEqual(expect.arrayContaining(['초등학생 이상', '참가비', '15,000원']));
+  });
+
+  it('식당 전용 뱃지 키워드(주차 등)는 섞여서 하이라이트되지 않는다(노출 중분류 개념 없음)', async () => {
+    const fetchMock = mockFetchByUrl({
+      blogSearch: {
+        items: [makeBlogItem({ title: '주차 가능한 행사장', description: '주차 공간이 넓어요' })],
+        hasRecentReview: true,
+        hasNoResults: false,
+      },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const { container } = render(<EventBlogCurationModal event={EVENT} onClose={vi.fn()} />);
+
+    await screen.findByText('주차 가능한 행사장');
+    expect(container.querySelectorAll('mark')).toHaveLength(0);
+  });
 });

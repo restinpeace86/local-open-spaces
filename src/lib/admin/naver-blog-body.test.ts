@@ -25,7 +25,10 @@ describe('toMobileNaverBlogUrl', () => {
 });
 
 describe('extractBlogBodyText', () => {
-  it('se-main-container(신형 스마트에디터) 안의 텍스트를 뽑아낸다', () => {
+  // [블로그 가독성 개선](2026-09-11 사용자 지시): "실제 블로그는 줄바꿈이 있는데 우리
+  // 화면은 다 붙어서 나온다" — 블록 요소(구성 요소 div/p) 경계는 이제 개행(\n)으로
+  // 보존된다(이전엔 공백 하나로 뭉개졌었음, 그 버그를 여기서 고쳤다).
+  it('se-main-container(신형 스마트에디터) 안의 텍스트를 블록 경계마다 줄바꿈으로 뽑아낸다', () => {
     const html = `
       <html><body>
         <div class="se-main-container">
@@ -35,7 +38,7 @@ describe('extractBlogBodyText', () => {
         </div>
       </body></html>
     `;
-    expect(extractBlogBodyText(html)).toBe('맛있는 숯불구이 후기입니다. 주차 공간도 넓었어요.');
+    expect(extractBlogBodyText(html)).toBe('맛있는 숯불구이 후기입니다.\n주차 공간도 넓었어요.');
   });
 
   it('postViewArea(구형 스마트에디터)로 폴백한다', () => {
@@ -43,10 +46,11 @@ describe('extractBlogBodyText', () => {
     expect(extractBlogBodyText(html)).toBe('구버전 본문입니다.');
   });
 
-  it('제로폭 공백을 제거하고 공백을 정리한다', () => {
+  it('제로폭 공백을 제거하고 줄 안의 공백만 정리한다(개행은 보존)', () => {
     const html = `<html><body><div class="se-main-container"><p>첫줄​</p>\n<p>둘째줄</p></div></body></html>`;
-    expect(extractBlogBodyText(html)).toBe('첫줄 둘째줄');
+    expect(extractBlogBodyText(html)).toBe('첫줄\n둘째줄');
   });
+
 
   it('본문 컨테이너를 찾지 못하면 추측하지 않고 null을 반환한다', () => {
     const html = `<html><body><div class="something-else">내용</div></body></html>`;

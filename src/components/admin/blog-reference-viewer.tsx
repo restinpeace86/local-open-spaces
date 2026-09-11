@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { highlightKeywords } from '@/lib/admin/curation-badges';
+import { ReactNode, useState } from 'react';
+import { highlightKeywords, highlightKeywordsOnly } from '@/lib/admin/curation-badges';
 import { BlogBodyState, BlogSearchItem, BlogSortOption } from '@/lib/admin/use-spot-curation-form';
 
 // [All-in-One 모바일 큐레이션 워크벤치](2026-09-05 사용자 지시)를 만들면서
@@ -39,6 +39,7 @@ export function BlogReferenceViewer({
   onSortOptionChange,
   regionKeywords,
   extraHighlightKeywords,
+  extraHighlightPatterns,
   hasRegionMismatchWarning,
   curationCategoryId,
 }: {
@@ -71,17 +72,32 @@ export function BlogReferenceViewer({
   // 노란색 형광펜 처리해 "관리자가 특정 연령 제한을 발견하기 쉽게" 한다. 지역명
   // 미스매치 경고 문구에는 포함하지 않으므로 regionKeywords와 분리해서 받는다.
   extraHighlightKeywords?: string[];
+  // [이벤트픽 블로그 큐레이션 하이라이팅](2026-09-11 사용자 지시): 리터럴 키워드가
+  // 아니라 이미 완성된 정규식 패턴(예: "10,000원" 같은 숫자+원 금액)도 함께
+  // 하이라이트해야 할 때 쓴다 — curationCategoryId가 없을 때(아래 highlightKeywordsOnly
+  // 경로)만 의미가 있다.
+  extraHighlightPatterns?: string[];
   hasRegionMismatchWarning?: boolean;
   // [카테고리별 뱃지/룰 완전 독립 Config 구조](2026-09-07 개선사항4): "노출
-  // 중분류" 콤보박스가 가리키는 카테고리의 키워드로만 하이라이트한다. 안 넘기면
-  // (기존 호출부 호환) 식당 기준 기본값을 쓴다 — highlightKeywords 자체의 기본값과
-  // 동일하게 유지.
+  // 중분류" 콤보박스가 가리키는 카테고리의 키워드로만 하이라이트한다.
+  // [이벤트픽 블로그 큐레이션 하이라이팅](2026-09-11 사용자 지시): 이벤트는 "노출
+  // 중분류" 개념 자체가 없다 — 이 값을 안 넘기면(신규 호출부: EventBlogCurationModal)
+  // 식당 등 카테고리 뱃지 키워드를 억지로 섞지 않고, extraHighlightKeywords/
+  // extraHighlightPatterns만으로 하이라이트한다(highlightKeywordsOnly). 기존 두
+  // 호출부(BlogCurationModal/MobileCurationWorkbench)는 항상 이 값을 명시적으로
+  // 넘기므로 동작 변화가 없다.
   curationCategoryId?: string;
 }) {
   const activeItem = blogItems?.[activeTab] ?? null;
   // 지역명 + 나이 키워드를 합쳐 하이라이트한다(미스매치 경고 문구에는 지역명만
   // 쓰므로 그쪽은 regionKeywords 그대로 사용).
   const highlightExtras = [...(regionKeywords ?? []), ...(extraHighlightKeywords ?? [])];
+  const highlightPatterns = extraHighlightPatterns ?? [];
+  function highlight(text: string): ReactNode {
+    return curationCategoryId
+      ? highlightKeywords(text, curationCategoryId, highlightExtras)
+      : highlightKeywordsOnly(text, highlightExtras, highlightPatterns);
+  }
   const [isEditingUrl, setIsEditingUrl] = useState(false);
   const [urlDraft, setUrlDraft] = useState('');
 
@@ -239,9 +255,7 @@ export function BlogReferenceViewer({
               {/* [지역명 하이라이팅 범위 확장](2026-09-07 사용자 지시): "블로그
                   제목도 포함시키고" — 제목도 뱃지 키워드/지역명과 같은 방식으로
                   하이라이트한다(기존엔 제목이 평문이었음). */}
-              <p className="font-medium text-sm text-gray-900">
-                {highlightKeywords(activeItem.title, curationCategoryId, highlightExtras)}
-              </p>
+              <p className="font-medium text-sm text-gray-900">{highlight(activeItem.title)}</p>
 
               {/* [핵심 기능: 자동 형광펜 하이라이팅](사용자 지시 원문) +
                   [전체 본문 보기](2026-09-05 사용자 지시): 네이버 블로그면 요약 대신
@@ -263,20 +277,23 @@ export function BlogReferenceViewer({
                 </p>
               )}
 
-              <div className="rounded-lg bg-gray-50 p-3 text-xs leading-relaxed text-gray-700">
+              {/* [블로그 가독성 개선](2026-09-11 사용자 지시): "블로그 가독성을 위해
+                  줄바꿈도.. 현재는 텍스트가 줄바꿈 없이 쫙 나열되는데 실제 블로그는
+                  안 그렇다" — whitespace-pre-line으로 naver-blog-body.ts가 보존한
+                  개행(\n)을 실제 줄바꿈으로 표시한다(기존엔 CSS가 개행을 무시해
+                  한 덩어리로 붙어 보였음). */}
+              <div className="rounded-lg bg-gray-50 p-3 text-xs leading-relaxed text-gray-700 whitespace-pre-line">
                 {activeBody?.text
-                  ? highlightKeywords(activeBody.text, curationCategoryId, highlightExtras)
+                  ? highlight(activeBody.text)
                   : activeBody?.isLoading
                     ? (
                         <>
-                          {activeItem.description
-                            ? highlightKeywords(activeItem.description, curationCategoryId, highlightExtras)
-                            : null}
+                          {activeItem.description ? highlight(activeItem.description) : null}
                           <p className="mt-2 text-[11px] text-gray-400">전체 본문 불러오는 중...</p>
                         </>
                       )
                     : activeItem.description
-                      ? highlightKeywords(activeItem.description, curationCategoryId, highlightExtras)
+                      ? highlight(activeItem.description)
                       : '(요약을 가져오지 못했습니다 — 원문 보기로 확인해주세요.)'}
               </div>
               {activeBody?.text && (

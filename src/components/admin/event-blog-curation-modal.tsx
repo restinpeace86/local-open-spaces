@@ -2,6 +2,7 @@
 
 import { useEventBlogCurationForm } from '@/lib/admin/use-event-blog-curation-form';
 import { BlogReferenceViewer } from '@/components/admin/blog-reference-viewer';
+import { AGE_HINT_KEYWORDS, PRICE_AMOUNT_PATTERN, PRICE_HINT_KEYWORDS } from '@/lib/admin/curation-badges';
 
 // [이벤트픽 관리자 블로그 큐레이션](2026-09-11 사용자 지시, implementation/todo.md
 // 개선사항7-2): "관리자 화면 Events 탭 개별 이벤트 항목의 상세 팝업 내부에 블로그
@@ -9,6 +10,14 @@ import { BlogReferenceViewer } from '@/components/admin/blog-reference-viewer';
 // BlogCurationModal(Decision 021)과 검색/본문 뷰어(BlogReferenceViewer)는 그대로
 // 재사용하되(제5장 제4조), 뱃지/노출 중분류 같은 스팟 전용 폼 없이 "검색 결과 중
 // 체크박스로 최대 3개 선택 → 저장"만 한다.
+//
+// [블로그 하이라이팅](2026-09-11 사용자 지시): "블로그 1,2,3에서 가격이나 연령과
+// 관련된 단어들을 찾아서 노란색 형광펜 색칠해줘" — curationCategoryId를 넘기지
+// 않아 BlogReferenceViewer가 카테고리 뱃지 키워드 없이 이 키워드/패턴만으로
+// 하이라이트한다(highlightKeywordsOnly, 스팟 전용 AGE_HINT_KEYWORDS를 그대로
+// 재사용 + 신규 PRICE_HINT_KEYWORDS/PRICE_AMOUNT_PATTERN).
+const EVENT_HIGHLIGHT_KEYWORDS = [...AGE_HINT_KEYWORDS, ...PRICE_HINT_KEYWORDS];
+const EVENT_HIGHLIGHT_PATTERNS = [PRICE_AMOUNT_PATTERN];
 export function EventBlogCurationModal({
   event,
   onClose,
@@ -55,6 +64,8 @@ export function EventBlogCurationModal({
           onOverrideUrl={form.overrideActiveUrl}
           sortOption={form.sortOption}
           onSortOptionChange={form.setSortOption}
+          extraHighlightKeywords={EVENT_HIGHLIGHT_KEYWORDS}
+          extraHighlightPatterns={EVENT_HIGHLIGHT_PATTERNS}
         />
 
         {/* [체크박스로 후보 선택](요구사항 원문 "블로그 후보 3개 중 체크"): 검색

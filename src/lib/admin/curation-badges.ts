@@ -415,17 +415,10 @@ function getHighlightRegex(categoryId: string, extraKeywords: string[] = []): Re
   return regex;
 }
 
-// 순수 텍스트 배열로 쪼갠 뒤, 매칭된 조각만 <mark>로 감싼 React 노드 배열을 만든다.
-// 블로그 본문은 외부(크롤링) 출처라 dangerouslySetInnerHTML로 렌더링하면 XSS 위험이
-// 있다 — React가 문자열 자식을 자동으로 이스케이프하는 이 방식이 안전하다.
-// [카테고리별 실시간 전환](2026-09-07 개선사항4): categoryId가 바뀌면(관리자가
-// 노출 중분류 콤보박스를 바꾸면) 그 카테고리의 키워드만으로 다시 하이라이트한다 —
-// 서버 재요청 없이 클라이언트에서 즉시 재계산된다.
-// [지역/지점명 동시 하이라이팅](2026-09-07 개선사항3 3번): extraKeywords로 뱃지
-// 키워드가 아닌 임의 키워드(지역명 등)도 같은 방식(공백 무시 포함)으로 하이라이트.
-export function highlightKeywords(text: string, categoryId: string = DEFAULT_CATEGORY_ID, extraKeywords: string[] = []): ReactNode {
-  if (!text) return text;
-  const regex = getHighlightRegex(categoryId, extraKeywords);
+// 순수 텍스트를 주어진 정규식으로 쪼갠 뒤, 매칭된 조각만 <mark>로 감싼 React 노드를
+// 만든다. 블로그 본문은 외부(크롤링) 출처라 dangerouslySetInnerHTML로 렌더링하면 XSS
+// 위험이 있다 — React가 문자열 자식을 자동으로 이스케이프하는 이 방식이 안전하다.
+function wrapMatchesWithMark(text: string, regex: RegExp): ReactNode {
   const parts = text.split(regex);
   // split()은 홀수 인덱스에 캡처 그룹 매칭 결과를, 짝수 인덱스에 그 사이 일반 텍스트를
   // 담는다 — 매칭인지 여부를 정규식 재실행으로 다시 판정하지 않고 인덱스 패리티로
@@ -439,6 +432,34 @@ export function highlightKeywords(text: string, categoryId: string = DEFAULT_CAT
         : part
     )
   );
+}
+
+// [카테고리별 실시간 전환](2026-09-07 개선사항4): categoryId가 바뀌면(관리자가
+// 노출 중분류 콤보박스를 바꾸면) 그 카테고리의 키워드만으로 다시 하이라이트한다 —
+// 서버 재요청 없이 클라이언트에서 즉시 재계산된다.
+// [지역/지점명 동시 하이라이팅](2026-09-07 개선사항3 3번): extraKeywords로 뱃지
+// 키워드가 아닌 임의 키워드(지역명 등)도 같은 방식(공백 무시 포함)으로 하이라이트.
+export function highlightKeywords(text: string, categoryId: string = DEFAULT_CATEGORY_ID, extraKeywords: string[] = []): ReactNode {
+  if (!text) return text;
+  return wrapMatchesWithMark(text, getHighlightRegex(categoryId, extraKeywords));
+}
+
+// [이벤트픽 블로그 큐레이션 하이라이팅](2026-09-11 사용자 지시, implementation/todo.md):
+// "블로그 1,2,3에서 가격이나 연령과 관련된 단어들을 찾아서 노란색 형광펜 색칠해줘" —
+// 이벤트는 "노출 중분류"(serviceCategoryId) 개념 자체가 없어(스팟 전용 개념) 식당/
+// 키즈카페 등 카테고리별 뱃지 키워드(highlightKeywords의 categoryId 인자)를 함께
+// 하이라이트할 근거가 없다. 주어진 키워드 목록만으로 하이라이트하는 별도 함수를 둔다
+// (제5장 제4조 — <mark> 렌더링 로직 자체는 wrapMatchesWithMark로 공유, 카테고리
+// 키워드 병합만 건너뜀).
+// rawPatterns: 리터럴 키워드가 아니라 이미 완성된 정규식 소스 문자열(예:
+// PRICE_AMOUNT_PATTERN)을 그대로 합친다 — "무료"/"참가비" 같은 리터럴 키워드는
+// 공백 무시 변환을 거치지만, "숫자+원" 같은 패턴은 그 변환이 의미가 없어 별도로 둔다.
+export function highlightKeywordsOnly(text: string, keywords: string[], rawPatterns: string[] = []): ReactNode {
+  if (!text || (keywords.length === 0 && rawPatterns.length === 0)) return text;
+  const sortedKeywords = [...keywords].sort((a, b) => b.length - a.length);
+  const patterns = [...sortedKeywords.map(toWhitespaceInsensitivePattern), ...rawPatterns];
+  const regex = new RegExp(`(${patterns.join('|')})`, 'g');
+  return wrapMatchesWithMark(text, regex);
 }
 
 // [키워드 하이라이팅에 따른 뱃지 자동 체크](2026-09-07 개선사항3 4번): "블로그 본문 및
@@ -491,6 +512,21 @@ export const AGE_HINT_KEYWORDS: string[] = [
   '24개월', '36개월', '48개월', '개월 이상', '개월부터',
   '세 이상', '세부터', '키 제한', '신장 제한', '몸무게 제한',
 ];
+
+// [이벤트픽 블로그 큐레이션 하이라이팅](2026-09-11 사용자 지시): "가격이나 연령과
+// 관련된 단어들을.. 노란색 형광펜 색칠해줘" — 위 AGE_HINT_KEYWORDS와 같은 방식으로
+// 가격 관련 라벨 단어를 형광펜 처리한다. "원"은 여기서 일부러 뺐다 — 바로 아래
+// PRICE_AMOUNT_PATTERN이 숫자와 결합된 형태만 정규식으로 잡는데, "원" 한 글자를
+// 키워드로 넣으면 "공원"/"회원"/"정원" 등 전혀 무관한 단어까지 전부 형광펜 처리돼
+// 오히려 가독성을 해친다(실측 판단).
+export const PRICE_HINT_KEYWORDS: string[] = [
+  '무료', '유료', '요금', '가격', '참가비', '입장료', '이용료', '수강료', '관람료', '할인',
+];
+
+// "10,000원"처럼 숫자+원 조합만 잡는 정규식 소스 문자열 — highlightKeywordsOnly의
+// rawPatterns 인자로 전달한다(리터럴 키워드와 달리 공백 무시 변환을 거치지 않고
+// 그대로 정규식에 합쳐진다).
+export const PRICE_AMOUNT_PATTERN = '[0-9][0-9,]{2,}\\s*원';
 
 const PRESCHOOL_LIMIT_PATTERNS: RegExp[] = [
   /초등\s*학?생?\s*(?:이상|부터)/,

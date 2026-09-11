@@ -66,10 +66,21 @@ export function extractBlogBodyText(html: string): string | null {
 
   container.querySelectorAll('script, style').forEach((node) => node.remove());
 
-  // structuredText는 블록 요소 사이에 개행을 넣어준다(순수 .text는 <p> 태그
-  // 사이에 실제 공백이 없으면 단어가 그대로 붙어버린다) — 그 뒤 제로폭 공백 제거와
-  // 공백 정리는 기존과 동일하게 적용한다.
-  const text = container.structuredText.replace(ZERO_WIDTH_SPACE, '').replace(/\s+/g, ' ').trim();
+  // structuredText는 블록 요소(<p>/<div>/<br> 등) 사이에 개행(\n)을 넣어준다(순수
+  // .text는 <p> 태그 사이에 실제 공백이 없으면 단어가 그대로 붙어버린다).
+  // [블로그 가독성 개선](2026-09-11 사용자 지시): "블로그 가독성을 위해 줄바꿈도..
+  // 현재는 텍스트가 줄바꿈 없이 쫙 나열되는데 실제 블로그는 안 그렇다" — 기존에는
+  // 여기서 `\s+`(개행 포함 모든 공백)를 한 칸으로 뭉개 structuredText가 애써 넣어준
+  // 문단 구분을 전부 지워버렸다(정확히 이 버그였음, 실측 확인). 개행이 아닌
+  // 공백(스페이스/탭)만 정리하고 개행 자체는 보존한다 — 과도하게 연속된 빈 줄(3개
+  // 이상)만 문단 구분 하나(빈 줄 1개)로 축소한다. 렌더링 쪽(blog-reference-viewer.tsx)은
+  // `whitespace-pre-line`으로 이 개행을 실제 줄바꿈으로 표시한다.
+  const text = container.structuredText
+    .replace(ZERO_WIDTH_SPACE, '')
+    .replace(/[^\S\n]+/g, ' ')
+    .replace(/ ?\n ?/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
   if (!text) return null;
 
   return text.length > MAX_BLOG_BODY_LENGTH ? `${text.slice(0, MAX_BLOG_BODY_LENGTH)}...` : text;
