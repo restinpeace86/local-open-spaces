@@ -49,6 +49,10 @@ GitHub Actions cron으로 직접 표현할 수 없다는 사실을 확인했다 
 
 | 실행 일시 | 수집 권역 | RAW 적재 건수 | Service 적재 건수 | 파싱 에러 | 상태 | 비고 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 2026-09-12 06:04 | SEOUL_YEYAK | 2636 | 0 | 2664 | 🚨 [CRITICAL] | 테이블별 부분 실패: events(events upsert 실패: canceling statement due to statement timeout) |
+| 2026-09-12 05:53 | GG_CULTURE_EVENTS | 3266 | 2954 | 312 | ✅ [OK] |  |
+| 2026-09-12 05:22 | SEOUL_YEYAK | 2636 | 2636 | 28 | ✅ [OK] |  |
+| 2026-09-12 05:07 | GG_CULTURE_EVENTS | 3266 | 2954 | 312 | ✅ [OK] |  |
 | 2026-09-12 01:21 | SEOUL_YEYAK | 2636 | 0 | 2664 | 🚨 [CRITICAL] | 테이블별 부분 실패: events(events upsert 실패: canceling statement due to statement timeout) |
 | 2026-09-11 05:57 | SEOUL_YEYAK | 2625 | 2625 | 28 | ✅ [OK] |  |
 | 2026-09-11 05:45 | GG_CULTURE_EVENTS | 3266 | 2954 | 312 | ✅ [OK] |  |
@@ -1398,3 +1402,87 @@ The server returned an invalid or incomplete response.
 | COORDINATE_PARSE_FAIL | 13 |
 
 </details>
+
+<details>
+<summary>2026-09-12 05:22 SEOUL_YEYAK 상세 리포트</summary>
+
+**테이블별 적재**
+
+| 테이블 | 가져온 건수 | DB 적재 건수 | 배치 내 중복(NULL 병합) | 기존 DB 병합 |
+| :--- | ---: | ---: | ---: | ---: |
+| open_spaces | 0 | 0 | 0 | 0 |
+| events | 2636 | 2636 | 0 | 2625 |
+
+**범위 제외**: 28건
+
+**에러 상세**
+
+| 원인 | 건수 |
+| :--- | ---: |
+| COORDINATE_PARSE_FAIL | 13 |
+
+</details>
+
+## [2026-09-12 05:27:04] [Daily Events Batch] Ingestion Log
+
+| API 출처 식별자 (`source`) | RAW 수신 건수 | events 적재 건수 | open_spaces 적재 건수 | Safe Merge 건수 | 에러 건수 | 비고 |
+| :--- | ---: | ---: | ---: | ---: | ---: | :--- |
+| gg_public | 3266 | 2954 | 0 | 2954 | 312 |  |
+| SEOUL_CULTURE_EVENTS | - | 0 | 0 | 0 | - | ❌ 실행 실패: [SEOUL_CULTURE_EVENTS] 하드 타임아웃(600초) 초과 — 응답 없는 요청이 있는 것으로 보여 이 단계를 포기하고 다음 단계로 넘어갑니다. |
+| tourapi_4.0 | 291 | 291 | 0 | 282 | 0 |  |
+| seoul_public_reservation | 2664 | 2636 | 0 | 2625 | 0 |  |
+| gg_public | 14 | 0 | 0 | 0 | 14 | 좌표 정밀도 보강 후처리(신규 적재 아님, gg-culture-events 종속) — EXACT 승격 0/14건, URL복원실패 0/장소필드없음 1/지오코딩실패 13 |
+| CATEGORY_RULES_APPLICATION | 17592 | 7 | 0 | 0 | 0 | category_min 신규 룰 매칭 후처리(신규 적재 아님) — open_spaces 2/2084건, events 5/15508건 |
+| DETAILED_CATEGORY_FALLBACK | 0 | 0 | 0 | 0 | 0 | 세부 중분류 미분류 잔여를 '기타'로 안전 적재(8개 대상 source_type 한정) — 0/0건 |
+| LEGACY_SOURCE_CATEGORY_MAPPING | 0 | 0 | 0 | 0 | 0 | docs/null-category-analysis.md 적용 범위(어린이놀이시설/수영장/키즈카페/바닥분수·물놀이시설) 매핑 — 0건, 내역: {} |
+| DEACTIVATE_EXPIRED_EVENTS | 3058 | 3058 | 0 | 0 | 0 | end_date < 2026-09-11 이면서 is_active=true였던 행 3058건을 false로 전환(신규 적재 아닌 만료 정리 후처리) |
+| DEDUPE_OPEN_SPACES | 0 | 0 | 0 | 0 | 0 | 교차 출처 중복 정제 완료 — 0개 그룹, survivor 병합 0건, 삭제 0건 |
+| AUTO_ASSIGN_TO_EXISTING_GROUPS | - | 0 | 0 | 0 | - | ❌ 실행 실패: 기존 그룹 자동 편입 실패: canceling statement due to statement timeout |
+| MATCH_EVENTS_TO_OPEN_SPACES | - | 0 | 0 | 0 | - | ❌ 실행 실패: 이벤트-스팟 자동 매칭 실패: canceling statement due to statement timeout |
+| DELETE_EXPIRED_RESERVATION_SPACES | 0 | 0 | 0 | 0 | 0 | 서비스 이용 종료일(SVCOPNENDDT) < 2026-09-11인 한시성 예약 스팟 0건 삭제(신규 적재 아닌 만료 정리 후처리) |
+| ANALYZE_OPEN_SPACES | 0 | 0 | 0 | 0 | 0 | open_spaces 플래너 통계 갱신 완료(신규 적재 아닌 유지보수 후처리) — statement timeout 재발 방지 |
+| REFRESH_SIGUNGU_OPTIONS_CACHE | 0 | 0 | 0 | 0 | 0 | 시/군/구 목록 캐시 갱신 완료(오늘 배치로 새로 추가된 지역이 있다면 반영됨) |
+
+**검증**: 전체 RAW 수신 6221건(일부 소스 실패/미확인 — 완전한 대조 불가) vs DB 적재 5881건 (+에러 312건 +범위제외 28건)
+
+<details>
+<summary>2026-09-12 06:04 SEOUL_YEYAK 상세 리포트</summary>
+
+**테이블별 적재**
+
+| 테이블 | 가져온 건수 | DB 적재 건수 | 배치 내 중복(NULL 병합) | 기존 DB 병합 |
+| :--- | ---: | ---: | ---: | ---: |
+| open_spaces | 0 | 0 | 0 | 0 |
+| events | 2636 | 0 | 0 | 0 |
+
+**범위 제외**: 28건
+
+**에러 상세**
+
+| 원인 | 건수 |
+| :--- | ---: |
+| COORDINATE_PARSE_FAIL | 13 |
+
+</details>
+
+## [2026-09-12 06:09:04] [Daily Events Batch] Ingestion Log
+
+| API 출처 식별자 (`source`) | RAW 수신 건수 | events 적재 건수 | open_spaces 적재 건수 | Safe Merge 건수 | 에러 건수 | 비고 |
+| :--- | ---: | ---: | ---: | ---: | ---: | :--- |
+| gg_public | 3266 | 2954 | 0 | 2954 | 312 |  |
+| seoul_public_culture | 19525 | 18981 | 0 | 18999 | 544 |  |
+| tourapi_4.0 | 291 | 291 | 0 | 291 | 0 |  |
+| seoul_public_reservation | 2664 | 0 | 0 | 0 | 0 | 테이블별 부분 실패: events(events upsert 실패: canceling statement due to statement timeout) |
+| gg_public | - | 0 | 0 | 0 | - | ❌ 실행 실패: GG_CULTURE_EVENTS: 전체(GGCULTUREVENTSTUS(문화행사), GGCULFOUEVENSTM(문화재단행사)) 수집 실패 — GGCULTUREVENTSTUS(문화행사):This operation was aborted (원인: 20: This operation was aborted) | GGCULFOUEVENSTM(문화재단행사):This operation was aborted (원인: 20: This operation was aborted) |
+| CATEGORY_RULES_APPLICATION | 17609 | 8 | 0 | 0 | 0 | category_min 신규 룰 매칭 후처리(신규 적재 아님) — open_spaces 0/2082건, events 8/15527건 |
+| DETAILED_CATEGORY_FALLBACK | 0 | 0 | 0 | 0 | 0 | 세부 중분류 미분류 잔여를 '기타'로 안전 적재(8개 대상 source_type 한정) — 0/0건 |
+| LEGACY_SOURCE_CATEGORY_MAPPING | 0 | 0 | 0 | 0 | 0 | docs/null-category-analysis.md 적용 범위(어린이놀이시설/수영장/키즈카페/바닥분수·물놀이시설) 매핑 — 0건, 내역: {} |
+| DEACTIVATE_EXPIRED_EVENTS | - | 0 | 0 | 0 | - | ❌ 실행 실패: 만료 이벤트 비활성화 실패: canceling statement due to statement timeout |
+| DEDUPE_OPEN_SPACES | 0 | 0 | 0 | 0 | 0 | 교차 출처 중복 정제 완료 — 0개 그룹, survivor 병합 0건, 삭제 0건 |
+| AUTO_ASSIGN_TO_EXISTING_GROUPS | - | 0 | 0 | 0 | - | ❌ 실행 실패: 기존 그룹 자동 편입 실패: canceling statement due to statement timeout |
+| MATCH_EVENTS_TO_OPEN_SPACES | - | 0 | 0 | 0 | - | ❌ 실행 실패: 이벤트-스팟 자동 매칭 실패: canceling statement due to statement timeout |
+| DELETE_EXPIRED_RESERVATION_SPACES | 0 | 0 | 0 | 0 | 0 | 서비스 이용 종료일(SVCOPNENDDT) < 2026-09-11인 한시성 예약 스팟 0건 삭제(신규 적재 아닌 만료 정리 후처리) |
+| ANALYZE_OPEN_SPACES | 0 | 0 | 0 | 0 | 0 | open_spaces 플래너 통계 갱신 완료(신규 적재 아닌 유지보수 후처리) — statement timeout 재발 방지 |
+| REFRESH_SIGUNGU_OPTIONS_CACHE | 0 | 0 | 0 | 0 | 0 | 시/군/구 목록 캐시 갱신 완료(오늘 배치로 새로 추가된 지역이 있다면 반영됨) |
+
+**검증**: 전체 RAW 수신 25746건(일부 소스 실패/미확인 — 완전한 대조 불가) vs DB 적재 22226건 (+에러 856건 +범위제외 28건)
