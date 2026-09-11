@@ -13,6 +13,18 @@
 
 ---
 
+## 진행 상태 (Harness 자율 실행 — 2026-09-11 순차 처리)
+- [x] 개선사항1 검토: 맘스픽 메인엔 이미 상단 장소 선택 바/검색창이 없음(확인 완료, 제거할 대상 없음).
+      Gating은 Step 96·107에서 이미 구현 — guest 클릭 시 로그인 안내 팝업(LoginPromptModal, 이 앱에
+      별도 "로그인 화면" 페이지가 없어 소셜 로그인 버튼이 포함된 안내 모달이 그 역할을 겸함),
+      not_sprout_yet 클릭 시 첫 글 쓰기 유도(SaessakMomGuideModal), 정상 유저는 제약 없음 — 스펙과
+      일치함을 재확인. 추가 코드 변경 없음.
+- [x] 개선사항2 (Step 108): **긴급 DB 버그 수정** — `get_nearby_spaces_and_events` RPC가
+      Step 82(2026-09-09) 이후 `coalesce(standard_name, name)` 타입 불일치(text vs varchar,
+      PL/pgSQL RETURN QUERY는 암묵 캐스팅 안 함)로 SPACE를 포함한 모든 호출에서 100% 실패 중이었음
+      (스팟픽 기본 지도·홈 피드·맘스픽 인기 스팟 등 전역 영향). `::character varying` 캐스팅 추가로
+      수정, 프로덕션 DB 직접 호출로 검증 완료. (완료: 2026-09-11)
+
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.
 
