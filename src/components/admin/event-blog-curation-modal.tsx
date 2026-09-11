@@ -1,0 +1,108 @@
+'use client';
+
+import { useEventBlogCurationForm } from '@/lib/admin/use-event-blog-curation-form';
+import { BlogReferenceViewer } from '@/components/admin/blog-reference-viewer';
+
+// [이벤트픽 관리자 블로그 큐레이션](2026-09-11 사용자 지시, implementation/todo.md
+// 개선사항7-2): "관리자 화면 Events 탭 개별 이벤트 항목의 상세 팝업 내부에 블로그
+// 큐레이션 버튼을 추가... 등록·수정·삭제할 수 있는 관리 UI". open_spaces의
+// BlogCurationModal(Decision 021)과 검색/본문 뷰어(BlogReferenceViewer)는 그대로
+// 재사용하되(제5장 제4조), 뱃지/노출 중분류 같은 스팟 전용 폼 없이 "검색 결과 중
+// 체크박스로 최대 3개 선택 → 저장"만 한다.
+export function EventBlogCurationModal({
+  event,
+  onClose,
+  onSaved,
+}: {
+  event: { id: string; title: string; sigunguName?: string | null };
+  onClose: () => void;
+  onSaved?: (eventId: string, urls: string[]) => void;
+}) {
+  const form = useEventBlogCurationForm(event);
+
+  async function handleSave() {
+    const ok = await form.save();
+    if (!ok) return;
+    onSaved?.(event.id, form.selectedUrls);
+    onClose();
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-[70] flex items-end md:items-center justify-center">
+      <div className="w-full md:w-[560px] max-h-[90vh] overflow-y-auto bg-white rounded-t-2xl md:rounded-2xl shadow-xl p-5 flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base font-bold text-gray-900">🔍 블로그 큐레이션</h2>
+            <p className="text-xs text-gray-500">{event.title}</p>
+          </div>
+          <button type="button" onClick={onClose} aria-label="닫기" className="text-gray-400 hover:text-gray-600">
+            ✕
+          </button>
+        </div>
+
+        <BlogReferenceViewer
+          searchQuery={form.searchQuery}
+          onSearchQueryChange={form.setSearchQuery}
+          onSearch={form.runSearch}
+          isSearching={form.isSearching}
+          searchError={form.searchError}
+          blogItems={form.blogItems}
+          hasRecentReview={form.hasRecentReview}
+          hasNoResults={form.hasNoResults}
+          activeTab={form.activeTab}
+          onActiveTabChange={form.setActiveTab}
+          activeBody={form.activeBody}
+          onOverrideUrl={form.overrideActiveUrl}
+          sortOption={form.sortOption}
+          onSortOptionChange={form.setSortOption}
+        />
+
+        {/* [체크박스로 후보 선택](요구사항 원문 "블로그 후보 3개 중 체크"): 검색
+            결과가 있으면 각 후보 옆에 체크박스를 둔다 — 유저 화면에 노출될 최종
+            방문 후기/추천 블로그 목록이 된다(최대 3개). */}
+        {form.blogItems && form.blogItems.length > 0 && (
+          <div className="flex flex-col gap-1.5 rounded-xl border border-gray-200 p-3">
+            <p className="text-xs font-semibold text-gray-500">유저 화면에 노출할 블로그 선택 (최대 3개)</p>
+            {form.blogItems.map((item, i) => {
+              const checked = form.selectedUrls.includes(item.link);
+              return (
+                <label key={`${item.link}-${i}`} className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={!checked && form.selectedUrls.length >= 3}
+                    onChange={() => form.toggleUrl(item.link)}
+                  />
+                  <span className="truncate">블로그 {i + 1} · {item.title}</span>
+                </label>
+              );
+            })}
+            {form.selectedUrls.length >= 3 && (
+              <p className="text-[11px] text-gray-400">최대 3개까지 선택할 수 있어요.</p>
+            )}
+          </div>
+        )}
+
+        {form.saveError && <p className="text-xs text-red-600">{form.saveError}</p>}
+
+        <div className="flex items-center gap-2 mt-1">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 rounded-full border border-gray-300 py-2.5 text-sm font-medium text-gray-600 hover:bg-gray-50"
+          >
+            취소
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={form.isSaving || form.isLoadingExisting}
+            className="flex-1 rounded-full bg-blue-600 text-white text-sm font-semibold py-2.5 disabled:opacity-50"
+          >
+            {form.isSaving ? '저장 중...' : '저장 및 완료'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RawDataModal } from './raw-data-modal';
-import { AdminOpenSpaceRow } from './data-grid-client';
+import { AdminEventRow, AdminOpenSpaceRow } from './data-grid-client';
 
 // [상세 모달 URL/이미지 UX 개선](2026-08-29): "전체 컬럼" 목록의 http(s) URL 값이 클릭 시
 // 새 창으로 열리는 링크로, 그중 이미지 URL은 실제 미리보기 이미지로 렌더링되는지 검증한다.
@@ -213,6 +213,50 @@ describe('RawDataModal — 블로그 큐레이션 트리거', () => {
     render(<RawDataModal table="events" row={row as unknown as AdminOpenSpaceRow} categoryMinOptions={[]} onClose={vi.fn()} />);
 
     expect(screen.queryByText('🔍 블로그로 큐레이션 (뱃지/노출 중분류 빠르게 채우기)')).not.toBeInTheDocument();
+  });
+});
+
+// [이벤트픽 관리자 블로그 큐레이션](2026-09-11 사용자 지시, todo.md 개선사항7-2):
+// "Events 탭 상세 팝업에 블로그 큐레이션 버튼 추가" — events 탭에서만 노출되고
+// 누르면 EventBlogCurationModal이 열리는지 확인한다(모달 내부 동작은
+// event-blog-curation-modal.test.tsx가 별도로 검증).
+describe('RawDataModal — 이벤트 블로그 큐레이션 트리거 (2026-09-11)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('events 탭에서 버튼을 누르면 EventBlogCurationModal이 열린다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ items: [], hasRecentReview: false, hasNoResults: true, urls: [] }),
+        } as Response)
+      )
+    );
+    const row = { ...buildRow(), title: '가을 단풍 축제' };
+    render(<RawDataModal table="events" row={row as unknown as AdminEventRow} categoryMinOptions={[]} onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByText('🔍 블로그 큐레이션 (방문 후기/추천 블로그 등록)'));
+
+    expect(await screen.findByText('🔍 블로그 큐레이션')).toBeInTheDocument();
+  });
+
+  it('open_spaces 탭에는 이 버튼이 없다', () => {
+    const row = buildRow();
+    render(
+      <RawDataModal
+        table="open_spaces"
+        row={row}
+        categoryMinOptions={[]}
+        serviceCategories={[]}
+        onServiceCategoryUpdated={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByText('🔍 블로그 큐레이션 (방문 후기/추천 블로그 등록)')).not.toBeInTheDocument();
   });
 });
 

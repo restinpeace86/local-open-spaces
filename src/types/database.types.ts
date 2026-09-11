@@ -240,6 +240,7 @@ export type Database = {
           category_min: string | null
           category_min_source: string | null
           created_at: string | null
+          curated_blog_urls: string[]
           description: string | null
           end_date: string
           event_type: string
@@ -275,6 +276,7 @@ export type Database = {
           category_min?: string | null
           category_min_source?: string | null
           created_at?: string | null
+          curated_blog_urls?: string[]
           description?: string | null
           end_date: string
           event_type: string
@@ -310,6 +312,7 @@ export type Database = {
           category_min?: string | null
           category_min_source?: string | null
           created_at?: string | null
+          curated_blog_urls?: string[]
           description?: string | null
           end_date?: string
           event_type?: string

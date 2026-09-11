@@ -142,6 +142,10 @@ export function DetailModal({
   // 여러 장이 들어와도 그대로 동작하도록 일반적인 인덱스 상태로 둔다(길이 1 이하면
   // 좌우 버튼/점 표시가 자동으로 숨는다).
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  // [개선사항8](2026-09-11 사용자 지시, implementation/todo.md): 관리자가 큐레이션한
+  // "방문 후기/추천 블로그" URL — 이벤트 상세에서만 조회한다(스팟픽 상세 카드의
+  // blogUrls 조회와 동일 패턴, 아래 참고). 0건이면 섹션 자체를 숨긴다.
+  const [curatedBlogUrls, setCuratedBlogUrls] = useState<string[]>([]);
   // undefined = 아직 조회 전(로딩), null = 큐레이션 없음(정상), 객체 = 큐레이션 있음.
   // spot_curations는 open_spaces에만 FK가 있어(이벤트는 대상 아님) 이벤트는 조회하지 않는다.
   const [curation, setCuration] = useState<SpotCuration | null | undefined>(undefined);
@@ -221,6 +225,29 @@ export function DetailModal({
   useEffect(() => {
     setCurrentImageIndex(0);
   }, [item.id]);
+
+  // [개선사항8](2026-09-11 사용자 지시): 이벤트 상세에서만, 관리자가 큐레이션한
+  // 방문 후기/추천 블로그 URL을 조회한다. 실패/0건이면 조용히 빈 배열 — 섹션이
+  // 숨겨진다(스팟픽 blogUrls 조회와 동일 관례).
+  useEffect(() => {
+    if (!isEvent) {
+      setCuratedBlogUrls([]);
+      return;
+    }
+    let cancelled = false;
+    setCuratedBlogUrls([]);
+    fetch(`/api/events/curated-blog-urls?event_id=${encodeURIComponent(item.id)}`)
+      .then((res) => res.json())
+      .then((data: { urls?: string[] }) => {
+        if (!cancelled) setCuratedBlogUrls(Array.isArray(data.urls) ? data.urls : []);
+      })
+      .catch(() => {
+        if (!cancelled) setCuratedBlogUrls([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [item.id, isEvent]);
 
   // Task 9-6-2(2026-08-23, Decision 009): location_precision이 없으면(SPACE, 기존 EXACT 전용
   // 경로) EXACT로 간주한다. CITY_APPROX/UNKNOWN은 정확한 행사장 위치가 아니므로 지도/길찾기를
@@ -514,6 +541,29 @@ export function DetailModal({
                       {isDescriptionExpanded ? '접기' : '더보기'}
                     </button>
                   )}
+                </div>
+              )}
+
+              {/* [개선사항8](2026-09-11 사용자 지시): "방문 후기 / 추천 블로그" —
+                  관리자가 큐레이션한 URL이 있을 때만(0개면 섹션 전체 숨김), 6단
+                  설명 아래·7단 미니맵 위에 배치한다(요구사항 원문 위치). */}
+              {curatedBlogUrls.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-xs font-semibold text-gray-500 mb-1.5">📝 방문 후기 / 추천 블로그</p>
+                  <div className="flex flex-col gap-1.5">
+                    {curatedBlogUrls.map((url, i) => (
+                      <a
+                        key={url}
+                        href={url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center justify-between gap-2"
+                      >
+                        <span>블로그 후기 {i + 1}</span>
+                        <span className="text-gray-400" aria-hidden>↗</span>
+                      </a>
+                    ))}
+                  </div>
                 </div>
               )}
 

@@ -888,4 +888,34 @@ describe('DetailModal 이벤트 상세카드 8단 구조 (개선사항6, 2026-09
     expect(screen.queryByText('🌐 공식 홈페이지 바로가기')).not.toBeInTheDocument();
     expect(screen.queryByText('📝 간편 예약/신청하기')).not.toBeInTheDocument();
   });
+
+  // [개선사항8](2026-09-11 사용자 지시): "방문 후기 / 추천 블로그" 카드 리스트 —
+  // 관리자가 큐레이션한 URL이 있을 때만 노출하고, 0개면 섹션 전체를 숨긴다.
+  it('큐레이션 블로그 URL이 있으면 "방문 후기 / 추천 블로그" 섹션을 보여준다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/events/curated-blog-urls')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ urls: ['https://blog.naver.com/a', 'https://blog.naver.com/b'] }),
+          } as Response);
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+      })
+    );
+    render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT' })} onClose={() => {}} />);
+
+    expect(await screen.findByText('📝 방문 후기 / 추천 블로그')).toBeInTheDocument();
+    const link1 = screen.getByText('블로그 후기 1').closest('a');
+    expect(link1).toHaveAttribute('href', 'https://blog.naver.com/a');
+    expect(link1).toHaveAttribute('target', '_blank');
+    expect(screen.getByText('블로그 후기 2')).toBeInTheDocument();
+  });
+
+  it('큐레이션 블로그 URL이 없으면 섹션 자체를 렌더링하지 않는다', () => {
+    render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT' })} onClose={() => {}} />);
+
+    expect(screen.queryByText('📝 방문 후기 / 추천 블로그')).not.toBeInTheDocument();
+  });
 });

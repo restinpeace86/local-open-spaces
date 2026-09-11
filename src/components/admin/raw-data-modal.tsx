@@ -5,6 +5,7 @@ import { AdminTable, AdminRow, AdminOpenSpaceRow, AdminEventRow, AdminRawIngestR
 import { MigrateToEventModal } from '@/components/admin/migrate-to-event-modal';
 import { ServiceCategory } from '@/lib/admin/service-category';
 import { BlogCurationModal } from '@/components/admin/blog-curation-modal';
+import { EventBlogCurationModal } from '@/components/admin/event-blog-curation-modal';
 import { SpotCurationQuickModal } from '@/components/admin/spot-curation-quick-modal';
 import { SpotDedupQuickModal } from '@/components/admin/spot-dedup-quick-modal';
 import { useBackdropDismiss } from '@/lib/admin/use-backdrop-dismiss';
@@ -403,6 +404,8 @@ export function RawDataModal({
   const prettyJson = JSON.stringify(raw ?? null, null, 2);
   const [isMigrateModalOpen, setIsMigrateModalOpen] = useState(false);
   const [isBlogCurationModalOpen, setIsBlogCurationModalOpen] = useState(false);
+  // [이벤트픽 관리자 블로그 큐레이션](2026-09-11 사용자 지시, todo.md 개선사항7-2)
+  const [isEventBlogCurationModalOpen, setIsEventBlogCurationModalOpen] = useState(false);
   // [open_spaces 상세에서 스팟 큐레이션 바로 열기](2026-09-08 사용자 지시)
   const [isSpotCurationModalOpen, setIsSpotCurationModalOpen] = useState(false);
   // [open_spaces 상세에서 중복 스팟 검토](2026-09-09 사용자 지시)
@@ -515,6 +518,19 @@ export function RawDataModal({
           )}
 
           {table === 'events' && onLocationUpdated && <LocationEditor row={row as AdminEventRow} onUpdated={onLocationUpdated} />}
+
+          {/* [이벤트픽 관리자 블로그 큐레이션](2026-09-11 사용자 지시, todo.md
+              개선사항7-2): "Events 탭 상세 팝업 내부에 블로그 큐레이션 버튼 추가" —
+              open_spaces의 블로그 큐레이션 버튼과 같은 톤/위치 관례를 따른다. */}
+          {table === 'events' && (
+            <button
+              type="button"
+              onClick={() => setIsEventBlogCurationModalOpen(true)}
+              className="mt-3 w-full rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+            >
+              🔍 블로그 큐레이션 (방문 후기/추천 블로그 등록)
+            </button>
+          )}
 
           {table === 'open_spaces' && onServiceCategoryUpdated && (
             <ServiceCategoryEditor
@@ -708,6 +724,17 @@ export function RawDataModal({
           serviceCategories={serviceCategories}
           onClose={() => setIsBlogCurationModalOpen(false)}
           onServiceCategoryUpdated={onServiceCategoryUpdated}
+        />
+      )}
+
+      {isEventBlogCurationModalOpen && table === 'events' && (
+        <EventBlogCurationModal
+          event={{
+            id: (row as AdminEventRow).id,
+            title: (row as AdminEventRow).title,
+            sigunguName: (row as AdminEventRow).sigungu_name,
+          }}
+          onClose={() => setIsEventBlogCurationModalOpen(false)}
         />
       )}
 
