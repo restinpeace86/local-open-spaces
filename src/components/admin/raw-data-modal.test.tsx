@@ -650,3 +650,95 @@ describe('RawDataModal — 원문 JSON 필드를 HTML로 보기', () => {
     expect(screen.queryByText(/HTML로 보기/)).not.toBeInTheDocument();
   });
 });
+
+// [개선사항10](2026-09-11 사용자 지시, implementation/todo.md): "매칭되는 스팟이 없는
+// 경우 관리자가 수동으로 스팟을 지정.. 관리자 툴 플로우". events 탭에서만 노출되는
+// "연결된 스팟" 편집기(SpaceLinkEditor, 내부적으로 기존 SpotPicker 재사용)를 검증한다.
+describe('RawDataModal — 연결된 스팟(space_id) 편집기 (개선사항10, 2026-09-11)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('space_id가 없으면 "미연결" 배지와 검색창을 보여준다', () => {
+    const row = { ...buildRow(), title: '가을 축제', space_id: null };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        onClose={vi.fn()}
+        onSpaceLinkUpdated={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('미연결')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/어느 스팟인가요/)).toBeInTheDocument();
+  });
+
+  it('space_id가 있으면 "연결됨" 배지를 보여준다', () => {
+    const row = { ...buildRow(), title: '가을 축제', space_id: 'space-1' };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        onClose={vi.fn()}
+        onSpaceLinkUpdated={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText('연결됨')).toBeInTheDocument();
+  });
+
+  it('스팟을 검색해 선택하면 space-link를 PATCH하고 onSpaceLinkUpdated를 호출한다', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/api/spots/search')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ items: [{ id: 'space-9', name: '오름공원', address: '제주' }] }),
+        } as Response);
+      }
+      if (url.includes('/api/admin/data-grid/space-link')) {
+        void init;
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ row: { id: 'row-1', space_id: 'space-9' } }) } as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const onSpaceLinkUpdated = vi.fn();
+    const row = { ...buildRow(), title: '가을 축제', space_id: null };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        onClose={vi.fn()}
+        onSpaceLinkUpdated={onSpaceLinkUpdated}
+      />
+    );
+
+    fireEvent.change(screen.getByPlaceholderText(/어느 스팟인가요/), { target: { value: '오름공원' } });
+    fireEvent.mouseDown(await screen.findByText('오름공원'));
+
+    await waitFor(() => expect(onSpaceLinkUpdated).toHaveBeenCalledWith('row-1', 'space-9'));
+    const patchCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/data-grid/space-link'));
+    expect(patchCall).toBeDefined();
+    expect(JSON.parse((patchCall![1] as RequestInit).body as string)).toEqual({ id: 'row-1', space_id: 'space-9' });
+  });
+
+  it('open_spaces 탭에는 이 편집기가 없다', () => {
+    const row = buildRow();
+    render(
+      <RawDataModal
+        table="open_spaces"
+        row={row}
+        categoryMinOptions={[]}
+        serviceCategories={[]}
+        onServiceCategoryUpdated={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByText('연결된 스팟(open_spaces)')).not.toBeInTheDocument();
+  });
+});

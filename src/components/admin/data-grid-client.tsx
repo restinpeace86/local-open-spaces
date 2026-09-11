@@ -108,6 +108,9 @@ export type AdminEventRow = {
   is_active: boolean | null;
   raw_data: unknown;
   created_at: string | null;
+  // [개선사항10](2026-09-11 사용자 지시): 연결된 open_spaces 행(기존 FK 컬럼,
+  // events_space_id_fkey). null이면 미연결.
+  space_id?: string | null;
 };
 
 export type AdminRawIngestRow = {
@@ -1636,6 +1639,10 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
             setSelectedRow((prev) =>
               prev && 'id' in prev && prev.id === id ? { ...prev, location: nextLocation, location_precision: nextPrecision } : prev
             );
+          }}
+          onSpaceLinkUpdated={(id, nextSpaceId) => {
+            setRows((prev) => prev.map((row) => ('id' in row && row.id === id ? { ...row, space_id: nextSpaceId } : row)));
+            setSelectedRow((prev) => (prev && 'id' in prev && prev.id === id ? { ...prev, space_id: nextSpaceId } : prev));
           }}
           onServiceCategoryUpdated={(id, nextServiceCategoryId) => {
             // [수정/적재일 클라이언트 즉시 반영](2026-09-08): 노출 중분류 단일 수정도

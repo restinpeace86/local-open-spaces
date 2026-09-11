@@ -6,6 +6,7 @@ import { MigrateToEventModal } from '@/components/admin/migrate-to-event-modal';
 import { ServiceCategory } from '@/lib/admin/service-category';
 import { BlogCurationModal } from '@/components/admin/blog-curation-modal';
 import { EventBlogCurationModal } from '@/components/admin/event-blog-curation-modal';
+import { SpotPicker, SpotOption } from '@/components/community/spot-picker';
 import { SpotCurationQuickModal } from '@/components/admin/spot-curation-quick-modal';
 import { SpotDedupQuickModal } from '@/components/admin/spot-dedup-quick-modal';
 import { useBackdropDismiss } from '@/lib/admin/use-backdrop-dismiss';
@@ -368,6 +369,63 @@ function LocationEditor({ row, onUpdated }: { row: AdminEventRow; onUpdated: (id
   );
 }
 
+// [개선사항10](2026-09-11 사용자 지시, implementation/todo.md): "매칭되는 스팟이 없는
+// 경우 관리자가 수동으로 스팟을 지정하거나 신규 등록하여 연결할 수 있도록 관리자
+// 툴 플로우를 지원". 기존 SpotPicker(맘스픽 글쓰기 스팟 검색, /api/spots/search +
+// 카카오 로컬 Fallback + Auto-Upsert)를 그대로 재사용한다(제5장 제4조 기존 구조
+// 우선 — 검색·신규 등록 로직을 다시 만들지 않음).
+function SpaceLinkEditor({
+  row,
+  onUpdated,
+}: {
+  row: AdminEventRow;
+  onUpdated: (id: string, nextSpaceId: string | null) => void;
+}) {
+  const [selected, setSelected] = useState<SpotOption | null>(
+    row.space_id ? { id: row.space_id, name: '(연결됨 — 이름 확인은 스팟픽에서)', address: null } : null
+  );
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  async function handleSelect(spot: SpotOption | null) {
+    setSelected(spot);
+    setIsSaving(true);
+    setErrorMessage(null);
+    try {
+      const res = await fetch('/api/admin/data-grid/space-link', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: row.id, space_id: spot?.id ?? null }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? '연결된 스팟 수정 실패');
+      onUpdated(row.id, json.row.space_id);
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : '연결된 스팟 수정 실패');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  return (
+    <div className="mt-3 rounded-xl border border-gray-200 p-3">
+      <h3 className="text-xs font-semibold text-gray-500 mb-2">
+        연결된 스팟(open_spaces)
+        <span
+          className={`ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+            row.space_id ? 'bg-emerald-100 text-emerald-700' : 'bg-gray-100 text-gray-500'
+          }`}
+        >
+          {row.space_id ? '연결됨' : '미연결'}
+        </span>
+        {isSaving && <span className="ml-2 text-[11px] text-gray-400">저장 중...</span>}
+      </h3>
+      <SpotPicker selected={selected} onSelect={handleSelect} />
+      {errorMessage && <p className="mt-1.5 text-xs text-red-500">{errorMessage}</p>}
+    </div>
+  );
+}
+
 export function RawDataModal({
   table,
   row,
@@ -378,6 +436,7 @@ export function RawDataModal({
   onCategoryMinUpdated,
   onTargetAudienceUpdated,
   onLocationUpdated,
+  onSpaceLinkUpdated,
   onServiceCategoryUpdated,
   onMigratedToEvent,
   onDeleted,
@@ -392,6 +451,8 @@ export function RawDataModal({
   onCategoryMinUpdated?: (id: string, nextCategoryMin: string | null, nextSource: string | null) => void;
   onTargetAudienceUpdated?: (id: string, nextTargetAudience: string | null, nextSource: string | null) => void;
   onLocationUpdated?: (id: string, nextLocation: unknown, nextPrecision: string) => void;
+  // [개선사항10](2026-09-11 사용자 지시): events 탭 전용, 연결된 스팟(space_id) 수동 지정.
+  onSpaceLinkUpdated?: (id: string, nextSpaceId: string | null) => void;
   onServiceCategoryUpdated?: (id: string, nextServiceCategoryId: string | null) => void;
   // [todo.md 개선사항 5](2026-09-03): open_spaces 탭에서만 전달된다 — 이관 성공 시 부모가
   // 목록에서 이 행을 제거하고 상세 모달을 닫는다(원본이 실제로 삭제됐으므로).
@@ -518,6 +579,10 @@ export function RawDataModal({
           )}
 
           {table === 'events' && onLocationUpdated && <LocationEditor row={row as AdminEventRow} onUpdated={onLocationUpdated} />}
+
+          {table === 'events' && onSpaceLinkUpdated && (
+            <SpaceLinkEditor row={row as AdminEventRow} onUpdated={onSpaceLinkUpdated} />
+          )}
 
           {/* [이벤트픽 관리자 블로그 큐레이션](2026-09-11 사용자 지시, todo.md
               개선사항7-2): "Events 탭 상세 팝업 내부에 블로그 큐레이션 버튼 추가" —

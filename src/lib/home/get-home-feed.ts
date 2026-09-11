@@ -88,10 +88,14 @@ function extractCoords(location: unknown): { lng: number; lat: number } {
 // 추가 조회 비용 없이 select 목록에만 포함하면 된다).
 // [상세보기 설명 추가](2026-08-27 사용자 지시): description도 함께 선택한다(제목만으로는
 // 내용을 알기 어려운 행사가 많다는 지적).
-const EVENT_COLUMNS =
+// [개선사항10](2026-09-11 사용자 지시, implementation/todo.md): Event↔Spot 양방향
+// 링킹의 유저 화면 조회(/api/events/linked-spot, /api/spots/linked-events)가 단일
+// 행을 NearbyItem으로 매핑할 때 이 컬럼 목록/변환 함수를 그대로 재사용한다(제5장
+// 제4조 — 새 라우트마다 필드 매핑을 다시 베끼지 않는다).
+export const EVENT_COLUMNS =
   'id, title, description, event_type, category_min, target_audience, location, location_precision, thumbnail_url, start_date, end_date, reservation_start_date, reservation_end_date, reservation_url, is_reservation_required, is_free, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, venue_name, sigungu_name';
 
-type EventRow = {
+export type EventRow = {
   id: string;
   title: string;
   description: string | null;
@@ -118,7 +122,7 @@ type EventRow = {
   sigungu_name: string | null;
 };
 
-function toEventItem(row: EventRow): NearbyItem {
+export function toEventItem(row: EventRow): NearbyItem {
   const { lng, lat } = extractCoords(row.location);
   return {
     id: row.id,
@@ -942,10 +946,10 @@ export async function searchSpacesNationwide(
 // map-explorer.tsx의 검색 모드 중분류 필터(item.category_min && ...)가 검색 결과에 대해서는
 // 한 번도 매치될 수 없는 잠재 버그였다(이번 작업의 관리자 큐레이션 검색이 category_min 필터를
 // 요구하면서 발견함). 추가해도 기존 소비처(getFreeFeed 등)는 순수 추가 필드라 영향 없다.
-const SPACE_COLUMNS =
+export const SPACE_COLUMNS =
   'id, name, category, category_min, address, location, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, sigungu_name, source_type';
 
-type SpaceRow = {
+export type SpaceRow = {
   id: string;
   name: string;
   category: string;
@@ -964,7 +968,7 @@ type SpaceRow = {
   source_type: string | null;
 };
 
-function toSpaceItem(row: SpaceRow): NearbyItem {
+export function toSpaceItem(row: SpaceRow): NearbyItem {
   const { lng, lat } = extractCoords(row.location);
   return {
     id: row.id,

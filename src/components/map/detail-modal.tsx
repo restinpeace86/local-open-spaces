@@ -136,6 +136,13 @@ export function DetailModal({
   const [isMapPreviewOpen, setIsMapPreviewOpen] = useState(false);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
+  // [개선사항10](2026-09-11 사용자 지시, implementation/todo.md): Event↔Spot 양방향
+  // 링킹 — 이벤트면 연결된 스팟 1건, 스팟이면 연결된(진행중/예정) 이벤트 목록을
+  // 조회한다. 둘 다 탭하면 이 컴포넌트 자신을 한 번 더 중첩 렌더링해 상세를 연다
+  // (부모 화면마다 네비게이션 콜백을 새로 추가하지 않아도 됨 — 제5장 제4조).
+  const [linkedSpot, setLinkedSpot] = useState<NearbyItem | null>(null);
+  const [linkedEvents, setLinkedEvents] = useState<NearbyItem[]>([]);
+  const [linkedDetailItem, setLinkedDetailItem] = useState<NearbyItem | null>(null);
   // [개선사항6](2026-09-11 사용자 지시): 이벤트 상세카드 1단(최상단 이미지 슬라이드) —
   // 현재 데이터 소스(NearbyItem.thumbnail_url)는 이미지 1장만 제공해 배열 길이가 항상
   // 0 또는 1이지만(추측으로 다중 이미지 데이터를 지어내지 않는다, 제3장 제5조), 향후
@@ -243,6 +250,49 @@ export function DetailModal({
       })
       .catch(() => {
         if (!cancelled) setCuratedBlogUrls([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [item.id, isEvent]);
+
+  // [개선사항10](2026-09-11 사용자 지시): 이벤트면 연결된 스팟 1건을 조회한다.
+  useEffect(() => {
+    if (!isEvent) {
+      setLinkedSpot(null);
+      return;
+    }
+    let cancelled = false;
+    setLinkedSpot(null);
+    fetch(`/api/events/linked-spot?event_id=${encodeURIComponent(item.id)}`)
+      .then((res) => res.json())
+      .then((data: { spot?: NearbyItem | null }) => {
+        if (!cancelled) setLinkedSpot(data.spot ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setLinkedSpot(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [item.id, isEvent]);
+
+  // [개선사항10](2026-09-11 사용자 지시): 스팟이면 연결된 진행중/예정 이벤트
+  // 목록을 조회한다. 0건이면 섹션 자체를 숨긴다(요구사항 원문).
+  useEffect(() => {
+    if (isEvent) {
+      setLinkedEvents([]);
+      return;
+    }
+    let cancelled = false;
+    setLinkedEvents([]);
+    fetch(`/api/spots/linked-events?spot_id=${encodeURIComponent(item.id)}`)
+      .then((res) => res.json())
+      .then((data: { events?: NearbyItem[] }) => {
+        if (!cancelled) setLinkedEvents(Array.isArray(data.events) ? data.events : []);
+      })
+      .catch(() => {
+        if (!cancelled) setLinkedEvents([]);
       });
     return () => {
       cancelled = true;
@@ -567,6 +617,20 @@ export function DetailModal({
                 </div>
               )}
 
+              {/* [개선사항10](2026-09-11 사용자 지시): "Event ➔ Spot: 장소/위치 영역을
+                  탭했을 때 연결된 open_spaces 상세로 이동" — 연결된 스팟이 있을
+                  때만 탭 가능한 행으로 보여준다. */}
+              {linkedSpot && (
+                <button
+                  type="button"
+                  onClick={() => setLinkedDetailItem(linkedSpot)}
+                  className="mt-3 w-full flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                >
+                  <span>📍 연결된 장소: {linkedSpot.name}</span>
+                  <span aria-hidden>›</span>
+                </button>
+              )}
+
               {/* 7단: 인앱 지도 & 스팟 마커(미니맵). 근사/미상 좌표는 정확한 핀처럼
                   오인시키지 않도록 지도 대신 안내 문구만 보여준다(Task 9-6-2). */}
               {hasExactLocation ? (
@@ -840,6 +904,27 @@ export function DetailModal({
               )}
             </dl>
 
+            {/* [개선사항10](2026-09-11 사용자 지시): "Spot ➔ Event: 스팟 상세 페이지에
+                현재 활성화/예정된 이벤트 섹션을 표시, 없으면 섹션 자체를 숨김". */}
+            {linkedEvents.length > 0 && (
+              <div className="mt-4">
+                <p className="text-xs font-semibold text-gray-500 mb-1.5">🎪 진행 중인 이벤트</p>
+                <div className="flex flex-col gap-1.5">
+                  {linkedEvents.map((ev) => (
+                    <button
+                      key={ev.id}
+                      type="button"
+                      onClick={() => setLinkedDetailItem(ev)}
+                      className="w-full flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                    >
+                      <span className="truncate">{ev.name}</span>
+                      <span className="shrink-0 text-gray-400" aria-hidden>›</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Task 9-5-1: 콤팩트 인앱 미니맵 — 상세 화면을 벗어나지 않고 위치를 바로 확인하고,
                 "🔍 크게보기"로 풀스크린 지도 모달을 띄운다.
                 Task 9-6-2: 근사/미상 좌표(CITY_APPROX/UNKNOWN)는 정확한 위치가 아니므로 지도 대신
@@ -930,6 +1015,14 @@ export function DetailModal({
           spotName={item.name}
           onClose={() => setIsReservationModalOpen(false)}
         />
+      )}
+
+      {/* [개선사항10](2026-09-11 사용자 지시): Event↔Spot 양방향 연동 — 연결된
+          장소/이벤트를 탭하면 이 컴포넌트 자신을 한 번 더 중첩 렌더링해 그 상세를
+          연다. 부모 화면(15곳 이상이 DetailModal을 쓴다)마다 별도 네비게이션
+          콜백을 추가하지 않아도 되는 자기완결적 방법이다(제5장 제4조). */}
+      {linkedDetailItem && (
+        <DetailModal item={linkedDetailItem} onClose={() => setLinkedDetailItem(null)} />
       )}
     </div>
   );

@@ -919,3 +919,73 @@ describe('DetailModal 이벤트 상세카드 8단 구조 (개선사항6, 2026-09
     expect(screen.queryByText('📝 방문 후기 / 추천 블로그')).not.toBeInTheDocument();
   });
 });
+
+// [개선사항10](2026-09-11 사용자 지시, implementation/todo.md): Event↔Spot 양방향
+// 링킹 — 이벤트 상세에서 연결된 스팟, 스팟 상세에서 연결된 이벤트를 각각 탭하면
+// DetailModal 자신을 중첩 렌더링해 그 상세를 연다.
+describe('DetailModal Event↔Spot 양방향 링킹 (개선사항10, 2026-09-11)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('이벤트에 연결된 스팟이 있으면 탭 가능한 행을 보여주고, 누르면 그 스팟 상세가 중첩으로 열린다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/events/linked-spot')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ spot: makeSpaceItem({ id: 'space-linked', name: '연결된 공원' }) }),
+          } as Response);
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+      })
+    );
+    render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT' })} onClose={() => {}} />);
+
+    const link = await screen.findByText('📍 연결된 장소: 연결된 공원');
+    fireEvent.click(link);
+
+    // 중첩된 DetailModal은 스팟 분기라 "주소" 라벨이 새로 나타나고, 그 상세의
+    // 제목(h2)도 "연결된 공원"이다.
+    expect(await screen.findByText('주소')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: '연결된 공원' })).toBeInTheDocument();
+  });
+
+  it('이벤트에 연결된 스팟이 없으면 그 행 자체를 렌더링하지 않는다', () => {
+    render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT' })} onClose={() => {}} />);
+
+    expect(screen.queryByText(/📍 연결된 장소/)).not.toBeInTheDocument();
+  });
+
+  it('스팟에 연결된 진행중 이벤트가 있으면 목록을 보여주고, 누르면 그 이벤트 상세가 중첩으로 열린다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/spots/linked-events')) {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                events: [makeSpaceItem({ id: 'event-linked', item_type: 'EVENT', name: '연결된 가을 축제' })],
+              }),
+          } as Response);
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+      })
+    );
+    render(<DetailModal item={makeSpaceItem()} onClose={() => {}} />);
+
+    expect(await screen.findByText('🎪 진행 중인 이벤트')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('연결된 가을 축제'));
+
+    // 중첩된 DetailModal은 이벤트 분기라 카테고리 뱃지가 하나 더 나타난다.
+    expect(screen.getAllByText('연결된 가을 축제')).toHaveLength(2);
+  });
+
+  it('스팟에 연결된 이벤트가 없으면 섹션 자체를 렌더링하지 않는다', () => {
+    render(<DetailModal item={makeSpaceItem()} onClose={() => {}} />);
+
+    expect(screen.queryByText('🎪 진행 중인 이벤트')).not.toBeInTheDocument();
+  });
+});

@@ -62,7 +62,27 @@
 - [ ] 개선사항7-1: 가격 크롤링 Fallback — 실측 결과 `events.source_url` 컬럼 자체가
       없고 각 수집 어댑터의 raw_data 안 URL 필드명이 소스마다 달라, 먼저 어댑터별
       조사가 필요함을 확인(위 구현 기록 "특이 사항" 참고). 다음 스텝에서 조사부터 진행.
-- [ ] 개선사항9~10: 아직 착수 전.
+- [x] **개선사항9 — 스킵 (보류)**: "체육시설/공간시설 seoul_public_reservation
+      데이터를 open_spaces가 아니라 events로 재라우팅"이 `project/decision-log.md`
+      **Decision 017**(2026-08-25, 승인 상태)과 정면 충돌한다. Decision 017 2항이
+      "체육시설/공간시설 → open_spaces, 문화체험/교육강좌 → events"를 명시적으로
+      결정했고(`scripts/ingest/adapters/seoul-yeyak-adapter.mjs`의
+      `MAXCLASSNM_TABLE` 매핑이 그대로 이 결정을 구현 중), 오늘 지시는 그중
+      체육시설/공간시설 분류만 events로 뒤집으라는 것이라 기존 승인된 아키텍처
+      결정과 직접 상충한다. CLAUDE.md 제0조(사전 준수 확인) 및 이 프로젝트의
+      기존 관례(Decision 022가 유사 상황에서 스킵→사용자 재확인→새 Decision으로
+      재승인한 선례)에 따라, Decision 017을 뒤집는 이 항목은 임의로 구현하지
+      않고 스킵한다. **재개를 위한 선행 작업**: 사용자가 Decision 017의 해당
+      항목을 명시적으로 재검토·재승인(새 Decision 기록)하면 그때 진행한다.
+      (완료: 2026-09-11, 스킵)
+- [x] 개선사항10 (Step 114): Event↔Spot 양방향 링킹. `events.space_id`(기존 FK
+      컬럼, 신규 마이그레이션 불필요)를 재사용 — 프로덕션에서 좌표 30m 이내 +
+      이름 부분일치 기준 배치 매칭으로 11,977건 자동 연결. 관리자 Events 탭
+      상세 팝업에 "연결된 스팟" 편집기(SpotPicker 재사용) 추가. 유저 화면:
+      이벤트 상세에 "📍 연결된 장소" 탭 가능 행, 스팟 상세에 "🎪 진행 중인
+      이벤트" 목록(0건 시 숨김) — 둘 다 탭하면 DetailModal이 자기 자신을
+      중첩 렌더링해 그 상세를 연다(부모 화면 15곳+ 수정 없이 자기완결적으로 구현).
+      (완료: 2026-09-11, 상세: implementation/2026-09-11-event-spot-bidirectional-linking.md)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.
