@@ -84,6 +84,27 @@
       이벤트" 목록(0건 시 숨김) — 둘 다 탭하면 DetailModal이 자기 자신을
       중첩 렌더링해 그 상세를 연다(부모 화면 15곳+ 수정 없이 자기완결적으로 구현).
       (완료: 2026-09-11, 상세: implementation/2026-09-11-event-spot-bidirectional-linking.md)
+- [x] 개선사항7-2 후속 (Step 116, 사용자 추가 지시): "events쪽의 블로그 큐레이션에도
+      가격이나 연령과 관련된 단어들을.. 노란색 형광펜 색칠해줘.. 블로그의 가독성을
+      위하여 줄바꿈도.." — `highlightKeywordsOnly` 신규(카테고리 뱃지 없이 명시적
+      키워드/패턴만 하이라이트), 가격 라벨/금액 키워드 세트 추가. `naver-blog-body.ts`의
+      본문 추출이 `structuredText`의 문단 줄바꿈(`\n`)을 공백으로 뭉개던 버그 수정 +
+      `whitespace-pre-line` 렌더링 적용.
+      (완료: 2026-09-11, 상세: implementation/2026-09-11-event-blog-curation-highlighting-and-readability.md)
+- [x] 개선사항7-2 후속2 (Step 117, 사용자 추가 지시): "가격 무료인지.. 유료면 가격에
+      대하여 블로그글 복붙하면 파싱할 수 있는거.. 적을 수 있는거 줘야지.. 타겟 연령..
+      선택체크 할 수 있도록.. 아이/분수/빛/불꽃 등 키워드도 색칠해줘" — 기존
+      `/api/admin/events/blog-curation` PUT을 확장해 `price_text`(자유 텍스트 직접
+      입력 + "현재 블로그에서 자동 채우기" 버튼, `parse-price-from-text.ts` 신규:
+      scripts/의 price-parser.mjs와 동일 로직을 TS로 중복 구현 — scripts/↔src/
+      비상호참조 컨벤션)와 `target_audience`(EVENT_PICK_TARGET_AUDIENCES 4개 중
+      단일 선택 토글 버튼, 기존 데이터그리드의 11개 값 TargetAudienceEditor와는
+      별개의 좁은 목적)를 한 번에 저장. "건드리지 않은 필드는 PUT body에서 아예
+      뺀다"(현재값==최초로드값이면 키 생략) 안전장치로 다른 화면에서 이미 검수한
+      값을 실수로 덮어쓰지 않게 함. `KID_APPEAL_HINT_KEYWORDS` 신규(아이/분수/
+      불꽃놀이/동화/공연/인형극/마술쇼/캐릭터/야경 등 + "아이들과 가기 좋은" 류
+      문구) — "원" 같은 단일 글자·오탐 위험 단어는 제외.
+      (완료: 2026-09-11, 상세: implementation/2026-09-11-event-curation-price-target-audience-kid-keywords.md)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.

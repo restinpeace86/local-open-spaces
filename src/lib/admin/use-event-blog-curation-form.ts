@@ -3,6 +3,18 @@
 import { useEffect, useState } from 'react';
 import { buildSmartBlogQuery, buildFallbackBlogQuery } from './naver-blog-search';
 import { BlogBodyState, BlogSearchItem, BlogSortOption } from './use-spot-curation-form';
+import { parsePriceFromText } from './parse-price-from-text';
+
+// [블로그 검수 결과를 바로 반영](2026-09-11 사용자 지시): "기껏 블로그에서 가격
+// 찾았는데.. 어디다 반영을 못하네.. 타겟 연령도 체크할 수 있도록 해줘" — 이 모달이
+// 다루는 target_audience는 이벤트픽 노출 4대 조건(EVENT_PICK_TARGET_AUDIENCES,
+// get-home-feed.ts와 동일 목록)으로만 좁힌다.
+export const EVENT_PICK_TARGET_AUDIENCE_OPTIONS = [
+  { value: 'INFANT', label: '영유아' },
+  { value: 'KIDS_PRE', label: '미취학' },
+  { value: 'KIDS_SCHOOL', label: '취학아동' },
+  { value: 'FAMILY', label: '가족' },
+] as const;
 
 // [이벤트픽 관리자 블로그 큐레이션](2026-09-11 사용자 지시, implementation/todo.md
 // 개선사항7-2/8): "관리자가 Events 탭 상세 팝업에서 블로그 큐레이션 버튼을 눌러
@@ -28,6 +40,15 @@ export function useEventBlogCurationForm(event: { id: string; title: string; sig
   const [isLoadingExisting, setIsLoadingExisting] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // [블로그 검수 결과를 바로 반영](2026-09-11 사용자 지시): 가격/타겟 연령을 이
+  // 모달에서 함께 입력·저장한다. initial* 값은 "건드리지 않았으면 저장 시 그대로
+  // 둔다"를 판단하는 기준선이다(현재 값과 같으면 PUT body에서 아예 빼서, 실수로
+  // 다른 화면에서 이미 검수해 둔 값을 덮어쓰지 않는다).
+  const [priceText, setPriceText] = useState('');
+  const [initialPriceText, setInitialPriceText] = useState('');
+  const [targetAudience, setTargetAudience] = useState<string | null>(null);
+  const [initialTargetAudience, setInitialTargetAudience] = useState<string | null>(null);
 
   function runSearch(query: string, sort: BlogSortOption = sortOption): Promise<{ hasNoResults: boolean }> {
     setIsSearching(true);
@@ -71,6 +92,14 @@ export function useEventBlogCurationForm(event: { id: string; title: string; sig
       .then(async (res) => {
         const data = await res.json();
         if (res.ok && Array.isArray(data.urls)) setSelectedUrls(data.urls);
+        if (res.ok) {
+          const price = typeof data.price_text === 'string' ? data.price_text : '';
+          setPriceText(price);
+          setInitialPriceText(price);
+          const audience = typeof data.target_audience === 'string' ? data.target_audience : null;
+          setTargetAudience(audience);
+          setInitialTargetAudience(audience);
+        }
       })
       .catch(() => {
         // 기존 값 조회 실패해도 신규 저장은 계속 가능하게 화면을 막지 않는다(제5장 제11조).
@@ -98,6 +127,26 @@ export function useEventBlogCurationForm(event: { id: string; title: string; sig
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [blogItems, activeTab]);
 
+  const activeItemForPrice = blogItems?.[activeTab];
+  const activeBodyForPrice = activeItemForPrice ? bodyByLink[activeItemForPrice.link] : undefined;
+  // [블로그글 복붙하면 파싱](2026-09-11 사용자 지시): 현재 보고 있는 블로그(전체
+  // 본문이 있으면 본문, 없으면 요약)에서 가격을 자동으로 찾아 입력란에 채운다.
+  // 못 찾으면 안내만 하고 입력란은 그대로 둔다(추측으로 채우지 않음) — 어느 쪽이든
+  // 관리자가 직접 다시 고쳐 쓸 수 있다.
+  function autoFillPriceFromActiveBlog(): { found: boolean } {
+    const source = activeBodyForPrice?.text ?? activeItemForPrice?.description ?? null;
+    const parsed = parsePriceFromText(source);
+    if (parsed) setPriceText(parsed);
+    return { found: Boolean(parsed) };
+  }
+
+  // [타겟 연령 체크](2026-09-11 사용자 지시): 4개 중 하나만 고를 수 있다(단일
+  // 컬럼) — 이미 선택된 것을 다시 누르면 "미선택"으로 되돌린다(명시적으로 지운
+  // 것으로 간주해 저장 시 null로 반영된다).
+  function toggleTargetAudience(value: string) {
+    setTargetAudience((prev) => (prev === value ? null : value));
+  }
+
   function overrideActiveUrl(url: string) {
     setBlogItems((prev) => {
       if (!prev) return prev;
@@ -123,10 +172,21 @@ export function useEventBlogCurationForm(event: { id: string; title: string; sig
     setIsSaving(true);
     setSaveError(null);
     try {
+      // [건드리지 않은 필드는 보내지 않는다](2026-09-11 사용자 지시 반영): 가격/타겟
+      // 연령이 처음 불러온 값과 같으면(관리자가 이번엔 그 부분을 검토하지 않은 것)
+      // body에서 아예 뺀다 — 서버(route.ts)가 "키가 없으면 건드리지 않는다"로
+      // 처리하므로, 다른 화면에서 이미 검수해 둔 값을 실수로 지우지 않는다.
+      const body: { event_id: string; urls: string[]; price_text?: string; target_audience?: string | null } = {
+        event_id: event.id,
+        urls: selectedUrls,
+      };
+      if (priceText !== initialPriceText) body.price_text = priceText;
+      if (targetAudience !== initialTargetAudience) body.target_audience = targetAudience;
+
       const res = await fetch('/api/admin/events/blog-curation', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ event_id: event.id, urls: selectedUrls }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? '저장에 실패했습니다.');
@@ -159,6 +219,11 @@ export function useEventBlogCurationForm(event: { id: string; title: string; sig
     setSortOption,
     selectedUrls,
     toggleUrl,
+    priceText,
+    setPriceText,
+    autoFillPriceFromActiveBlog,
+    targetAudience,
+    toggleTargetAudience,
     isLoadingExisting,
     isSaving,
     saveError,
