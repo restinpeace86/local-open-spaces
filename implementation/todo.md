@@ -138,6 +138,23 @@
       "방금 누른 항목 포커스 표시"(파란 테두리 강조 + scrollIntoView) 신규 추가,
       전체보기 4곳 모두 일관 적용.
       (완료: 2026-09-12, 상세: implementation/2026-09-12-eventpick-browse-sheet-detail-return-focus.md)
+- [x] 개선사항10(맘스픽) 후속 (Step 121, 사용자 버그 신고): "맘스픽 들어가면 장소선택이
+      같이 보여.. 첫글은 안쓴상태면 맘스픽 내용만 보여야돼.. 액션하면 그때 팝업떠서
+      권한없다고 첫글쓰러 가자고 해야" — not_sprout_yet(로그인 O, 첫 글 X)이 guest와
+      달리 실제 글쓰기 폼(SurveyReviewComposer, 1단계 장소선택)을 항상 그대로
+      렌더링하고 있던 것을 guest와 동일한 소프트월 버튼으로 통일. 안내 팝업의
+      "첫 글 쓰러 가기"를 눌러야만 폼이 드러난다(isComposerRevealed 신규).
+      (완료: 2026-09-12, 상세: implementation/2026-09-12-mompick-first-post-softwall-unify.md)
+- [x] 개선사항10 후속2 (Step 122, 사용자 추가 지시): "이미 등록한적 있는데 일자만
+      바뀌는 이벤트들(난지캠핑장/서울형 키즈카페 등).. 8월꺼에 스팟연결+노출
+      중분류 해놨는데 9월꺼 가져왔으면 자동 매핑 가능한가?" — external_id가
+      매달 새로 발급되는 소스(안내글마다 새 SVCID)는 새 이벤트 행이 매번 space_id
+      NULL로 시작해 관리자가 매번 재연결해야 했음. Step 114의 일회성 매칭 SQL
+      (좌표 30m+이름 부분일치, 멱등)을 `match_events_to_open_spaces()` RPC로 옮겨
+      매일 배치 후처리 단계에 상시 편입. 노출 중분류는 스팟(open_spaces) 쪽 값이라
+      space_id만 연결되면 자동으로 함께 적용됨. 프로덕션 1회 수동 실행으로 기존
+      미연결 331건 즉시 정리(한성백제박물관점 9월 안내글 포함 확인).
+      (완료: 2026-09-12, 상세: implementation/2026-09-12-auto-match-events-to-open-spaces-daily.md)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.

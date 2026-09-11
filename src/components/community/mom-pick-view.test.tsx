@@ -63,11 +63,39 @@ describe('MomPickView — 투명 오버레이 온보딩(개선사항4)', () => {
     expect(await screen.findByText('🌱 아직 새싹맘 등급이 아니에요!')).toBeInTheDocument();
   });
 
-  it('not_sprout_yet: 글쓰기 폼은 레이어 밖에 있어 그대로 렌더된다', async () => {
+  // [맘스픽 첫 글쓰기 소프트월 통일](2026-09-12 사용자 지시): "첫글은 안 쓴 상태면
+  // 맘스픽 내용만 보여야지, 첫글쓰기의 장소선택이 같이 보이면 안 된다.. 뭔가 눌러서
+  // 보려는 액션을 하면 그때 팝업이 떠서 권한이 없다고 하면서 첫 글 쓰러 가자고 해야".
+  it('not_sprout_yet: 진입 시 글쓰기 폼(장소선택 포함)은 렌더되지 않고, guest와 동일한 소프트월 버튼만 보인다', async () => {
     stubDashboardFetch();
     render(<MomPickView />);
 
+    await screen.findByText('🔥 인기 · 우수글');
+    expect(screen.queryByTestId('composer')).not.toBeInTheDocument();
+    expect(screen.getByText('✍️ 첫 글 쓰고 맘스픽 시작하기')).toBeInTheDocument();
+  });
+
+  it('not_sprout_yet: 소프트월 버튼을 누르면 안내 팝업이 뜬다(권한 없음 안내)', async () => {
+    stubDashboardFetch();
+    render(<MomPickView />);
+
+    await screen.findByText('🔥 인기 · 우수글');
+    fireEvent.click(screen.getByText('✍️ 첫 글 쓰고 맘스픽 시작하기'));
+
+    expect(await screen.findByText('🌱 아직 새싹맘 등급이 아니에요!')).toBeInTheDocument();
+    expect(screen.queryByTestId('composer')).not.toBeInTheDocument();
+  });
+
+  it('not_sprout_yet: 안내 팝업의 "첫 글 쓰러 가기"를 눌러야 비로소 글쓰기 폼이 나타난다', async () => {
+    stubDashboardFetch();
+    render(<MomPickView />);
+
+    await screen.findByText('🔥 인기 · 우수글');
+    fireEvent.click(screen.getByText('✍️ 첫 글 쓰고 맘스픽 시작하기'));
+    fireEvent.click(await screen.findByText('첫 글 쓰러 가기'));
+
     expect(await screen.findByTestId('composer')).toBeInTheDocument();
+    expect(screen.queryByText('🌱 아직 새싹맘 등급이 아니에요!')).not.toBeInTheDocument();
   });
 
   it('allowed: 투명 인터셉트 레이어가 없다', async () => {

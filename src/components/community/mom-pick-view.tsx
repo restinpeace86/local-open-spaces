@@ -45,6 +45,15 @@ export function MomPickView() {
   // Soft-wall 모달 — 페이지 진입 즉시(state==='guest') 여는 게 아니라, 실제로 쓰려고
   // 시도하는 그 순간에만 연다는 점이 기존 LoginPromptModal 용례(진입 즉시 강제)와 다르다.
   const [isGuestWritePromptOpen, setIsGuestWritePromptOpen] = useState(false);
+  // [맘스픽 첫 글쓰기 소프트월 통일](2026-09-12 사용자 지시): "로그인은 했지만 첫 글은
+  // 안 쓴 상태(not_sprout_yet)면 맘스픽 내용만 보여야지, 첫글쓰기의 장소선택이 같이
+  // 보이면 안 된다.. 뭔가 눌러서 보려는 액션을 하면 그때 팝업이 떠서 권한이 없다고
+  // 하면서 첫 글 쓰러 가자고 해야" — 이전엔 not_sprout_yet도 실제 글쓰기 폼
+  // (SurveyReviewComposer, 첫 단계가 장소선택)이 항상 화면에 그대로 노출돼 있었다
+  // (guest만 소프트월 버튼이었음). 이제 guest와 동일하게, 실제로 "쓰겠다"고 액션할
+  // 때까지 SurveyReviewComposer 자체를 렌더링하지 않는다 — 안내 모달의 "첫 글 쓰러
+  // 가기"를 눌러야만 true가 되어 폼이 나타난다.
+  const [isComposerRevealed, setIsComposerRevealed] = useState(false);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [dashboardKey, setDashboardKey] = useState(0);
@@ -132,6 +141,16 @@ export function MomPickView() {
           >
             ✍️ 로그인하고 후기 남기기
           </button>
+        ) : state === 'not_sprout_yet' && !isComposerRevealed ? (
+          // [맘스픽 첫 글쓰기 소프트월 통일](2026-09-12 사용자 지시): guest와 동일한
+          // 소프트월 버튼 — 누르기 전엔 장소선택 등 실제 작성 폼이 전혀 보이지 않는다.
+          <button
+            type="button"
+            onClick={() => setIsGuideModalOpen(true)}
+            className="w-full rounded-xl border border-dashed border-gray-300 bg-white p-4 text-center text-sm font-medium text-gray-500 hover:bg-gray-50"
+          >
+            ✍️ 첫 글 쓰고 맘스픽 시작하기
+          </button>
         ) : (
           <SurveyReviewComposer onPosted={refreshProfileAfterPost} />
         )}
@@ -194,7 +213,15 @@ export function MomPickView() {
         <SaessakMomGuideModal
           onWriteClick={() => {
             setIsGuideModalOpen(false);
-            composerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // [맘스픽 첫 글쓰기 소프트월 통일](2026-09-12 사용자 지시): 이전엔 폼이 이미
+            // 화면에 떠 있어 스크롤만 하면 됐지만, 이제는 이 시점까지 렌더되지 않았으므로
+            // 먼저 실제로 드러낸(reveal) 뒤 스크롤한다.
+            setIsComposerRevealed(true);
+            // jsdom(테스트 환경)에는 scrollIntoView 구현체가 없어 존재 여부를 방어적으로
+            // 확인한다(제5장 제11조 — 없는 환경에서도 화면이 죽지 않아야 함).
+            if (typeof composerRef.current?.scrollIntoView === 'function') {
+              composerRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }
           }}
           // [개선사항8 - 미등업 유저 진입 플로우 개선](2026-09-04 todo.md): "'X' 버튼을
           // 누르면 모달이 닫히며 다시 맘스픽 메인 화면으로 돌아가 탐색을 지속할 수
