@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { EventListRow } from '@/components/cards/event-list-row';
+import { EventListSkeleton } from '@/components/cards/event-list-skeleton';
 import { EmptyState } from '@/components/map/empty-state';
 import { CATEGORY_MAJ_OPTIONS } from '@/lib/spaces/category-maj-meta';
 import { DEFAULT_REGION_OPTION, REGION_OPTIONS } from '@/lib/geo/region-hierarchy';
@@ -197,7 +198,10 @@ export function EventBrowseSheet({
         </div>
 
         <div className="flex-1 overflow-y-auto p-4" onScroll={handleScroll}>
-          {isLoading && items.length === 0 && <p className="text-sm text-gray-400">불러오는 중...</p>}
+          {/* [개선사항4](2026-09-11 사용자 지시): 초기 로딩/필터 전환 중 빈 화면처럼
+              보이지 않도록 1열 리스트 모양 스켈레톤을 보여준다(텍스트만 있던 기존
+              대비 로딩 인지가 더 명확함). */}
+          {isLoading && items.length === 0 && <EventListSkeleton label="전체보기 목록 불러오는 중" />}
           {errorMessage && <p className="text-sm text-red-500">{errorMessage}</p>}
           {isEmpty && <EmptyState onReset={() => setSelectedMaj(null)} />}
           {items.length > 0 && (

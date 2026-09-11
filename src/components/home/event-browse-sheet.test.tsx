@@ -167,6 +167,15 @@ describe('EventBrowseSheet', () => {
     expect(onSelectItem).toHaveBeenCalledWith(expect.objectContaining({ id: 'e1' }));
   });
 
+  // [개선사항4](2026-09-11 사용자 지시): 초기 로딩 중 빈 화면처럼 보이지 않도록 1열
+  // 리스트 모양 스켈레톤을 보여준다(텍스트만 있던 이전 방식 대체).
+  it('초기 로딩 중에는 1열 리스트 모양 스켈레톤을 보여준다', () => {
+    vi.stubGlobal('fetch', vi.fn(() => new Promise(() => {}))); // 영원히 pending
+    render(<EventBrowseSheet mode="today" onClose={() => {}} onSelectItem={() => {}} />);
+
+    expect(screen.getByRole('status', { name: '전체보기 목록 불러오는 중' })).toBeInTheDocument();
+  });
+
   it('결과가 없으면 빈 상태 안내를 보여준다', async () => {
     render(<EventBrowseSheet mode="today" onClose={() => {}} onSelectItem={() => {}} />);
     expect(await screen.findByText('🎪 오늘 전체보기')).toBeInTheDocument();

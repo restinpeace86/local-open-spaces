@@ -31,8 +31,12 @@
       뱃지 / 행사·운영기간 / 예약기간)로 통일. EventCard/FeedCard 자체는 다른 화면
       (슬라이더 등)에서 여전히 이미지가 필요해 그대로 유지, 새 전용 컴포넌트만 추가.
       (완료: 2026-09-11, 상세: implementation/2026-09-11-eventpick-browse-sheets-image-free-list.md)
-- [ ] 개선사항4: 동일 바텀시트 2곳에 카테고리 탭 즉시 활성 피드백/스켈레톤/중복 fetch
-      정리 — 개선사항3에서 새로 만든 EventListRow·1열 리스트 구조 위에서 이어서 진행.
+- [x] 개선사항4 (Step 110): MajorCategoryGrid — 대분류 클릭 시 첫 번째(왼쪽) 중분류
+      자동 선택(onSelectMin 즉시 호출, 0건 중분류는 건너뜀)으로 결과 로딩이 바로
+      시작되도록 개선. 두 바텀시트(MajorCategoryGrid/EventBrowseSheet) 모두 로딩
+      스켈레톤을 신규 `EventListSkeleton`(1열 리스트 모양)으로 통일. 중복 fetch 점검
+      결과 실제 중복 호출 지점 없음(코드 변경 없이 점검 결과만 기록).
+      (완료: 2026-09-11, 상세: implementation/2026-09-11-eventpick-browse-sheets-autofocus-and-skeleton.md)
 - [ ] 개선사항5: 동일 바텀시트 2곳 결과를 도(道) 단위 1차 필터 + 거리순 정렬, 무한
       스크롤 중복/정렬 붕괴 없이 페이지네이션.
 - [ ] 개선사항6~10: 아직 착수 전.

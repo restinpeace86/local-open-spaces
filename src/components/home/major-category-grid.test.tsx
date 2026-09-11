@@ -218,6 +218,37 @@ describe('MajorCategoryGrid', () => {
     expect(screen.getByText('도시농업')).toBeInTheDocument();
     expect(screen.getByText('농장체험')).toBeInTheDocument();
   });
+
+  // [개선사항4](2026-09-11 사용자 지시): "바텀시트 진입 시 가장 왼쪽 중분류가 자동
+  // 포커스되면서 데이터를 불러온다" — 대분류를 클릭하는 즉시 그 대분류의 첫 번째
+  // 중분류로 onSelectMin이 호출돼야, 사용자가 칩을 한 번 더 누르지 않아도 결과 로딩이
+  // 바로 시작된다.
+  it('대분류를 클릭하면 그 대분류의 첫 번째(왼쪽) 중분류가 자동으로 onSelectMin 호출된다', () => {
+    const onSelectMin = vi.fn();
+    render(
+      <MajorCategoryGrid selectedMaj={null} onSelectMaj={() => {}} selectedMin={null} onSelectMin={onSelectMin} />
+    );
+
+    fireEvent.click(screen.getByText('체험 / 농장').closest('button')!);
+    // category-maj-meta.ts: '체험 / 농장'의 minorCategories 첫 값은 '농장체험'.
+    expect(onSelectMin).toHaveBeenCalledWith('농장체험');
+  });
+
+  it('첫 번째 중분류가 categoryCounts상 0건이면 그 다음 사용 가능한 중분류가 자동 선택된다', () => {
+    const onSelectMin = vi.fn();
+    render(
+      <MajorCategoryGrid
+        selectedMaj={null}
+        onSelectMaj={() => {}}
+        selectedMin={null}
+        onSelectMin={onSelectMin}
+        categoryCounts={{ 농장체험: 0, 도시농업: 5 }}
+      />
+    );
+
+    fireEvent.click(screen.getByText('체험 / 농장').closest('button')!);
+    expect(onSelectMin).toHaveBeenCalledWith('도시농업');
+  });
 });
 
 // [바텀시트 구조 복구 및 재적용](2026-09-04 사용자 지시): 중분류 선택 결과 카드를 이제
@@ -256,6 +287,8 @@ describe('MajorCategoryGrid — 결과 피드를 시트 안에 렌더링 (2026-0
 
     fireEvent.click(screen.getByText('체험 / 농장').closest('button')!);
     expect(screen.queryByText('도시농업 체험 행사')).not.toBeInTheDocument();
+    // [개선사항4] 빈 화면 대신 1열 리스트 모양 스켈레톤(EventListSkeleton)을 보여준다.
+    expect(screen.getByRole('status', { name: '중분류 결과 불러오는 중' })).toBeInTheDocument();
   });
 
   it('selectedMin이 있고 결과가 0건이면 안내 문구를 보여준다', () => {

@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { CATEGORY_MAJ_OPTIONS } from '@/lib/spaces/category-maj-meta';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { EventListRow } from '@/components/cards/event-list-row';
-import { FreeFeedSkeleton } from '@/components/home/free-feed-skeleton';
+import { EventListSkeleton } from '@/components/cards/event-list-skeleton';
 
 // [대분류/중분류 드릴다운 개편](2026-08-27 사용자 지시): 기존 QuickCategoryGrid(event_type
 // 기반 5대 카테고리, 단일 레벨)를 대체하는 신규 컴포넌트 — 7대 대분류(category_maj) 아이콘을
@@ -77,9 +77,25 @@ export function MajorCategoryGrid({
   const [isSheetOpen, setIsSheetOpen] = useState(false);
   const activeOption = CATEGORY_MAJ_OPTIONS.find((opt) => opt.maj === selectedMaj) ?? null;
 
+  // [개선사항4](2026-09-11 사용자 지시): "바텀시트 진입 시 가장 왼쪽 중분류가 자동
+  // 포커스되면서 데이터를 불러오는" UX를 도입한다 — 대분류를 누르면 그 대분류의 첫
+  // (가장 왼쪽) 중분류를 곧바로 선택해, 사용자가 중분류 칩을 한 번 더 누르지 않아도
+  // 결과가 바로 로딩되기 시작한다. 이때 프롭으로 받는 selectedMaj(activeOption)는
+  // 아직 부모 리렌더 전이라 이 클릭 시점엔 갱신되지 않았으므로, activeOption 대신
+  // 클릭된 maj 값으로 직접 CATEGORY_MAJ_OPTIONS에서 찾는다. categoryCounts로 0건인
+  // 중분류는 건너뛴다(기존 칩 목록 필터링과 동일 기준, 위 필터 로직 재사용).
+  // onSelectMaj → onSelectMin을 같은 이벤트 핸들러 안에서 동기 호출하므로 React가 두
+  // 상태 갱신(활성 탭 스타일 + 스켈레톤 노출)을 한 번의 리렌더로 배치 처리해, "Active
+  // 디자인이 지연 없이 즉시 반영"된다(요구사항 1 — 별도 지연 로직이 없어 자연히 충족).
   function handleSelectMaj(maj: string) {
     onSelectMaj(maj);
     setIsSheetOpen(true);
+
+    const option = CATEGORY_MAJ_OPTIONS.find((opt) => opt.maj === maj);
+    const firstAvailableMin = option?.minorCategories.find(
+      (min) => categoryCounts == null || (categoryCounts[min] ?? 1) > 0
+    );
+    if (firstAvailableMin) onSelectMin(firstAvailableMin);
   }
 
   function handleSelectMin(min: string) {
@@ -185,7 +201,10 @@ export function MajorCategoryGrid({
             {selectedMin !== null && (
               <div className="px-4 pb-4">
                 {isCategoryFeedLoading || categoryFeedItems === null ? (
-                  <FreeFeedSkeleton />
+                  // [개선사항4](2026-09-11 사용자 지시): 중분류 탭 선택/전환 중 빈 화면처럼
+                  // 보이지 않도록 1열 리스트 모양 스켈레톤(EventListSkeleton)을 보여준다
+                  // (기존 FreeFeedSkeleton은 그리드 카드용이라 새 1열 리스트와 모양이 안 맞음).
+                  <EventListSkeleton label="중분류 결과 불러오는 중" />
                 ) : categoryFeedItems.length > 0 ? (
                   <>
                     {/* [개선사항3](2026-09-11 사용자 지시): 이미지 포함 2열 그리드(FeedCard) →
