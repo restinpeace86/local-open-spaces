@@ -20,7 +20,13 @@
 import { pathToFileURL } from 'url';
 import { loadEnv } from '../lib/load-env.mjs';
 import { getMissingEnvVars, formatMissingEnvVarsMessage } from './lib/env-precheck.mjs';
-import { createAdminClient, analyzeOpenSpaces, refreshSigunguOptionsCache, autoAssignOpenSpacesToExistingGroups } from './lib/supabase-admin.mjs';
+import {
+  createAdminClient,
+  analyzeOpenSpaces,
+  refreshSigunguOptionsCache,
+  autoAssignOpenSpacesToExistingGroups,
+  matchEventsToOpenSpaces,
+} from './lib/supabase-admin.mjs';
 import { dedupeOpenSpaces } from './lib/dedupe-open-spaces.mjs';
 import { deleteExpiredReservationSpaces } from './lib/delete-expired-reservation-spaces.mjs';
 import { applyDetailedCategoryFallback } from './lib/detailed-category-fallback.mjs';
@@ -279,6 +285,49 @@ async function runAutoAssignToExistingGroups({ dryRun }) {
   };
 }
 
+// [개선사항10 후속: Event↔Spot 자동 매칭을 매일 배치에 상시 편입](2026-09-12 사용자 지시):
+// "이미 등록한 적 있는데 일자만 바뀌는 이벤트들.. 내가 이전 8월꺼에 대하여 스팟연결하고
+// 노출 중분류도 해놨어.. 9월꺼 가져왔으면 자동 매핑같은거 가능한가?" — external_id가
+// 안정적인 소스는 SafeMerge가 space_id를 그대로 보존하지만, external_id가 매달 새로
+// 발급되는 소스(예: 안내글마다 새 SVCID)는 매번 완전히 새 이벤트 행이라 space_id가
+// NULL로 시작한다. Step 114에서 한 번 수동 실행했던 좌표 30m 이내 + 이름 부분일치
+// 매칭(match_events_to_open_spaces RPC, 2026-09-12-match-events-to-open-spaces-rpc.sql)을
+// 오늘 배치가 끝날 때마다 재실행해, 관리자가 이미 어떤 스팟에 연결해 둔 것과 같은
+// 자리의 신규 이벤트를 자동으로 그 스팟에 연결한다 — 노출 중분류는 스팟(open_spaces)
+// 쪽 값이라 별도 복사 없이 자동으로 함께 적용된다. space_id가 NULL인 이벤트만
+// 대상이라 멱등이다(이미 연결된 것은 절대 건드리지 않음).
+async function runMatchEventsToOpenSpaces({ dryRun }) {
+  if (dryRun) {
+    return {
+      sourceKey: 'MATCH_EVENTS_TO_OPEN_SPACES',
+      source: null,
+      targetTable: 'events',
+      rawCount: 0,
+      count: 0,
+      upserted: false,
+      safeMergeCount: 0,
+      errorCount: 0,
+      excludeFromVerification: true,
+      note: 'dry-run: 실제 UPDATE는 실행하지 않음',
+    };
+  }
+
+  const client = createAdminClient();
+  const updatedCount = await matchEventsToOpenSpaces(client);
+  return {
+    sourceKey: 'MATCH_EVENTS_TO_OPEN_SPACES',
+    source: null,
+    targetTable: 'events',
+    rawCount: updatedCount,
+    count: updatedCount,
+    upserted: updatedCount > 0,
+    safeMergeCount: 0,
+    errorCount: 0,
+    excludeFromVerification: true,
+    note: `연결 안 된 이벤트를 좌표 30m 이내 + 이름 부분일치 기준으로 기존 스팟에 자동 연결 — ${updatedCount}건`,
+  };
+}
+
 // [한시성 예약 스팟 자동 삭제](2026-09-09 사용자 지시): "예약일자 기준 end date가
 // 지난건 open_spaces에서 삭제해버리자" — seoul_public_reservation 소스는
 // open_spaces에 소프트 삭제 컬럼이 없어(dedupe-open-spaces.mjs와 동일한 제약)
@@ -529,6 +578,14 @@ export async function runDailyBatch({ dryRun = false } = {}) {
   } catch (err) {
     console.error(`❌ [AUTO_ASSIGN_TO_EXISTING_GROUPS] 실패: ${err.message}`);
     results.push({ failed: true, sourceKey: 'AUTO_ASSIGN_TO_EXISTING_GROUPS', source: null, note: err.message });
+  }
+
+  console.log('\n=== [MATCH_EVENTS_TO_OPEN_SPACES] ===');
+  try {
+    results.push(await runMatchEventsToOpenSpaces({ dryRun }));
+  } catch (err) {
+    console.error(`❌ [MATCH_EVENTS_TO_OPEN_SPACES] 실패: ${err.message}`);
+    results.push({ failed: true, sourceKey: 'MATCH_EVENTS_TO_OPEN_SPACES', source: null, note: err.message });
   }
 
   console.log('\n=== [DELETE_EXPIRED_RESERVATION_SPACES] ===');

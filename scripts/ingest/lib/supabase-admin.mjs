@@ -292,6 +292,20 @@ export async function autoAssignOpenSpacesToExistingGroups(client) {
   return data ?? 0;
 }
 
+// [개선사항10 후속: Event↔Spot 자동 매칭을 매일 배치에 상시 편입](2026-09-12 사용자 지시):
+// "9월꺼 가져왔으면 자동 매핑같은거 가능한가?" — 2026-09-11-match-events-to-open-spaces.sql
+// (Step 114)에서 이미 한 번 수동 실행했던 좌표 30m 이내 + 이름 부분일치 매칭을 RPC로
+// 만들어(2026-09-12-match-events-to-open-spaces-rpc.sql) 매일 배치가 끝날 때마다
+// 자동으로 재실행한다 — space_id가 NULL인 이벤트만 대상이라 멱등이며(이미 연결된 것은
+// 건드리지 않음), external_id가 달마다 새로 발급되는 소스(예: 매달 새 SVCID가 붙는
+// 안내글)의 새 이벤트도 매칭 조건만 맞으면 자동으로 이미 관리자가 큐레이션해 둔
+// open_spaces에 연결된다.
+export async function matchEventsToOpenSpaces(client) {
+  const { data, error } = await client.rpc('match_events_to_open_spaces');
+  if (error) throw new Error(`이벤트-스팟 자동 매칭 실패: ${error.message}`);
+  return data ?? 0;
+}
+
 // [챗봇 개선](2026-09-04 사용자 지시) 3: get_sigungu_options()가 매 요청마다 open_spaces+
 // events 전체(16만+ 행)를 다시 집계해 17.68초가 걸려 PostgREST 8초 타임아웃에 항상
 // 걸리던 문제를 sigungu_options_cache 머티리얼라이즈드 뷰로 해결했다(scripts/migrations/
