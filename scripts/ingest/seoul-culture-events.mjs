@@ -24,7 +24,10 @@ function buildExternalId(item) {
   return `SEOUL_CULTURE_${hash}`;
 }
 
-async function mapToEventRow(item, { apiKey }) {
+// [가격 정보 파싱 고도화](2026-09-11 사용자 지시, todo.md 개선사항7-1) 단위 테스트를 위해
+// export한다(이 파일은 원래 BaseCollectorAdapter를 쓰지 않는 레거시 구조라 테스트가 없었으나,
+// 새로 추가한 price_text/source_url 추출 로직만이라도 직접 검증한다).
+export async function mapToEventRow(item, { apiKey }) {
   const lng = Number(item.LOT);
   const lat = Number(item.LAT);
   if (!lng || !lat || !item.STRTDATE || !item.END_DATE || !item.TITLE) return null;
@@ -71,6 +74,13 @@ async function mapToEventRow(item, { apiKey }) {
     // PROGRAM(프로그램 소개)/ETC_DESC(기타내용) 둘 다 실제 원본 필드다(실측 확인) — 값이
     // 있는 것만 이어붙이고, 둘 다 빈 문자열이면 null(추측으로 다른 값을 넣지 않음).
     description: [item.PROGRAM, item.ETC_DESC].map((v) => v?.trim()).filter(Boolean).join(' ') || null,
+    // [가격 정보 파싱 고도화](2026-09-11 사용자 지시, todo.md 개선사항7-1): 이 API는
+    // USE_FEE(이용요금) 필드로 가격을 이미 사람이 쓴 자유 텍스트로 제공한다(실측 확인,
+    // 예: "전석 10,000원 / 단체10인 이상 할인 20% (전화예매필수)") — 그대로 쓴다.
+    price_text: item.USE_FEE?.trim() || null,
+    // ORG_LINK(주최 기관 자체 상세 페이지)를 우선하고, 없으면 HMPG_ADDR(문화포털 상세
+    // 페이지)로 대체한다(둘 다 실측 확인된 실제 원본 필드).
+    source_url: item.ORG_LINK || item.HMPG_ADDR || null,
     ...tags,
   };
 }

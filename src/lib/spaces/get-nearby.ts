@@ -66,6 +66,13 @@ export type NearbyItem = {
   // 노출해 getSpotGroupMembers로 나머지 멤버를 펼쳐볼 수 있게 한다. events는
   // 그룹 개념이 없어 항상 null이다.
   group_id?: string | null;
+  // [가격 정보 파싱 고도화](2026-09-11 사용자 지시, todo.md 개선사항7-1): 원본 API의
+  // 가격 필드(USE_FEE/PARTCPT_EXPN_INFO 등)를 그대로 쓰거나 설명 텍스트에서 파싱한
+  // 자유 텍스트 가격(예: "성인 15,000원 어린이 10,000원"). 확인 불가하면 null.
+  // get-home-feed.ts의 events 조회 경로만 채운다(공간/RPC 경로는 이 컬럼 자체가 없다).
+  price_text?: string | null;
+  // 이벤트 원천 상세 페이지/공식 홈페이지 URL(정규화됨). 위와 동일하게 events 전용.
+  source_url?: string | null;
 };
 
 // Task 9-6-10(2026-08-23): itemType을 넘기면 RPC가 해당 타입만 반환한다(예: '/nearby' 지도는

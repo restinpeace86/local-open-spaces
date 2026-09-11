@@ -106,7 +106,22 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchOverview(contentId) {
+// [가격 정보 파싱 고도화](2026-09-11 사용자 지시, todo.md 개선사항7-1): detailCommon2
+// 응답의 homepage 필드는 순수 URL이 아니라 "<a href=\"...\" target=\"_blank\">...</a>"
+// 형태의 HTML 앵커 태그로 온다(TourAPI 4.0 공통 관례) — href 속성만 뽑아낸다.
+function extractHomepageUrl(homepageField) {
+  if (!homepageField) return null;
+  const hrefMatch = homepageField.match(/href=["']([^"']+)["']/i);
+  if (hrefMatch) return hrefMatch[1];
+  const trimmed = homepageField.trim();
+  return /^https?:\/\//i.test(trimmed) ? trimmed : null;
+}
+
+// [가격 정보 파싱 고도화](2026-09-11 사용자 지시): 기존에는 이 상세 호출에서 overview만
+// 뽑아 썼는데, 같은 응답에 homepage(공식 홈페이지 URL) 필드도 이미 포함돼 있음을 실측
+// 확인했다 — 추가 API 호출 없이 함께 추출한다(제5장 제4조 기존 구조 우선). 이름도
+// fetchOverview → fetchDetail로 바꿔 실제로 반환하는 값(overview+homepage)을 반영한다.
+async function fetchDetail(contentId) {
   const params = new URLSearchParams({
     MobileOS: 'ETC',
     MobileApp: 'local-open-spaces',
@@ -120,25 +135,31 @@ async function fetchOverview(contentId) {
     const text = await res.text();
     if (!res.ok) {
       console.warn(`⚠️ detailCommon2 호출 실패 [${contentId}] (HTTP ${res.status})`);
-      return null;
+      return { overview: null, sourceUrl: null };
     }
     const json = JSON.parse(text);
     if (json.response?.header?.resultCode !== '0000') {
       console.warn(`⚠️ detailCommon2 에러 응답 [${contentId}]: ${json.response?.header?.resultMsg}`);
-      return null;
+      return { overview: null, sourceUrl: null };
     }
     const item = json.response?.body?.items?.item;
     const detail = Array.isArray(item) ? item[0] : item;
-    return detail?.overview?.trim() || null;
+    return {
+      overview: detail?.overview?.trim() || null,
+      sourceUrl: extractHomepageUrl(detail?.homepage),
+    };
   } catch (err) {
     // Task 9-6-14(Decision 012) Graceful Parsing과 동일한 원칙 — 상세 조회 1건이 실패해도
-    // 목록 수집 전체를 중단시키지 않는다(개요는 보강 정보이지 필수 필드가 아님).
+    // 목록 수집 전체를 중단시키지 않는다(개요/URL은 보강 정보이지 필수 필드가 아님).
     console.warn(`⚠️ detailCommon2 처리 중 예외 [${contentId}]: ${err.message}`);
-    return null;
+    return { overview: null, sourceUrl: null };
   }
 }
 
-async function mapToEventRow(item, { dryRun = false } = {}) {
+// [가격 정보 파싱 고도화](2026-09-11 사용자 지시, todo.md 개선사항7-1) 단위 테스트를 위해
+// export한다(이 파일은 원래 BaseCollectorAdapter를 쓰지 않는 레거시 구조라 테스트가
+// 없었으나, 새로 추가한 source_url 추출 로직만이라도 직접 검증한다).
+export async function mapToEventRow(item, { dryRun = false } = {}) {
   const lng = Number(item.mapx);
   const lat = Number(item.mapy);
   if (!lng || !lat || !item.eventstartdate || !item.eventenddate) return null;
@@ -156,7 +177,8 @@ async function mapToEventRow(item, { dryRun = false } = {}) {
   });
 
   // dry-run은 미리보기 용도라 항목당 상세 호출(외부 API 사용량)까지 발생시키지 않는다.
-  const overview = item.contentid && !dryRun ? await fetchOverview(item.contentid) : null;
+  const { overview, sourceUrl } =
+    item.contentid && !dryRun ? await fetchDetail(item.contentid) : { overview: null, sourceUrl: null };
   if (item.contentid && !dryRun) await sleep(DETAIL_PACING_MS);
 
   return {
@@ -178,8 +200,14 @@ async function mapToEventRow(item, { dryRun = false } = {}) {
     // [수집기 본문(Contents) 필드 적재 보강](2026-08-26) 버그 수정: 이 행 빌더가 raw_data를
     // 애초에 전달하지 않아 events.raw_data가 계속 빈 값(null)으로 적재되고 있었다(실측 확인).
     // detailCommon2로 보강한 overview를 원본 item에 합쳐 함께 보존한다.
-    raw_data: overview ? { ...item, overview } : item,
+    raw_data: overview || sourceUrl ? { ...item, ...(overview ? { overview } : {}), ...(sourceUrl ? { homepage: sourceUrl } : {}) } : item,
     description: overview,
+    // [가격 정보 파싱 고도화](2026-09-11 사용자 지시, todo.md 개선사항7-1): searchFestival2/
+    // detailCommon2 어디에도 가격 필드가 없음을 실측 확인했다(전체 응답 필드 전수 확인,
+    // 위 주석 참고) — 추측으로 만들어내지 않고 null로 둔다. 원천 URL(source_url)만 확보해
+    // 유저가 공식 홈페이지에서 직접 확인할 수 있게 한다.
+    price_text: null,
+    source_url: sourceUrl,
     ...tags,
   };
 }

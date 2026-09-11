@@ -1,7 +1,11 @@
 // Decision 017(2026-08-25) 전면 재작성: 기존에는 DIV 필드 기준으로 events 테이블에만 단일
-// 적재했으나, 이제 MAXCLASSNM(대분류) 기준으로 체육시설/공간시설 → open_spaces, 문화체험/
-// 교육강좌 → events로 분리 적재하고(진료복지 제외), Null-safe 원본 적재/항목 단위 무중단 처리/
-// 에러 원인별 집계를 검증한다. (이전 DIV 기반 transform() 테스트는 이번에 전면 교체됨)
+// 적재했으나, MAXCLASSNM(대분류) 기준으로 체육시설/공간시설 → open_spaces, 문화체험/
+// 교육강좌 → events로 분리 적재했었다(진료복지 제외).
+// [Decision 024(2026-09-11) 개정]: 사용자가 "체육시설 대관/축구장/농구장 등 시설 대관
+// 예약관련 데이터가 open_spaces에 보이는데 events로 이관해달라"고 명시적으로 재지시해,
+// 체육시설/공간시설도 이제 events로 분류한다 — 결과적으로 진료복지(수집 제외) 외 전
+// MAXCLASSNM이 events로 단일화됐다. Null-safe 원본 적재/항목 단위 무중단 처리/에러
+// 원인별 집계를 검증한다.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { SeoulYeyakAdapter, buildSigunguName } = await import('./seoul-yeyak-adapter.mjs');
@@ -117,14 +121,17 @@ describe('SeoulYeyakAdapter', () => {
       expect(result.events.map((r) => r.external_id)).toEqual(['SEOUL_YEYAK_S1', 'SEOUL_YEYAK_S2']);
     });
 
-    it('MAXCLASSNM이 체육시설/공간시설이면 open_spaces로 분류한다', () => {
+    // [Decision 024(2026-09-11, 사용자 명시적 재확인)] 개선사항9: "체육시설 대관/축구장/
+    // 농구장 등 시설 대관 예약관련 데이터가 open_spaces에 보이는데 events로 이관해달라"
+    // — Decision 017 2항을 개정해 체육시설/공간시설도 이제 events로 분류한다.
+    it('MAXCLASSNM이 체육시설/공간시설이면 이제 events로 분류한다(Decision 024)', () => {
       const adapter = new SeoulYeyakAdapter();
       const result = adapter.transformSplit([
         { ...BASE_ITEM, SVCID: 'S1', MAXCLASSNM: '체육시설' },
         { ...BASE_ITEM, SVCID: 'S2', MAXCLASSNM: '공간시설' },
       ]);
-      expect(result.open_spaces).toHaveLength(2);
-      expect(result.events).toHaveLength(0);
+      expect(result.events).toHaveLength(2);
+      expect(result.open_spaces).toHaveLength(0);
     });
 
     it("MAXCLASSNM이 '진료복지'면 어느 테이블에도 넣지 않고 excludedCount로만 집계한다", () => {
@@ -146,10 +153,16 @@ describe('SeoulYeyakAdapter', () => {
       expect(result.events).toHaveLength(1); // 뒤 항목은 정상 처리(무중단)
     });
 
-    it('강제 카테고리 매핑을 제거했다: open_spaces(체육시설)는 UI 카테고리를 억지로 채우지 않고 ETC로 남긴다', () => {
+    // [Decision 024] 체육시설/공간시설이 events로 옮겨간 뒤에도, "체험·클래스"
+    // (EXPERIENCE_CLASS, 문화체험/교육강좌 전용 라벨)를 억지로 붙이지 않고 예전
+    // open_spaces 시절과 동일하게 ETC로 남긴다 — category_min(MINCLASSNM 원본, 예:
+    // "테니스장")이 이미 정확한 화면 배지이므로 event_type 오매핑 영향은 없다.
+    it('체육시설/공간시설은 events로 가도 event_type을 억지로 채우지 않고 ETC로 남긴다', () => {
       const adapter = new SeoulYeyakAdapter();
-      const [row] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '체육시설' }]).open_spaces;
-      expect(row.category).toBe('ETC');
+      const [gym] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '체육시설' }]).events;
+      const [space] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '공간시설' }]).events;
+      expect(gym.event_type).toBe('ETC');
+      expect(space.event_type).toBe('ETC');
     });
 
     it('events(문화체험/교육강좌)는 EXPERIENCE_CLASS로 매핑한다', () => {
@@ -158,26 +171,42 @@ describe('SeoulYeyakAdapter', () => {
       expect(row.event_type).toBe('EXPERIENCE_CLASS');
     });
 
-    it('source 컬럼에 seoul_public_reservation을 담는다(양쪽 테이블 공통)', () => {
+    it('source 컬럼에 seoul_public_reservation을 담는다(전 분류 공통)', () => {
       const adapter = new SeoulYeyakAdapter();
-      const [eventRow] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '문화체험' }]).events;
-      const [spaceRow] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '체육시설' }]).open_spaces;
-      expect(eventRow.source).toBe('seoul_public_reservation');
-      expect(spaceRow.source).toBe('seoul_public_reservation');
+      const [cultureRow] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '문화체험' }]).events;
+      const [gymRow] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '체육시설' }]).events;
+      expect(cultureRow.source).toBe('seoul_public_reservation');
+      expect(gymRow.source).toBe('seoul_public_reservation');
     });
 
-    it('원본 메타필드(MAXCLASSNM/MINCLASSNM 등)를 raw_data에 그대로 보존한다(양쪽 테이블 공통)', () => {
+    it('원본 메타필드(MAXCLASSNM/MINCLASSNM 등)를 raw_data에 그대로 보존한다(전 분류 공통)', () => {
       const adapter = new SeoulYeyakAdapter();
       const item = { ...BASE_ITEM, MAXCLASSNM: '체육시설' };
-      const [spaceRow] = adapter.transformSplit([item]).open_spaces;
-      expect(spaceRow.raw_data).toEqual(item);
+      const [row] = adapter.transformSplit([item]).events;
+      expect(row.raw_data).toEqual(item);
+    });
+
+    // [가격 정보 파싱 고도화](2026-09-11 사용자 지시, todo.md 개선사항7-1): 이 소스는
+    // 구조화된 가격 필드가 없어(PAYATNM은 유료/무료뿐) DTLCONT(상세 안내문)에서
+    // 라벨+금액 패턴을 찾는다.
+    it('DTLCONT에 라벨+금액이 있으면 events.price_text로 추출한다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const item = { ...BASE_ITEM, MAXCLASSNM: '문화체험', DTLCONT: '이용료: 15,000원 (성인 기준)' };
+      const [row] = adapter.transformSplit([item]).events;
+      expect(row.price_text).toBe('이용료 15,000원');
+    });
+
+    it('DTLCONT에 금액 정보가 없으면 events.price_text는 null이다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const [row] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '문화체험' }]).events;
+      expect(row.price_text).toBeNull();
     });
   });
 
   describe('transformSplit — Null-safe 원본 적재 (Decision 017 4항: 드롭 금지)', () => {
     it('좌표가 없어도 드롭하지 않고 location_precision=UNKNOWN으로 적재한다', () => {
       const adapter = new SeoulYeyakAdapter();
-      const [row] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '체육시설', X: '', Y: '' }]).open_spaces;
+      const [row] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '체육시설', X: '', Y: '' }]).events;
       expect(row).toBeTruthy();
       expect(row.location).toBeNull();
       expect(row.location_precision).toBe('UNKNOWN');
@@ -187,8 +216,8 @@ describe('SeoulYeyakAdapter', () => {
       const adapter = new SeoulYeyakAdapter();
       const result = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '체육시설', X: '잘못된값', Y: '잘못된값' }]);
       expect(result.errorCounts.COORDINATE_PARSE_FAIL).toBe(1);
-      expect(result.open_spaces).toHaveLength(1);
-      expect(result.open_spaces[0].location_precision).toBe('UNKNOWN');
+      expect(result.events).toHaveLength(1);
+      expect(result.events[0].location_precision).toBe('UNKNOWN');
     });
 
     it('요금 정보(PAYATNM)가 없어도 드롭하지 않고 is_free만 false로 남는다', () => {
@@ -214,6 +243,7 @@ describe('SeoulYeyakAdapter', () => {
       const adapter = new SeoulYeyakAdapter();
       const result = adapter.transformSplit([{ ...BASE_ITEM, SVCNM: '', MAXCLASSNM: '체육시설' }]);
       expect(result.errorCounts.MISSING_NAME).toBe(1);
+      expect(result.events).toHaveLength(0);
       expect(result.open_spaces).toHaveLength(0);
     });
 
@@ -246,25 +276,27 @@ describe('SeoulYeyakAdapter', () => {
       expect(row.facility_type).toBe('실내'); // DTLCONT: "실내 교육 프로그램입니다"
     });
 
-    it('open_spaces(체육/공간시설)는 USETGTINFO에 키즈 신호가 없으면 키즈 뱃지를 부여하지 않는다(오매핑 정화 확인)', () => {
+    // [Decision 024] 체육시설/공간시설이 이제 events 배열에 담기지만, Decision 017 9항이
+    // 정한 "좁은 판별(USETGTINFO/MINCLASSNM만)"은 그대로 유지된다(오매핑 재발 방지 확인).
+    it('체육/공간시설은 events로 가도 USETGTINFO에 키즈 신호가 없으면 키즈 뱃지를 부여하지 않는다(오매핑 정화 확인)', () => {
       const adapter = new SeoulYeyakAdapter();
       const [row] = adapter
         .transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '체육시설', USETGTINFO: '성인', MINCLASSNM: '체육관' }])
-        .open_spaces;
+        .events;
       expect(row.is_kids_friendly).toBe(false);
     });
 
-    it('open_spaces는 USETGTINFO에 가족/어린이 등이 명시되면 키즈 뱃지를 부여한다', () => {
+    it('체육/공간시설은 USETGTINFO에 가족/어린이 등이 명시되면 키즈 뱃지를 부여한다', () => {
       const adapter = new SeoulYeyakAdapter();
-      const [row] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '체육시설' }]).open_spaces; // USETGTINFO: "가족..."
+      const [row] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '체육시설' }]).events; // USETGTINFO: "가족..."
       expect(row.is_kids_friendly).toBe(true);
     });
 
-    it('open_spaces는 MINCLASSNM이 키즈/체험 전용 시설이면 USETGTINFO와 무관하게 키즈 뱃지를 부여한다', () => {
+    it('체육/공간시설은 MINCLASSNM이 키즈/체험 전용 시설이면 USETGTINFO와 무관하게 키즈 뱃지를 부여한다', () => {
       const adapter = new SeoulYeyakAdapter();
       const [row] = adapter
         .transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '공간시설', USETGTINFO: '성인', MINCLASSNM: '서울형키즈카페' }])
-        .open_spaces;
+        .events;
       expect(row.is_kids_friendly).toBe(true);
     });
   });

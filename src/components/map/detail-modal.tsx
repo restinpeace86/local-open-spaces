@@ -546,6 +546,17 @@ export function DetailModal({
                   </div>
                 )}
 
+                {/* [가격 정보 파싱 고도화](2026-09-11 사용자 지시, todo.md 개선사항7-1):
+                    8단 구조가 명시한 섹션은 아니지만 행사 기간 바로 아래에 자연스럽게
+                    붙는 정보라 여기 배치한다. 확인 불가한 값은 애초에 null이라(추측
+                    없음) 이 행 자체가 렌더링되지 않는다. */}
+                {item.price_text && (
+                  <div className="flex items-start justify-between gap-2">
+                    <dt className="text-gray-500 shrink-0">가격</dt>
+                    <dd className="text-right text-gray-900">{item.price_text}</dd>
+                  </div>
+                )}
+
                 {/* 5단: 예약 기간 — 티켓팅/사전 접수가 열려 있는 기간. */}
                 {eventReservationPeriod && (
                   <div className="flex items-start justify-between gap-2">
@@ -571,6 +582,25 @@ export function DetailModal({
                       {reservationDeadline && (
                         <span className="block text-red-600 font-medium">마감: {reservationDeadline}</span>
                       )}
+                    </dd>
+                  </div>
+                )}
+
+                {/* [가격 정보 파싱 고도화](2026-09-11 사용자 지시, todo.md 개선사항7-1):
+                    원천 상세/공식 홈페이지 링크 — 스팟 분기의 "홈페이지" 행과 동일한
+                    관례로 배치한다. */}
+                {item.source_url && (
+                  <div className="flex items-start justify-between gap-2">
+                    <dt className="text-gray-500 shrink-0">홈페이지</dt>
+                    <dd className="text-right">
+                      <a
+                        href={item.source_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm font-semibold text-blue-600 hover:underline"
+                      >
+                        자세히 보기 ↗
+                      </a>
                     </dd>
                   </div>
                 )}

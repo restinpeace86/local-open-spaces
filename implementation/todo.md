@@ -59,22 +59,23 @@
       시 섹션 숨김). open_spaces의 기존 블로그 검색/본문 API(Decision 021)를
       그대로 재사용.
       (완료: 2026-09-11, 상세: implementation/2026-09-11-event-blog-curation-admin-and-user.md)
-- [ ] 개선사항7-1: 가격 크롤링 Fallback — 실측 결과 `events.source_url` 컬럼 자체가
-      없고 각 수집 어댑터의 raw_data 안 URL 필드명이 소스마다 달라, 먼저 어댑터별
-      조사가 필요함을 확인(위 구현 기록 "특이 사항" 참고). 다음 스텝에서 조사부터 진행.
-- [x] **개선사항9 — 스킵 (보류)**: "체육시설/공간시설 seoul_public_reservation
-      데이터를 open_spaces가 아니라 events로 재라우팅"이 `project/decision-log.md`
-      **Decision 017**(2026-08-25, 승인 상태)과 정면 충돌한다. Decision 017 2항이
-      "체육시설/공간시설 → open_spaces, 문화체험/교육강좌 → events"를 명시적으로
-      결정했고(`scripts/ingest/adapters/seoul-yeyak-adapter.mjs`의
-      `MAXCLASSNM_TABLE` 매핑이 그대로 이 결정을 구현 중), 오늘 지시는 그중
-      체육시설/공간시설 분류만 events로 뒤집으라는 것이라 기존 승인된 아키텍처
-      결정과 직접 상충한다. CLAUDE.md 제0조(사전 준수 확인) 및 이 프로젝트의
-      기존 관례(Decision 022가 유사 상황에서 스킵→사용자 재확인→새 Decision으로
-      재승인한 선례)에 따라, Decision 017을 뒤집는 이 항목은 임의로 구현하지
-      않고 스킵한다. **재개를 위한 선행 작업**: 사용자가 Decision 017의 해당
-      항목을 명시적으로 재검토·재승인(새 Decision 기록)하면 그때 진행한다.
-      (완료: 2026-09-11, 스킵)
+- [x] 개선사항7-1 (Step 115): 가격 정보 파싱 고도화. 4개 이벤트 소스를 전부 실측
+      조사한 결과 2곳(SEOUL_CULTURE_EVENTS의 USE_FEE, GG_CULTURE_EVENTS API1의
+      PARTCPT_EXPN_INFO)은 이미 원본 API가 가격을 자유 텍스트로 제공해 크롤링
+      불필요, 나머지(GG_CULTURE_EVENTS API2/SEOUL_YEYAK)는 설명 텍스트에서 라벨+
+      금액 패턴을 파싱(`price-parser.mjs` 신규). SEOUL_YEYAK의 실제 원천 URL을
+      직접 fetch해 확인한 결과 가격이 정적 HTML에 없어(동적 로딩 추정) 헤드리스
+      브라우저 없이는 크롤링이 실제로 불가능함을 실측 확인 — 안 되는 걸 구현하는
+      대신 정직하게 null 처리. `events.price_text`/`source_url` 컬럼 신규, 유저
+      상세 화면(가격/홈페이지 행)에 노출.
+      (완료: 2026-09-11, 상세: implementation/2026-09-11-price-parsing-and-seoul-yeyak-reroute.md)
+- [x] 개선사항9 (Step 115, Decision 024로 재승인 후 구현): 최초 스킵(Decision 017과
+      충돌) 후 사용자가 "이거는 open_spaces말고.. 다시 이벤트 테이블로"라고 명시적
+      재확인 → **Decision 024**로 Decision 017 2항 개정. SEOUL_YEYAK의 체육시설/
+      공간시설을 open_spaces → events로 재라우팅(UI 카테고리 오매핑/키즈 뱃지 좁은
+      판별 등 Decision 017 9항 취지는 그대로 유지). 기존 잘못 적재된 1,525건을
+      raw_data로 재구성해 events로 이관 + 원본 삭제 완료(실측 검증됨).
+      (완료: 2026-09-11, 상세: implementation/2026-09-11-price-parsing-and-seoul-yeyak-reroute.md)
 - [x] 개선사항10 (Step 114): Event↔Spot 양방향 링킹. `events.space_id`(기존 FK
       컬럼, 신규 마이그레이션 불필요)를 재사용 — 프로덕션에서 좌표 30m 이내 +
       이름 부분일치 기준 배치 매칭으로 11,977건 자동 연결. 관리자 Events 탭

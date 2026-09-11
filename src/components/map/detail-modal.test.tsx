@@ -889,6 +889,36 @@ describe('DetailModal 이벤트 상세카드 8단 구조 (개선사항6, 2026-09
     expect(screen.queryByText('📝 간편 예약/신청하기')).not.toBeInTheDocument();
   });
 
+  // [가격 정보 파싱 고도화](2026-09-11 사용자 지시, todo.md 개선사항7-1)
+  it('price_text가 있으면 "가격" 행을 보여주고, 없으면 숨긴다', () => {
+    const { rerender } = render(
+      <DetailModal item={makeSpaceItem({ item_type: 'EVENT', price_text: '성인 15,000원 어린이 10,000원' })} onClose={() => {}} />
+    );
+    expect(screen.getByText('가격')).toBeInTheDocument();
+    expect(screen.getByText('성인 15,000원 어린이 10,000원')).toBeInTheDocument();
+
+    rerender(<DetailModal item={makeSpaceItem({ item_type: 'EVENT', price_text: null })} onClose={() => {}} />);
+    expect(screen.queryByText('가격')).not.toBeInTheDocument();
+  });
+
+  it('source_url이 있으면 "홈페이지" 행에 "자세히 보기" 링크를 보여준다', () => {
+    render(
+      <DetailModal
+        item={makeSpaceItem({ item_type: 'EVENT', source_url: 'https://official.example.com/event' })}
+        onClose={() => {}}
+      />
+    );
+
+    const link = screen.getByText('자세히 보기 ↗').closest('a');
+    expect(link).toHaveAttribute('href', 'https://official.example.com/event');
+    expect(link).toHaveAttribute('target', '_blank');
+  });
+
+  it('source_url이 없으면 "홈페이지" 행을 렌더링하지 않는다', () => {
+    render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT', source_url: null })} onClose={() => {}} />);
+    expect(screen.queryByText('자세히 보기 ↗')).not.toBeInTheDocument();
+  });
+
   // [개선사항8](2026-09-11 사용자 지시): "방문 후기 / 추천 블로그" 카드 리스트 —
   // 관리자가 큐레이션한 URL이 있을 때만 노출하고, 0개면 섹션 전체를 숨긴다.
   it('큐레이션 블로그 URL이 있으면 "방문 후기 / 추천 블로그" 섹션을 보여준다', async () => {

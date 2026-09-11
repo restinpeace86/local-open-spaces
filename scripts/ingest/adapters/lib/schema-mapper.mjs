@@ -199,6 +199,17 @@ export function buildEventRow({
   // 별개로 둔 이유는 target_audience 등 텍스트 스캔 로직이 소스별 JSONB 키를 매번 찾지
   // 않고 이 컬럼 하나만 보면 되게 하기 위함.
   description = null,
+  // [가격 정보 파싱 고도화](2026-09-11 사용자 지시, todo.md 개선사항7-1): 소스마다
+  // 다른 원본 필드(USE_FEE/PARTCPT_EXPN_INFO/DTLCONT 파싱 결과 등)에서 뽑아낸 자유
+  // 텍스트 가격 정보. "15,000원"처럼 단일 금액일 수도, "성인 15,000원 어린이
+  // 10,000원"처럼 복수 요금일 수도 있어 구조화된 컬럼 대신 유연한 텍스트로 둔다
+  // (요구사항 원문 "DB에 데이터는 유연하게 적재"). 파싱 실패/무료/정보 없음이면 null.
+  priceText = null,
+  // 이벤트 원본(상세 페이지/예약 페이지/공식 홈페이지) URL. 소스별로 필드명이 제각각
+  // (SVCURL/ORG_LINK·HMPG_ADDR/HMPG_URL/homepage)이라 호출부가 정규화해 넘긴다.
+  // 가격 크롤링 Fallback의 "원천 URL(source_url)" 근거이자, 존재 자체만으로도 유저에게
+  // "자세히 보기" 링크로 유용하다.
+  sourceUrl = null,
 }) {
   if (!externalId || !title || !startDate || !endDate) return null;
   if (locationPrecision === 'UNKNOWN') {
@@ -241,5 +252,7 @@ export function buildEventRow({
     description,
     category_min: categoryMin,
     category_min_source: categoryMinSource,
+    price_text: priceText,
+    source_url: sourceUrl,
   };
 }

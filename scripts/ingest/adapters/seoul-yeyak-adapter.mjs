@@ -20,6 +20,7 @@ import { fetchWithTimeout } from '../lib/fetch-with-timeout.mjs';
 import { buildEventRow, buildOpenSpaceRow, UI_CATEGORY } from './lib/schema-mapper.mjs';
 import { deriveParentalTags, deriveSpaceKidsFriendly } from '../lib/ai-tagging.mjs';
 import { extractYeyakDescription } from '../lib/seoul-yeyak-description.mjs';
+import { parsePriceFromText } from './lib/price-parser.mjs';
 
 const BASE_URL = 'http://openapi.seoul.go.kr:8088';
 const SERVICE_NAME = 'tvYeyakCOllect';
@@ -28,11 +29,16 @@ const PAGE_SIZE = 1000;
 const OUTLINK_BASE = 'https://yeyak.seoul.go.kr/web/reservation/selectReservView.do';
 const SOURCE = 'seoul_public_reservation';
 
-// Decision 017 1항/4항: MAXCLASSNM(대분류) → 적재 대상 테이블. 진료복지는 놀거리/공간 도메인과
-// 무관해 수집 범위에서 제외한다(맵에 없는 값은 transformSplit에서 UNKNOWN_MAXCLASSNM 에러로 집계).
+// Decision 017 1항/4항 → Decision 024로 개정(2026-09-11, 사용자 명시적 재확인,
+// implementation/todo.md 개선사항9): "체육시설 대분류와 축구장/농구장 등 시설 대관
+// 예약관련 데이터가 open_spaces에 보이는데 events로 이관해달라." 체육시설/공간시설도
+// 대관·사전예약제 "슬롯" 데이터라 본질적으로 시한성이라는 지적을 받아들여 open_spaces
+// → events로 재라우팅한다(Decision 024). 결과적으로 진료복지(수집 제외) 외 전 항목이
+// events로 단일화된다. 진료복지는 여전히 놀거리/공간 도메인과 무관해 수집 범위에서
+// 제외한다(맵에 없는 값은 transformSplit에서 UNKNOWN_MAXCLASSNM 에러로 집계).
 const MAXCLASSNM_TABLE = {
-  체육시설: 'open_spaces',
-  공간시설: 'open_spaces',
+  체육시설: 'events',
+  공간시설: 'events',
   문화체험: 'events',
   교육강좌: 'events',
 };
@@ -187,6 +193,10 @@ export class SeoulYeyakAdapter extends BaseCollectorAdapter {
         // 태깅한다(scripts/migrations/2026-08-26-category-rules-engine.sql 4절과 동일 규약).
         const categoryMin = item.MINCLASSNM || null;
         const categoryMinSource = categoryMin ? 'RAW' : null;
+        // [Decision 024(2026-09-11)] 체육시설/공간시설은 이제 이 events 분기를 함께
+        // 지나가지만, Decision 017 9항의 "공간형 시설은 좁은 키즈 판별/일반 UI 카테고리
+        // 라벨 배제" 규칙은 유지해야 한다(둘 다 아래에서 참조).
+        const isSpaceLikeMaxClass = item.MAXCLASSNM === '체육시설' || item.MAXCLASSNM === '공간시설';
 
         if (table === 'events') {
           const startDate = toDateOnly(item.SVCOPNBGNDT);
@@ -199,7 +209,13 @@ export class SeoulYeyakAdapter extends BaseCollectorAdapter {
           const row = buildEventRow({
             externalId: `SEOUL_YEYAK_${item.SVCID}`,
             title: item.SVCNM,
-            uiCategory: EVENTS_UI_CATEGORY,
+            // [Decision 024(2026-09-11)] 체육시설/공간시설도 이제 이 events 분기를 함께
+            // 지나가지만, "체험·클래스"(EVENTS_UI_CATEGORY)는 문화체험/교육강좌에만
+            // 맞는 라벨이다 — 테니스장 대관/캠핑장 예약을 "체험·클래스"로 잘못 태깅하지
+            // 않도록 이 둘은 예전 open_spaces 시절과 동일하게 uiCategory: null(→ETC)로
+            // 남긴다(category_min은 이미 MINCLASSNM으로 정확히 채워지므로 실제 화면
+            // 배지 표시에는 영향 없음 — Task 8-27 category_min 우선 표시 규약).
+            uiCategory: isSpaceLikeMaxClass ? null : EVENTS_UI_CATEGORY,
             source: SOURCE,
             startDate,
             endDate,
@@ -213,7 +229,13 @@ export class SeoulYeyakAdapter extends BaseCollectorAdapter {
             isFree: item.PAYATNM === '무료',
             thumbnailUrl: item.IMGURL || null,
             isActive: isActiveStatus(item.SVCSTATNM),
-            isKidsFriendly: broadTags.is_kids_friendly,
+            // [Decision 024] 체육시설/공간시설이 이 events 분기로 옮겨왔다고 해서 Decision
+            // 017 9항이 정한 "체육/공간시설의 키즈 뱃지는 넓은 텍스트 스캔이 아니라
+            // USETGTINFO/MINCLASSNM 두 필드로만 판별"까지 되돌리면 안 된다(정확히 그
+            // 오매핑을 정화하려던 결정이었다) — 이 둘만 계속 좁은 판별을 쓴다.
+            isKidsFriendly: isSpaceLikeMaxClass
+              ? deriveSpaceKidsFriendly({ useTargetInfo: item.USETGTINFO, minClassName: item.MINCLASSNM })
+              : broadTags.is_kids_friendly,
             hasParking: broadTags.has_parking,
             strollerAccessible: broadTags.stroller_accessible,
             facilityType: broadTags.facility_type,
@@ -227,6 +249,11 @@ export class SeoulYeyakAdapter extends BaseCollectorAdapter {
             description: extractYeyakDescription(item.DTLCONT),
             categoryMin,
             categoryMinSource,
+            // [가격 정보 파싱 고도화](2026-09-11 사용자 지시, todo.md 개선사항7-1): 이 소스는
+            // 구조화된 가격 필드가 없어(PAYATNM은 유료/무료 구분뿐, 실측 확인) DTLCONT(상세
+            // 안내문)에서 라벨+금액 패턴을 찾는다. reservation_url이 이미 SVCURL과 동등한
+            // 값(reservationUrl, 위 참고)이라 source_url을 별도로 중복 저장하지 않는다.
+            priceText: parsePriceFromText(item.DTLCONT),
           });
           if (!row) {
             bumpError(errorCounts, 'SCHEMA_BUILD_FAIL');
@@ -234,6 +261,11 @@ export class SeoulYeyakAdapter extends BaseCollectorAdapter {
           }
           eventRows.push(row);
         } else {
+          // [Decision 024(2026-09-11)로 현재는 도달 불가] MAXCLASSNM_TABLE의 4개 키가 전부
+          // 'events'를 가리켜 이 분기는 지금 실행되지 않는다 — 삭제하지 않고 남겨둔 이유는
+          // (1) 향후 MAXCLASSNM_TABLE에 open_spaces행 값이 다시 추가될 가능성을 완전히
+          // 배제하지 않고, (2) 이 브랜치를 함께 검증하던 기존 테스트/이력을 그대로 보존하기
+          // 위함이다(제5장 제4조 — 불필요한 대규모 삭제보다 최소 변경).
           // Decision 017 9항: 체육/공간시설의 키즈 뱃지는 넓은 텍스트 스캔이 아니라 USETGTINFO/
           // MINCLASSNM 두 필드로만 판별한다(오매핑 정화). 카테고리는 억지로 끼워 맞추지 않고 null.
           const row = buildOpenSpaceRow({

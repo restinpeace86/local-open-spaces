@@ -63,6 +63,7 @@ import { settleGroupFetches } from '../lib/settle-group-fetches.mjs';
 // 함수 본문 안에서만 참조해 실행 시점(두 모듈이 이미 전부 로드된 뒤)에는 문제가 없다
 // (ESM 순환 참조의 잘 알려진 안전 패턴 — 실제로 테스트 스위트 통과로 재확인했다).
 import { normalizeVenueText } from './gg-culture-location-enrichment.mjs';
+import { parsePriceFromText } from './lib/price-parser.mjs';
 
 const CULTURE_EVENT_BASE_URL = 'https://openapi.gg.go.kr/GGCULTUREVENTSTUS';
 const FOUNDATION_EVENT_BASE_URL = 'https://openapi.gg.go.kr/GGCULFOUEVENSTM';
@@ -349,6 +350,15 @@ export class GgCultureEventsAdapter extends BaseCollectorAdapter {
           // 억지로 끼워 넣지 않음). raw_data에는 그래도 원본 전체를 무손실 보존한다.
           rawData: item,
           description: null,
+          // [가격 정보 파싱 고도화](2026-09-11 사용자 지시, todo.md 개선사항7-1): 이 API는
+          // 참가비를 PARTCPT_EXPN_INFO(참가비 정보, 예: "무료 (일부 재료비 별도)") 필드로
+          // 이미 사람이 쓴 자유 텍스트로 제공한다(위 헤더 주석 실측 확인) — 정규식 파싱 없이
+          // 그대로 쓰는 것이 문맥(할인 조건 등) 손실이 없다. "무료"/빈 값이면 null.
+          priceText: item.PARTCPT_EXPN_INFO?.trim() && !/^무료\s*$/.test(item.PARTCPT_EXPN_INFO.trim())
+            ? item.PARTCPT_EXPN_INFO.trim()
+            : null,
+          // 공식 홈페이지(HMPG_URL)를 우선하고, 없으면 이 API 자체의 상세 페이지(URL)로 대체한다.
+          sourceUrl: item.HMPG_URL || item.URL || null,
         });
 
         if (row) rows.push(row);
@@ -418,6 +428,12 @@ export class GgCultureEventsAdapter extends BaseCollectorAdapter {
           // 내용이 없는 이 값은 null로 정리한다(플레이스홀더를 실제 설명으로 오인하지 않도록).
           rawData: item,
           description: item.DTCONT && item.DTCONT.trim() && item.DTCONT.trim() !== '-' ? item.DTCONT.trim() : null,
+          // [가격 정보 파싱 고도화](2026-09-11 사용자 지시, todo.md 개선사항7-1): API2는
+          // API1과 달리 참가비 전용 필드가 없다(위 헤더 주석 실측 확인) — 유일한 서술형
+          // 텍스트인 DTCONT(설명)에서 라벨+금액 패턴을 찾아본다(없으면 null, 추측 없음).
+          priceText: parsePriceFromText(item.DTCONT),
+          // ORIGIN_CONT가 이 API의 원본 상세 페이지 URL이다(위 헤더 주석 실측 확인).
+          sourceUrl: item.ORIGIN_CONT || null,
           ...tags,
         });
 

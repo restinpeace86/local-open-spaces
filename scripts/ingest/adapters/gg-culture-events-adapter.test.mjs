@@ -213,6 +213,38 @@ describe('GgCultureEventsAdapter', () => {
       expect(classifyEventTypeWithAI).toHaveBeenCalledWith(expect.objectContaining({ rawLabel: '알수없음' }));
     });
 
+    // [가격 정보 파싱 고도화](2026-09-11 사용자 지시, todo.md 개선사항7-1): API1은
+    // PARTCPT_EXPN_INFO(참가비 정보)를 이미 자유 텍스트로 제공한다(실측 확인) — 그대로 쓴다.
+    it('API1 PARTCPT_EXPN_INFO가 있으면 price_text로 그대로 쓰고, HMPG_URL을 source_url로 쓴다', async () => {
+      const adapter = new GgCultureEventsAdapter();
+      const rows = await adapter.transform({
+        cultureEventItems: [
+          { ...CULTURE_EVENT_ITEM, PARTCPT_EXPN_INFO: '무료 (일부 재료비 별도)', HMPG_URL: 'https://2026fes.com/' },
+        ],
+        foundationEventItems: [],
+      });
+      expect(rows[0].price_text).toBe('무료 (일부 재료비 별도)');
+      expect(rows[0].source_url).toBe('https://2026fes.com/');
+    });
+
+    it('API1 PARTCPT_EXPN_INFO가 정확히 "무료"뿐이면 price_text는 null(is_free와 중복 정보 배제)', async () => {
+      const adapter = new GgCultureEventsAdapter();
+      const rows = await adapter.transform({
+        cultureEventItems: [{ ...CULTURE_EVENT_ITEM, PARTCPT_EXPN_INFO: '무료' }],
+        foundationEventItems: [],
+      });
+      expect(rows[0].price_text).toBeNull();
+    });
+
+    it('API1에 HMPG_URL이 없으면 URL(API 자체 상세 페이지)을 source_url로 대신 쓴다', async () => {
+      const adapter = new GgCultureEventsAdapter();
+      const rows = await adapter.transform({
+        cultureEventItems: [{ ...CULTURE_EVENT_ITEM, HMPG_URL: undefined }],
+        foundationEventItems: [],
+      });
+      expect(rows[0].source_url).toBe(CULTURE_EVENT_ITEM.URL);
+    });
+
     it('API2(GGCULFOUEVENSTM) 항목을 events 표준 스키마 행으로 변환한다', async () => {
       const adapter = new GgCultureEventsAdapter();
       const rows = await adapter.transform({ cultureEventItems: [], foundationEventItems: [FOUNDATION_EVENT_ITEM] });
@@ -229,6 +261,21 @@ describe('GgCultureEventsAdapter', () => {
       });
       expect(rows[0].external_id).toMatch(/^GG_FOUNDATION_EVENT_[0-9a-f]{16}$/);
       expect(geocode).toHaveBeenCalledWith('경기도 안산시 경기도미술관');
+    });
+
+    // [가격 정보 파싱 고도화](2026-09-11 사용자 지시, todo.md 개선사항7-1): API2는 참가비
+    // 전용 필드가 없어 DTCONT(설명)에서 라벨+금액 패턴을 찾는다. ORIGIN_CONT는 이 API의
+    // 원본 상세 페이지 URL이라 source_url로 그대로 쓴다.
+    it('API2 ORIGIN_CONT를 source_url로 쓰고, DTCONT에 금액이 있으면 price_text로 추출한다', async () => {
+      const adapter = new GgCultureEventsAdapter();
+      const rows = await adapter.transform({
+        cultureEventItems: [],
+        foundationEventItems: [
+          { ...FOUNDATION_EVENT_ITEM, ORIGIN_CONT: 'https://ggcf.or.kr/events/1274', DTCONT: '참가비 10,000원' },
+        ],
+      });
+      expect(rows[0].source_url).toBe('https://ggcf.or.kr/events/1274');
+      expect(rows[0].price_text).toBe('참가비 10,000원');
     });
 
     it('LOC_NM이 콤마로 여러 장소를 나열하면 첫 번째 장소만 지오코딩한다', async () => {

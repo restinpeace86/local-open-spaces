@@ -254,12 +254,14 @@ export type Database = {
           is_reservation_required: boolean | null
           location: unknown
           location_precision: string
+          price_text: string | null
           raw_data: Json | null
           reservation_end_date: string | null
           reservation_start_date: string | null
           reservation_url: string | null
           sigungu_name: string | null
           source: string | null
+          source_url: string | null
           space_id: string | null
           start_date: string
           stroller_accessible: boolean
@@ -290,12 +292,14 @@ export type Database = {
           is_reservation_required?: boolean | null
           location?: unknown
           location_precision?: string
+          price_text?: string | null
           raw_data?: Json | null
           reservation_end_date?: string | null
           reservation_start_date?: string | null
           reservation_url?: string | null
           sigungu_name?: string | null
           source?: string | null
+          source_url?: string | null
           space_id?: string | null
           start_date: string
           stroller_accessible?: boolean
@@ -326,12 +330,14 @@ export type Database = {
           is_reservation_required?: boolean | null
           location?: unknown
           location_precision?: string
+          price_text?: string | null
           raw_data?: Json | null
           reservation_end_date?: string | null
           reservation_start_date?: string | null
           reservation_url?: string | null
           sigungu_name?: string | null
           source?: string | null
+          source_url?: string | null
           space_id?: string | null
           start_date?: string
           stroller_accessible?: boolean

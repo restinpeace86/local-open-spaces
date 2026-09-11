@@ -92,8 +92,11 @@ function extractCoords(location: unknown): { lng: number; lat: number } {
 // 링킹의 유저 화면 조회(/api/events/linked-spot, /api/spots/linked-events)가 단일
 // 행을 NearbyItem으로 매핑할 때 이 컬럼 목록/변환 함수를 그대로 재사용한다(제5장
 // 제4조 — 새 라우트마다 필드 매핑을 다시 베끼지 않는다).
+// [가격 정보 파싱 고도화](2026-09-11 사용자 지시, todo.md 개선사항7-1): price_text/
+// source_url 추가 — 4개 이벤트 생산 어댑터가 새로 채우기 시작한 컬럼을 유저 화면에서
+// 읽으려면 이 SELECT 목록에 포함돼야 한다.
 export const EVENT_COLUMNS =
-  'id, title, description, event_type, category_min, target_audience, location, location_precision, thumbnail_url, start_date, end_date, reservation_start_date, reservation_end_date, reservation_url, is_reservation_required, is_free, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, venue_name, sigungu_name';
+  'id, title, description, event_type, category_min, target_audience, location, location_precision, thumbnail_url, start_date, end_date, reservation_start_date, reservation_end_date, reservation_url, is_reservation_required, is_free, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, venue_name, sigungu_name, price_text, source_url';
 
 export type EventRow = {
   id: string;
@@ -120,6 +123,8 @@ export type EventRow = {
   booking_status: string | null;
   venue_name: string | null;
   sigungu_name: string | null;
+  price_text: string | null;
+  source_url: string | null;
 };
 
 export function toEventItem(row: EventRow): NearbyItem {
@@ -162,6 +167,8 @@ export function toEventItem(row: EventRow): NearbyItem {
     facility_type: row.facility_type,
     target_age_group: row.target_age_group,
     booking_status: row.booking_status,
+    price_text: row.price_text,
+    source_url: row.source_url,
   };
 }
 
