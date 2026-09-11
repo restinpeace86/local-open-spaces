@@ -35,6 +35,20 @@ export function formatDateRange(startDate: string | null, endDate: string | null
   return `${startDate} ~ ${endDate}`;
 }
 
+// [개선사항3](2026-09-11 사용자 지시, implementation/todo.md): "전체보기" 바텀시트
+// 리스트 4번째 줄 "예약기간"용 압축 포맷 — reservation_start_date/reservation_end_date는
+// timestamptz(예: "2026-09-01T00:00:00+09:00")라 formatDateTime처럼 시:분까지 풀어
+// 쓰면 리스트 한 줄에 너무 길다. 날짜 부분(YYYY-MM-DD)만 잘라 formatDateRange와 동일한
+// "start ~ end" 표기를 재사용한다(제5장 제4조 기존 구조 우선 — 새 포맷 규칙을 만들지 않음).
+export function formatReservationPeriod(
+  reservationStartDateTime: string | null,
+  reservationEndDateTime: string | null
+): string | null {
+  const startDate = reservationStartDateTime ? reservationStartDateTime.slice(0, 10) : null;
+  const endDate = reservationEndDateTime ? reservationEndDateTime.slice(0, 10) : null;
+  return formatDateRange(startDate, endDate);
+}
+
 export function formatDateTime(dateTimeStr: string | null): string | null {
   if (!dateTimeStr) return null;
   const date = new Date(dateTimeStr);

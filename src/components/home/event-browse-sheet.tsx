@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
-import { EventCard } from '@/components/cards/event-card';
+import { EventListRow } from '@/components/cards/event-list-row';
 import { EmptyState } from '@/components/map/empty-state';
 import { CATEGORY_MAJ_OPTIONS } from '@/lib/spaces/category-maj-meta';
 import { DEFAULT_REGION_OPTION, REGION_OPTIONS } from '@/lib/geo/region-hierarchy';
@@ -201,9 +201,11 @@ export function EventBrowseSheet({
           {errorMessage && <p className="text-sm text-red-500">{errorMessage}</p>}
           {isEmpty && <EmptyState onReset={() => setSelectedMaj(null)} />}
           {items.length > 0 && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            // [개선사항3](2026-09-11 사용자 지시): 이미지 포함 2~3열 그리드(EventCard) →
+            // 이미지 없는 1열 리스트(EventListRow)로 통일 — 대량 리스트 렌더링 성능 최적화.
+            <div className="flex flex-col gap-2">
               {items.map((item) => (
-                <EventCard key={item.id} item={item} onSelect={onSelectItem} />
+                <EventListRow key={item.id} item={item} onSelect={onSelectItem} />
               ))}
             </div>
           )}

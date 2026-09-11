@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { CATEGORY_MAJ_OPTIONS } from '@/lib/spaces/category-maj-meta';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
-import { FeedCard } from '@/components/home/feed-card';
+import { EventListRow } from '@/components/cards/event-list-row';
 import { FreeFeedSkeleton } from '@/components/home/free-feed-skeleton';
 
 // [대분류/중분류 드릴다운 개편](2026-08-27 사용자 지시): 기존 QuickCategoryGrid(event_type
@@ -188,9 +188,14 @@ export function MajorCategoryGrid({
                   <FreeFeedSkeleton />
                 ) : categoryFeedItems.length > 0 ? (
                   <>
-                    <div className="grid grid-cols-2 gap-3">
+                    {/* [개선사항3](2026-09-11 사용자 지시): 이미지 포함 2열 그리드(FeedCard) →
+                        이미지 없는 1열 리스트(EventListRow)로 통일 — 대량 리스트 렌더링
+                        성능 최적화. FeedCard는 EVENT/SPACE 타입을 나눠 EventCard/
+                        SpaceGridCard로 분기했지만, EventListRow는 NearbyItem 공통 필드만
+                        쓰므로 타입 분기 없이 그대로 재사용한다. */}
+                    <div className="flex flex-col gap-2">
                       {categoryFeedItems.map((item) => (
-                        <FeedCard key={item.id} item={item} onSelect={onSelectResultItem} />
+                        <EventListRow key={item.id} item={item} onSelect={onSelectResultItem} />
                       ))}
                     </div>
                     {/* [무한 스크롤 도입](2026-09-04 사용자 지시): "더보기" 버튼 대신 스크롤이
