@@ -4,9 +4,8 @@ import { useEffect, useState } from 'react';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
 import { getTargetAudienceLabel } from '@/lib/spaces/target-audience-meta';
-import { formatDDay } from '@/lib/spaces/d-day';
-import { getReservationAvailabilityTag } from '@/lib/spaces/event-status';
-import { formatDistance, formatDateRange, formatDateTime } from '@/lib/spaces/format';
+import { getReservationAvailabilityTag, getEventStatus, EventStatus } from '@/lib/spaces/event-status';
+import { formatDistance, formatDateRange, formatDateTime, formatReservationPeriod } from '@/lib/spaces/format';
 import { MiniMap } from '@/components/map/mini-map';
 import { MapPreviewModal } from '@/components/map/map-preview-modal';
 import { ReservationRequestModal } from '@/components/map/reservation-request-modal';
@@ -22,6 +21,18 @@ const NO_INFO_TEXT = '정보 준비 중 (공공 기관 문의)';
 const PRICE_PLACEHOLDER = '가격 정보 업데이트 준비 중입니다 ⏳';
 const MENU_PLACEHOLDER = '상세 메뉴 정보는 순차적으로 추가될 예정이에요';
 const HOURS_PLACEHOLDER = '영업시간 정보는 순차적으로 추가될 예정이에요';
+
+// [개선사항6](2026-09-11 사용자 지시, implementation/todo.md): "이벤트 상세카드 8단
+// 구조" 2단(뱃지 영역)의 "현재 진행 상태 뱃지" 색상 — calendar-view.tsx의
+// statusColorClass(텍스트 색만 있는 리스트 항목용)와 시각적 요구가 달라(여기는 배경이
+// 있는 필 배지) 별도로 둔다. tone 자체는 event-status.ts의 기존 EventStatus를 그대로
+// 재사용한다(제5장 제4조 — 상태 판별 로직 자체는 새로 만들지 않음).
+function eventStatusPillClass(tone: EventStatus['tone']): string {
+  if (tone === 'urgent') return 'bg-red-50 text-red-600';
+  if (tone === 'closed') return 'bg-gray-100 text-gray-500';
+  if (tone === 'upcoming') return 'bg-blue-50 text-blue-600';
+  return 'bg-emerald-50 text-emerald-700';
+}
 
 // [개발 종합 요청] 스팟픽 MVP 스마트 폴백 아키텍처(2026-09-01 사용자 지시) 섹션 1
 // "View Fallback": 우리 DB(spot_curations)에 관리자가 보강한 상세 정보가 있으면 그
@@ -125,6 +136,12 @@ export function DetailModal({
   const [isMapPreviewOpen, setIsMapPreviewOpen] = useState(false);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
+  // [개선사항6](2026-09-11 사용자 지시): 이벤트 상세카드 1단(최상단 이미지 슬라이드) —
+  // 현재 데이터 소스(NearbyItem.thumbnail_url)는 이미지 1장만 제공해 배열 길이가 항상
+  // 0 또는 1이지만(추측으로 다중 이미지 데이터를 지어내지 않는다, 제3장 제5조), 향후
+  // 여러 장이 들어와도 그대로 동작하도록 일반적인 인덱스 상태로 둔다(길이 1 이하면
+  // 좌우 버튼/점 표시가 자동으로 숨는다).
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   // undefined = 아직 조회 전(로딩), null = 큐레이션 없음(정상), 객체 = 큐레이션 있음.
   // spot_curations는 open_spaces에만 FK가 있어(이벤트는 대상 아님) 이벤트는 조회하지 않는다.
   const [curation, setCuration] = useState<SpotCuration | null | undefined>(undefined);
@@ -198,6 +215,13 @@ export function DetailModal({
       cancelled = true;
     };
   }, [item.id, isEvent, spotPickCard]);
+
+  // [개선사항6] 다른 아이템으로 모달이 갱신되면(item.id 변경) 이미지 슬라이드 위치를
+  // 처음으로 되돌린다.
+  useEffect(() => {
+    setCurrentImageIndex(0);
+  }, [item.id]);
+
   // Task 9-6-2(2026-08-23, Decision 009): location_precision이 없으면(SPACE, 기존 EXACT 전용
   // 경로) EXACT로 간주한다. CITY_APPROX/UNKNOWN은 정확한 행사장 위치가 아니므로 지도/길찾기를
   // 보여주면 사용자를 오도한다 — 근사·미상 좌표를 정확한 핀처럼 그리지 않는다.
@@ -209,8 +233,15 @@ export function DetailModal({
   // 설명하는 유용한 정보라 제거 대상이 아니다).
   const shouldHideMapForSpotScreen = hideMapSection && !isEvent && hasExactLocation;
 
-  const dDay = isEvent ? formatDDay(item.reservation_end_date ?? item.end_date) : null;
   const period = isEvent ? formatDateRange(item.start_date, item.end_date) : null;
+  // [개선사항6] 8단 구조 1단(이미지 슬라이드)/2단(진행 상태 뱃지)/5단(예약 기간)에
+  // 필요한 값. eventImages: 현재 데이터는 thumbnail_url 1장뿐이라 0~1건 배열이지만,
+  // UI 자체는 여러 장을 받아도 그대로 동작하도록 배열로 다룬다.
+  const eventImages = isEvent && item.thumbnail_url ? [item.thumbnail_url] : [];
+  const eventStatus = isEvent ? getEventStatus(item) : null;
+  const eventReservationPeriod = isEvent
+    ? formatReservationPeriod(item.reservation_start_date, item.reservation_end_date)
+    : null;
   // [카드 표준 중분류/연령대상 표시](2026-08-27 사용자 지시): 상세보기에 연령대상(초등학생
   // 이상/미취학/가족/유아 등)을 안내한다. OTHER(수동 검수 대상)나 매핑 안 된 값은 null이라
   // 노출하지 않는다(getTargetAudienceLabel 참고).
@@ -313,176 +344,361 @@ export function DetailModal({
     }
   }
 
+  // [개선사항6](2026-09-11 사용자 지시, implementation/todo.md): 이벤트 상세카드 8단
+  // 구조 전용 CTA 행 — cta는 위에서 이미 계산한 3분류(공공 예약하기/할인 예매하기/
+  // 지도에서 길찾기, Task 9-6-11)를 그대로 재사용한다(제5장 제4조 기존 구조 우선).
+  // secondaryAction은 항상 null이라(스팟 전용 로직) 이벤트는 처음부터 버튼 하나만
+  // 노출했다 — "예약 상품 → 예약하기 / 비예약 → 이 장소로 길찾기"라는 요구사항과
+  // cta의 기존 우선순위가 그대로 일치한다. 실제 채널이 하나도 없을 때만(좌표도 없는
+  // 극히 드문 경우) 안내 텍스트로 대체한다(secondaryAction의 'info' 폴백과 동일 관례).
+  const eventCtaFallbackLabel = '길찾기 정보가 없습니다';
+
   return (
     <div
       className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center"
       onClick={onClose}
     >
-      <div
-        className="w-full md:w-[480px] max-h-[85vh] md:max-h-[80vh] overflow-y-auto bg-white rounded-t-2xl md:rounded-2xl shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {isEvent && item.thumbnail_url && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={item.thumbnail_url}
-            alt={item.name}
-            className="w-full h-40 object-cover rounded-t-2xl md:rounded-t-2xl"
-          />
-        )}
-        {/* [View Fallback](2026-09-01 사용자 지시): 스팟은 원래 헤더 이미지가 없었다
-            (공공데이터에 이미지 필드 자체가 없음) — 관리자가 spot_curations에 등록한
-            대표 이미지가 있으면(is_active) 그 "풍성한" 이미지를 보여준다. */}
-        {!isEvent && curation?.image_url && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={curation.image_url}
-            alt={item.name}
-            className="w-full h-40 object-cover rounded-t-2xl md:rounded-t-2xl"
-          />
-        )}
+      {isEvent ? (
+        <div
+          className="relative w-full md:w-[480px] max-h-[85vh] md:max-h-[80vh] bg-white rounded-t-2xl md:rounded-2xl shadow-xl flex flex-col overflow-hidden"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="닫기"
+            className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-white/90 text-gray-500 shadow flex items-center justify-center hover:bg-white"
+          >
+            ✕
+          </button>
 
-        <div className="p-5">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-2 flex-wrap">
-              {/* [카드 표준 중분류 표시](2026-08-27 사용자 지시): event_type 기반 5대 UI
-                  카테고리 대신 실제 표준 중분류(category_min)를 보여준다(이벤트 한정).
-                  [스팟픽 상세 카드 뱃지 영역](2026-09-10 개선사항3-2·2-2): 스팟픽
-                  카드는 구형 레거시 뱃지(meta.label)를 배제하고 맞춤형 뱃지만 노출. */}
-              {spotPickCard && !isEvent ? (
-                <>
-                  {deal && (
-                    <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500 text-white">
-                      🔥 특가
-                    </span>
-                  )}
-                  {minAgeRecommended > 0 && (
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
-                      만 {minAgeRecommended}세 이상
-                    </span>
-                  )}
-                  {spotBadgeLabels.map((label) => (
-                    <span
-                      key={label}
-                      className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700"
+          <div className="flex-1 overflow-y-auto">
+            {/* 1단: 최상단 이미지 슬라이드 — 이미지가 아예 없으면 영역 자체를 숨긴다.
+                현재 데이터는 thumbnail_url 1장뿐이라 좌우 화살표/점은 여러 장일 때만
+                (배열 길이 > 1) 나타난다(추측으로 다중 이미지를 지어내지 않는다). */}
+            {eventImages.length > 0 && (
+              <div className="relative bg-gray-100">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={eventImages[currentImageIndex]}
+                  alt={item.name}
+                  className="w-full h-48 object-cover"
+                />
+                {eventImages.length > 1 && (
+                  <>
+                    <button
+                      type="button"
+                      aria-label="이전 이미지"
+                      onClick={() => setCurrentImageIndex((i) => (i === 0 ? eventImages.length - 1 : i - 1))}
+                      className="absolute left-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/80 text-gray-700 shadow flex items-center justify-center"
                     >
-                      {label}
-                    </span>
-                  ))}
-                </>
-              ) : (
+                      ‹
+                    </button>
+                    <button
+                      type="button"
+                      aria-label="다음 이미지"
+                      onClick={() => setCurrentImageIndex((i) => (i === eventImages.length - 1 ? 0 : i + 1))}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 w-7 h-7 rounded-full bg-white/80 text-gray-700 shadow flex items-center justify-center"
+                    >
+                      ›
+                    </button>
+                    <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+                      {eventImages.map((_, i) => (
+                        <span
+                          key={i}
+                          className={`w-1.5 h-1.5 rounded-full ${i === currentImageIndex ? 'bg-white' : 'bg-white/50'}`}
+                        />
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            <div className="p-5">
+              {/* 2단: 뱃지 영역 — 카테고리(중분류) + 현재 진행 상태. getEventStatus의
+                  '상시'는 실제 운영 상황과 무관하게 "날짜 정보가 아예 없다"는 뜻이라
+                  다른 카드들과 동일하게 숨긴다(event-card.tsx와 동일 관례). */}
+              <div className="flex items-center gap-2 flex-wrap">
                 <span
                   className="text-xs font-semibold px-2 py-0.5 rounded-full text-white"
                   style={{ backgroundColor: meta.color }}
                 >
-                  {isEvent ? (item.category_min ?? meta.label) : meta.label}
+                  {item.category_min ?? meta.label}
                 </span>
+                {eventStatus && eventStatus.label !== '상시' && (
+                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${eventStatusPillClass(eventStatus.tone)}`}>
+                    {eventStatus.label}
+                  </span>
+                )}
+                {/* [카드 표준 중분류/연령대상 표시](2026-08-27 사용자 지시) 계승: 연령대상은
+                    8단 구조가 명시한 필수 섹션은 아니지만 기존에 노출하던 유용한 정보라
+                    임의로 없애지 않고(제5장 제3조) 뱃지 영역에 함께 둔다. */}
+                {targetAudienceLabel && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                    {targetAudienceLabel}
+                  </span>
+                )}
+              </div>
+
+              {/* 3단: 이벤트 명(좌) & 거리(우, 인터랙티브) — 정확한 좌표가 있으면 탭 시
+                  인앱 지도(MapPreviewModal, 내부에 실제 길찾기 기능 포함)를 곧바로 연다. */}
+              <div className="mt-2 flex items-start justify-between gap-2">
+                <h2 className="text-lg font-bold text-gray-900 flex-1">{item.name}</h2>
+                <BookmarkButton target={{ kind: 'event', eventId: item.id }} />
+              </div>
+              {item.distance_meters >= 0 &&
+                (hasExactLocation ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsMapPreviewOpen(true)}
+                    className="mt-0.5 inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:underline"
+                  >
+                    🧭 {formatDistance(item.distance_meters)} <span aria-hidden>›</span>
+                  </button>
+                ) : (
+                  <p className="mt-0.5 text-sm text-gray-400">현재 위치에서 {formatDistance(item.distance_meters)}</p>
+                ))}
+
+              <dl className="mt-3 flex flex-col gap-3 text-sm">
+                {/* 4단: 이벤트(운영) 기간 */}
+                {period && (
+                  <div className="flex items-start justify-between gap-2">
+                    <dt className="text-gray-500 shrink-0">행사 기간</dt>
+                    <dd className="text-right text-gray-900">{period}</dd>
+                  </div>
+                )}
+
+                {/* 5단: 예약 기간 — 티켓팅/사전 접수가 열려 있는 기간. */}
+                {eventReservationPeriod && (
+                  <div className="flex items-start justify-between gap-2">
+                    <dt className="text-gray-500 shrink-0">예약 기간</dt>
+                    <dd className="text-right text-gray-900">{eventReservationPeriod}</dd>
+                  </div>
+                )}
+
+                {/* 예약 안내(사전예약필요/마감일) — 8단 구조가 명시한 섹션은 아니지만
+                    기존에 노출하던 유용한 경고성 정보라 임의로 없애지 않는다(제5장 제3조),
+                    5단(예약 기간) 바로 아래에 보충 정보로 배치한다. */}
+                {(item.is_reservation_required || reservationTag) && (
+                  <div className="flex items-start justify-between gap-2">
+                    <dt className="text-gray-500 shrink-0">예약 안내</dt>
+                    <dd className="text-right text-gray-900">
+                      {reservationTag ? (
+                        <span className={reservationTag.tone === 'warn' ? 'text-amber-600 font-medium' : 'text-gray-700'}>
+                          {reservationTag.label}
+                        </span>
+                      ) : (
+                        '사전 예약 필수'
+                      )}
+                      {reservationDeadline && (
+                        <span className="block text-red-600 font-medium">마감: {reservationDeadline}</span>
+                      )}
+                    </dd>
+                  </div>
+                )}
+              </dl>
+
+              {/* 6단: 상세 설명 — 기본 2줄 요약, "더보기/접기" 토글로 확장/축소. */}
+              {description && (
+                <div className="mt-3">
+                  <p className={`text-sm text-gray-600 whitespace-pre-line ${!isDescriptionExpanded && isLongDescription ? 'line-clamp-2' : ''}`}>
+                    {description}
+                  </p>
+                  {isLongDescription && (
+                    <button
+                      type="button"
+                      onClick={() => setIsDescriptionExpanded((prev) => !prev)}
+                      className="mt-0.5 text-xs font-semibold text-blue-600"
+                    >
+                      {isDescriptionExpanded ? '접기' : '더보기'}
+                    </button>
+                  )}
+                </div>
               )}
-              {dDay && <span className="text-xs font-semibold text-red-600">{dDay}</span>}
-              {!isEvent && item.is_free !== null && (
-                <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">
-                  {item.is_free ? '무료' : '유료'}
-                </span>
+
+              {/* 7단: 인앱 지도 & 스팟 마커(미니맵). 근사/미상 좌표는 정확한 핀처럼
+                  오인시키지 않도록 지도 대신 안내 문구만 보여준다(Task 9-6-2). */}
+              {hasExactLocation ? (
+                <div className="mt-4 relative rounded-xl overflow-hidden border border-gray-200">
+                  <MiniMap lat={item.lat} lng={item.lng} name={item.name} address={item.address} className="w-full h-40" />
+                  <button
+                    type="button"
+                    onClick={() => setIsMapPreviewOpen(true)}
+                    className="absolute bottom-2 right-2 text-xs font-semibold px-2.5 py-1 rounded-full bg-white/90 text-gray-700 shadow hover:bg-white"
+                  >
+                    🔍 크게보기
+                  </button>
+                </div>
+              ) : (
+                <p className="mt-4 text-sm text-gray-400">
+                  📍 {item.sigungu_name ? `${item.sigungu_name} 일대 (정확한 위치 정보 없음)` : '정확한 위치 정보가 없는 행사입니다'}
+                </p>
               )}
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="shrink-0 text-gray-400 hover:text-gray-600"
-              aria-label="닫기"
-            >
-              ✕
-            </button>
           </div>
 
-          <div className="mt-2 flex items-start justify-between gap-2">
-            <h2 className="text-lg font-bold text-gray-900">{item.name}</h2>
-            <BookmarkButton target={isEvent ? { kind: 'event', eventId: item.id } : { kind: 'spot', spotId: item.id }} />
-          </div>
-          {/* [스팟픽 상세 카드 인터랙티브 거리/길찾기](2026-09-10 사용자 지시, todo.md
-              개선사항3-3·2-4): "현재 거리 클릭 시 서비스 내에 구현되어 있는 인앱 길찾기
-              API를 정상 호출하여 내 위치 기준 길안내 실행. 해당 거리 누르면 길 찾기가
-              될 거라는걸 직관적으로 알수 있게 노출." 정확한 좌표가 있을 때만 버튼으로,
-              아니면 기존처럼 단순 텍스트. */}
-          {item.distance_meters >= 0 &&
-            (spotPickCard && hasExactLocation ? (
+          {/* 8단: 하단 고정 CTA — 스크롤과 무관하게 항상 보이도록 sticky 푸터로 둔다.
+              예약 상품(reservation_url/공공예약)이면 예약하기, 아니면 지도에서 길찾기. */}
+          <div className="shrink-0 border-t border-gray-100 p-3">
+            {cta?.type === 'link' && (
+              <a
+                href={cta.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="block text-center rounded-lg text-white text-sm font-medium py-2.5"
+                style={{ backgroundColor: meta.color }}
+              >
+                {cta.label}
+              </a>
+            )}
+            {cta?.type === 'map' && (
               <button
                 type="button"
                 onClick={() => setIsMapPreviewOpen(true)}
-                className="mt-0.5 inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:underline"
+                className="w-full text-center rounded-lg text-white text-sm font-medium py-2.5"
+                style={{ backgroundColor: meta.color }}
               >
-                🧭 현재 위치에서 {formatDistance(item.distance_meters)} · 길찾기 <span aria-hidden>›</span>
+                {cta.label}
               </button>
-            ) : (
-              <p className="text-sm text-gray-400">현재 위치에서 {formatDistance(item.distance_meters)}</p>
-            ))}
-
-          {!isEvent && item.group_id && onExpandGroup && (
-            <button
-              type="button"
-              onClick={() => onExpandGroup(item.group_id as string)}
-              disabled={isExpandingGroup}
-              className="mt-1 text-xs font-semibold text-blue-600 hover:underline disabled:opacity-50"
-            >
-              {isExpandingGroup ? '불러오는 중...' : '🔗 이 장소의 다른 예약 옵션 보기'}
-            </button>
+            )}
+            {!cta && <p className="text-center text-sm text-gray-400 py-2.5">{eventCtaFallbackLabel}</p>}
+          </div>
+        </div>
+      ) : (
+        <div
+          className="w-full md:w-[480px] max-h-[85vh] md:max-h-[80vh] overflow-y-auto bg-white rounded-t-2xl md:rounded-2xl shadow-xl"
+          onClick={(e) => e.stopPropagation()}
+        >
+          {/* [View Fallback](2026-09-01 사용자 지시): 스팟은 원래 헤더 이미지가 없었다
+              (공공데이터에 이미지 필드 자체가 없음) — 관리자가 spot_curations에 등록한
+              대표 이미지가 있으면(is_active) 그 "풍성한" 이미지를 보여준다. */}
+          {curation?.image_url && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={curation.image_url}
+              alt={item.name}
+              className="w-full h-40 object-cover rounded-t-2xl md:rounded-t-2xl"
+            />
           )}
 
-          {/* [제휴 상품 연동 CTA](2026-09-10 사용자 지시, todo.md 개선사항6): 이 스팟에
-              연동된 노출 활성화 제휴 상품이 있으면 눈에 띄는 특가 버튼으로 연결한다. */}
-          {spotPickCard && !isEvent && deal && (
-            <a
-              href={deal.bookingUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-3 flex items-center justify-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2.5 text-sm font-bold text-white hover:bg-amber-600"
-            >
-              🔥 {deal.title} · 특가 보기
-            </a>
-          )}
-
-          {/* [스팟픽 상세 카드 네이버 블로그 후기 바로가기](2026-09-10 사용자 지시,
-              todo.md 개선사항3-5): 10일 캐싱(TTL)이 적용된 blog_urls를 활용해 저장된
-              URL 개수(최대 3개)만큼 동적으로 버튼을 노출한다. 터치 시 새 창(아웃바운드)
-              으로 열려 우리 앱 상태가 그대로 유지된다. URL이 없으면 영역 숨김. */}
-          {spotPickCard && !isEvent && blogUrls.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {blogUrls.map((url, i) => (
-                <a
-                  key={url}
-                  href={url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 rounded-full border border-green-500 bg-green-50 px-3 py-1 text-xs font-semibold text-green-700 hover:bg-green-100"
-                >
-                  📝 블로그 후기 {i + 1}
-                </a>
-              ))}
+          <div className="p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* [스팟픽 상세 카드 뱃지 영역](2026-09-10 개선사항3-2·2-2): 스팟픽
+                    카드는 구형 레거시 뱃지(meta.label)를 배제하고 맞춤형 뱃지만 노출. */}
+                {spotPickCard ? (
+                  <>
+                    {deal && (
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-500 text-white">
+                        🔥 특가
+                      </span>
+                    )}
+                    {minAgeRecommended > 0 && (
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                        만 {minAgeRecommended}세 이상
+                      </span>
+                    )}
+                    {spotBadgeLabels.map((label) => (
+                      <span
+                        key={label}
+                        className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700"
+                      >
+                        {label}
+                      </span>
+                    ))}
+                  </>
+                ) : (
+                  <span
+                    className="text-xs font-semibold px-2 py-0.5 rounded-full text-white"
+                    style={{ backgroundColor: meta.color }}
+                  >
+                    {meta.label}
+                  </span>
+                )}
+                {item.is_free !== null && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">
+                    {item.is_free ? '무료' : '유료'}
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="shrink-0 text-gray-400 hover:text-gray-600"
+                aria-label="닫기"
+              >
+                ✕
+              </button>
             </div>
-          )}
 
-          {/* [상세보기 설명 추가](2026-08-27 사용자 지시): 제목만으로 내용을 파악하기 어려운
-              행사가 많아 본문 설명을 보여준다. 짧으면 그대로, 길면(60자 초과) 2줄 미리보기 +
-              "더보기/접기" 토글로 감춘다. */}
-          {description && (
-            <div className="mt-2">
-              <p className={`text-sm text-gray-600 whitespace-pre-line ${!isDescriptionExpanded && isLongDescription ? 'line-clamp-2' : ''}`}>
-                {description}
-              </p>
-              {isLongDescription && (
+            <div className="mt-2 flex items-start justify-between gap-2">
+              <h2 className="text-lg font-bold text-gray-900">{item.name}</h2>
+              <BookmarkButton target={{ kind: 'spot', spotId: item.id }} />
+            </div>
+            {/* [스팟픽 상세 카드 인터랙티브 거리/길찾기](2026-09-10 사용자 지시, todo.md
+                개선사항3-3·2-4): "현재 거리 클릭 시 서비스 내에 구현되어 있는 인앱 길찾기
+                API를 정상 호출하여 내 위치 기준 길안내 실행. 해당 거리 누르면 길 찾기가
+                될 거라는걸 직관적으로 알수 있게 노출." 정확한 좌표가 있을 때만 버튼으로,
+                아니면 기존처럼 단순 텍스트. */}
+            {item.distance_meters >= 0 &&
+              (spotPickCard && hasExactLocation ? (
                 <button
                   type="button"
-                  onClick={() => setIsDescriptionExpanded((prev) => !prev)}
-                  className="mt-0.5 text-xs font-semibold text-blue-600"
+                  onClick={() => setIsMapPreviewOpen(true)}
+                  className="mt-0.5 inline-flex items-center gap-1 text-sm font-semibold text-blue-600 hover:underline"
                 >
-                  {isDescriptionExpanded ? '접기' : '더보기'}
+                  🧭 현재 위치에서 {formatDistance(item.distance_meters)} · 길찾기 <span aria-hidden>›</span>
                 </button>
-              )}
-            </div>
-          )}
+              ) : (
+                <p className="text-sm text-gray-400">현재 위치에서 {formatDistance(item.distance_meters)}</p>
+              ))}
 
-          <dl className="mt-4 flex flex-col gap-3 text-sm">
-            {!isEvent && (
+            {item.group_id && onExpandGroup && (
+              <button
+                type="button"
+                onClick={() => onExpandGroup(item.group_id as string)}
+                disabled={isExpandingGroup}
+                className="mt-1 text-xs font-semibold text-blue-600 hover:underline disabled:opacity-50"
+              >
+                {isExpandingGroup ? '불러오는 중...' : '🔗 이 장소의 다른 예약 옵션 보기'}
+              </button>
+            )}
+
+            {/* [제휴 상품 연동 CTA](2026-09-10 사용자 지시): 이 스팟에 연동된 노출
+                활성화 제휴 상품이 있으면 눈에 띄는 특가 버튼으로 연결한다. */}
+            {spotPickCard && deal && (
+              <a
+                href={deal.bookingUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-3 flex items-center justify-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2.5 text-sm font-bold text-white hover:bg-amber-600"
+              >
+                🔥 {deal.title} · 특가 보기
+              </a>
+            )}
+
+            {/* [스팟픽 상세 카드 네이버 블로그 후기 바로가기](2026-09-10 사용자 지시,
+                todo.md 개선사항3-5): 10일 캐싱(TTL)이 적용된 blog_urls를 활용해 저장된
+                URL 개수(최대 3개)만큼 동적으로 버튼을 노출한다. 터치 시 새 창(아웃바운드)
+                으로 열려 우리 앱 상태가 그대로 유지된다. URL이 없으면 영역 숨김. */}
+            {spotPickCard && blogUrls.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {blogUrls.map((url, i) => (
+                  <a
+                    key={url}
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-full border border-green-500 bg-green-50 px-3 py-1 text-xs font-semibold text-green-700 hover:bg-green-100"
+                  >
+                    📝 블로그 후기 {i + 1}
+                  </a>
+                ))}
+              </div>
+            )}
+
+            <dl className="mt-4 flex flex-col gap-3 text-sm">
               <div className="flex items-start justify-between gap-2">
                 <dt className="text-gray-500 shrink-0">주소</dt>
                 <dd className="text-right text-gray-900 flex items-center gap-2">
@@ -498,9 +714,7 @@ export function DetailModal({
                   )}
                 </dd>
               </div>
-            )}
 
-            {!isEvent && (
               <div className="flex items-start justify-between gap-2">
                 <dt className="text-gray-500 shrink-0">운영시간</dt>
                 {/* [View Fallback](2026-09-01 사용자 지시): 관리자가 구조화한 영업시간
@@ -514,175 +728,141 @@ export function DetailModal({
                     HOURS_PLACEHOLDER}
                 </dd>
               </div>
-            )}
 
-            {/* [가격 및 메뉴 '준비 중' 플레이스홀더](2026-09-08 개선사항3-5): 입장료가
-                아직 없으면 빈 화면 대신 전용 문구를 보여준다(주소처럼 "이미 공공데이터에
-                항상 있어야 할 정보"가 아니라 관리자 큐레이션에 의존하는 정보라, 로딩
-                중(curation === undefined)에는 아직 판단하지 않고 잠시 아무것도 보여주지
-                않는다 — 로딩 끝나면 즉시 실제 값 또는 플레이스홀더로 확정된다). */}
-            {!isEvent && curation !== undefined && (
-              <div className="flex items-start justify-between gap-2">
-                <dt className="text-gray-500 shrink-0">가격</dt>
-                {/* item.is_free===true(공공데이터로 이미 확인된 무료 시설)면 굳이
-                    "준비 중"이라는 오해의 소지가 있는 문구 대신 이미 아는 사실을
-                    그대로 보여준다 — 신뢰도 유지라는 취지에 더 부합한다. */}
-                <dd className="text-right text-gray-900">
-                  {(curation && formatEntranceFee(curation)) ||
-                    (item.is_free === true ? '무료입장' : PRICE_PLACEHOLDER)}
-                </dd>
+              {/* [가격 및 메뉴 '준비 중' 플레이스홀더](2026-09-08 개선사항3-5): 입장료가
+                  아직 없으면 빈 화면 대신 전용 문구를 보여준다(주소처럼 "이미 공공데이터에
+                  항상 있어야 할 정보"가 아니라 관리자 큐레이션에 의존하는 정보라, 로딩
+                  중(curation === undefined)에는 아직 판단하지 않고 잠시 아무것도 보여주지
+                  않는다 — 로딩 끝나면 즉시 실제 값 또는 플레이스홀더로 확정된다). */}
+              {curation !== undefined && (
+                <div className="flex items-start justify-between gap-2">
+                  <dt className="text-gray-500 shrink-0">가격</dt>
+                  {/* item.is_free===true(공공데이터로 이미 확인된 무료 시설)면 굳이
+                      "준비 중"이라는 오해의 소지가 있는 문구 대신 이미 아는 사실을
+                      그대로 보여준다 — 신뢰도 유지라는 취지에 더 부합한다. */}
+                  <dd className="text-right text-gray-900">
+                    {(curation && formatEntranceFee(curation)) ||
+                      (item.is_free === true ? '무료입장' : PRICE_PLACEHOLDER)}
+                  </dd>
+                </div>
+              )}
+
+              {/* [View Fallback](2026-09-01 사용자 지시) "풍성한 뷰": 관리자가 등록한 메뉴가
+                  있으면 보여준다. 공공데이터에는 메뉴 개념 자체가 없어 큐레이션 전용 정보다.
+                  [가격 및 메뉴 '준비 중' 플레이스홀더](2026-09-08 개선사항3-5): 메뉴가 없어도
+                  행 자체는 숨기지 않고 전용 문구로 대신한다. */}
+              {curation !== undefined && (
+                <div className="flex items-start justify-between gap-2">
+                  <dt className="text-gray-500 shrink-0">메뉴</dt>
+                  <dd className="text-right text-gray-900">
+                    {curation && curation.menu_items.length > 0 ? (
+                      <ul className="flex flex-col gap-0.5">
+                        {curation.menu_items.map((menuItem, i) => (
+                          <li key={`${menuItem.name}-${i}`}>
+                            {menuItem.name} · {menuItem.price.toLocaleString()}원
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      MENU_PLACEHOLDER
+                    )}
+                  </dd>
+                </div>
+              )}
+
+              {/* [스팟픽 상세 카드 홈페이지 행](2026-09-10 사용자 지시): 공식 홈페이지
+                  (info_url)는 "예약"이 아니라 정보라서 하단 예약 버튼이 아니라 이
+                  상세 정보 영역에 링크 행으로 노출한다. */}
+              {spotPickCard && item.info_url && (
+                <div className="flex items-start justify-between gap-2">
+                  <dt className="text-gray-500 shrink-0">홈페이지</dt>
+                  <dd className="text-right">
+                    <a
+                      href={item.info_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm font-semibold text-blue-600 hover:underline"
+                    >
+                      공식 홈페이지 바로가기 ↗
+                    </a>
+                  </dd>
+                </div>
+              )}
+            </dl>
+
+            {/* Task 9-5-1: 콤팩트 인앱 미니맵 — 상세 화면을 벗어나지 않고 위치를 바로 확인하고,
+                "🔍 크게보기"로 풀스크린 지도 모달을 띄운다.
+                Task 9-6-2: 근사/미상 좌표(CITY_APPROX/UNKNOWN)는 정확한 위치가 아니므로 지도 대신
+                안내 문구만 보여준다(정확한 핀처럼 오인시키지 않기 위함). */}
+            {shouldHideMapForSpotScreen ? null : hasExactLocation ? (
+              <div className="mt-4 relative rounded-xl overflow-hidden border border-gray-200">
+                <MiniMap lat={item.lat} lng={item.lng} name={item.name} address={item.address} className="w-full h-40" />
+                <button
+                  type="button"
+                  onClick={() => setIsMapPreviewOpen(true)}
+                  className="absolute bottom-2 right-2 text-xs font-semibold px-2.5 py-1 rounded-full bg-white/90 text-gray-700 shadow hover:bg-white"
+                >
+                  🔍 크게보기
+                </button>
               </div>
+            ) : (
+              <p className="mt-4 text-sm text-gray-400">
+                📍 {item.sigungu_name ? `${item.sigungu_name} 일대 (정확한 위치 정보 없음)` : '정확한 위치 정보가 없는 행사입니다'}
+              </p>
             )}
 
-            {/* [View Fallback](2026-09-01 사용자 지시) "풍성한 뷰": 관리자가 등록한 메뉴가
-                있으면 보여준다. 공공데이터에는 메뉴 개념 자체가 없어 큐레이션 전용 정보다.
-                [가격 및 메뉴 '준비 중' 플레이스홀더](2026-09-08 개선사항3-5): 메뉴가 없어도
-                행 자체는 숨기지 않고 전용 문구로 대신한다. */}
-            {!isEvent && curation !== undefined && (
-              <div className="flex items-start justify-between gap-2">
-                <dt className="text-gray-500 shrink-0">메뉴</dt>
-                <dd className="text-right text-gray-900">
-                  {curation && curation.menu_items.length > 0 ? (
-                    <ul className="flex flex-col gap-0.5">
-                      {curation.menu_items.map((menuItem, i) => (
-                        <li key={`${menuItem.name}-${i}`}>
-                          {menuItem.name} · {menuItem.price.toLocaleString()}원
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    MENU_PLACEHOLDER
-                  )}
-                </dd>
-              </div>
-            )}
-
-            {/* [스팟픽 상세 카드 홈페이지 행](2026-09-10 사용자 지시): 공식 홈페이지
-                (info_url)는 "예약"이 아니라 정보라서 하단 예약 버튼이 아니라 이
-                상세 정보 영역에 링크 행으로 노출한다. */}
-            {spotPickCard && !isEvent && item.info_url && (
-              <div className="flex items-start justify-between gap-2">
-                <dt className="text-gray-500 shrink-0">홈페이지</dt>
-                <dd className="text-right">
-                  <a
-                    href={item.info_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm font-semibold text-blue-600 hover:underline"
-                  >
-                    공식 홈페이지 바로가기 ↗
-                  </a>
-                </dd>
-              </div>
-            )}
-
-            {isEvent && period && (
-              <div className="flex items-start justify-between gap-2">
-                <dt className="text-gray-500 shrink-0">행사 기간</dt>
-                <dd className="text-right text-gray-900">{period}</dd>
-              </div>
-            )}
-
-            {isEvent && targetAudienceLabel && (
-              <div className="flex items-start justify-between gap-2">
-                <dt className="text-gray-500 shrink-0">연령대상</dt>
-                <dd className="text-right text-gray-900">{targetAudienceLabel}</dd>
-              </div>
-            )}
-
-            {isEvent && (item.is_reservation_required || reservationTag) && (
-              <div className="flex items-start justify-between gap-2">
-                <dt className="text-gray-500 shrink-0">예약 안내</dt>
-                <dd className="text-right text-gray-900">
-                  {reservationTag ? (
-                    <span className={reservationTag.tone === 'warn' ? 'text-amber-600 font-medium' : 'text-gray-700'}>
-                      {reservationTag.label}
-                    </span>
-                  ) : (
-                    '사전 예약 필수'
-                  )}
-                  {reservationDeadline && (
-                    <span className="block text-red-600 font-medium">
-                      마감: {reservationDeadline}
-                    </span>
-                  )}
-                </dd>
-              </div>
-            )}
-          </dl>
-
-          {/* Task 9-5-1: 콤팩트 인앱 미니맵 — 상세 화면을 벗어나지 않고 위치를 바로 확인하고,
-              "🔍 크게보기"로 풀스크린 지도 모달을 띄운다.
-              Task 9-6-2: 근사/미상 좌표(CITY_APPROX/UNKNOWN)는 정확한 위치가 아니므로 지도 대신
-              안내 문구만 보여준다(정확한 핀처럼 오인시키지 않기 위함). */}
-          {shouldHideMapForSpotScreen ? null : hasExactLocation ? (
-            <div className="mt-4 relative rounded-xl overflow-hidden border border-gray-200">
-              <MiniMap lat={item.lat} lng={item.lng} name={item.name} address={item.address} className="w-full h-40" />
-              <button
-                type="button"
-                onClick={() => setIsMapPreviewOpen(true)}
-                className="absolute bottom-2 right-2 text-xs font-semibold px-2.5 py-1 rounded-full bg-white/90 text-gray-700 shadow hover:bg-white"
-              >
-                🔍 크게보기
-              </button>
+            <div className="mt-5 flex gap-2">
+              {cta?.type === 'link' && (
+                <a
+                  href={cta.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 text-center rounded-lg text-white text-sm font-medium py-2.5"
+                  style={{ backgroundColor: meta.color }}
+                >
+                  {cta.label}
+                </a>
+              )}
+              {cta?.type === 'map' && (
+                <button
+                  type="button"
+                  onClick={() => setIsMapPreviewOpen(true)}
+                  className="flex-1 text-center rounded-lg text-white text-sm font-medium py-2.5"
+                  style={{ backgroundColor: meta.color }}
+                >
+                  {cta.label}
+                </button>
+              )}
+              {secondaryAction?.type === 'link' && (
+                <a
+                  href={secondaryAction.href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 text-center rounded-lg border border-gray-300 text-gray-700 text-sm font-medium py-2.5 hover:bg-gray-50"
+                >
+                  {secondaryAction.label}
+                </a>
+              )}
+              {secondaryAction?.type === 'reservation' && (
+                <button
+                  type="button"
+                  onClick={() => setIsReservationModalOpen(true)}
+                  className="flex-1 text-center rounded-lg border border-gray-300 text-gray-700 text-sm font-medium py-2.5 hover:bg-gray-50"
+                >
+                  {secondaryAction.label}
+                </button>
+              )}
+              {/* [예약 버튼 노출 조건 엄격화](2026-09-01 사용자 지시): 실제 예약 채널이
+                  하나도 없으면 버튼 대신 안내 텍스트만 보여준다(무료 시설은 "예약 필요
+                  없음", 그 외는 정보 없음). cta가 없는 스팟픽 화면(지도 CTA 생략)에서는
+                  이 텍스트가 액션 행의 유일한 내용이 된다. */}
+              {secondaryAction?.type === 'info' && (
+                <p className="flex-1 text-center text-sm text-gray-400 py-2.5">{secondaryAction.label}</p>
+              )}
             </div>
-          ) : (
-            <p className="mt-4 text-sm text-gray-400">
-              📍 {item.sigungu_name ? `${item.sigungu_name} 일대 (정확한 위치 정보 없음)` : '정확한 위치 정보가 없는 행사입니다'}
-            </p>
-          )}
-
-          <div className="mt-5 flex gap-2">
-            {cta?.type === 'link' && (
-              <a
-                href={cta.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 text-center rounded-lg text-white text-sm font-medium py-2.5"
-                style={{ backgroundColor: meta.color }}
-              >
-                {cta.label}
-              </a>
-            )}
-            {cta?.type === 'map' && (
-              <button
-                type="button"
-                onClick={() => setIsMapPreviewOpen(true)}
-                className="flex-1 text-center rounded-lg text-white text-sm font-medium py-2.5"
-                style={{ backgroundColor: meta.color }}
-              >
-                {cta.label}
-              </button>
-            )}
-            {secondaryAction?.type === 'link' && (
-              <a
-                href={secondaryAction.href}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 text-center rounded-lg border border-gray-300 text-gray-700 text-sm font-medium py-2.5 hover:bg-gray-50"
-              >
-                {secondaryAction.label}
-              </a>
-            )}
-            {secondaryAction?.type === 'reservation' && (
-              <button
-                type="button"
-                onClick={() => setIsReservationModalOpen(true)}
-                className="flex-1 text-center rounded-lg border border-gray-300 text-gray-700 text-sm font-medium py-2.5 hover:bg-gray-50"
-              >
-                {secondaryAction.label}
-              </button>
-            )}
-            {/* [예약 버튼 노출 조건 엄격화](2026-09-01 사용자 지시): 실제 예약 채널이
-                하나도 없으면 버튼 대신 안내 텍스트만 보여준다(무료 시설은 "예약 필요
-                없음", 그 외는 정보 없음). cta가 없는 스팟픽 화면(지도 CTA 생략)에서는
-                이 텍스트가 액션 행의 유일한 내용이 된다. */}
-            {secondaryAction?.type === 'info' && (
-              <p className="flex-1 text-center text-sm text-gray-400 py-2.5">{secondaryAction.label}</p>
-            )}
           </div>
         </div>
-      </div>
+      )}
 
       {isMapPreviewOpen && (
         <MapPreviewModal

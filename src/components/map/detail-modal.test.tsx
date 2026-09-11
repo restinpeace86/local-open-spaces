@@ -273,7 +273,10 @@ describe('DetailModal 표준 중분류 뱃지 및 연령대상 표시', () => {
     expect(screen.getByText('야외·자연')).toBeInTheDocument();
   });
 
-  it('행사에 target_audience가 있으면 "연령대상" 행을 사람이 읽을 수 있는 한글로 보여준다', () => {
+  // [개선사항6](2026-09-11 사용자 지시): 이벤트 상세카드 8단 구조 재설계로 연령대상이
+  // 별도 "연령대상" 라벨 행이 아니라 2단(뱃지 영역)의 배지 하나로 표시된다(정보 자체는
+  // 그대로 유지 — 제5장 제3조, 배치만 새 구조에 맞게 바뀜).
+  it('행사에 target_audience가 있으면 사람이 읽을 수 있는 한글 뱃지로 보여준다', () => {
     render(
       <DetailModal
         item={makeSpaceItem({ item_type: 'EVENT', target_audience: 'KIDS_SCHOOL' })}
@@ -281,14 +284,13 @@ describe('DetailModal 표준 중분류 뱃지 및 연령대상 표시', () => {
       />
     );
 
-    expect(screen.getByText('연령대상')).toBeInTheDocument();
     expect(screen.getByText('초등학생 이상')).toBeInTheDocument();
   });
 
-  it('target_audience가 없으면 "연령대상" 행 자체를 숨긴다', () => {
+  it('target_audience가 없으면 연령대상 뱃지 자체를 숨긴다', () => {
     render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT', target_audience: null })} onClose={() => {}} />);
 
-    expect(screen.queryByText('연령대상')).not.toBeInTheDocument();
+    expect(screen.queryByText('초등학생 이상')).not.toBeInTheDocument();
   });
 });
 
@@ -768,5 +770,122 @@ describe('DetailModal 스팟픽 카드(spotPickCard)', () => {
 
     await screen.findByText('트램폴린/방방');
     expect(screen.queryByText('🔥 특가')).not.toBeInTheDocument();
+  });
+});
+
+// [개선사항6](2026-09-11 사용자 지시, implementation/todo.md): "이벤트 상세카드 8단 구조"
+// 재설계 — 이미지 슬라이드/뱃지(카테고리+진행상태)/제목+인터랙티브 거리/행사기간/
+// 예약기간/설명 토글/미니맵/하단 고정 CTA.
+describe('DetailModal 이벤트 상세카드 8단 구조 (개선사항6, 2026-09-11)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('1단: 썸네일이 없으면 이미지 영역 자체를 렌더링하지 않는다', () => {
+    const { container } = render(
+      <DetailModal item={makeSpaceItem({ item_type: 'EVENT', thumbnail_url: null })} onClose={() => {}} />
+    );
+
+    expect(container.querySelector('img')).toBeNull();
+  });
+
+  it('1단: 썸네일이 있으면 이미지를 보여주고, 1장뿐이면 좌우 넘김/점 표시는 없다', () => {
+    render(
+      <DetailModal
+        item={makeSpaceItem({ item_type: 'EVENT', thumbnail_url: 'https://example.com/event.jpg' })}
+        onClose={() => {}}
+      />
+    );
+
+    const img = screen.getByAltText('율동공원');
+    expect(img).toHaveAttribute('src', 'https://example.com/event.jpg');
+    expect(screen.queryByLabelText('다음 이미지')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('이전 이미지')).not.toBeInTheDocument();
+  });
+
+  it('2단: 카테고리 뱃지와 현재 진행 상태 뱃지를 함께 보여준다', () => {
+    // getEventStatus(event-status.ts)는 is_reservation_required+reservation_end_date
+    // 조합으로 상태를 판단한다 — 마감일을 충분히 먼 미래로 두면 "접수중"이 된다.
+    render(
+      <DetailModal
+        item={makeSpaceItem({
+          item_type: 'EVENT',
+          category: 'EXPERIENCE_CLASS',
+          category_min: '도시농업',
+          is_reservation_required: true,
+          reservation_end_date: '2099-01-01',
+        })}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.getByText('도시농업')).toBeInTheDocument();
+    expect(screen.getByText('접수중')).toBeInTheDocument();
+  });
+
+  it('3단: 정확한 좌표가 있으면 spotPickCard 여부와 무관하게 거리 영역이 항상 탭 가능한 버튼이다', () => {
+    render(
+      <DetailModal
+        item={makeSpaceItem({ item_type: 'EVENT', distance_meters: 1500, location_precision: 'EXACT' })}
+        onClose={() => {}}
+      />
+    );
+
+    const button = screen.getByText(/1\.5km/).closest('button');
+    expect(button).not.toBeNull();
+
+    fireEvent.click(button!);
+    expect(screen.getByLabelText('지도 닫기')).toBeInTheDocument();
+  });
+
+  it('5단: 예약 기간이 있으면 별도 행으로 보여준다', () => {
+    render(
+      <DetailModal
+        item={makeSpaceItem({
+          item_type: 'EVENT',
+          is_reservation_required: true,
+          reservation_start_date: '2026-09-01T00:00:00+09:00',
+          reservation_end_date: '2026-09-10T00:00:00+09:00',
+        })}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.getByText('예약 기간')).toBeInTheDocument();
+    expect(screen.getByText('2026-09-01 ~ 2026-09-10')).toBeInTheDocument();
+  });
+
+  it('5단: 예약 기간 정보가 없으면 그 행 자체를 숨긴다', () => {
+    render(
+      <DetailModal
+        item={makeSpaceItem({
+          item_type: 'EVENT',
+          reservation_start_date: null,
+          reservation_end_date: null,
+        })}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.queryByText('예약 기간')).not.toBeInTheDocument();
+  });
+
+  it('8단: 이벤트는 하단에 CTA 버튼이 하나만 있다(스팟의 보조 액션 행 없음)', () => {
+    render(
+      <DetailModal
+        item={makeSpaceItem({
+          item_type: 'EVENT',
+          is_free: true,
+          reservation_url: 'https://yeyak.seoul.go.kr/event/2',
+        })}
+        onClose={() => {}}
+      />
+    );
+
+    const link = screen.getByText('🏛️ 공공 예약하기').closest('a');
+    expect(link).toHaveAttribute('href', 'https://yeyak.seoul.go.kr/event/2');
+    // 스팟 전용 보조 액션(공식 홈페이지/간편 예약 등)은 이벤트에 렌더링되지 않는다.
+    expect(screen.queryByText('🌐 공식 홈페이지 바로가기')).not.toBeInTheDocument();
+    expect(screen.queryByText('📝 간편 예약/신청하기')).not.toBeInTheDocument();
   });
 });
