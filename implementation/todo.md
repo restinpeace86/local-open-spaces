@@ -199,6 +199,13 @@
       이동("역사"는 대다수(96%)가 실제 문화 콘텐츠라 그룹은 그대로 둠). 매번
       DB(이미 반영돼 있는지)와 그룹핑 코드를 함께 재확인하는 동일 패턴 반복.
       (완료: 2026-09-12, 상세: implementation/2026-09-12-events-category-reclassification.md)
+- [x] 개선사항10 후속3 (Step 127, 사용자 지시): "스팟픽에서 연결된 이벤트 중에 저
+      4개 연령(FAMILY/KIDS_PRE/KIDS_SCHOOL/INFANT) 아닌데 나오는게 있나 점검해봐..
+      나오면 안되긴 해" — `/api/spots/linked-events`(스팟 상세 "🎪 진행 중인
+      이벤트" 섹션)가 target_audience 필터가 전혀 없어 이벤트픽 피드엔 안 보이는
+      이벤트도 그대로 노출되고 있었음(실측: 714건 중 515건, 72%가 4개 밖/NULL).
+      다른 이벤트픽 조회와 동일하게 EVENT_PICK_TARGET_AUDIENCES 필터 추가.
+      (완료: 2026-09-12, 상세: implementation/2026-09-12-linked-events-target-audience-filter.md)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.
