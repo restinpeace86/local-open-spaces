@@ -90,4 +90,15 @@ describe('buildEventsCategoryMinGroups', () => {
       expect(allAssigned).toContain(opt);
     }
   });
+
+  // [원천 대/중분류 재분류 반영](2026-09-12 사용자 지시): "문화/축제 >> 전시실 항목
+  // 있는데 이거 원천 대/중분류가 공간시설/전시실인데? 이것도 공공청사/행정쪽으로
+  // 옮겨줘.. 여기의 표준 중분류 조건은 전혀 반영 안됐어.. 여기도 반영해줘" —
+  // events.category_maj 데이터 수정과 별개로, 이 어드민 필터 그룹핑도 맞춰야
+  // 실제로 화면에 반영된다.
+  it('전시실은 "공공청사/행정" 그룹에 배정되고, "문화/축제" 그룹에는 더 이상 없다', () => {
+    const result = buildEventsCategoryMinGroups(['전시실']);
+    expect(result.find((g) => g.major === '공공청사/행정')?.minors).toContain('전시실');
+    expect(result.find((g) => g.major === '문화/축제')).toBeUndefined();
+  });
 });
