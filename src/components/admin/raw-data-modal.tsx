@@ -11,6 +11,7 @@ import { SpotCurationQuickModal } from '@/components/admin/spot-curation-quick-m
 import { SpotDedupQuickModal } from '@/components/admin/spot-dedup-quick-modal';
 import { useBackdropDismiss } from '@/lib/admin/use-backdrop-dismiss';
 import { GroupMemberRow } from '@/app/api/admin/spot-dedup/group-members/route';
+import { cleanupMessyText, looksLikeMessyText } from '@/lib/admin/cleanup-messy-text';
 
 // [개편] 행 클릭 시 해당 행의 전체 원천 컬럼(구조화된 값) + raw_data/raw_payload 원문 JSON을
 // 함께 보여주는 Read-Only 뷰어. 3개 탭(open_spaces/events/raw_ingest_data) 행 형태가 서로
@@ -587,6 +588,9 @@ export function RawDataModal({
   // [원문 JSON 필드를 HTML로 보기](2026-09-06 사용자 지시) — 어떤 필드를 HTML로
   // 열었는지 저장한다(null이면 팝업 닫힘).
   const [htmlPreviewField, setHtmlPreviewField] = useState<{ key: string; value: string } | null>(null);
+  // [원문 JSON 필드 정돈해서 보기](2026-09-12 사용자 지시) — HTML은 아니지만
+  // \r\n·&nbsp; 등이 섞여 원문 그대로는 알아보기 힘든 필드를 정돈해서 열었는지 저장.
+  const [cleanedTextPreviewField, setCleanedTextPreviewField] = useState<{ key: string; value: string } | null>(null);
   // [드래그 시 팝업 닫힘 버그 수정](2026-09-05 사용자 지시) 참고: use-backdrop-dismiss.ts
   const backdropDismiss = useBackdropDismiss(onClose);
 
@@ -595,6 +599,17 @@ export function RawDataModal({
   const htmlLikeFields: [string, string][] =
     raw && typeof raw === 'object' && !Array.isArray(raw)
       ? Object.entries(raw as Record<string, unknown>).filter((entry): entry is [string, string] => looksLikeHtml(entry[1]))
+      : [];
+
+  // [원문 JSON 필드 정돈해서 보기](2026-09-12 사용자 지시): "html이면 html로 지금처럼
+  // 볼수있게하는데 html이 아닌경우 이와 같이 되어있는지 확인하고 해당 컬럼 글만
+  // 정돈돼서 볼수있게" — htmlLikeFields와 상호 배타적으로, 진짜 태그가 없는 필드
+  // 중에서만 찾는다(같은 필드에 버튼 두 개가 겹치지 않게).
+  const messyTextFields: [string, string][] =
+    raw && typeof raw === 'object' && !Array.isArray(raw)
+      ? Object.entries(raw as Record<string, unknown>).filter(
+          (entry): entry is [string, string] => !looksLikeHtml(entry[1]) && looksLikeMessyText(entry[1])
+        )
       : [];
 
   // [open_spaces 삭제 기능](2026-09-06 사용자 지시): "내가 불필요하다고 생각하는건
@@ -864,6 +879,25 @@ export function RawDataModal({
             </div>
           )}
 
+          {/* [원문 JSON 필드 정돈해서 보기](2026-09-12 사용자 지시): "\r\n&nbsp;&nbsp;
+              - 4회차 - ... 이런식으로 되어있으면 \r \n같은거 적용해서 정돈된
+              글로 볼수있게해줘" — HTML 태그는 없지만 이스케이프된 개행/엔티티만
+              섞여 원문 그대로는 알아보기 힘든 필드용 버튼. */}
+          {messyTextFields.length > 0 && (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {messyTextFields.map(([key, value]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setCleanedTextPreviewField({ key, value })}
+                  className="rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-medium text-emerald-700 hover:bg-emerald-100"
+                >
+                  📄 {key} 정돈해서 보기
+                </button>
+              ))}
+            </div>
+          )}
+
           <pre className="mt-1.5 rounded-lg bg-gray-900 text-gray-100 text-xs p-3 overflow-x-auto whitespace-pre-wrap break-words">
             {prettyJson}
           </pre>
@@ -872,6 +906,10 @@ export function RawDataModal({
 
       {htmlPreviewField && (
         <HtmlFieldPreviewModal field={htmlPreviewField} onClose={() => setHtmlPreviewField(null)} />
+      )}
+
+      {cleanedTextPreviewField && (
+        <CleanedTextPreviewModal field={cleanedTextPreviewField} onClose={() => setCleanedTextPreviewField(null)} />
       )}
 
       {isMigrateModalOpen && table === 'open_spaces' && onMigratedToEvent && (
@@ -1047,6 +1085,33 @@ function HtmlFieldPreviewModal({ field, onClose }: { field: { key: string; value
           // eslint-disable-next-line react/no-danger
           dangerouslySetInnerHTML={{ __html: field.value }}
         />
+      </div>
+    </div>
+  );
+}
+
+// [원문 JSON 필드 정돈해서 보기](2026-09-12 사용자 지시): "html이면 html로 지금처럼
+// 볼수있게하는데 html이 아닌경우 이와 같이 되어있는지 확인하고 해당 컬럼 글만
+// 정돈돼서 볼수있게" — HtmlFieldPreviewModal과 형태는 같지만, 이 필드엔 진짜
+// HTML 태그가 없으므로 dangerouslySetInnerHTML을 쓰지 않고(엔티티를 태그로 오인해
+// 렉더링할 위험 없이) cleanupMessyText로 정돈한 일반 텍스트를 그대로 보여준다.
+function CleanedTextPreviewModal({ field, onClose }: { field: { key: string; value: string }; onClose: () => void }) {
+  const backdropDismiss = useBackdropDismiss(onClose);
+  return (
+    <div className="fixed inset-0 bg-black/50 z-[80] flex items-end md:items-center justify-center" {...backdropDismiss}>
+      <div
+        className="w-full md:w-[640px] max-h-[85vh] overflow-y-auto bg-white rounded-t-2xl md:rounded-2xl shadow-xl p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-bold text-gray-900">{field.key} (정돈된 텍스트)</h2>
+          <button type="button" onClick={onClose} aria-label="닫기" className="text-gray-400 hover:text-gray-600">
+            ✕
+          </button>
+        </div>
+        <div className="rounded-lg border border-gray-200 p-3 text-sm leading-relaxed text-gray-800 whitespace-pre-line">
+          {cleanupMessyText(field.value)}
+        </div>
       </div>
     </div>
   );

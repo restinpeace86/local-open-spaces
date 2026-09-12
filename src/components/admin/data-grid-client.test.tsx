@@ -369,7 +369,7 @@ describe('AdminDataGridClient — open_spaces 목록 컬럼 정리(2026-09-07)',
     expect(screen.getByText('제목/명칭')).toBeInTheDocument();
   });
 
-  it('events 탭에는 컬럼 정리 영향 없이 ID/원천 대·중분류/장소·시설명/요금/접수상태가 그대로 보인다', async () => {
+  it('events 탭에는 원천 대·중분류/장소·시설명/요금/접수상태가 그대로 보이지만(2026-09-07 컬럼 정리 영향 없음), ID는 숨겨진다(2026-09-12 후속)', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn(() =>
@@ -384,12 +384,36 @@ describe('AdminDataGridClient — open_spaces 목록 컬럼 정리(2026-09-07)',
     fireEvent.click(screen.getByText('📥 불러오기'));
 
     await screen.findByText('테스트 행사');
-    expect(screen.getByText('ID')).toBeInTheDocument();
+    // [그리드 컬럼 축소](2026-09-12 사용자 지시): "events 탭도 그리드 컬럼 축소해줘
+    // ID컬럼 숨겨줘" — 출처 컬럼과 중복 정보라 open_spaces와 동일하게 숨긴다.
+    expect(screen.queryByText('ID')).not.toBeInTheDocument();
     expect(screen.getByText('원천 대/중분류')).toBeInTheDocument();
     expect(screen.getByText('장소/시설명')).toBeInTheDocument();
     expect(screen.getByText('요금')).toBeInTheDocument();
     expect(screen.getByText('접수상태')).toBeInTheDocument();
     expect(screen.getByText('테스트 장소')).toBeInTheDocument(); // venue_name, title과 다른 값
+  });
+
+  it('raw_ingest_data 탭은 ID(source_id) 컬럼이 그대로 남아 있다(제목/명칭 컬럼 자체가 없는 유일한 식별자)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              rows: [{ source: 'test_source', source_id: 'RAW-1', fetched_at: '2026-09-12T00:00:00Z', raw_payload: {} }],
+              total: 1,
+            }),
+        } as Response)
+      )
+    );
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+    fireEvent.click(screen.getByText('raw_ingest_data (원천 보존)'));
+    fireEvent.click(screen.getByText('📥 불러오기'));
+
+    await screen.findByText('RAW-1');
+    expect(screen.getByText('ID')).toBeInTheDocument();
   });
 });
 

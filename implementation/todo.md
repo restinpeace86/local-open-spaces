@@ -177,6 +177,14 @@
       백업 테이블 이전은 검토 결과 비권장(events 전체가 28,698건뿐이라 성능
       이점 미미, 오래된 건도 259~278건뿐 — 진짜 원인은 이 버그였음).
       (완료: 2026-09-12, 상세: implementation/2026-09-12-deactivate-expired-events-backlog-fix.md)
+- [x] 개선사항6 후속 (Step 125, 사용자 지시): "events 탭도 그리드 컬럼 축소해줘
+      ID컬럼 숨겨줘.. DTLCONT 컬럼에 html로 안되어있는것들에 \r\n&nbsp;&nbsp; 이런식
+      으로 되어있으면 정돈된 글로 볼수있게해줘.. html이 아닌경우 확인하고 정돈돼서
+      볼수있게" — events 탭 ID 컬럼을 open_spaces와 동일하게 숨김(출처와 중복).
+      `looksLikeHtml`(진짜 태그)과 상호 배타적인 `looksLikeMessyText`(개행/엔티티만
+      섞인 경우) 신규 — "📄 정돈해서 보기" 버튼으로 \r\n을 실제 개행으로, &nbsp; 등
+      엔티티를 브라우저 파서로 안전하게 디코딩해 정돈된 텍스트 팝업으로 보여준다.
+      (완료: 2026-09-12, 상세: implementation/2026-09-12-admin-grid-column-reduction-and-messy-text-cleanup.md)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.

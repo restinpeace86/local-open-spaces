@@ -651,6 +651,61 @@ describe('RawDataModal — 원문 JSON 필드를 HTML로 보기', () => {
   });
 });
 
+// [원문 JSON 필드 정돈해서 보기](2026-09-12 사용자 지시): "DTLCONT 해당 컬럼에 대하여
+// html로 안되어있는것들에 \r\n&nbsp;&nbsp; - 4회차 - ... 이런식으로 되어있으면
+// \r \n같은거 적용해서 정돈된 글로 볼수있게해줘.. html이 아닌경우 이와 같이
+// 되어있는지 확인하고 해당 컬럼 글만 정돈돼서 볼수있게".
+describe('RawDataModal — 원문 JSON 필드 정돈해서 보기', () => {
+  it('HTML 태그 없이 \\r\\n·엔티티만 섞인 필드에 "정돈해서 보기" 버튼이 뜨고, 누르면 정돈된 텍스트 팝업이 뜬다', () => {
+    const row = buildRow({
+      raw_data: {
+        DTLCONT: '\r\n&nbsp;&nbsp; - 4회차 - 14:30~15:50 &nbsp;(60명)     \r\n&nbsp;&nbsp; - 5회차 - 16:00~17:40 &nbsp;(60명)',
+        PLAINFIELD: '그냥 텍스트',
+      },
+    });
+    render(<RawDataModal table="open_spaces" row={row} categoryMinOptions={[]} onClose={vi.fn()} />);
+
+    const openButton = screen.getByText('📄 DTLCONT 정돈해서 보기');
+    expect(openButton).toBeInTheDocument();
+    // 개행/엔티티가 없는 필드는 버튼이 생기지 않는다.
+    expect(screen.queryByText('📄 PLAINFIELD 정돈해서 보기')).not.toBeInTheDocument();
+
+    fireEvent.click(openButton);
+
+    expect(screen.getByText('DTLCONT (정돈된 텍스트)')).toBeInTheDocument();
+    expect(screen.getByText(/4회차 - 14:30~15:50 \(60명\)/)).toBeInTheDocument();
+    expect(screen.getByText(/5회차 - 16:00~17:40 \(60명\)/)).toBeInTheDocument();
+  });
+
+  it('진짜 HTML 태그가 있는 필드는 "정돈해서 보기"가 아니라 "HTML로 보기" 버튼만 뜬다(상호 배타)', () => {
+    const row = buildRow({ raw_data: { DTLCONT: '<p>공공시설 예약 안내</p>\r\n&nbsp;추가 안내' } });
+    render(<RawDataModal table="open_spaces" row={row} categoryMinOptions={[]} onClose={vi.fn()} />);
+
+    expect(screen.getByText('🔍 DTLCONT HTML로 보기')).toBeInTheDocument();
+    expect(screen.queryByText('📄 DTLCONT 정돈해서 보기')).not.toBeInTheDocument();
+  });
+
+  it('닫기 버튼을 누르면 팝업이 사라진다', () => {
+    const row = buildRow({ raw_data: { DTLCONT: '본문\r\n둘째줄' } });
+    render(<RawDataModal table="open_spaces" row={row} categoryMinOptions={[]} onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByText('📄 DTLCONT 정돈해서 보기'));
+    expect(screen.getByText('DTLCONT (정돈된 텍스트)')).toBeInTheDocument();
+
+    const closeButtons = screen.getAllByLabelText('닫기');
+    fireEvent.click(closeButtons[closeButtons.length - 1]);
+
+    expect(screen.queryByText('DTLCONT (정돈된 텍스트)')).not.toBeInTheDocument();
+  });
+
+  it('정돈이 필요한(개행/엔티티가 있는) 필드가 없으면 버튼 자체를 보여주지 않는다', () => {
+    const row = buildRow({ raw_data: { NAME: '그냥 한 줄 이름', COUNT: 3 } });
+    render(<RawDataModal table="open_spaces" row={row} categoryMinOptions={[]} onClose={vi.fn()} />);
+
+    expect(screen.queryByText(/정돈해서 보기/)).not.toBeInTheDocument();
+  });
+});
+
 // [개선사항10](2026-09-11 사용자 지시, implementation/todo.md): "매칭되는 스팟이 없는
 // 경우 관리자가 수동으로 스팟을 지정.. 관리자 툴 플로우". events 탭에서만 노출되는
 // "연결된 스팟" 편집기(SpaceLinkEditor, 내부적으로 기존 SpotPicker 재사용)를 검증한다.

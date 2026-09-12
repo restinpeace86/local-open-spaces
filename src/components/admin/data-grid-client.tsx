@@ -1503,8 +1503,12 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                 )}
                 {/* [관리자 화면 목록 컬럼 정리](2026-09-07 사용자 지시): "ID와 출처는
                     비슷하니 출처 컬럼만 남겨" — open_spaces에서 ID(external_id)는
-                    출처(source)와 함께 있으면 중복 정보라 이 탭에서만 숨긴다. */}
-                {tab !== 'open_spaces' && <th className="py-2.5 pr-3">ID</th>}
+                    출처(source)와 함께 있으면 중복 정보라 이 탭에서만 숨겼다.
+                    [그리드 컬럼 축소](2026-09-12 사용자 지시): "events 탭도 그리드
+                    컬럼 축소해줘 ID컬럼 숨겨줘" — 같은 이유(출처 컬럼과 중복)로
+                    events 탭도 숨긴다. raw_ingest_data는 source_id가 유일한 식별자
+                    (제목/명칭 컬럼 자체가 없음)라 그대로 남겨둔다. */}
+                {tab === 'raw_ingest_data' && <th className="py-2.5 pr-3">ID</th>}
                 <th className="py-2.5 pr-3">출처</th>
                 {/* "원천 대/중분류 컬럼은 안보이게 해" — open_spaces 전용 숨김(events는
                     그대로 유지, 이 컬럼이 event_type 배지와 별개 정보를 담음). */}
@@ -1579,7 +1583,9 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                         />
                       </td>
                     )}
-                    {isEvent && <td className="py-2 pr-3 font-mono text-[11px] text-gray-500 max-w-[140px] truncate">{r.external_id}</td>}
+                    {/* [그리드 컬럼 축소](2026-09-12 사용자 지시): "events 탭도 ID컬럼
+                        숨겨줘" — 위 헤더와 짝을 맞춰 이 셀도 제거한다(출처 컬럼과
+                        중복 정보). */}
                     <td className="py-2 pr-3 text-gray-600 whitespace-nowrap">{r.source ?? (isEvent ? '-' : (r as AdminOpenSpaceRow).source_type)}</td>
                     {isEvent && (
                       <td className="py-2 pr-3 text-gray-600 whitespace-nowrap">
