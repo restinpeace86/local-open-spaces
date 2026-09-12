@@ -312,6 +312,18 @@
       operating-schedule-editor.test.tsx로 이동, event-blog-curation-modal.test.tsx에
       내장 렌더링/저장 검증 3건 추가.
       (완료: 2026-09-12, 상세: implementation/2026-09-12-operating-schedule-into-blog-curation.md)
+- [x] Step 133 (사용자 버그 신고): "또 나드리픽 관리자화면 느려졌어 많이 느림..
+      VACUUM을 하던 원인 확인하고 조치해줘 배큠해야하는지 인덱싱이 문제인지"
+      — 실측 결과 open_spaces/events/raw_ingest_data 3개 테이블 모두 dead
+      tuple 1~2%로 건강했음(2026-09-05/06 조치가 계속 유효, 이번엔 VACUUM
+      문제 아님). 원인은 `get_events_filter_options()` RPC가 8초
+      statement_timeout에 걸려 실패 — source/event_type/raw_data->>'MINCLASSNM'/
+      'SVCSTATNM' 4개 값을 한 스캔에 몰아 집계하다 보니 raw_data(JSONB, 특히
+      seoul_public_reservation 소스 평균 3.9KB·최대 82KB) TOAST 압축 해제
+      비용이 매 행 발생. `raw_data->>'MINCLASSNM'`/`'SVCSTATNM'` 표현식
+      인덱스 2개 추가 + 함수를 4개 독립 서브쿼리로 재작성해 8274ms(타임아웃)
+      → 352ms로 해결. 코드 변경 없음(순수 DB 마이그레이션).
+      (완료: 2026-09-12, 상세: implementation/2026-09-12-admin-data-grid-events-filter-options-timeout-fix.md)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.
