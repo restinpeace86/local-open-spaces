@@ -206,6 +206,17 @@
       이벤트도 그대로 노출되고 있었음(실측: 714건 중 515건, 72%가 4개 밖/NULL).
       다른 이벤트픽 조회와 동일하게 EVENT_PICK_TARGET_AUDIENCES 필터 추가.
       (완료: 2026-09-12, 상세: implementation/2026-09-12-linked-events-target-audience-filter.md)
+- [x] 개선사항9 후속4 (Step 126 후속3, 사용자 지시): "배움/교육 대분류에 있는
+      교육체험에 대하여 대분류 자연/체험쪽으로 옮겨줘" — 앞선 3건과 달리 소스별
+      성격 혼재가 아니라 순수 taxonomy 재분류 판단이라, 어드민 필터 그룹핑
+      (category-min-groups.ts)만 이동하고 DB category_maj/공개 화면 taxonomy는
+      건드리지 않음(임의 확장 금지).
+      (완료: 2026-09-12, 상세: implementation/2026-09-12-events-category-reclassification.md)
+- [ ] (기획 메모, 2026-09-12) 스팟 선택 시 프리뷰/상세카드에 "아직은 아니지만
+      진행중인 이벤트"를 연결 표시하는 기능 — 사용자가 기획 중인 노출 기준
+      초안: (1) 현재일 기준 이벤트 진행중, (2) 타겟 연령 4개(FAMILY/KIDS_PRE/
+      KIDS_SCHOOL/INFANT) 해당, (3) 현재일 기준 예약 진행중 여부는 아직 미확정.
+      아직 기획 단계라고 명시함 — 구현 보류, 확정되면 착수.
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.

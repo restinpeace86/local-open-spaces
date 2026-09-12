@@ -118,4 +118,12 @@ describe('buildEventsCategoryMinGroups', () => {
     expect(result.find((g) => g.major === '공공청사/행정')?.minors).toContain('광장');
     expect(result.find((g) => g.major === '자연/체험')).toBeUndefined();
   });
+
+  // [배움/교육 → 자연/체험 재분류](2026-09-12 사용자 지시): "배움/교육 대분류에
+  // 있는 교육체험에 대하여 대분류 자연/체험쪽으로 옮겨줘".
+  it('교육체험은 "자연/체험" 그룹에 배정되고, "배움/교육" 그룹에는 더 이상 없다', () => {
+    const result = buildEventsCategoryMinGroups(['교육체험']);
+    expect(result.find((g) => g.major === '자연/체험')?.minors).toContain('교육체험');
+    expect(result.find((g) => g.major === '배움/교육')).toBeUndefined();
+  });
 });
