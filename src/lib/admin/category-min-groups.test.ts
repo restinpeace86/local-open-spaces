@@ -110,4 +110,12 @@ describe('buildEventsCategoryMinGroups', () => {
     expect(result.find((g) => g.major === '공공청사/행정')?.minors).toContain('공연장');
     expect(result.find((g) => g.major === '문화/축제')).toBeUndefined();
   });
+
+  // [원천 대/중분류 재분류 반영 후속2](2026-09-12 사용자 지시): "자연/체험 대분류에
+  // 있는 광장 중분류에 대하여 공공청사/행정 대분류로 옮겨줘".
+  it('광장은 "공공청사/행정" 그룹에 배정되고, "자연/체험" 그룹에는 더 이상 없다', () => {
+    const result = buildEventsCategoryMinGroups(['광장']);
+    expect(result.find((g) => g.major === '공공청사/행정')?.minors).toContain('광장');
+    expect(result.find((g) => g.major === '자연/체험')).toBeUndefined();
+  });
 });
