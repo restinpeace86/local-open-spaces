@@ -299,6 +299,19 @@
       다른 주차 매칭"(예: 2번째 화요일+4번째 목요일 따로 지정) 확장은 보류
       확정("안되는걸로 하자") — 기존 구현(요일×주차 전체 조합만 지원) 유지.
       (완료: 2026-09-12, 상세: implementation/2026-09-12-spot-detail-card-menu-scope.md)
+- [x] 개선사항10 후속8 (Step 132, 사용자 지시): "운영 요일 / 반복 규칙으로 예외일자
+      설정하는거.. 이거 관련 블로그 큐레이션 안으로 집어넣어줄수 있어? 보통
+      RAW_DATA는 기간으로만 나와있어서.. 블로그 보고 파악하는데" — 원천 데이터는
+      기간만 주고 실제 반복 패턴은 블로그를 읽어야 알 수 있다는 지적에 따라
+      OperatingScheduleEditor를 상세 팝업의 독립 섹션에서 EventBlogCurationModal
+      (블로그 큐레이션 모달) 안으로 옮김. raw-data-modal.tsx/
+      event-blog-curation-modal.tsx 두 파일이 공유하는
+      src/components/admin/operating-schedule-editor.tsx로 분리(AdminEventRow
+      전체가 아니라 이 편집기가 실제 쓰는 필드만 요구하는 좁은 타입
+      OperatingScheduleRow로 재사용성 확보). raw-data-modal.tsx의 관련 테스트는
+      operating-schedule-editor.test.tsx로 이동, event-blog-curation-modal.test.tsx에
+      내장 렌더링/저장 검증 3건 추가.
+      (완료: 2026-09-12, 상세: implementation/2026-09-12-operating-schedule-into-blog-curation.md)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.

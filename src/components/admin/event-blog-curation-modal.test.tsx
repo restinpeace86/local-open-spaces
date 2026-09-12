@@ -4,7 +4,7 @@ import { EventBlogCurationModal } from './event-blog-curation-modal';
 
 // [이벤트픽 관리자 블로그 큐레이션](2026-09-11 사용자 지시, implementation/todo.md
 // 개선사항7-2) 단위 테스트.
-const EVENT = { id: 'event-1', title: '가을 단풍 축제' };
+const EVENT = { id: 'event-1', title: '가을 단풍 축제', start_date: '2026-09-01', end_date: '2026-09-30' };
 
 function makeBlogItem(overrides: Partial<{ title: string; link: string; description: string; bloggername: string; postdate: string; isRecent: boolean }> = {}) {
   return {
@@ -54,6 +54,12 @@ function mockFetchByUrl(handlers: {
         ok,
         json: () => Promise.resolve(ok ? JSON.parse(init!.body as string) : { error: '저장 실패' }),
       } as Response);
+    }
+    // [블로그 큐레이션 모달로 이동](2026-09-12 사용자 지시): OperatingScheduleEditor가
+    // 이 모달 안에서 자체적으로 PATCH하는 엔드포인트 — 보낸 값을 그대로 되돌려준다.
+    if (url.includes('/api/admin/events/operating-schedule')) {
+      const parsed = JSON.parse(init!.body as string);
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ row: parsed }) } as Response);
     }
     return Promise.reject(new Error(`unexpected fetch: ${url}`));
   });
@@ -329,6 +335,55 @@ describe('EventBlogCurationModal', () => {
       urls: ['https://blog.naver.com/1'],
       price_text: '무료',
       target_audience: null,
+    });
+  });
+});
+
+// [운영 요일/반복 규칙을 블로그 큐레이션 안으로](2026-09-12 사용자 지시): "운영
+// 요일/반복 규칙으로 예외일자 설정하는거.. 블로그 큐레이션 안으로 집어넣어줄수
+// 있어? 보통 RAW_DATA는 기간으로만 나와있어서.. 블로그 보고 파악하는데" —
+// raw-data-modal.tsx의 독립 섹션에서 이 모달 안으로 옮긴 OperatingScheduleEditor가
+// 실제로 여기서 렌더링·저장되는지 검증한다(편집기 자체 동작은
+// operating-schedule-editor.test.tsx가 이미 상세히 검증하므로, 여기서는 "이
+// 모달 안에 실려 있고 onOperatingScheduleUpdated로 결과가 올라오는지"만 확인).
+describe('EventBlogCurationModal — 운영 요일/반복 규칙 편집기 내장(2026-09-12)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('onOperatingScheduleUpdated를 넘기면 "운영 요일 / 반복 규칙" 편집기가 함께 렌더링된다', async () => {
+    vi.stubGlobal('fetch', mockFetchByUrl({}));
+    render(<EventBlogCurationModal event={EVENT} onClose={vi.fn()} onOperatingScheduleUpdated={vi.fn()} />);
+
+    expect(await screen.findByText('운영 요일 / 반복 규칙')).toBeInTheDocument();
+  });
+
+  it('onOperatingScheduleUpdated를 넘기지 않으면 편집기가 렌더링되지 않는다', async () => {
+    vi.stubGlobal('fetch', mockFetchByUrl({}));
+    render(<EventBlogCurationModal event={EVENT} onClose={vi.fn()} />);
+
+    await screen.findByPlaceholderText(/성인 15,000원/);
+    expect(screen.queryByText('운영 요일 / 반복 규칙')).not.toBeInTheDocument();
+  });
+
+  it('"주말만 운영"을 골라 저장하면 operating-schedule을 PATCH하고 onOperatingScheduleUpdated를 호출한다', async () => {
+    const fetchMock = mockFetchByUrl({});
+    vi.stubGlobal('fetch', fetchMock);
+    const onOperatingScheduleUpdated = vi.fn();
+    render(<EventBlogCurationModal event={EVENT} onClose={vi.fn()} onOperatingScheduleUpdated={onOperatingScheduleUpdated} />);
+
+    await screen.findByText('운영 요일 / 반복 규칙');
+    fireEvent.click(screen.getByRole('button', { name: '주말만 운영(토·일)' }));
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => expect(onOperatingScheduleUpdated).toHaveBeenCalledWith('event-1', ['SAT', 'SUN'], null, null));
+    const patchCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/events/operating-schedule'));
+    expect(patchCall).toBeDefined();
+    expect(JSON.parse((patchCall![1] as RequestInit).body as string)).toEqual({
+      id: 'event-1',
+      operating_weekdays: ['SAT', 'SUN'],
+      excluded_weekdays: null,
+      operating_nth_weekdays: null,
     });
   });
 });
