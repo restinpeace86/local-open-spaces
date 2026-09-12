@@ -104,19 +104,49 @@ JS에서 요일 규칙을 추가로 걸러낸다(스팟 하나당 최대 10건 �
 DB 레벨에서 "배열 포함 + 오늘 날짜" 조합을 표현하기보다 애플리케이션에서 계산하는
 편이 명확함).
 
-## 특이 사항 — 사용자 확인 필요
-`get-home-feed.ts`의 다른 "오늘 진행중" 이벤트픽 피드들(예: 이벤트픽 홈 피드,
-`/api/events/ongoing`, `/api/events/today` 등)에는 이번 요일 규칙 검사를
-**적용하지 않았다**. 사용자의 지시가 "관리자 이벤트 상세 팝업"과 그 예시("이벤트
-팝업")를 중심으로 한 것이라 일단 스팟 연결 이벤트 노출 경로 하나에만 범위를
-좁혔는데, 홈 피드 전반에도 같은 요일 규칙이 적용되어야 하는지는 확인이 필요해
-별도로 질문했다(대화 답변 참고). 확인되면 후속 Step으로 나머지 라우트에도 동일
-필터를 추가할 것.
+## 후속(같은 날, 사용자 확인 답변 반영) — 적용 범위 확대
+위 "확인 필요" 질문에 사용자가 답했다: "스팟픽에 연결된 이벤트가 스팟픽 화면의
+스팟에서 어떤형태로든 뜨게 했을때 적용되어야하고 이벤트픽화면에서도 뜨는 이벤트들에
+대하여 해당 규칙대로 적용되게 해야돼."
+
+**스팟픽 쪽**: `linked-events`/`linkedEvents`를 참조하는 모든 파일을 실측 확인한
+결과, 연결된 이벤트가 노출되는 화면은 `detail-modal.tsx`(스팟 상세의 "🎪 진행 중인
+이벤트" 섹션, `/api/spots/linked-events` 기반) 하나뿐이었다 — 이미 위에서 적용을
+마쳤으므로 추가 조치 없음.
+
+**이벤트픽 쪽**: `get-home-feed.ts`의 `EVENT_COLUMNS`/`EventRow`에
+`operating_weekdays`/`excluded_weekdays`를 추가하고, 공용 헬퍼를 만들었다.
+```ts
+export function filterEventsOperatingToday<T extends { operating_weekdays: string[] | null; excluded_weekdays: string[] | null }>(
+  rows: T[]
+): T[] {
+  const now = new Date();
+  return rows.filter((row) => isEventOperatingOn(row, now));
+}
+```
+`EVENT_COLUMNS`를 사용하는 이벤트픽 조회 함수 전부(총 10개 지점 — fetch 직후,
+`toEventItem` 매핑 직전에 적용)에 공통으로 걸었다:
+`getTodayEvents`, `getReservationOpenEvents`, `getCurrentlyOngoingEvents`,
+`getTodayEventsPage`, `getCurrentlyOngoingEventsPage`, `getReservationOpenEventsPage`,
+`searchEvents`, `getFreeFeed`(events 분기), `getThemeSpotFeed`(events 분기),
+`getCategoryMinFeed`(events 분기). `/api/spots/linked-events`도 자체 필터 로직 대신
+이 공용 헬퍼로 통합해 중복을 없앴다(제5장 제4조 기존 구조 우선).
+
+**의도적으로 제외한 지점**: `getCategoryMinCounts()`는 특정 중분류가 바텀시트에
+표시할 만큼 실제 행이 있는지 판단하는 `count(*)`(head: true) 전용 쿼리다. 요일
+배열 포함 여부는 SQL 집계로 표현할 수 없어(행을 실제로 읽어야 판별 가능)
+이 함수만은 그대로 두었다 — 실제 카드가 이 카운트만으로 노출되는 게 아니라
+위 개별 조회 함수들이 다시 걸러내므로, 여기서 요일 규칙을 안 걸어도 화면에
+"쉬는 이벤트"가 실제로 보이는 일은 없다(단지 그 중분류 버튼이 근소하게 더
+자주 보일 수 있는 정도의 부수 효과 — 카운트가 오늘 쉬는 이벤트 하나뿐이라
+실제로는 0건인 특수한 경우에 한함).
 
 ## 검증
 - `npx tsc --noEmit`: 통과(신규 컬럼 반영을 위해 `npm run gen:types`로
   `database.types.ts` 재생성 필요했음 — 재생성 후 통과).
-- `npm run test -- --run`: 136 파일 / 1602건 전체 통과(신규 8건 —
-  `event-operating-schedule.test.ts` — + 신규 7건 —
-  `raw-data-modal.test.tsx`의 OperatingScheduleEditor 스위트).
+- `npm run test -- --run`: 136 파일 / 1604건 전체 통과. 신규 테스트: 8건
+  (`event-operating-schedule.test.ts`), 7건(`raw-data-modal.test.tsx`
+  OperatingScheduleEditor 스위트), 2건(`get-home-feed.test.ts` —
+  `getCurrentlyOngoingEvents`에 정기 휴무일/허용 요일 규칙 검증 추가, 실행 시점의
+  실제 요일을 동적으로 계산해 하드코딩된 날짜로 우연히 통과하지 않도록 함).
 - `npm run build`: 성공(`/api/admin/events/operating-schedule` 라우트 포함 확인).

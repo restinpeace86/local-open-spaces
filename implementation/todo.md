@@ -253,6 +253,20 @@
       홈피드(get-home-feed.ts) 등 다른 "오늘 진행중" 화면까지 확장할지는 사용자
       확인 필요(질문으로 별도 보고).
       (완료: 2026-09-12, 상세: implementation/2026-09-12-events-operating-weekdays.md)
+- [x] 개선사항10 후속5 (Step 130 후속, 사용자 지시): "스팟픽에 연결된 이벤트가 스팟픽
+      화면의 스팟에서 어떤형태로든 뜨게 했을때 적용되어야하고 이벤트픽화면에서도
+      뜨는 이벤트들에 대하여 해당 규칙대로 적용되게 해야돼" — 위 Step 130에서 남겨둔
+      "확인 필요" 항목에 대한 답변. 스팟픽 쪽은 실측 확인 결과 연결된 이벤트가 뜨는
+      화면이 detail-modal.tsx(스팟 상세의 "연결된 이벤트" 섹션, /api/spots/linked-events
+      기반) 하나뿐이라 이미 적용 완료 상태(추가 조치 불필요). 이벤트픽 쪽은
+      get-home-feed.ts의 EVENT_COLUMNS/EventRow에 operating_weekdays/excluded_weekdays를
+      추가하고 `filterEventsOperatingToday()` 공용 헬퍼를 만들어 EVENT_COLUMNS를 쓰는
+      이벤트픽 조회 함수 전부(오늘의 이벤트/현재 진행중/예약 가능/무료/테마/카테고리별
+      피드 및 각 전체보기 페이지·검색, 총 10개 지점)에 공통 적용. /api/spots/linked-events도
+      이 공용 헬퍼로 통합(중복 로직 제거). getCategoryMinCounts()(중분류 버튼 노출 여부를
+      결정하는 COUNT 전용 쿼리)는 요일 배열 필터가 count(*) 헤드 쿼리로 표현되지 않아
+      제외 — "그 중분류에 맞는 행이 존재하는지" 판단용이라 실제 카드 노출과는 무관.
+      (완료: 2026-09-12, 상세: implementation/2026-09-12-events-operating-weekdays.md)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.

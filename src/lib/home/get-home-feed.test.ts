@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { WEEKDAY_CODES } from '@/lib/spaces/event-operating-schedule';
 
 // Task 9-1-3: Haversine 반경 필터링을 걷어내고 sigungu_name 기반 지역 우선 정렬 + 중복 제거로
 // 전환한 것을 검증한다. Supabase 쿼리 빌더는 메서드 체이닝 후 마지막에 .limit()이 Promise를
@@ -1193,6 +1194,43 @@ describe('getCurrentlyOngoingEvents', () => {
     const items = await getCurrentlyOngoingEvents(10, { sigunguName: null });
 
     expect(items.map((item) => item.id)).toEqual(['ends-soon', 'ends-middle', 'ends-late']);
+  });
+
+  // [운영 요일/반복 규칙](2026-09-12 사용자 지시): "이벤트픽화면에서도 뜨는 이벤트들에
+  // 대하여 해당 규칙대로 적용되게 해야돼" — 기간(start~end) 안에 있어도 요일 규칙에
+  // 안 맞으면 이벤트픽 "현재 진행중" 피드에도 노출되면 안 된다. 실행 시점의 실제
+  // 요일을 계산해 검증한다(하드코딩된 날짜로 우연히 통과하는 것을 방지).
+  describe('운영 요일/반복 규칙(2026-09-12)', () => {
+    const todayCode = WEEKDAY_CODES[new Date().getDay()];
+    const otherCode = WEEKDAY_CODES[(new Date().getDay() + 1) % 7];
+
+    it('정기 휴무일이 오늘 요일과 일치하면 기간 중이어도 제외된다', async () => {
+      const closedToday = eventRow({ id: 'closed-today', is_active: true, excluded_weekdays: [todayCode] });
+      const noRule = eventRow({ id: 'no-rule', is_active: true });
+
+      vi.doMock('@/lib/supabase/server', () => ({
+        createClient: () => Promise.resolve({ from: () => makeFilteringChainable([closedToday, noRule]) }),
+      }));
+
+      const { getCurrentlyOngoingEvents } = await import('./get-home-feed');
+      const items = await getCurrentlyOngoingEvents(10, { sigunguName: null });
+
+      expect(items.map((item) => item.id)).toEqual(['no-rule']);
+    });
+
+    it('허용 요일 목록에 오늘 요일이 없으면 기간 중이어도 제외되고, 있으면 노출된다', async () => {
+      const wrongDayOnly = eventRow({ id: 'wrong-day', is_active: true, operating_weekdays: [otherCode] });
+      const todayIncluded = eventRow({ id: 'today-included', is_active: true, operating_weekdays: [todayCode] });
+
+      vi.doMock('@/lib/supabase/server', () => ({
+        createClient: () => Promise.resolve({ from: () => makeFilteringChainable([wrongDayOnly, todayIncluded]) }),
+      }));
+
+      const { getCurrentlyOngoingEvents } = await import('./get-home-feed');
+      const items = await getCurrentlyOngoingEvents(10, { sigunguName: null });
+
+      expect(items.map((item) => item.id)).toEqual(['today-included']);
+    });
   });
 
   // [카드 순서 우선순위 — 쏠림 수정](2026-08-27 후속 버그 수정): 대표가 실측으로 발견한 버그 —

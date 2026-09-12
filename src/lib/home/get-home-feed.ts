@@ -10,6 +10,7 @@ import {
   confidentSourceTypesFor,
   ThemeSpotKey,
 } from '@/lib/theme-spots';
+import { isEventOperatingOn } from '@/lib/spaces/event-operating-schedule';
 
 // Task 9-1(2026-08-22): 홈 화면 Hero Carousel/큐레이션 피드용 서버 사이드 조회 로직.
 // /api/home/feed 라우트와 홈 페이지 Server Component가 이 함수들을 공유해서 쓴다
@@ -95,8 +96,12 @@ function extractCoords(location: unknown): { lng: number; lat: number } {
 // [가격 정보 파싱 고도화](2026-09-11 사용자 지시, todo.md 개선사항7-1): price_text/
 // source_url 추가 — 4개 이벤트 생산 어댑터가 새로 채우기 시작한 컬럼을 유저 화면에서
 // 읽으려면 이 SELECT 목록에 포함돼야 한다.
+// [운영 요일/반복 규칙](2026-09-12 사용자 지시): "이벤트픽화면에서도 뜨는 이벤트들에
+// 대하여 해당 규칙대로 적용되게 해야돼" — 상세팝업(관리자)에서 지정한 운영 요일
+// 허용목록/정기 휴무 제외목록을 이벤트픽 화면 전체에서 걸러내려면 이 두 컬럼이
+// 모든 이벤트 조회에 공통으로 실려야 한다(EVENT_COLUMNS를 쓰는 모든 함수가 대상).
 export const EVENT_COLUMNS =
-  'id, title, description, event_type, category_min, target_audience, location, location_precision, thumbnail_url, start_date, end_date, reservation_start_date, reservation_end_date, reservation_url, is_reservation_required, is_free, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, venue_name, sigungu_name, price_text, source_url';
+  'id, title, description, event_type, category_min, target_audience, location, location_precision, thumbnail_url, start_date, end_date, reservation_start_date, reservation_end_date, reservation_url, is_reservation_required, is_free, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, venue_name, sigungu_name, price_text, source_url, operating_weekdays, excluded_weekdays';
 
 export type EventRow = {
   id: string;
@@ -125,7 +130,22 @@ export type EventRow = {
   sigungu_name: string | null;
   price_text: string | null;
   source_url: string | null;
+  operating_weekdays: string[] | null;
+  excluded_weekdays: string[] | null;
 };
+
+// [운영 요일/반복 규칙](2026-09-12 사용자 지시): "이벤트 기간중에 있더라도 이에
+// 부합하지 않으면 안나오도록해야돼" — start_date~end_date 기간 필터는 각 쿼리가
+// 이미 개별로 걸고, 그 결과를 화면용으로 매핑(toEventItem)하기 직전에 이 필터를
+// 공통으로 한 번 더 거친다(EVENT_PICK_TARGET_AUDIENCES와 동일하게 이벤트픽 전
+// 조회가 공유하는 관례). /api/spots/linked-events(스팟픽 연결 이벤트)도 이 함수를
+// 그대로 재사용한다.
+export function filterEventsOperatingToday<T extends { operating_weekdays: string[] | null; excluded_weekdays: string[] | null }>(
+  rows: T[]
+): T[] {
+  const now = new Date();
+  return rows.filter((row) => isEventOperatingOn(row, now));
+}
 
 export function toEventItem(row: EventRow): NearbyItem {
   const { lng, lat } = extractCoords(row.location);
@@ -556,7 +576,7 @@ export async function getTodayEvents(
 
   const data = await fetchRegionFirstRows<EventRow>(buildQuery, region, limit);
 
-  const items = dedupeAndMergeFree(data.map(toEventItem));
+  const items = dedupeAndMergeFree(filterEventsOperatingToday(data).map(toEventItem));
   const distanceOrdered = sortByDistanceIfKnown(items, region);
   const dateOrdered = sortByEndDateAscending(distanceOrdered);
   const regionOrdered = rankByRegion(dateOrdered, region, heroRegionTier);
@@ -631,7 +651,7 @@ export async function getReservationOpenEvents(
 
   const data = await fetchRegionFirstRows<EventRow>(buildQuery, region, limit);
 
-  const items = dedupeAndMergeFree(data.map(toEventItem));
+  const items = dedupeAndMergeFree(filterEventsOperatingToday(data).map(toEventItem));
   const distanceOrdered = sortByDistanceIfKnown(items, region);
   const dateOrdered = sortByEndDateAscending(distanceOrdered);
   const regionOrdered = dateOrdered.sort(byRegionPriority(region));
@@ -709,7 +729,7 @@ export async function getCurrentlyOngoingEvents(
 
   const data = await fetchRegionFirstRows<EventRow>(buildQuery, region, limit);
 
-  const items = dedupeAndMergeFree(data.map(toEventItem));
+  const items = dedupeAndMergeFree(filterEventsOperatingToday(data).map(toEventItem));
   const distanceOrdered = sortByDistanceIfKnown(items, region);
   const dateOrdered = sortByEndDateAscending(distanceOrdered);
   const regionOrdered = dateOrdered.sort(byRegionPriority(region));
@@ -783,7 +803,7 @@ export async function getTodayEventsPage(
     return query.order('end_date', { ascending: true }).range(from, to);
   });
 
-  return finalizeBrowsePage(rows.map(toEventItem), region, page, pageSize);
+  return finalizeBrowsePage(filterEventsOperatingToday(rows).map(toEventItem), region, page, pageSize);
 }
 
 // [이벤트픽 전체보기 바텀시트化](2026-08-29 사용자 지시): 페이지 이동 대신 바텀시트에서
@@ -814,7 +834,7 @@ export async function getCurrentlyOngoingEventsPage(
     return query.order('end_date', { ascending: true }).range(from, to);
   });
 
-  return finalizeBrowsePage(rows.map(toEventItem), region, page, pageSize);
+  return finalizeBrowsePage(filterEventsOperatingToday(rows).map(toEventItem), region, page, pageSize);
 }
 
 export async function getReservationOpenEventsPage(
@@ -843,7 +863,7 @@ export async function getReservationOpenEventsPage(
     return query.order('end_date', { ascending: true }).range(from, to);
   });
 
-  return finalizeBrowsePage(rows.map(toEventItem), region, page, pageSize);
+  return finalizeBrowsePage(filterEventsOperatingToday(rows).map(toEventItem), region, page, pageSize);
 }
 
 // [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "GNB 헤더 & 글로벌 위치 상태 공유"):
@@ -887,7 +907,7 @@ export async function searchEvents(keyword: string, limit = 30): Promise<NearbyI
 
   if (error) throw new Error(error.message);
 
-  return ((data ?? []) as EventRow[]).map(toEventItem);
+  return filterEventsOperatingToday((data ?? []) as EventRow[]).map(toEventItem);
 }
 
 // [스팟픽 전국구 서버사이드 검색](2026-08-30 사용자 지시): /nearby(스팟픽) 지도 검색이
@@ -1042,7 +1062,7 @@ export async function getFreeFeed(
     dataType === 'events' ? fetchRegionFirstRows<EventRow>(buildEventsQuery, region, limit) : Promise.resolve([]),
   ]);
 
-  const merged = dedupeAndMergeFree([...spaceRows.map(toSpaceItem), ...eventRows.map(toEventItem)]);
+  const merged = dedupeAndMergeFree([...spaceRows.map(toSpaceItem), ...filterEventsOperatingToday(eventRows).map(toEventItem)]);
   const ordered = sortByDistanceIfKnown(merged, region);
   return ordered.sort(byRegionPriority(region)).slice(0, limit);
 }
@@ -1132,7 +1152,10 @@ export async function getThemeSpotFeed(
     }
   }
 
-  const merged = dedupeAndMergeFree([...spaceRows.map(toSpaceItem), ...(eventResult.data ?? []).map(toEventItem)]);
+  const merged = dedupeAndMergeFree([
+    ...spaceRows.map(toSpaceItem),
+    ...filterEventsOperatingToday((eventResult.data ?? []) as EventRow[]).map(toEventItem),
+  ]);
   const ordered = sortByDistanceIfKnown(merged, region);
   return ordered.sort(byRegionPriority(region)).slice(0, limit);
 }
@@ -1221,7 +1244,7 @@ export async function getCategoryMinFeed(
   // getEventStatus()가 이를 "상시" 상태로 인식해 [상시] 뱃지를 보여준다(날짜 정보가
   // 없어도 자연스럽게 처리되도록 event-status.ts에도 분기를 추가했다).
   const spaceItems = spaceData.map((row) => ({ ...toSpaceItem(row), item_type: 'EVENT' as const }));
-  const items = dedupeAndMergeFree([...eventData.map(toEventItem), ...spaceItems]);
+  const items = dedupeAndMergeFree([...filterEventsOperatingToday(eventData).map(toEventItem), ...spaceItems]);
   const ordered = sortByDistanceIfKnown(items, region);
   return selectRegionFirst(ordered, region, offset, limit);
 }

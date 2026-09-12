@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { EVENT_COLUMNS, EVENT_PICK_TARGET_AUDIENCES, EventRow, toEventItem } from '@/lib/home/get-home-feed';
-import { isEventOperatingOn } from '@/lib/spaces/event-operating-schedule';
+import { EVENT_COLUMNS, EVENT_PICK_TARGET_AUDIENCES, EventRow, filterEventsOperatingToday, toEventItem } from '@/lib/home/get-home-feed';
 
 // [개선사항10](2026-09-11 사용자 지시, implementation/todo.md): "Spot ➔ Event: 스팟
 // 상세 페이지에 현재 활성화/예정된 이벤트 섹션을 표시하고, 없으면 섹션 자체를
@@ -28,12 +27,15 @@ export async function GET(request: NextRequest) {
     // 원천데이터꺼로 하긴 하는데 예외 규칙을 여기서 집어넣으면 해당 예외 규칙도
     // 적용되도록.. 이벤트 기간중에 있더라도 이에 부합하지 않으면 안나오도록해야돼"
     // — start_date~end_date 기간 필터(위 gte)는 그대로 두고, 그 안에서도 오늘
-    // 요일이 관리자가 지정한 운영/휴무 요일 규칙에 맞는지 추가로 검사한다. DB
-    // 필터로는 표현하기 까다로워(요일 배열 포함 여부 + "오늘" 계산) 조회 후 JS에서
-    // 걸러낸다 — 스팟 하나당 최대 LINKED_EVENTS_LIMIT건이라 성능 문제 없음.
+    // 요일이 관리자가 지정한 운영/휴무 요일 규칙에 맞는지 filterEventsOperatingToday로
+    // 추가로 검사한다(get-home-feed.ts의 다른 이벤트픽 조회들과 동일하게 공유하는
+    // 헬퍼 — EVENT_COLUMNS에 operating_weekdays/excluded_weekdays가 이미 포함돼
+    // 있어 별도 컬럼을 더 붙일 필요가 없다). DB 필터로는 표현하기 까다로워(요일
+    // 배열 포함 여부 + "오늘" 계산) 조회 후 JS에서 걸러낸다 — 스팟 하나당 최대
+    // LINKED_EVENTS_LIMIT건이라 성능 문제 없음.
     const { data, error } = await supabase
       .from('events')
-      .select(`${EVENT_COLUMNS}, operating_weekdays, excluded_weekdays`)
+      .select(EVENT_COLUMNS)
       .eq('space_id', spotId)
       .eq('is_active', true)
       .gte('end_date', today)
@@ -43,12 +45,7 @@ export async function GET(request: NextRequest) {
 
     if (error || !data) return NextResponse.json({ events: [] });
 
-    const now = new Date();
-    const operatingToday = (
-      data as (EventRow & { operating_weekdays: string[] | null; excluded_weekdays: string[] | null })[]
-    ).filter((row) => isEventOperatingOn(row, now));
-
-    return NextResponse.json({ events: operatingToday.map(toEventItem) });
+    return NextResponse.json({ events: filterEventsOperatingToday(data as EventRow[]).map(toEventItem) });
   } catch {
     return NextResponse.json({ events: [] });
   }
