@@ -115,6 +115,11 @@ export type AdminEventRow = {
   // [개선사항10](2026-09-11 사용자 지시): 연결된 open_spaces 행(기존 FK 컬럼,
   // events_space_id_fkey). null이면 미연결.
   space_id?: string | null;
+  // [운영 요일/반복 규칙](2026-09-12 사용자 지시): start_date~end_date 기간 내에서도
+  // 특정 요일에만 운영하거나(예: 주말만) 정기 휴무 요일이 있는 경우의 예외 규칙.
+  // null/빈 배열 = 제약 없음(기존 이벤트 전체와 동일하게 매일 운영).
+  operating_weekdays?: string[] | null;
+  excluded_weekdays?: string[] | null;
 };
 
 export type AdminRawIngestRow = {
@@ -1747,6 +1752,20 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
             setSelectedRow((prev) =>
               prev && 'id' in prev && prev.id === id
                 ? { ...prev, target_audience: nextTargetAudience, target_audience_source: nextSource }
+                : prev
+            );
+          }}
+          onOperatingScheduleUpdated={(id, nextOperatingWeekdays, nextExcludedWeekdays) => {
+            setRows((prev) =>
+              prev.map((row) =>
+                'id' in row && row.id === id
+                  ? { ...row, operating_weekdays: nextOperatingWeekdays, excluded_weekdays: nextExcludedWeekdays }
+                  : row
+              )
+            );
+            setSelectedRow((prev) =>
+              prev && 'id' in prev && prev.id === id
+                ? { ...prev, operating_weekdays: nextOperatingWeekdays, excluded_weekdays: nextExcludedWeekdays }
                 : prev
             );
           }}

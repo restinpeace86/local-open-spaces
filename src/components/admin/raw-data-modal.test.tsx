@@ -946,3 +946,168 @@ describe('RawDataModal — 연결된 스팟(space_id) 편집기 (개선사항10,
     expect(screen.queryByText('연결된 스팟(open_spaces)')).not.toBeInTheDocument();
   });
 });
+
+// [관리자 이벤트 상세 팝업 내 '운영 요일 / 반복 규칙' 설정 추가](2026-09-12 사용자 지시):
+// "☑️ 주말만 운영 / ☑️ 특정 요일 지정 / ☑️ 정기 휴무일 제외 .. 택 1 또는 조합". events
+// 탭 전용 OperatingScheduleEditor를 검증한다.
+describe('RawDataModal — 운영 요일/반복 규칙 편집기 (2026-09-12)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('events 탭에서만 노출되고, open_spaces 탭에는 없다', () => {
+    const eventsRow = { ...buildRow(), title: '가을 축제', operating_weekdays: null, excluded_weekdays: null };
+    render(
+      <RawDataModal
+        table="events"
+        row={eventsRow as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        onClose={vi.fn()}
+        onOperatingScheduleUpdated={vi.fn()}
+      />
+    );
+    expect(screen.getByText('운영 요일 / 반복 규칙')).toBeInTheDocument();
+
+    const openSpaceRow = buildRow();
+    render(
+      <RawDataModal table="open_spaces" row={openSpaceRow} categoryMinOptions={[]} onClose={vi.fn()} onOperatingScheduleUpdated={vi.fn()} />
+    );
+    expect(screen.queryAllByText('운영 요일 / 반복 규칙')).toHaveLength(1); // 위에서 이미 렌더된 것 1개뿐, open_spaces엔 추가되지 않음
+  });
+
+  it('규칙이 없으면 "매일 운영" 프리셋이 기본 선택돼 있다', () => {
+    const row = { ...buildRow(), title: '가을 축제', operating_weekdays: null, excluded_weekdays: null };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        onClose={vi.fn()}
+        onOperatingScheduleUpdated={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: '매일 운영' })).toHaveClass('bg-purple-600');
+  });
+
+  it('"주말만 운영" 프리셋을 선택해 저장하면 operating_weekdays=[SAT,SUN]으로 PATCH한다', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ row: { id: 'row-1', operating_weekdays: ['SAT', 'SUN'], excluded_weekdays: null } }),
+      } as Response)
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const onOperatingScheduleUpdated = vi.fn();
+    const row = { ...buildRow(), title: '가을 축제', operating_weekdays: null, excluded_weekdays: null };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        onClose={vi.fn()}
+        onOperatingScheduleUpdated={onOperatingScheduleUpdated}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '주말만 운영(토·일)' }));
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => expect(onOperatingScheduleUpdated).toHaveBeenCalledWith('row-1', ['SAT', 'SUN'], null));
+    const patchCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/events/operating-schedule'));
+    expect(patchCall).toBeDefined();
+    expect(JSON.parse((patchCall![1] as RequestInit).body as string)).toEqual({
+      id: 'row-1',
+      operating_weekdays: ['SAT', 'SUN'],
+      excluded_weekdays: null,
+    });
+  });
+
+  it('"특정 요일 지정"을 고르고 화/목을 체크해 저장하면 그 두 요일만 PATCH한다', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ row: { id: 'row-1', operating_weekdays: ['TUE', 'THU'], excluded_weekdays: null } }),
+      } as Response)
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const row = { ...buildRow(), title: '가을 축제', operating_weekdays: null, excluded_weekdays: null };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        onClose={vi.fn()}
+        onOperatingScheduleUpdated={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '특정 요일 지정' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '화' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '목' }));
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => {
+      const patchCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/events/operating-schedule'));
+      expect(patchCall).toBeDefined();
+      expect(JSON.parse((patchCall![1] as RequestInit).body as string)).toEqual({
+        id: 'row-1',
+        operating_weekdays: ['TUE', 'THU'],
+        excluded_weekdays: null,
+      });
+    });
+  });
+
+  // [사용자 제시 예시] "정기 휴무일이 매주 월요일이라고 했을 때"
+  it('"정기 휴무일 지정"을 체크하고 월요일을 골라 저장하면 excluded_weekdays=[MON]으로 PATCH한다(매일 운영과 조합)', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) =>
+      Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ row: { id: 'row-1', operating_weekdays: null, excluded_weekdays: ['MON'] } }),
+      } as Response)
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const row = { ...buildRow(), title: '가을 축제', operating_weekdays: null, excluded_weekdays: null };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        onClose={vi.fn()}
+        onOperatingScheduleUpdated={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('checkbox', { name: '정기 휴무일 지정(예: 매주 월요일 휴무)' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '월' }));
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() => {
+      const patchCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/events/operating-schedule'));
+      expect(patchCall).toBeDefined();
+      expect(JSON.parse((patchCall![1] as RequestInit).body as string)).toEqual({
+        id: 'row-1',
+        operating_weekdays: null,
+        excluded_weekdays: ['MON'],
+      });
+    });
+  });
+
+  it('저장된 규칙(주말만 운영)을 다시 열면 프리셋이 복원된다', () => {
+    const row = { ...buildRow(), title: '가을 축제', operating_weekdays: ['SAT', 'SUN'], excluded_weekdays: ['MON'] };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        onClose={vi.fn()}
+        onOperatingScheduleUpdated={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: '주말만 운영(토·일)' })).toHaveClass('bg-purple-600');
+    // 정기 휴무일 체크박스도 이미 체크돼 있고, 월요일이 선택돼 보인다.
+    expect(screen.getByRole('checkbox', { name: '정기 휴무일 지정(예: 매주 월요일 휴무)' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: '월' })).toBeChecked();
+  });
+});

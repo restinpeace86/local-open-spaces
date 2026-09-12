@@ -240,6 +240,19 @@
       open_spaces는 무관. 현재 값이 15종 밖(SEOUL_YEYAK 강의실 등)이어도 값 자체는
       안 지움 — 새로 "고를 수 있는" 범위만 제한.
       (완료: 2026-09-12, 상세: implementation/2026-09-12-events-category-min-manual-editor-restriction.md)
+- [x] 개선사항10 후속4 (Step 130, 사용자 지시): "관리자 이벤트 상세 팝업 내 '운영
+      요일 / 반복 규칙' 설정 추가.. 매일 운영(기본값) + 예외 규칙(주말만 운영/특정
+      요일 지정/정기 휴무일 제외, 택1 또는 조합).. 이벤트 기간중이라도 이에 부합
+      하지 않으면 안나오도록". `events.operating_weekdays`/`excluded_weekdays`
+      text[] 컬럼 추가(둘 다 null/빈배열=제약없음, 독립 조합 가능 — 3개 토글이
+      아니라 허용목록/제외목록 2개로 모델링). `isEventOperatingOn()` 순수함수로
+      판정, 상세팝업(CategoryMinEditor/TargetAudienceEditor 다음 위치)에
+      OperatingScheduleEditor 추가(프리셋 버튼 3종 + 정기휴무 체크박스, PATCH
+      /api/admin/events/operating-schedule). 실제 필터링은 현재
+      /api/spots/linked-events(스팟 상세→연결된 이벤트)에만 적용 — 이벤트픽
+      홈피드(get-home-feed.ts) 등 다른 "오늘 진행중" 화면까지 확장할지는 사용자
+      확인 필요(질문으로 별도 보고).
+      (완료: 2026-09-12, 상세: implementation/2026-09-12-events-operating-weekdays.md)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.

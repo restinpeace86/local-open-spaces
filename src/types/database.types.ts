@@ -244,6 +244,7 @@ export type Database = {
           description: string | null
           end_date: string
           event_type: string
+          excluded_weekdays: string[] | null
           external_id: string
           facility_type: string
           has_parking: boolean
@@ -254,6 +255,7 @@ export type Database = {
           is_reservation_required: boolean | null
           location: unknown
           location_precision: string
+          operating_weekdays: string[] | null
           price_text: string | null
           raw_data: Json | null
           reservation_end_date: string | null
@@ -270,6 +272,7 @@ export type Database = {
           target_audience_source: string | null
           thumbnail_url: string | null
           title: string
+          updated_at: string
           venue_name: string | null
         }
         Insert: {
@@ -282,6 +285,7 @@ export type Database = {
           description?: string | null
           end_date: string
           event_type: string
+          excluded_weekdays?: string[] | null
           external_id: string
           facility_type?: string
           has_parking?: boolean
@@ -292,6 +296,7 @@ export type Database = {
           is_reservation_required?: boolean | null
           location?: unknown
           location_precision?: string
+          operating_weekdays?: string[] | null
           price_text?: string | null
           raw_data?: Json | null
           reservation_end_date?: string | null
@@ -308,6 +313,7 @@ export type Database = {
           target_audience_source?: string | null
           thumbnail_url?: string | null
           title: string
+          updated_at?: string
           venue_name?: string | null
         }
         Update: {
@@ -320,6 +326,7 @@ export type Database = {
           description?: string | null
           end_date?: string
           event_type?: string
+          excluded_weekdays?: string[] | null
           external_id?: string
           facility_type?: string
           has_parking?: boolean
@@ -330,6 +337,7 @@ export type Database = {
           is_reservation_required?: boolean | null
           location?: unknown
           location_precision?: string
+          operating_weekdays?: string[] | null
           price_text?: string | null
           raw_data?: Json | null
           reservation_end_date?: string | null
@@ -346,6 +354,7 @@ export type Database = {
           target_audience_source?: string | null
           thumbnail_url?: string | null
           title?: string
+          updated_at?: string
           venue_name?: string | null
         }
         Relationships: [
@@ -1561,6 +1570,7 @@ export type Database = {
       }
       gettransactionid: { Args: never; Returns: unknown }
       longtransactionsenabled: { Args: never; Returns: boolean }
+      match_events_to_open_spaces: { Args: never; Returns: number }
       normalize_address_region_prefix: {
         Args: { addr: string }
         Returns: string
