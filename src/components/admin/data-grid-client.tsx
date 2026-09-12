@@ -70,7 +70,11 @@ export type AdminOpenSpaceRow = {
   stroller_accessible: boolean;
   facility_type: string;
   target_age_group: string | null;
-  raw_data: unknown;
+  // [관리자화면 프론트엔드 렌더링 지연 진단](2026-09-12 사용자 지시): 목록 조회가
+  // raw_data 전체를 실어 나르던 것을 없앴다(그리드 행은 이 값을 전혀 안 씀) —
+  // 상세 모달을 열 때만 /api/admin/data-grid/raw-data로 따로 받아온다. undefined =
+  // 아직 안 받아옴, null = 조회했지만 값이 없음.
+  raw_data?: unknown;
   sigungu_name: string | null;
   created_at: string | null;
   updated_at: string | null;
@@ -106,7 +110,17 @@ export type AdminEventRow = {
   target_age_group: string | null;
   booking_status: string | null;
   is_active: boolean | null;
-  raw_data: unknown;
+  // [관리자화면 프론트엔드 렌더링 지연 진단](2026-09-12 사용자 지시): "데이터를
+  // 가져오는게 크게 없는데?" — 실측 결과 raw_data가 events 목록 페이로드의
+  // 60~66%를 차지하는데 그리드 행은 이 중 3개 문자열 필드(max_class/min_class/
+  // svc_stat, 아래)만 쓴다. raw_data 전체는 목록에서 빼고 상세 모달을 열 때만
+  // /api/admin/data-grid/raw-data로 따로 받아온다.
+  raw_data?: unknown;
+  // route.ts의 EVENTS_COLUMNS가 raw_data->>'MAXCLASSNM' 등을 별칭으로 직접
+  // SELECT한 값 — 그리드 행(원천 대/중분류·접수상태 컬럼)이 쓰는 값 그대로다.
+  max_class?: string | null;
+  min_class?: string | null;
+  svc_stat?: string | null;
   created_at: string | null;
   // [events.updated_at 컬럼 + 자동 갱신 트리거](2026-09-12 사용자 지시): 실제 값이
   // 바뀔 때만 트리거가 갱신한다(raw_data 등 잡음 컬럼은 제외) — 컬럼이 없던 동안
@@ -357,12 +371,6 @@ export function extractLngLat(location: unknown): { lng: number; lat: number } |
   const geometry = location as { coordinates?: [number, number] } | null;
   if (!geometry?.coordinates) return null;
   return { lng: geometry.coordinates[0], lat: geometry.coordinates[1] };
-}
-
-function rawField(raw: unknown, key: string): string | null {
-  const obj = raw as Record<string, unknown> | null;
-  const value = obj?.[key];
-  return typeof value === 'string' ? value : null;
 }
 
 function TriStateToggle({ label, value, onChange }: { label: string; value: TriState; onChange: (next: TriState) => void }) {
@@ -811,11 +819,36 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
       });
   }
 
+  // [관리자화면 프론트엔드 렌더링 지연 진단](2026-09-12 사용자 지시): "데이터를
+  // 가져오는게 크게 없는데?" — 실측 결과 목록 조회가 raw_data(JSONB) 전체를 매 행
+  // 실어 날랐는데(그리드 행은 이 값을 거의 안 씀) 상세 모달을 열 때만 실제로
+  // 필요했다. 목록에서는 이제 raw_data를 안 받아오므로(route.ts), 행을 열 때 이
+  // 한 건만 따로 받아와 rows/selectedRow 양쪽에 채운다(이미 받아온 적 있으면
+  // 재조회하지 않음 — raw_data !== undefined로 판단).
+  function ensureRawDataLoaded(openTable: 'open_spaces' | 'events', row: AdminOpenSpaceRow | AdminEventRow) {
+    if (row.raw_data !== undefined) return;
+    fetch(`/api/admin/data-grid/raw-data?table=${openTable}&id=${encodeURIComponent(row.id)}`)
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) return;
+        const rawData = data.raw_data ?? null;
+        setRows((prev) => prev.map((r) => ('id' in r && r.id === row.id ? { ...r, raw_data: rawData } : r)));
+        setSelectedRow((prev) => (prev && 'id' in prev && prev.id === row.id ? { ...prev, raw_data: rawData } : prev));
+      })
+      .catch(() => {
+        // 조용한 부가 조회 실패는 화면을 막지 않는다(제5장 제11조) — 상세 모달의
+        // raw_data 섹션만 "불러오는 중" 상태로 남는다.
+      });
+  }
+
   function handleOpenDataRow(row: AdminRow) {
     setSelectedRow(row);
     // [연결된 스팟의 노출 중분류 확인/입력](2026-09-12 사용자 지시): events 탭 상세도
     // SpaceLinkEditor가 노출 중분류 목록/선택 UI를 보여줘야 해 함께 로드한다.
-    if (tab === 'open_spaces' || tab === 'events') ensureServiceCategoriesLoaded();
+    if (tab === 'open_spaces' || tab === 'events') {
+      ensureServiceCategoriesLoaded();
+      ensureRawDataLoaded(tab, row as AdminOpenSpaceRow | AdminEventRow);
+    }
   }
 
   function toggleRowSelection(id: string) {
@@ -1566,9 +1599,12 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                 const categoryValue = isEvent ? (r as AdminEventRow).event_type : (r as AdminOpenSpaceRow).category;
                 const meta = getCategoryMeta(categoryValue);
                 const coords = extractLngLat(r.location);
-                const maxClass = rawField(r.raw_data, 'MAXCLASSNM');
-                const minClass = rawField(r.raw_data, 'MINCLASSNM');
-                const svcStat = rawField(r.raw_data, 'SVCSTATNM');
+                // [관리자화면 프론트엔드 렌더링 지연 진단](2026-09-12 사용자 지시):
+                // raw_data 전체 대신 route.ts가 별칭으로 뽑아둔 값을 그대로 쓴다
+                // (open_spaces에는 이 필드가 없어 항상 undefined → null로 폴백).
+                const maxClass = isEvent ? (r as AdminEventRow).max_class ?? null : null;
+                const minClass = isEvent ? (r as AdminEventRow).min_class ?? null : null;
+                const svcStat = isEvent ? (r as AdminEventRow).svc_stat ?? null : null;
                 const updatedAt = isEvent ? (r as AdminEventRow).created_at : (r as AdminOpenSpaceRow).updated_at ?? (r as AdminOpenSpaceRow).created_at;
                 // 요구사항 3: 오늘 자정 이후 새로 생성된 건 [NEW] 뱃지. "내용 갱신([UPDATED])"은
                 // TodayBatchSummary 주석과 동일한 이유로 이번 범위에 포함하지 않는다.

@@ -324,6 +324,19 @@
       인덱스 2개 추가 + 함수를 4개 독립 서브쿼리로 재작성해 8274ms(타임아웃)
       → 352ms로 해결. 코드 변경 없음(순수 DB 마이그레이션).
       (완료: 2026-09-12, 상세: implementation/2026-09-12-admin-data-grid-events-filter-options-timeout-fix.md)
+- [x] Step 134 (사용자 지시): "아까보단 빨라졌는데 그래도 느린데 db쪽이 아니라면
+      프론트엔드쪽의 랜더링쪽에서 뭔가 느린거 아니야? 데이터를 가져오는게 크게
+      없는데?" — 실측 결과 렌더링이 아니라 목록 조회 응답 자체가 화면에 안 보이는
+      raw_data(JSONB)를 매번 통째로 실어 나르고 있었음. open_spaces는 raw_data를
+      그리드 행이 전혀 안 쓰는데도 200건 조회 시 66.4KB(27%) 포함, events는
+      3개 문자열 필드(MAXCLASSNM/MINCLASSNM/SVCSTATNM)만 쓰는데 404.3KB(62%)
+      포함. open_spaces 목록에서 raw_data 완전 제거, events는 PostgREST 별칭
+      (`max_class:raw_data->>MAXCLASSNM` 등)으로 필요한 3개 필드만 SELECT.
+      상세 모달을 열 때만 신규 라우트(/api/admin/data-grid/raw-data)로 그 한
+      건의 raw_data를 따로 받아옴(data-grid-client.tsx ensureRawDataLoaded).
+      200건 기준 open_spaces 246.9KB→177.5KB(-28%), events 655.0KB→231.9KB
+      (-65%).
+      (완료: 2026-09-12, 상세: implementation/2026-09-12-admin-data-grid-raw-data-overfetch-fix.md)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.

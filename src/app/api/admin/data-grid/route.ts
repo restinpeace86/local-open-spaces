@@ -136,8 +136,23 @@ function applyDateRange<Q extends { gte: (c: string, v: string) => Q; lt: (c: st
 // 직접 노출하지는 않지만, queryOpenSpacesViaSourceSubset(SEOUL_YEYAK 전용 JS 필터
 // 경로 — 정확히 이번에 문제가 된 캠핑장 데이터가 지나가는 경로)가 이 값을 JS에서
 // 직접 걸러야 해서 SELECT 목록에 반드시 포함해야 한다.
+// [관리자화면 프론트엔드 렌더링 지연 진단](2026-09-12 사용자 지시): "느린데 db쪽이
+// 아니라면 프론트엔드쪽의 랜더링쪽에서 뭔가 느린거 아니야? 데이터를 가져오는게
+// 크게 없는데?" — 실측해보니 정반대였다: 목록 조회가 raw_data(JSONB) 전체를
+// 매번 실어 날랐는데, 목록 화면(그리드 행)은 raw_data를 전혀 안 쓰거나(open_spaces)
+// 그중 딱 3개 문자열 필드만 쓴다(events의 MAXCLASSNM/MINCLASSNM/SVCSTATNM). 실측
+// 페이로드: open_spaces 200건에 raw_data가 66KB(27%), events 200건에 raw_data가
+// 404KB(62%) — 화면에 안 보이는 데이터를 매번 통째로 내려받고 파싱하고 있었다.
+// raw_data는 상세 모달(원문 JSON 보기)에서만 필요하므로 목록에서는 빼고,
+// 상세 모달을 열 때만 /api/admin/data-grid/raw-data로 그 한 건만 따로 받아온다
+// (아래 GET 핸들러, data-grid-client.tsx의 handleOpenDataRow가 호출).
 const OPEN_SPACES_COLUMNS =
-  'id, external_id, source_type, source, name, category, category_min, category_min_source, service_category_id, group_id, is_dedup_representative, address, location, location_precision, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, raw_data, sigungu_name, created_at, updated_at';
+  'id, external_id, source_type, source, name, category, category_min, category_min_source, service_category_id, group_id, is_dedup_representative, address, location, location_precision, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, sigungu_name, created_at, updated_at';
+
+// queryOpenSpacesViaSourceSubset(SEOUL_YEYAK 전용 JS 메모리 필터 경로)만은 여전히
+// raw_data->>'MINCLASSNM'/'SVCSTATNM'를 애플리케이션 코드에서 직접 읽어야 해서
+// raw_data 원본이 필요하다 — 이 경로 전용으로만 raw_data를 더한 컬럼 목록을 따로 둔다.
+const OPEN_SPACES_COLUMNS_WITH_RAW_DATA = `${OPEN_SPACES_COLUMNS}, raw_data`;
 
 // [개선사항10](2026-09-11 사용자 지시): space_id(기존 FK 컬럼) 추가 — 관리자 화면이
 // "연결된 스팟" 편집기에서 현재 연결 상태를 보여주려면 목록 조회에도 포함돼야 한다.
@@ -147,8 +162,12 @@ const OPEN_SPACES_COLUMNS =
 // operating_nth_weekdays도 상세 모달의 새 편집기가 "현재 값"을 바로 보여주려면 목록
 // 조회에 포함돼야 한다(CategoryMinEditor/TargetAudienceEditor와 동일한 관례 — 별도
 // GET 없이 이미 받아온 row에서 바로 읽음).
+// [프론트엔드 렌더링 지연 진단](2026-09-12) 후속: raw_data 전체 대신 그리드 행이
+// 실제로 표시하는 3개 필드만 PostgREST 표현식 별칭(alias:column->>path)으로 뽑는다
+// — SQL WHERE 필터(raw_data->>'MINCLASSNM' 등)는 SELECT 목록과 무관하게 계속 그대로
+// 작동한다(아래 쿼리 빌더의 .filter() 호출 참고).
 const EVENTS_COLUMNS =
-  'id, external_id, source, title, event_type, category_maj, category_min, category_min_source, target_audience, target_audience_source, venue_name, sigungu_name, start_date, end_date, location, location_precision, is_reservation_required, reservation_url, reservation_start_date, reservation_end_date, is_free, thumbnail_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, is_active, raw_data, created_at, updated_at, space_id, operating_weekdays, excluded_weekdays, operating_nth_weekdays';
+  "id, external_id, source, title, event_type, category_maj, category_min, category_min_source, target_audience, target_audience_source, venue_name, sigungu_name, start_date, end_date, location, location_precision, is_reservation_required, reservation_url, reservation_start_date, reservation_end_date, is_free, thumbnail_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, is_active, created_at, updated_at, space_id, operating_weekdays, excluded_weekdays, operating_nth_weekdays, max_class:raw_data->>MAXCLASSNM, min_class:raw_data->>MINCLASSNM, svc_stat:raw_data->>SVCSTATNM";
 
 const RAW_INGEST_COLUMNS = 'source, source_id, fetched_at, raw_payload';
 
@@ -190,7 +209,10 @@ async function queryOpenSpacesViaSourceSubset(
     pageSize: number;
   }
 ) {
-  const { data, error } = await supabase.from('open_spaces').select(OPEN_SPACES_COLUMNS).eq('source', SEOUL_YEYAK_SOURCE);
+  // 이 경로는 raw_data.MINCLASSNM/SVCSTATNM을 애플리케이션 코드에서 직접 읽어야 해서
+  // (아래 filtered 안 rawData 참고) raw_data가 포함된 컬럼 목록을 쓴다 — 나머지 목록
+  // 조회 경로와 달리 여기서만 예외적으로 필요하다.
+  const { data, error } = await supabase.from('open_spaces').select(OPEN_SPACES_COLUMNS_WITH_RAW_DATA).eq('source', SEOUL_YEYAK_SOURCE);
   if (error) return { error };
 
   type Row = NonNullable<typeof data>[number];

@@ -592,6 +592,12 @@ export function RawDataModal({
   onDeleted?: (id: string) => void;
 }) {
   const { title, subtitle, raw } = getModalContent(table, row);
+  // [관리자화면 프론트엔드 렌더링 지연 진단](2026-09-12 사용자 지시): open_spaces/
+  // events는 이제 목록 조회에 raw_data를 안 실어 raw_data === undefined인 채로 이
+  // 모달이 먼저 뜬다 — data-grid-client.tsx가 열자마자 /api/admin/data-grid/raw-data로
+  // 따로 받아와 채운다. raw_ingest_data는 원래부터 raw_payload를 항상 갖고 있어
+  // 해당 없음(raw_payload는 undefined가 될 일이 없음).
+  const isRawDataLoading = table !== 'raw_ingest_data' && raw === undefined;
   const prettyJson = JSON.stringify(raw ?? null, null, 2);
   const [isMigrateModalOpen, setIsMigrateModalOpen] = useState(false);
   const [isBlogCurationModalOpen, setIsBlogCurationModalOpen] = useState(false);
@@ -920,7 +926,7 @@ export function RawDataModal({
           )}
 
           <pre className="mt-1.5 rounded-lg bg-gray-900 text-gray-100 text-xs p-3 overflow-x-auto whitespace-pre-wrap break-words">
-            {prettyJson}
+            {isRawDataLoading ? '불러오는 중...' : prettyJson}
           </pre>
         </div>
       </div>

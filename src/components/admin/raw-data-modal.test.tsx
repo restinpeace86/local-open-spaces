@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RawDataModal } from './raw-data-modal';
-import { AdminEventRow, AdminOpenSpaceRow } from './data-grid-client';
+import { AdminEventRow, AdminOpenSpaceRow, AdminRawIngestRow } from './data-grid-client';
 
 // [상세 모달 URL/이미지 UX 개선](2026-08-29): "전체 컬럼" 목록의 http(s) URL 값이 클릭 시
 // 새 창으로 열리는 링크로, 그중 이미지 URL은 실제 미리보기 이미지로 렌더링되는지 검증한다.
@@ -944,5 +944,38 @@ describe('RawDataModal — 연결된 스팟(space_id) 편집기 (개선사항10,
     );
 
     expect(screen.queryByText('연결된 스팟(open_spaces)')).not.toBeInTheDocument();
+  });
+});
+
+// [관리자화면 프론트엔드 렌더링 지연 진단](2026-09-12 사용자 지시): "데이터를
+// 가져오는게 크게 없는데?" — 목록 조회가 더 이상 raw_data를 실어 나르지 않아
+// (data-grid-client.tsx가 상세 모달을 열 때 별도로 받아온다), row.raw_data가
+// undefined인 채로 이 모달이 먼저 뜰 수 있다 — 그 로딩 상태를 검증한다.
+describe('RawDataModal — raw_data 지연 로딩 상태(2026-09-12)', () => {
+  it('open_spaces/events는 raw_data가 아직 undefined면 "불러오는 중..."을 보여준다', () => {
+    const row = { ...buildRow(), raw_data: undefined };
+    render(<RawDataModal table="open_spaces" row={row} categoryMinOptions={[]} onClose={vi.fn()} />);
+
+    expect(screen.getByText('불러오는 중...')).toBeInTheDocument();
+  });
+
+  it('raw_data가 채워지면(부모가 나중에 넘겨줌) 로딩 문구 대신 실제 JSON을 보여준다', () => {
+    const row = { ...buildRow(), raw_data: { ok: true } };
+    render(<RawDataModal table="open_spaces" row={row} categoryMinOptions={[]} onClose={vi.fn()} />);
+
+    expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument();
+    expect(screen.getByText(/"ok": true/)).toBeInTheDocument();
+  });
+
+  it('raw_ingest_data는 raw_payload가 항상 이미 있으므로 로딩 문구를 보여주지 않는다', () => {
+    const row: AdminRawIngestRow = {
+      source: 'test',
+      source_id: 'ext-1',
+      fetched_at: new Date().toISOString(),
+      raw_payload: { ok: true },
+    };
+    render(<RawDataModal table="raw_ingest_data" row={row} categoryMinOptions={[]} onClose={vi.fn()} />);
+
+    expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument();
   });
 });

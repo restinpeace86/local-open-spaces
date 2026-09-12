@@ -671,3 +671,76 @@ describe('AdminDataGridClient — 오늘 반영 현황에 events 갱신 건수 �
     expect(await screen.findByText(/오늘 갱신\(내용 변경\): 331건/)).toBeInTheDocument();
   });
 });
+
+// [관리자화면 프론트엔드 렌더링 지연 진단](2026-09-12 사용자 지시): "데이터를
+// 가져오는게 크게 없는데?" — 목록 조회에서 raw_data를 뺀 대신(route.ts), 행을 열
+// 때만 /api/admin/data-grid/raw-data로 그 한 건의 raw_data를 따로 받아오는지
+// 검증한다.
+describe('AdminDataGridClient — 상세 모달 열 때 raw_data 지연 로딩(2026-09-12)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('목록 행에 raw_data가 없으면(undefined) 행을 클릭할 때 raw-data 엔드포인트를 호출해 채운다', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/api/admin/data-grid/raw-data')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ raw_data: { hello: 'world' } }) } as Response);
+      }
+      if (url.includes('/api/admin/data-grid')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ rows: [buildOpenSpaceRow({ raw_data: undefined })], total: 1 }),
+        } as Response);
+      }
+      if (url.includes('/api/admin/service-categories')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [] }) } as Response);
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+
+    fireEvent.click(await screen.findByText('테스트 공간'));
+
+    // 처음엔 아직 안 받아왔으니 로딩 문구를 보여준다.
+    expect(screen.getByText('불러오는 중...')).toBeInTheDocument();
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/data-grid/raw-data'));
+      expect(call).toBeDefined();
+      expect(call![0]).toContain('table=open_spaces');
+      expect(call![0]).toContain('id=row-1');
+    });
+
+    await waitFor(() => expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument());
+    expect(screen.getByText(/"hello": "world"/)).toBeInTheDocument();
+  });
+
+  it('목록 행에 raw_data가 이미 있으면(SEOUL_YEYAK 메모리 필터 경로 등) 다시 조회하지 않는다', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/api/admin/data-grid/raw-data')) {
+        return Promise.reject(new Error('should not be called'));
+      }
+      if (url.includes('/api/admin/data-grid')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ rows: [buildOpenSpaceRow({ raw_data: { already: 'here' } })], total: 1 }),
+        } as Response);
+      }
+      if (url.includes('/api/admin/service-categories')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [] }) } as Response);
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+
+    fireEvent.click(await screen.findByText('테스트 공간'));
+
+    expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument();
+    expect(screen.getByText(/"already": "here"/)).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some((c) => (c[0] as string).includes('/api/admin/data-grid/raw-data'))).toBe(false);
+  });
+});
