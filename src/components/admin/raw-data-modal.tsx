@@ -12,6 +12,7 @@ import { SpotDedupQuickModal } from '@/components/admin/spot-dedup-quick-modal';
 import { useBackdropDismiss } from '@/lib/admin/use-backdrop-dismiss';
 import { GroupMemberRow } from '@/app/api/admin/spot-dedup/group-members/route';
 import { cleanupMessyText, looksLikeMessyText } from '@/lib/admin/cleanup-messy-text';
+import { EVENTS_ALLOWED_CATEGORY_MINS } from '@/lib/admin/category-min-groups';
 
 // [개편] 행 클릭 시 해당 행의 전체 원천 컬럼(구조화된 값) + raw_data/raw_payload 원문 JSON을
 // 함께 보여주는 Read-Only 뷰어. 3개 탭(open_spaces/events/raw_ingest_data) 행 형태가 서로
@@ -79,6 +80,19 @@ function CategoryMinEditor({
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // [events 표준 중분류 사용 범위 15종 제한](2026-09-12 사용자 지시): "매일 재수집..
+  // 상세팝업에서 표준 중분류 선택하고.. 여기서 표준 중분류 수동선택하여 저장하는
+  // 부분엔 우리가 사용하기로 한 중분류들만 나왔으면 해" — events 탭에서만 좁힌다
+  // (open_spaces는 이 정책 대상이 아니라 기존처럼 실제 존재하는 값 전체를 보여준다).
+  // seoul_public_reservation(강의실/테니스장 등 15종 밖 값도 RAW로 그대로 씀)
+  // 행을 실수로 열었을 때 현재 값이 목록에 없어 빈 선택으로 보이는 걸 막기 위해,
+  // 현재 값이 15종 밖이면 그 값도 맨 앞에 함께 보여준다(값을 숨기거나 지우지 않음
+  // — 제3장 제5조 추측 금지, 있는 값을 안 보이게만 하는 것도 일종의 임의 변경).
+  const options =
+    table === 'events'
+      ? Array.from(new Set([...(row.category_min ? [row.category_min] : []), ...EVENTS_ALLOWED_CATEGORY_MINS]))
+      : categoryMinOptions;
+
   const handleSave = async () => {
     setIsSaving(true);
     setErrorMessage(null);
@@ -115,7 +129,7 @@ function CategoryMinEditor({
           className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs flex-1"
         >
           <option value="">(미분류)</option>
-          {categoryMinOptions.map((opt) => (
+          {options.map((opt) => (
             <option key={opt} value={opt}>
               {opt}
             </option>

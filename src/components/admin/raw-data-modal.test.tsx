@@ -706,6 +706,72 @@ describe('RawDataModal — 원문 JSON 필드 정돈해서 보기', () => {
   });
 });
 
+// [events 표준 중분류 사용 범위 15종 제한](2026-09-12 사용자 지시): "상세팝업에서
+// 표준 중분류 수동선택하여 저장하는 부분엔 우리가 사용하기로 한 중분류들만
+// 나왔으면 해" — 문화/축제·자연/체험·키즈/육아 3개 대분류의 15종만 events 탭
+// 드롭다운에 보여야 한다(open_spaces는 이 정책과 무관, 기존처럼 전달받은
+// categoryMinOptions 그대로 사용).
+describe('RawDataModal — events 표준 중분류 수동 수정 드롭다운 범위 제한(2026-09-12)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('events 탭에서는 categoryMinOptions로 무엇을 넘겨도 승인된 15종만 옵션으로 보여준다', () => {
+    const row = { ...buildRow(), title: '가을 단풍 축제', category_min: null };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={['강의실', '테니스장', '기타']}
+        onClose={vi.fn()}
+        onCategoryMinUpdated={vi.fn()}
+      />
+    );
+
+    // 승인된 15종 중 일부는 옵션으로 존재한다.
+    expect(screen.getByRole('option', { name: '전시/관람' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: '캠핑장' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: '공공키즈카페' })).toBeInTheDocument();
+    // 전달받은 categoryMinOptions(승인 목록 밖)는 옵션에 없어야 한다.
+    expect(screen.queryByRole('option', { name: '강의실' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: '테니스장' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: '기타' })).not.toBeInTheDocument();
+  });
+
+  it('현재 값이 15종 밖(예: SEOUL_YEYAK의 강의실)이어도 그 값 자체는 그대로 옵션에 남아있다(값을 숨기지 않음)', () => {
+    const row = { ...buildRow(), title: '강의실 대관', category_min: '강의실' };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        onClose={vi.fn()}
+        onCategoryMinUpdated={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('option', { name: '강의실' })).toBeInTheDocument();
+  });
+
+  it('open_spaces 탭에는 이 정책이 적용되지 않고 전달받은 categoryMinOptions 그대로 보여준다', () => {
+    const row = buildRow({ category_min: null });
+    render(
+      <RawDataModal
+        table="open_spaces"
+        row={row}
+        categoryMinOptions={['강의실', '테니스장']}
+        onClose={vi.fn()}
+        onCategoryMinUpdated={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('option', { name: '강의실' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: '테니스장' })).toBeInTheDocument();
+    // open_spaces는 15종 승인 목록 정책과 무관하므로 이 목록에 없는 값도 그대로 노출된다.
+    expect(screen.queryByRole('option', { name: '전시/관람' })).not.toBeInTheDocument();
+  });
+});
+
 // [개선사항10](2026-09-11 사용자 지시, implementation/todo.md): "매칭되는 스팟이 없는
 // 경우 관리자가 수동으로 스팟을 지정.. 관리자 툴 플로우". events 탭에서만 노출되는
 // "연결된 스팟" 편집기(SpaceLinkEditor, 내부적으로 기존 SpotPicker 재사용)를 검증한다.

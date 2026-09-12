@@ -125,3 +125,17 @@ export function buildOpenSpacesCategoryMinGroups(liveOptions: string[]): Categor
 export function buildEventsCategoryMinGroups(liveOptions: string[]): CategoryMinGroup[] {
   return buildCategoryMinGroups(liveOptions, EVENTS_GROUPS_STATIC);
 }
+
+// [events 표준 중분류 사용 범위 15종 제한](2026-09-12 사용자 지시): "매일 재수집..
+// 상세팝업에서 표준 중분류.. 선택하고.. 여기에 대하여 일단 상세팝업에서 표준
+// 중분류 수동선택하여 저장하는 부분엔 우리가 사용하기로 한 중분류들만 나왔으면
+// 해" — "문화/축제·자연/체험·키즈/육아 대분류 안의 중분류만 쓴다"는 동일한
+// 정책(Step 128)을 관리자가 개별 행에서 수동으로 고를 때도 그대로 적용한다.
+// 하드코딩된 별도 목록을 새로 만들지 않고 위 EVENTS_GROUPS_STATIC에서 이 3개
+// 대분류의 minors를 그대로 뽑아 쓴다(제5장 제4조/제6조 — 두 곳에 같은 목록을
+// 따로 유지하면 나중에 한쪽만 고쳐 어긋날 위험이 있다).
+const EVENTS_ALLOWED_CATEGORY_MAJORS = ['문화/축제', '자연/체험', '키즈/육아'];
+
+export const EVENTS_ALLOWED_CATEGORY_MINS: string[] = EVENTS_GROUPS_STATIC.filter((g) =>
+  EVENTS_ALLOWED_CATEGORY_MAJORS.includes(g.major)
+).flatMap((g) => g.minors);

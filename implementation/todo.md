@@ -232,6 +232,14 @@
       되돌림(MANUAL 지정 4건은 보호). seoul_public_reservation은 지시대로 원천
       대/중분류 그대로 유지(변경 없음). 코드 파일 변경 없이 전부 데이터/설정 작업.
       (완료: 2026-09-12, 상세: implementation/2026-09-12-events-category-min-universe-restriction.md)
+- [x] 개선사항9 후속6 (Step 129, 사용자 지시): "매일 재수집.. EVENTS탭.. 상세팝업..
+      표준 중분류 수동선택하여 저장하는 부분엔 우리가 사용하기로 한 중분류들만
+      나왔으면 해" — Step 128의 15종 정책을 관리자가 직접 고르는 CategoryMinEditor
+      드롭다운에도 반영. `EVENTS_ALLOWED_CATEGORY_MINS`(기존 EVENTS_GROUPS_STATIC의
+      3개 그룹에서 그대로 추출, 새 목록 하드코딩 안 함)를 events 탭에서만 적용,
+      open_spaces는 무관. 현재 값이 15종 밖(SEOUL_YEYAK 강의실 등)이어도 값 자체는
+      안 지움 — 새로 "고를 수 있는" 범위만 제한.
+      (완료: 2026-09-12, 상세: implementation/2026-09-12-events-category-min-manual-editor-restriction.md)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.
