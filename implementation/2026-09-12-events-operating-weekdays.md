@@ -141,6 +141,74 @@ export function filterEventsOperatingToday<T extends { operating_weekdays: strin
 자주 보일 수 있는 정도의 부수 효과 — 카운트가 오늘 쉬는 이벤트 하나뿐이라
 실제로는 0건인 특수한 경우에 한함).
 
+## 후속2(같은 날) — "매월 N번째 요일" 패턴 추가
+사용자가 실제 운영 패턴을 구체적으로 알려줬다: "매주 토요일 / 매월 2번째 4번째
+토요일 / 매주 주말 / 매주 월요일 휴무 / 매주 화, 목 운영 이런식의 패턴이야
+대부분." 이 중 "매월 2번째 4번째 토요일"은 기존 `operating_weekdays`(매주
+반복되는 요일 집합)로는 표현할 수 없었다 — "토요일"을 넣으면 매주 토요일마다
+적용되지, 그중 2번째·4번째 주만 골라낼 방법이 없었기 때문이다.
+
+### 데이터 모델 확장
+`events.operating_nth_weekdays text[]` 컬럼을 추가했다(`scripts/migrations/
+2026-09-12-events-operating-nth-weekdays.sql`). 값은 `"N-요일코드"` 형식
+토큰의 배열이다(예: `{2-SAT,4-SAT}` = 매월 2번째·4번째 토요일).
+
+- **`operating_weekdays`(매주 반복)와 `operating_nth_weekdays`(매월 N번째)는
+  상호 배타적인 대안 규칙**이다 — 관리자는 "매주" 모드 또는 "매월 N번째" 모드
+  중 하나만 고른다(`isEventOperatingOn`은 `operating_nth_weekdays`가 있으면
+  `operating_weekdays`를 무시하도록 우선순위를 뒀다).
+- `excluded_weekdays`(정기 휴무)는 두 규칙 중 어느 쪽과도 계속 독립적으로
+  조합 가능하고, 항상 최우선으로 검사된다(예: "2·4번째 토요일 운영"이더라도
+  토요일 자체가 정기 휴무면 운영하지 않음).
+
+### 판정 로직(`event-operating-schedule.ts`)
+```ts
+function nthWeekdayOccurrenceOf(date: Date): number {
+  return Math.ceil(date.getDate() / 7); // 예: 9/12(토) → 5,12,19,26일 중 2번째 → 2
+}
+
+export function isEventOperatingOn(schedule, date): boolean {
+  const code = WEEKDAY_CODES[date.getDay()];
+  if (schedule.excluded_weekdays?.includes(code)) return false;
+  if (schedule.operating_nth_weekdays?.length) {
+    return schedule.operating_nth_weekdays.includes(buildNthWeekdayToken(nthWeekdayOccurrenceOf(date), code));
+  }
+  if (schedule.operating_weekdays?.length) return schedule.operating_weekdays.includes(code);
+  return true;
+}
+```
+"몇 번째 등장인지"는 달력 계산 없이 `Math.ceil(날짜/7)`로 충분하다(1~7일=1번째,
+8~14일=2번째, …). 2026년 9월 실측(토요일=5/12/19/26일)으로 정확히 확인했다.
+테스트 6건 추가(2·4번째 토요일 매치/1·3번째 토요일 불일치/다른 요일 불일치/
+operating_weekdays 무시 확인/excluded_weekdays 우선 확인).
+
+### 관리자 UI
+상세 팝업의 "운영 요일 / 반복 규칙" 프리셋에 4번째 버튼 **"매월 특정 주차
+요일"**을 추가했다. 선택하면 요일 선택 그리드(예: 토요일)와 주차 선택 그리드
+(1~5주차, 예: 2주차·4주차)가 나타나고, 저장 시 선택된 요일 × 주차의 모든
+조합을 토큰으로 만들어 보낸다(예: 요일 1개 + 주차 2개 → 토큰 2개). 서로 다른
+요일에 서로 다른 주차를 짝짓는 것(예: "2번째 화요일과 4번째 목요일만")은 현재
+UI로는 표현할 수 없다 — 실제 요청 패턴이 전부 "한 요일 + 여러 주차" 조합이라
+이 정도로 충분하다고 판단했다(더 복잡한 조합이 필요해지면 요일별 주차를
+따로 지정하는 UI로 확장 가능).
+
+다시 열었을 때 저장된 토큰에서 요일/주차 집합을 되짚어 프리셋을 복원한다
+(`detectOperatingPreset`).
+
+### 자동 반영된 부분
+`get-home-feed.ts`의 `filterEventsOperatingToday<T extends OperatingSchedule>`가
+`OperatingSchedule` 타입을 그대로 재사용하도록 이미 설계돼 있어, `EVENT_COLUMNS`/
+`EventRow`에 `operating_nth_weekdays` 한 줄만 추가하면 이벤트픽 조회 10개 지점 +
+`/api/spots/linked-events` 전부가 별도 수정 없이 새 패턴을 자동으로 검사한다.
+
+### 검증(후속2)
+- `npx tsc --noEmit`: 통과(`npm run gen:types`로 `operating_nth_weekdays`
+  컬럼 재생성 포함).
+- `npm run test -- --run`: 136 파일 / 1612건 전체 통과(신규 6건 —
+  `event-operating-schedule.test.ts`, 2건 — `raw-data-modal.test.tsx`
+  "매월 특정 주차 요일" 저장/복원 검증).
+- `npm run build`: 성공.
+
 ## 검증
 - `npx tsc --noEmit`: 통과(신규 컬럼 반영을 위해 `npm run gen:types`로
   `database.types.ts` 재생성 필요했음 — 재생성 후 통과).

@@ -994,7 +994,10 @@ describe('RawDataModal — 운영 요일/반복 규칙 편집기 (2026-09-12)', 
     const fetchMock = vi.fn((url: string, init?: RequestInit) =>
       Promise.resolve({
         ok: true,
-        json: () => Promise.resolve({ row: { id: 'row-1', operating_weekdays: ['SAT', 'SUN'], excluded_weekdays: null } }),
+        json: () =>
+          Promise.resolve({
+            row: { id: 'row-1', operating_weekdays: ['SAT', 'SUN'], excluded_weekdays: null, operating_nth_weekdays: null },
+          }),
       } as Response)
     );
     vi.stubGlobal('fetch', fetchMock);
@@ -1013,13 +1016,14 @@ describe('RawDataModal — 운영 요일/반복 규칙 편집기 (2026-09-12)', 
     fireEvent.click(screen.getByRole('button', { name: '주말만 운영(토·일)' }));
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
 
-    await waitFor(() => expect(onOperatingScheduleUpdated).toHaveBeenCalledWith('row-1', ['SAT', 'SUN'], null));
+    await waitFor(() => expect(onOperatingScheduleUpdated).toHaveBeenCalledWith('row-1', ['SAT', 'SUN'], null, null));
     const patchCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/events/operating-schedule'));
     expect(patchCall).toBeDefined();
     expect(JSON.parse((patchCall![1] as RequestInit).body as string)).toEqual({
       id: 'row-1',
       operating_weekdays: ['SAT', 'SUN'],
       excluded_weekdays: null,
+      operating_nth_weekdays: null,
     });
   });
 
@@ -1027,7 +1031,10 @@ describe('RawDataModal — 운영 요일/반복 규칙 편집기 (2026-09-12)', 
     const fetchMock = vi.fn((url: string, init?: RequestInit) =>
       Promise.resolve({
         ok: true,
-        json: () => Promise.resolve({ row: { id: 'row-1', operating_weekdays: ['TUE', 'THU'], excluded_weekdays: null } }),
+        json: () =>
+          Promise.resolve({
+            row: { id: 'row-1', operating_weekdays: ['TUE', 'THU'], excluded_weekdays: null, operating_nth_weekdays: null },
+          }),
       } as Response)
     );
     vi.stubGlobal('fetch', fetchMock);
@@ -1054,6 +1061,7 @@ describe('RawDataModal — 운영 요일/반복 규칙 편집기 (2026-09-12)', 
         id: 'row-1',
         operating_weekdays: ['TUE', 'THU'],
         excluded_weekdays: null,
+        operating_nth_weekdays: null,
       });
     });
   });
@@ -1063,7 +1071,10 @@ describe('RawDataModal — 운영 요일/반복 규칙 편집기 (2026-09-12)', 
     const fetchMock = vi.fn((url: string, init?: RequestInit) =>
       Promise.resolve({
         ok: true,
-        json: () => Promise.resolve({ row: { id: 'row-1', operating_weekdays: null, excluded_weekdays: ['MON'] } }),
+        json: () =>
+          Promise.resolve({
+            row: { id: 'row-1', operating_weekdays: null, excluded_weekdays: ['MON'], operating_nth_weekdays: null },
+          }),
       } as Response)
     );
     vi.stubGlobal('fetch', fetchMock);
@@ -1089,6 +1100,7 @@ describe('RawDataModal — 운영 요일/반복 규칙 편집기 (2026-09-12)', 
         id: 'row-1',
         operating_weekdays: null,
         excluded_weekdays: ['MON'],
+        operating_nth_weekdays: null,
       });
     });
   });
@@ -1109,5 +1121,73 @@ describe('RawDataModal — 운영 요일/반복 규칙 편집기 (2026-09-12)', 
     // 정기 휴무일 체크박스도 이미 체크돼 있고, 월요일이 선택돼 보인다.
     expect(screen.getByRole('checkbox', { name: '정기 휴무일 지정(예: 매주 월요일 휴무)' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: '월' })).toBeChecked();
+  });
+
+  // [매월 N번째 요일 패턴 추가](2026-09-12 사용자 지시): "매월 2번째 4번째 토요일" 예시.
+  it('"매월 특정 주차 요일"을 고르고 토요일 + 2주차/4주차를 체크해 저장하면 operating_nth_weekdays=[2-SAT,4-SAT]로 PATCH한다', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) =>
+      Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            row: { id: 'row-1', operating_weekdays: null, excluded_weekdays: null, operating_nth_weekdays: ['2-SAT', '4-SAT'] },
+          }),
+      } as Response)
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const onOperatingScheduleUpdated = vi.fn();
+    const row = { ...buildRow(), title: '가을 축제', operating_weekdays: null, excluded_weekdays: null };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        onClose={vi.fn()}
+        onOperatingScheduleUpdated={onOperatingScheduleUpdated}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: '매월 특정 주차 요일' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '토' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '2주차' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: '4주차' }));
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() =>
+      expect(onOperatingScheduleUpdated).toHaveBeenCalledWith('row-1', null, null, ['2-SAT', '4-SAT'])
+    );
+    const patchCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/events/operating-schedule'));
+    expect(patchCall).toBeDefined();
+    expect(JSON.parse((patchCall![1] as RequestInit).body as string)).toEqual({
+      id: 'row-1',
+      operating_weekdays: null,
+      excluded_weekdays: null,
+      operating_nth_weekdays: ['2-SAT', '4-SAT'],
+    });
+  });
+
+  it('저장된 매월 N번째 요일 규칙(2-SAT,4-SAT)을 다시 열면 프리셋/요일/주차가 복원된다', () => {
+    const row = {
+      ...buildRow(),
+      title: '가을 축제',
+      operating_weekdays: null,
+      excluded_weekdays: null,
+      operating_nth_weekdays: ['2-SAT', '4-SAT'],
+    };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        onClose={vi.fn()}
+        onOperatingScheduleUpdated={vi.fn()}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: '매월 특정 주차 요일' })).toHaveClass('bg-purple-600');
+    expect(screen.getByRole('checkbox', { name: '토' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: '2주차' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: '4주차' })).toBeChecked();
+    expect(screen.getByRole('checkbox', { name: '1주차' })).not.toBeChecked();
   });
 });

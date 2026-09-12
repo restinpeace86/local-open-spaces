@@ -143,12 +143,12 @@ const OPEN_SPACES_COLUMNS =
 // "연결된 스팟" 편집기에서 현재 연결 상태를 보여주려면 목록 조회에도 포함돼야 한다.
 // [events.updated_at 컬럼 + 자동 갱신 트리거](2026-09-12 사용자 지시): 목록 조회에도
 // 포함해야 상세 모달 등에서 실제 갱신 시각을 확인할 수 있다.
-// [운영 요일/반복 규칙](2026-09-12 사용자 지시): operating_weekdays/excluded_weekdays도
-// 상세 모달의 새 편집기가 "현재 값"을 바로 보여주려면 목록 조회에 포함돼야 한다
-// (CategoryMinEditor/TargetAudienceEditor와 동일한 관례 — 별도 GET 없이 이미
-// 받아온 row에서 바로 읽음).
+// [운영 요일/반복 규칙](2026-09-12 사용자 지시): operating_weekdays/excluded_weekdays/
+// operating_nth_weekdays도 상세 모달의 새 편집기가 "현재 값"을 바로 보여주려면 목록
+// 조회에 포함돼야 한다(CategoryMinEditor/TargetAudienceEditor와 동일한 관례 — 별도
+// GET 없이 이미 받아온 row에서 바로 읽음).
 const EVENTS_COLUMNS =
-  'id, external_id, source, title, event_type, category_maj, category_min, category_min_source, target_audience, target_audience_source, venue_name, sigungu_name, start_date, end_date, location, location_precision, is_reservation_required, reservation_url, reservation_start_date, reservation_end_date, is_free, thumbnail_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, is_active, raw_data, created_at, updated_at, space_id, operating_weekdays, excluded_weekdays';
+  'id, external_id, source, title, event_type, category_maj, category_min, category_min_source, target_audience, target_audience_source, venue_name, sigungu_name, start_date, end_date, location, location_precision, is_reservation_required, reservation_url, reservation_start_date, reservation_end_date, is_free, thumbnail_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, is_active, raw_data, created_at, updated_at, space_id, operating_weekdays, excluded_weekdays, operating_nth_weekdays';
 
 const RAW_INGEST_COLUMNS = 'source, source_id, fetched_at, raw_payload';
 

@@ -255,6 +255,7 @@ export type Database = {
           is_reservation_required: boolean | null
           location: unknown
           location_precision: string
+          operating_nth_weekdays: string[] | null
           operating_weekdays: string[] | null
           price_text: string | null
           raw_data: Json | null
@@ -296,6 +297,7 @@ export type Database = {
           is_reservation_required?: boolean | null
           location?: unknown
           location_precision?: string
+          operating_nth_weekdays?: string[] | null
           operating_weekdays?: string[] | null
           price_text?: string | null
           raw_data?: Json | null
@@ -337,6 +339,7 @@ export type Database = {
           is_reservation_required?: boolean | null
           location?: unknown
           location_precision?: string
+          operating_nth_weekdays?: string[] | null
           operating_weekdays?: string[] | null
           price_text?: string | null
           raw_data?: Json | null

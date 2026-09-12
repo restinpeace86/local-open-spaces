@@ -120,6 +120,9 @@ export type AdminEventRow = {
   // null/빈 배열 = 제약 없음(기존 이벤트 전체와 동일하게 매일 운영).
   operating_weekdays?: string[] | null;
   excluded_weekdays?: string[] | null;
+  // [매월 N번째 요일 패턴 추가](2026-09-12 사용자 지시): "매월 2번째 4번째 토요일"
+  // 같은 패턴("2-SAT" 형식 토큰 배열) — operating_weekdays와 상호 배타적 대안.
+  operating_nth_weekdays?: string[] | null;
 };
 
 export type AdminRawIngestRow = {
@@ -1755,17 +1758,27 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                 : prev
             );
           }}
-          onOperatingScheduleUpdated={(id, nextOperatingWeekdays, nextExcludedWeekdays) => {
+          onOperatingScheduleUpdated={(id, nextOperatingWeekdays, nextExcludedWeekdays, nextOperatingNthWeekdays) => {
             setRows((prev) =>
               prev.map((row) =>
                 'id' in row && row.id === id
-                  ? { ...row, operating_weekdays: nextOperatingWeekdays, excluded_weekdays: nextExcludedWeekdays }
+                  ? {
+                      ...row,
+                      operating_weekdays: nextOperatingWeekdays,
+                      excluded_weekdays: nextExcludedWeekdays,
+                      operating_nth_weekdays: nextOperatingNthWeekdays,
+                    }
                   : row
               )
             );
             setSelectedRow((prev) =>
               prev && 'id' in prev && prev.id === id
-                ? { ...prev, operating_weekdays: nextOperatingWeekdays, excluded_weekdays: nextExcludedWeekdays }
+                ? {
+                    ...prev,
+                    operating_weekdays: nextOperatingWeekdays,
+                    excluded_weekdays: nextExcludedWeekdays,
+                    operating_nth_weekdays: nextOperatingNthWeekdays,
+                  }
                 : prev
             );
           }}

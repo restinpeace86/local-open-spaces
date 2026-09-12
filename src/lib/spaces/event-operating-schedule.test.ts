@@ -54,4 +54,42 @@ describe('isEventOperatingOn', () => {
     expect(isEventOperatingOn(schedule, tuesday)).toBe(true);
     expect(isEventOperatingOn(schedule, thursday)).toBe(false);
   });
+
+  // [매월 N번째 요일 패턴 추가](2026-09-12 사용자 지시): "매월 2번째 4번째 토요일" —
+  // 2026년 9월의 토요일은 5(1번째)/12(2번째)/19(3번째)/26(4번째)일이다(실측 확인).
+  describe('매월 N번째 요일 패턴(operating_nth_weekdays)', () => {
+    const schedule = { operating_nth_weekdays: ['2-SAT', '4-SAT'] };
+
+    it('2번째 토요일(9/12)에는 운영한다', () => {
+      expect(isEventOperatingOn(schedule, new Date('2026-09-12T00:00:00'))).toBe(true);
+    });
+
+    it('4번째 토요일(9/26)에는 운영한다', () => {
+      expect(isEventOperatingOn(schedule, new Date('2026-09-26T00:00:00'))).toBe(true);
+    });
+
+    it('1번째 토요일(9/5)이나 3번째 토요일(9/19)에는 운영하지 않는다', () => {
+      expect(isEventOperatingOn(schedule, new Date('2026-09-05T00:00:00'))).toBe(false);
+      expect(isEventOperatingOn(schedule, new Date('2026-09-19T00:00:00'))).toBe(false);
+    });
+
+    it('토요일이 아닌 날에는 운영하지 않는다', () => {
+      expect(isEventOperatingOn(schedule, new Date('2026-09-15T00:00:00'))).toBe(false); // 화요일
+    });
+
+    it('operating_nth_weekdays가 있으면 operating_weekdays는 무시된다(상호 배타적 대안 규칙)', () => {
+      // operating_weekdays로는 매주 화요일도 허용하지만, nth 규칙이 있으면 그쪽이 우선한다.
+      const combined = { operating_weekdays: ['TUE'], operating_nth_weekdays: ['2-SAT'] };
+      const tuesday = new Date('2026-09-15T00:00:00');
+      const secondSaturday = new Date('2026-09-12T00:00:00');
+      expect(isEventOperatingOn(combined, tuesday)).toBe(false);
+      expect(isEventOperatingOn(combined, secondSaturday)).toBe(true);
+    });
+
+    it('정기 휴무 요일은 매월 N번째 요일 규칙과도 조합되며 항상 우선한다', () => {
+      // "2번째·4번째 토요일 운영"이더라도 토요일 자체가 정기 휴무면 운영하지 않는다.
+      const withExclusion = { operating_nth_weekdays: ['2-SAT', '4-SAT'], excluded_weekdays: ['SAT'] };
+      expect(isEventOperatingOn(withExclusion, new Date('2026-09-12T00:00:00'))).toBe(false);
+    });
+  });
 });

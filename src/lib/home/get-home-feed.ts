@@ -10,7 +10,7 @@ import {
   confidentSourceTypesFor,
   ThemeSpotKey,
 } from '@/lib/theme-spots';
-import { isEventOperatingOn } from '@/lib/spaces/event-operating-schedule';
+import { isEventOperatingOn, OperatingSchedule } from '@/lib/spaces/event-operating-schedule';
 
 // Task 9-1(2026-08-22): 홈 화면 Hero Carousel/큐레이션 피드용 서버 사이드 조회 로직.
 // /api/home/feed 라우트와 홈 페이지 Server Component가 이 함수들을 공유해서 쓴다
@@ -98,10 +98,11 @@ function extractCoords(location: unknown): { lng: number; lat: number } {
 // 읽으려면 이 SELECT 목록에 포함돼야 한다.
 // [운영 요일/반복 규칙](2026-09-12 사용자 지시): "이벤트픽화면에서도 뜨는 이벤트들에
 // 대하여 해당 규칙대로 적용되게 해야돼" — 상세팝업(관리자)에서 지정한 운영 요일
-// 허용목록/정기 휴무 제외목록을 이벤트픽 화면 전체에서 걸러내려면 이 두 컬럼이
-// 모든 이벤트 조회에 공통으로 실려야 한다(EVENT_COLUMNS를 쓰는 모든 함수가 대상).
+// 허용목록/정기 휴무 제외목록/매월 N번째 요일 규칙을 이벤트픽 화면 전체에서
+// 걸러내려면 이 세 컬럼이 모든 이벤트 조회에 공통으로 실려야 한다(EVENT_COLUMNS를
+// 쓰는 모든 함수가 대상).
 export const EVENT_COLUMNS =
-  'id, title, description, event_type, category_min, target_audience, location, location_precision, thumbnail_url, start_date, end_date, reservation_start_date, reservation_end_date, reservation_url, is_reservation_required, is_free, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, venue_name, sigungu_name, price_text, source_url, operating_weekdays, excluded_weekdays';
+  'id, title, description, event_type, category_min, target_audience, location, location_precision, thumbnail_url, start_date, end_date, reservation_start_date, reservation_end_date, reservation_url, is_reservation_required, is_free, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, venue_name, sigungu_name, price_text, source_url, operating_weekdays, excluded_weekdays, operating_nth_weekdays';
 
 export type EventRow = {
   id: string;
@@ -132,6 +133,7 @@ export type EventRow = {
   source_url: string | null;
   operating_weekdays: string[] | null;
   excluded_weekdays: string[] | null;
+  operating_nth_weekdays: string[] | null;
 };
 
 // [운영 요일/반복 규칙](2026-09-12 사용자 지시): "이벤트 기간중에 있더라도 이에
@@ -140,9 +142,7 @@ export type EventRow = {
 // 공통으로 한 번 더 거친다(EVENT_PICK_TARGET_AUDIENCES와 동일하게 이벤트픽 전
 // 조회가 공유하는 관례). /api/spots/linked-events(스팟픽 연결 이벤트)도 이 함수를
 // 그대로 재사용한다.
-export function filterEventsOperatingToday<T extends { operating_weekdays: string[] | null; excluded_weekdays: string[] | null }>(
-  rows: T[]
-): T[] {
+export function filterEventsOperatingToday<T extends OperatingSchedule>(rows: T[]): T[] {
   const now = new Date();
   return rows.filter((row) => isEventOperatingOn(row, now));
 }

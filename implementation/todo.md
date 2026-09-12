@@ -267,6 +267,20 @@
       결정하는 COUNT 전용 쿼리)는 요일 배열 필터가 count(*) 헤드 쿼리로 표현되지 않아
       제외 — "그 중분류에 맞는 행이 존재하는지" 판단용이라 실제 카드 노출과는 무관.
       (완료: 2026-09-12, 상세: implementation/2026-09-12-events-operating-weekdays.md)
+- [x] 개선사항10 후속6 (Step 130 후속2, 사용자 지시): "매주 토요일 / 매월 2번째
+      4번째 토요일 / 매주 주말 / 매주 월요일 휴무 / 매주 화, 목 운영 이런식의
+      패턴이야 대부분" — 기존 operating_weekdays(매주 반복)만으로는 "매월 N번째
+      요일" 패턴을 표현할 수 없어 `events.operating_nth_weekdays text[]`
+      컬럼을 추가("N-요일코드" 토큰, 예: `{2-SAT,4-SAT}`). operating_weekdays와
+      상호 배타적 대안 규칙으로 두되(있으면 우선), excluded_weekdays(정기 휴무)는
+      어느 쪽과도 계속 조합 가능. `isEventOperatingOn()`에 월 기준 N번째 등장
+      판정(`Math.ceil(date.getDate()/7)`) 로직 추가. 상세팝업에 "매월 특정 주차
+      요일" 프리셋 추가(요일 선택 + 1~5주차 선택 → 조합 토큰 생성). 기존
+      operating_weekdays/excluded_weekdays 필터 적용 지점(get-home-feed.ts 전체
+      + linked-events)이 `filterEventsOperatingToday`/`OperatingSchedule` 타입을
+      공유해 컬럼만 추가하면 자동 반영되도록 이미 설계돼 있어 별도 라우트 수정
+      불필요.
+      (완료: 2026-09-12, 상세: implementation/2026-09-12-events-operating-weekdays.md)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.
