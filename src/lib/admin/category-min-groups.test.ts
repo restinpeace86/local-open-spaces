@@ -101,4 +101,13 @@ describe('buildEventsCategoryMinGroups', () => {
     expect(result.find((g) => g.major === '공공청사/행정')?.minors).toContain('전시실');
     expect(result.find((g) => g.major === '문화/축제')).toBeUndefined();
   });
+
+  // [원천 대/중분류 재분류 반영 후속](2026-09-12 사용자 지시): "문화/축제 >> 공연장도
+  // 공간시설 대관이야.. 이것도 공공청사/행정의 공연장으로 옮겨줘.. DB는 물론
+  // 관리자 화면도 그렇게 보이도록".
+  it('공연장은 "공공청사/행정" 그룹에 배정되고, "문화/축제" 그룹에는 더 이상 없다', () => {
+    const result = buildEventsCategoryMinGroups(['공연장']);
+    expect(result.find((g) => g.major === '공공청사/행정')?.minors).toContain('공연장');
+    expect(result.find((g) => g.major === '문화/축제')).toBeUndefined();
+  });
 });
