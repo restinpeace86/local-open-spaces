@@ -337,6 +337,19 @@
       200건 기준 open_spaces 246.9KB→177.5KB(-28%), events 655.0KB→231.9KB
       (-65%).
       (완료: 2026-09-12, 상세: implementation/2026-09-12-admin-data-grid-raw-data-overfetch-fix.md)
+- [x] Step 135 (사용자 지시): "관리자 화면에서 open_spaces쪽에 블로그 큐레이션도
+      가져온 블로그 url에 대하여 선택하여 저장할 수 있게해줘.. events 탭처럼" —
+      events는 검색 결과에 체크박스가 있어 고른 것만 저장하지만, open_spaces는
+      체크박스 없이 검색된 상위 3개를 항상 자동 저장했다. /api/spot-blog-reviews
+      확인 결과 spot_curations.blog_url_1/2/3은 이미 유저 화면 최우선 소스라
+      DB 마이그레이션 불필요 — useSpotCurationForm에 selectedUrls/toggleUrl 추가
+      (기본값 빈 배열, events와 동일), save()가 blogItems[0..2] 대신
+      selectedUrls[0..2]를 저장하도록 변경. BlogCurationModal/
+      MobileCurationWorkbench 둘 다(같은 훅 공유) EventBlogCurationModal과
+      동일한 체크박스 목록(최대 3개) 추가. 동작 변화: 이제 아무것도 체크 안
+      하면 아무 URL도 저장 안 됨(이전엔 자동 저장) — events와 동일하게 맞춘
+      의도된 변경.
+      (완료: 2026-09-12, 상세: implementation/2026-09-12-open-spaces-blog-curation-url-selection.md)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.

@@ -136,6 +136,41 @@ describe('MobileCurationWorkbench', () => {
     expect(screen.getByText('주차장')).toBeInTheDocument(); // <mark>로 감싸진 키워드
   });
 
+  // [블로그 URL 선택 저장](2026-09-12 사용자 지시): "블로그 큐레이션도 가져온
+  // 블로그 url에 대하여 선택하여 저장할 수 있게해줘.. events 탭처럼" — 워크벤치도
+  // BlogCurationModal과 같은 useSpotCurationForm을 공유하므로 동일하게 체크한
+  // URL만 저장된다.
+  it('블로그 체크박스에서 선택한 URL만 저장된다', async () => {
+    const fetchMock = mockFetchByUrl({
+      blogSearch: {
+        items: [
+          { title: '행복키즈카페 후기1', link: 'https://blog.naver.com/1', description: '', bloggername: '', postdate: '', isRecent: true },
+          { title: '행복키즈카페 후기2', link: 'https://blog.naver.com/2', description: '', bloggername: '', postdate: '', isRecent: true },
+        ],
+        hasRecentReview: true,
+        hasNoResults: false,
+      },
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(
+      <MobileCurationWorkbench spot={SPOT} serviceCategories={SERVICE_CATEGORIES} queue={QUEUE} onClose={vi.fn()} onAdvance={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+    );
+
+    await screen.findByText('행복키즈카페 후기1');
+    fireEvent.click(screen.getByLabelText(/블로그 2/));
+    fireEvent.click(screen.getByText('저장 및 다음 미처리 스팟으로 이동'));
+
+    await waitFor(() => {
+      const saveCall = fetchMock.mock.calls.find(
+        (c) => (c[0] as string) === '/api/admin/spot-curations' && (c[1] as RequestInit)?.method === 'POST'
+      );
+      expect(saveCall).toBeDefined();
+      const body = JSON.parse((saveCall![1] as RequestInit).body as string);
+      expect(body.blog_url_1).toBe('https://blog.naver.com/2');
+      expect(body.blog_url_2).toBeNull();
+    });
+  });
+
   // [4단: 저장 및 다음 이동](사용자 지시 원문): "저장 시.. 업데이트하고.. 저장 완료 후
   // 자동으로 다음 미처리 스팟으로 뷰가 전환됨."
   it('저장 후 큐에서 아직 큐레이션이 없는 다음 스팟으로 이동한다', async () => {

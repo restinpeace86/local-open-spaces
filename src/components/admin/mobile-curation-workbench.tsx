@@ -245,6 +245,34 @@ export function MobileCurationWorkbench({
             hasRegionMismatchWarning={form.hasRegionMismatchWarning}
             curationCategoryId={form.curationCategoryId}
           />
+
+          {/* [블로그 URL 선택 저장](2026-09-12 사용자 지시): "블로그 큐레이션도
+              가져온 블로그 url에 대하여 선택하여 저장할 수 있게해줘.. events
+              탭처럼" — BlogCurationModal(작은 팝업)과 동일한 체크박스 목록을
+              워크벤치에도 둔다(같은 useSpotCurationForm을 공유하므로 로직은
+              이미 준비돼 있음 — 제5장 제4조). */}
+          {form.blogItems && form.blogItems.length > 0 && (
+            <div className="flex flex-col gap-1.5 rounded-xl border border-gray-200 p-3">
+              <p className="text-xs font-semibold text-gray-500">유저 화면에 노출할 블로그 선택 (최대 3개)</p>
+              {form.blogItems.map((item, i) => {
+                const checked = form.selectedUrls.includes(item.link);
+                return (
+                  <label key={`${item.link}-${i}`} className="flex items-center gap-2 text-sm text-gray-700">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      disabled={!checked && form.selectedUrls.length >= 3}
+                      onChange={() => form.toggleUrl(item.link)}
+                    />
+                    <span className="truncate">블로그 {i + 1} · {item.title}</span>
+                  </label>
+                );
+              })}
+              {form.selectedUrls.length >= 3 && (
+                <p className="text-[11px] text-gray-400">최대 3개까지 선택할 수 있어요.</p>
+              )}
+            </div>
+          )}
         </section>
 
         {form.saveError && <p className="text-xs text-red-600">{form.saveError}</p>}

@@ -84,6 +84,34 @@ export function BlogCurationModal({
           curationCategoryId={form.curationCategoryId}
         />
 
+        {/* [블로그 URL 선택 저장](2026-09-12 사용자 지시): "블로그 큐레이션도
+            가져온 블로그 url에 대하여 선택하여 저장할 수 있게해줘.. events
+            탭처럼" — EventBlogCurationModal과 동일한 체크박스 목록(최대 3개).
+            체크한 것만 blog_url_1~3에 순서대로 저장된다(예전엔 검색된 상위
+            3개를 관리자 확인 없이 그대로 저장했음). */}
+        {form.blogItems && form.blogItems.length > 0 && (
+          <div className="flex flex-col gap-1.5 rounded-xl border border-gray-200 p-3">
+            <p className="text-xs font-semibold text-gray-500">유저 화면에 노출할 블로그 선택 (최대 3개)</p>
+            {form.blogItems.map((item, i) => {
+              const checked = form.selectedUrls.includes(item.link);
+              return (
+                <label key={`${item.link}-${i}`} className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={!checked && form.selectedUrls.length >= 3}
+                    onChange={() => form.toggleUrl(item.link)}
+                  />
+                  <span className="truncate">블로그 {i + 1} · {item.title}</span>
+                </label>
+              );
+            })}
+            {form.selectedUrls.length >= 3 && (
+              <p className="text-[11px] text-gray-400">최대 3개까지 선택할 수 있어요.</p>
+            )}
+          </div>
+        )}
+
         <CurationBadgeForm
           serviceCategoryId={form.serviceCategoryId}
           onServiceCategoryChange={form.setServiceCategoryId}

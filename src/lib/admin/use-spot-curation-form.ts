@@ -108,6 +108,14 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
   const [activeTab, setActiveTab] = useState(0);
 
   const [existingCuration, setExistingCuration] = useState<SpotCurationItem | null>(null);
+  // [블로그 URL 선택 저장](2026-09-12 사용자 지시): "블로그 큐레이션도 가져온
+  // 블로그 url에 대하여 선택하여 저장할 수 있게해줘.. events 탭처럼" — 기존엔
+  // 검색된 상위 3개(blogItems[0..2])를 관리자 확인 없이 그대로 저장했다(관련
+  // 없는 결과가 섞여도 걸러낼 방법이 "다른 URL로 바꾸기"로 한 슬롯씩 바꿔치기
+  // 하는 것뿐이었음). events의 EventBlogCurationModal과 동일하게, 체크박스로
+  // 고른 URL만(순서 유지, 최대 3개) 저장한다.
+  const MAX_SELECTED_URLS = 3;
+  const [selectedUrls, setSelectedUrls] = useState<string[]>([]);
   // [키워드 하이라이팅에 따른 뱃지 자동 체크](2026-09-07 개선사항3 4번): 기존
   // 큐레이션 조회가 끝나기 전에 본문 로딩이 먼저 끝나 자동 체크가 기존 뱃지를
   // 덮어써 버리는 경쟁 상태를 막기 위한 플래그(둘 다 비동기 fetch라 순서가
@@ -237,6 +245,13 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
           setSelectedBadges(new Set(item.curation_badges ?? []));
           setSavedBadgeKeys(new Set(item.curation_badges ?? []));
           setCurationNote(item.curation_note ?? '');
+          // [블로그 URL 선택 저장](2026-09-12 사용자 지시): 재편집 시 이미 저장된
+          // URL들을 체크된 상태로 프리필한다(events의 existingUrls 프리필과 동일 관례).
+          setSelectedUrls(
+            [item.blog_url_1, item.blog_url_2, item.blog_url_3].filter(
+              (u): u is string => typeof u === 'string' && u.trim().length > 0
+            )
+          );
           // 이미 저장된 큐레이션이면 저장된 추천 연령을 그대로 쓰고, 블로그
           // 본문 기반 자동 판정은 건너뛴다(관리자가 이미 검수한 값을 덮어쓰지
           // 않음 — 뱃지 자동 체크와 동일 규약).
@@ -365,6 +380,17 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
     });
   }
 
+  // [블로그 URL 선택 저장](2026-09-12 사용자 지시): 이미 선택된 URL은 체크 해제
+  // 가능, 미선택인데 이미 3개 찼으면 더 담지 않는다(events의 toggleUrl과 동일
+  // 관례 — 새 UI 없이도 상한이 자연스럽게 지켜짐).
+  function toggleUrl(url: string) {
+    setSelectedUrls((prev) => {
+      if (prev.includes(url)) return prev.filter((u) => u !== url);
+      if (prev.length >= MAX_SELECTED_URLS) return prev;
+      return [...prev, url];
+    });
+  }
+
   // 저장 성공 시 true, 실패 시 false를 반환한다 — 호출부(모달은 "닫기", 워크벤치는
   // "다음 미처리 스팟으로 이동")가 서로 다른 후속 동작을 결정해야 하므로 이 훅은
   // 저장 자체만 책임지고 후속 동작은 호출부에 맡긴다.
@@ -385,15 +411,18 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
         if (!res.ok) throw new Error(data.error ?? '노출 중분류 저장에 실패했습니다.');
       }
 
-      // 2) 블로그 URL 3개(본문은 절대 전송하지 않음) + 뱃지를 spot_curations에
-      // 저장한다. 대표 이미지/영업시간/가격/메뉴는 이 화면의 책임이 아니다
-      // (SpotCurationsPanel 전담 — 위 재분리 참고). PATCH는 body에 있는 필드만
-      // 갱신하므로 이 필드들을 아예 보내지 않으면 SpotCurationsPanel이 이미
-      // 저장해둔 값을 덮어쓰지 않는다.
+      // 2) 체크박스로 선택한 블로그 URL(최대 3개, 본문은 절대 전송하지 않음) +
+      // 뱃지를 spot_curations에 저장한다. [블로그 URL 선택 저장](2026-09-12
+      // 사용자 지시): "블로그 큐레이션도 가져온 블로그 url에 대하여 선택하여
+      // 저장할 수 있게해줘.. events 탭처럼" — 예전엔 검색된 상위 3개를 그대로
+      // 저장했지만, 이제 관리자가 체크한 것만 저장한다. 대표 이미지/영업시간/
+      // 가격/메뉴는 이 화면의 책임이 아니다(SpotCurationsPanel 전담 — 위
+      // 재분리 참고). PATCH는 body에 있는 필드만 갱신하므로 이 필드들을 아예
+      // 보내지 않으면 SpotCurationsPanel이 이미 저장해둔 값을 덮어쓰지 않는다.
       const payload = {
-        blog_url_1: blogItems?.[0]?.link ?? null,
-        blog_url_2: blogItems?.[1]?.link ?? null,
-        blog_url_3: blogItems?.[2]?.link ?? null,
+        blog_url_1: selectedUrls[0] ?? null,
+        blog_url_2: selectedUrls[1] ?? null,
+        blog_url_3: selectedUrls[2] ?? null,
         curation_badges: [...selectedBadges],
         curation_note: curationNote.trim() || null,
         min_age_recommended: clampMinAgeRecommended(minAgeRecommended),
@@ -445,6 +474,8 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
     activeBody,
     overrideActiveUrl,
     existingCuration,
+    selectedUrls,
+    toggleUrl,
     selectedBadges,
     savedBadgeKeys,
     toggleBadge,

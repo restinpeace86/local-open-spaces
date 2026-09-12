@@ -169,6 +169,11 @@ describe('BlogCurationModal', () => {
     await screen.findByText('행복키즈카페 다녀왔어요');
     fireEvent.click(screen.getByText('주차 완비'));
     fireEvent.click(screen.getByText('유모차 가능'));
+    // [블로그 URL 선택 저장](2026-09-12 사용자 지시): 이제 체크한 URL만 저장되므로
+    // 3개 모두 체크한다.
+    fireEvent.click(screen.getByLabelText(/블로그 1/));
+    fireEvent.click(screen.getByLabelText(/블로그 2/));
+    fireEvent.click(screen.getByLabelText(/블로그 3/));
     fireEvent.click(screen.getByText('저장 및 완료'));
 
     await waitFor(() => expect(onClose).toHaveBeenCalled());
@@ -344,6 +349,9 @@ describe('BlogCurationModal', () => {
         target: { value: 'https://blog.naver.com/yjsjhs/223844311455' },
       });
       fireEvent.click(screen.getByText('적용'));
+      // [블로그 URL 선택 저장](2026-09-12 사용자 지시): 바꿔치기한 URL도 체크해야
+      // 저장된다.
+      fireEvent.click(screen.getByLabelText(/블로그 1/));
       fireEvent.click(screen.getByText('저장 및 완료'));
 
       const saveCall = await vi.waitFor(() => {
@@ -782,4 +790,119 @@ describe('BlogCurationModal', () => {
     });
   });
 
+  // [블로그 URL 선택 저장](2026-09-12 사용자 지시): "블로그 큐레이션도 가져온
+  // 블로그 url에 대하여 선택하여 저장할 수 있게해줘.. events 탭처럼" — 예전엔
+  // 검색된 상위 3개를 관리자 확인 없이 그대로 저장했다.
+  describe('블로그 URL 선택 저장(2026-09-12)', () => {
+    it('아무것도 체크하지 않고 저장하면 blog_url 3개 모두 null로 저장된다', async () => {
+      const fetchMock = mockFetchByUrl({
+        blogSearch: {
+          items: [makeBlogItem({ link: 'https://blog.naver.com/1' }), makeBlogItem({ link: 'https://blog.naver.com/2' })],
+          hasRecentReview: true,
+          hasNoResults: false,
+        },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(
+        <BlogCurationModal spot={SPOT} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+      );
+
+      await screen.findByText('행복키즈카페 다녀왔어요');
+      fireEvent.click(screen.getByText('저장 및 완료'));
+
+      await waitFor(() => {
+        const saveCall = fetchMock.mock.calls.find(
+          (c) => (c[0] as string) === '/api/admin/spot-curations' && (c[1] as RequestInit)?.method === 'POST'
+        );
+        expect(saveCall).toBeDefined();
+        const body = JSON.parse((saveCall![1] as RequestInit).body as string);
+        expect(body.blog_url_1).toBeNull();
+        expect(body.blog_url_2).toBeNull();
+        expect(body.blog_url_3).toBeNull();
+      });
+    });
+
+    it('체크된 것 하나만 선택하면 그 하나만 blog_url_1에 저장된다', async () => {
+      const fetchMock = mockFetchByUrl({
+        blogSearch: {
+          items: [
+            makeBlogItem({ link: 'https://blog.naver.com/1' }),
+            makeBlogItem({ link: 'https://blog.naver.com/2' }),
+            makeBlogItem({ link: 'https://blog.naver.com/3' }),
+          ],
+          hasRecentReview: true,
+          hasNoResults: false,
+        },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(
+        <BlogCurationModal spot={SPOT} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+      );
+
+      await screen.findByText('행복키즈카페 다녀왔어요');
+      fireEvent.click(screen.getByLabelText(/블로그 2/));
+      fireEvent.click(screen.getByText('저장 및 완료'));
+
+      await waitFor(() => {
+        const saveCall = fetchMock.mock.calls.find(
+          (c) => (c[0] as string) === '/api/admin/spot-curations' && (c[1] as RequestInit)?.method === 'POST'
+        );
+        const body = JSON.parse((saveCall![1] as RequestInit).body as string);
+        expect(body.blog_url_1).toBe('https://blog.naver.com/2');
+        expect(body.blog_url_2).toBeNull();
+        expect(body.blog_url_3).toBeNull();
+      });
+    });
+
+    it('이미 저장된 blog_url이 있으면 그 URL이 체크된 채로 프리필된다', async () => {
+      const fetchMock = mockFetchByUrl({
+        blogSearch: {
+          items: [makeBlogItem({ link: 'https://blog.naver.com/1' }), makeBlogItem({ link: 'https://blog.naver.com/2' })],
+          hasRecentReview: true,
+          hasNoResults: false,
+        },
+        existingCuration: {
+          id: 'existing-1',
+          spot_id: 'spot-1',
+          blog_url_1: 'https://blog.naver.com/2',
+          blog_url_2: null,
+          blog_url_3: null,
+          curation_badges: [],
+        },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(
+        <BlogCurationModal spot={SPOT} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+      );
+
+      await screen.findByText('행복키즈카페 다녀왔어요');
+      expect(await screen.findByLabelText(/블로그 2/)).toBeChecked();
+      expect(screen.getByLabelText(/블로그 1/)).not.toBeChecked();
+    });
+
+    it('최대 3개까지만 선택할 수 있다', async () => {
+      const fetchMock = mockFetchByUrl({
+        blogSearch: {
+          items: [
+            makeBlogItem({ link: 'https://blog.naver.com/1' }),
+            makeBlogItem({ link: 'https://blog.naver.com/2' }),
+            makeBlogItem({ link: 'https://blog.naver.com/3' }),
+          ],
+          hasRecentReview: true,
+          hasNoResults: false,
+        },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(
+        <BlogCurationModal spot={SPOT} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+      );
+
+      await screen.findByText('행복키즈카페 다녀왔어요');
+      fireEvent.click(screen.getByLabelText(/블로그 1/));
+      fireEvent.click(screen.getByLabelText(/블로그 2/));
+      fireEvent.click(screen.getByLabelText(/블로그 3/));
+
+      expect(screen.getByText('최대 3개까지 선택할 수 있어요.')).toBeInTheDocument();
+    });
+  });
 });
