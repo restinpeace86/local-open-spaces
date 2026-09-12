@@ -10,6 +10,7 @@ import { MiniMap } from '@/components/map/mini-map';
 import { MapPreviewModal } from '@/components/map/map-preview-modal';
 import { ReservationRequestModal } from '@/components/map/reservation-request-modal';
 import { BookmarkButton } from '@/components/community/bookmark-button';
+import { KIDS_RESTAURANT_CATEGORY_MIN } from '@/lib/spaces/spot-category-groups';
 
 const NO_INFO_TEXT = '정보 준비 중 (공공 기관 문의)';
 
@@ -894,8 +895,17 @@ export function DetailModal({
               {/* [View Fallback](2026-09-01 사용자 지시) "풍성한 뷰": 관리자가 등록한 메뉴가
                   있으면 보여준다. 공공데이터에는 메뉴 개념 자체가 없어 큐레이션 전용 정보다.
                   [가격 및 메뉴 '준비 중' 플레이스홀더](2026-09-08 개선사항3-5): 메뉴가 없어도
-                  행 자체는 숨기지 않고 전용 문구로 대신한다. */}
-              {curation !== undefined && (
+                  행 자체는 숨기지 않고 전용 문구로 대신한다.
+                  [스팟 상세카드 "메뉴" 노출 범위 정리](2026-09-12 사용자 지시): "메뉴는..
+                  키즈카페라던가도 메뉴가 있을수있어서.. 다른곳은 안하겠지?" — 관리자
+                  큐레이션이 애초에 "키즈친화 식당"(category_min='놀이방식당') 후보만
+                  검색되도록 설계돼 있어(spot-curations-panel.tsx), 다른 카테고리는
+                  메뉴를 입력할 방법 자체가 없다. 이 행을 모든 스팟에 무조건 보여주면
+                  공원·도서관 등에서 "메뉴 정보는 순차적으로 추가될 예정이에요"라는,
+                  사실은 추가될 일이 없는 문구가 영구히 뜬다 — 사용자 확인(2026-09-12):
+                  "키즈친화식당만(현행 유지)". 운영시간/가격은 공공데이터(operating_hours/
+                  is_free) 폴백이 있어 다른 카테고리에도 유의미하므로 그대로 둔다. */}
+              {curation !== undefined && item.category_min === KIDS_RESTAURANT_CATEGORY_MIN && (
                 <div className="flex items-start justify-between gap-2">
                   <dt className="text-gray-500 shrink-0">메뉴</dt>
                   <dd className="text-right text-gray-900">

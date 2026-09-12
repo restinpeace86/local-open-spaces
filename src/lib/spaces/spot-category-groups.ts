@@ -163,6 +163,17 @@ export function isSpotCategoryVisible(category: CoreSpotCategory, counts?: Recor
   return category.minors.some((min) => (counts[min] ?? 1) > 0);
 }
 
+// [스팟 상세카드 "메뉴" 노출 범위 정리](2026-09-12 사용자 지시): "메뉴는... 키즈카페
+// 라던가도 메뉴가 있을수있어서.. 다른곳은 안하겠지?" — 검토 결과 관리자 큐레이션
+// (spot-curations-panel.tsx)이 애초에 "키즈친화 식당"(category_min='놀이방식당')
+// 후보만 검색하도록 설계돼 있어(2026-09-01), 다른 카테고리는 메뉴를 입력할 방법
+// 자체가 없다. 그런데도 detail-modal.tsx는 모든 스팟에 "메뉴" 행을 무조건 보여줘,
+// 공원·도서관 등은 영원히 "메뉴 정보는 순차적으로 추가될 예정이에요"라는 사실과
+// 다른(추가될 일이 없는) 문구가 뜬다. 사용자 확인: "키즈친화식당만 (현행 유지)".
+// 관리자 큐레이션 후보 검색과 유저 화면 메뉴 행 노출 여부가 항상 같은 범위를
+// 가리키도록 이 상수 하나로 통일한다(하드코딩 중복 제거, 제5장 제4·6조).
+export const KIDS_RESTAURANT_CATEGORY_MIN = CORE_SPOT_CATEGORIES.find((c) => c.id === 'kids-restaurant')?.minors[0];
+
 export function isKnownSpotCategoryMin(value: string): boolean {
   return CORE_SPOT_CATEGORIES.some((c) => c.minors.includes(value));
 }

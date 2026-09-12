@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { parseEntranceFeeText, parseMenuText, parseOperatingHoursText, ParsedMenuItem } from '@/lib/admin/spot-curation-parsers';
-import { CORE_SPOT_CATEGORIES } from '@/lib/spaces/spot-category-groups';
+import { KIDS_RESTAURANT_CATEGORY_MIN } from '@/lib/spaces/spot-category-groups';
 
 // [개발 종합 요청] 스팟픽 MVP 스마트 폴백, 관리자 큐레이션 및 배치 안정화 고도화(2026-09-01)
 // 섹션 2: 관리자 전용 "스팟 큐레이션" 탭. curated_items(제휴 상품, booking_url 외부 링크
@@ -45,9 +45,10 @@ const PAGE_SIZE = 50;
 
 // [관리자 '스팟 큐레이션' 탭 대상 범위](2026-09-01 사용자 지시): 스팟 큐레이션은
 // 애초에 "키즈친화 식당"(gg-kidscafe-adapter.mjs가 적재하는 category_min='놀이방식당')을
-// 위해 설계된 기능이라, 후보 목록을 이 중분류로 좁힌다. 하드코딩된 문자열을 새로 만들지
-// 않고 CORE_SPOT_CATEGORIES(/nearby 필터 칩과 동일한 단일 출처)에서 찾아 쓴다.
-const KIDS_RESTAURANT_CATEGORY_MIN = CORE_SPOT_CATEGORIES.find((c) => c.id === 'kids-restaurant')?.minors[0];
+// 위해 설계된 기능이라, 후보 목록을 이 중분류로 좁힌다.
+// [스팟 상세카드 "메뉴" 노출 범위 정리](2026-09-12 사용자 지시): detail-modal.tsx의
+// "메뉴" 행 노출 범위와 항상 같은 값을 가리켜야 해서 spot-category-groups.ts로
+// 상수를 옮기고 여기서는 그 값을 그대로 가져다 쓴다(하드코딩 중복 제거).
 
 // 요구사항 "[장소명 + 주소(동/읍/면)]": 도로명 주소 끝에 "...(가능동)"처럼 법정동/읍/면이
 // 괄호로 붙어 있으면 그 부분만 짧게 뽑아 보여준다(실측 확인: 이 표기가 실제 데이터의

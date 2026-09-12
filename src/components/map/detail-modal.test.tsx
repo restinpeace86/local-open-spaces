@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DetailModal } from './detail-modal';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
+import { KIDS_RESTAURANT_CATEGORY_MIN } from '@/lib/spaces/spot-category-groups';
 
 // [Decision 019](2026-09-02): DetailModal 헤더에 추가된 BookmarkButton이 useUser() 훅을
 // 쓴다 — 비로그인으로 고정해 렌더링만 되고(찜 버튼은 조용히 숨김) 이 파일의 기존 CTA/뱃지
@@ -352,10 +353,47 @@ describe('DetailModal 스마트 폴백(View/Reservation Fallback, 2026-09-01)', 
     render(<DetailModal item={makeSpaceItem({ operating_hours: '평일 09:00-18:00' })} onClose={() => {}} />);
 
     expect(await screen.findByText('평일 09:00-18:00')).toBeInTheDocument();
-    // [가격 및 메뉴 '준비 중' 플레이스홀더](2026-09-08 개선사항3-5): 메뉴가 없어도
-    // 행 자체는 숨기지 않고 전용 문구를 보여준다(예전엔 완전히 숨겨졌음).
-    expect(screen.getByText('메뉴')).toBeInTheDocument();
-    expect(await screen.findByText('상세 메뉴 정보는 순차적으로 추가될 예정이에요')).toBeInTheDocument();
+  });
+
+  // [스팟 상세카드 "메뉴" 노출 범위 정리](2026-09-12 사용자 지시): "메뉴는.. 키즈카페
+  // 라던가도 메뉴가 있을수있어서.. 다른곳은 안하겠지?" — 키즈친화 식당
+  // (category_min='놀이방식당')에서만 "메뉴" 행을 보여준다(관리자 큐레이션도 이
+  // 카테고리만 입력 가능해, 다른 카테고리는 영원히 채워지지 않을 플레이스홀더를
+  // 보여주는 걸 막는다).
+  describe('메뉴 행 노출 범위(2026-09-12)', () => {
+    it('키즈친화 식당이면 메뉴가 없어도 행 자체는 숨기지 않고 전용 문구를 보여준다', async () => {
+      mockCurationResponse(null);
+      render(
+        <DetailModal
+          item={makeSpaceItem({ category_min: KIDS_RESTAURANT_CATEGORY_MIN })}
+          onClose={() => {}}
+        />
+      );
+
+      // curation 조회(비동기)가 끝나 로딩 상태(undefined)를 벗어날 때까지 기다린 뒤
+      // 확인한다 — "가격" 행이 뜨는 순간이 곧 curation 로딩 완료 시점이다.
+      await screen.findByText('가격');
+      expect(screen.getByText('메뉴')).toBeInTheDocument();
+      expect(screen.getByText('상세 메뉴 정보는 순차적으로 추가될 예정이에요')).toBeInTheDocument();
+    });
+
+    it('키즈친화 식당이 아니면(예: 공원) 메뉴 행 자체를 보여주지 않는다', async () => {
+      mockCurationResponse(null);
+      render(<DetailModal item={makeSpaceItem({ category_min: '공원' })} onClose={() => {}} />);
+
+      // curation 로딩이 끝난 뒤(가격 행이 뜬 뒤)에도 메뉴 행은 계속 없어야 한다.
+      await screen.findByText('가격');
+      expect(screen.queryByText('메뉴')).not.toBeInTheDocument();
+      expect(screen.queryByText('상세 메뉴 정보는 순차적으로 추가될 예정이에요')).not.toBeInTheDocument();
+    });
+
+    it('category_min이 아예 없어도(null) 메뉴 행을 보여주지 않는다', async () => {
+      mockCurationResponse(null);
+      render(<DetailModal item={makeSpaceItem({ category_min: null })} onClose={() => {}} />);
+
+      await screen.findByText('가격');
+      expect(screen.queryByText('메뉴')).not.toBeInTheDocument();
+    });
   });
 
   it('큐레이션이 있으면 구조화된 영업시간(오픈~마감/브레이크타임/라스트오더)을 우선 보여준다', async () => {
@@ -394,7 +432,7 @@ describe('DetailModal 스마트 폴백(View/Reservation Fallback, 2026-09-01)', 
       naver_booking_url: null,
       curation_note: null,
     });
-    render(<DetailModal item={makeSpaceItem()} onClose={() => {}} />);
+    render(<DetailModal item={makeSpaceItem({ category_min: KIDS_RESTAURANT_CATEGORY_MIN })} onClose={() => {}} />);
 
     expect(await screen.findByText('짜장면 · 7,000원')).toBeInTheDocument();
   });
