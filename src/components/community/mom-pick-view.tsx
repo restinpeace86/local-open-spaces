@@ -6,7 +6,9 @@ import { getMyProfile } from '@/lib/auth/profile';
 import { LoginPromptModal } from './login-prompt-modal';
 import { SaessakMomGuideModal } from './saessak-mom-guide-modal';
 import { SurveyReviewComposer } from './survey-review-composer';
-import { PreviewSection } from './preview-section';
+import { ExpertPickSection } from './expert-pick-section';
+import { TrendingPickSection } from './trending-pick-section';
+import { LivePickSection } from './live-pick-section';
 import { GRADE_LABEL } from '@/lib/community/grades';
 import { DashboardPost } from '@/lib/community/mom-pick-dashboard';
 
@@ -211,24 +213,9 @@ export function MomPickView() {
             <p className="text-sm text-gray-400">피드를 불러오는 중...</p>
           ) : dashboard ? (
             <div className="flex flex-col gap-6">
-              <PreviewSection
-                title="✨ 파워맘 · 우수맘 추천"
-                href="/mom-pick/expert"
-                posts={dashboard.expert}
-                emptyText="아직 파워맘/우수맘 추천 글이 없어요."
-              />
-              <PreviewSection
-                title="🔥 인기 · 우수글"
-                href="/mom-pick/trending"
-                posts={dashboard.trending}
-                emptyText="아직 인기글이 없어요."
-              />
-              <PreviewSection
-                title="🕐 실시간 라이브"
-                href="/mom-pick/live"
-                posts={dashboard.live}
-                emptyText="아직 등록된 글이 없어요."
-              />
+              <ExpertPickSection posts={dashboard.expert} />
+              <TrendingPickSection posts={dashboard.trending} />
+              <LivePickSection posts={dashboard.live} />
             </div>
           ) : null}
 
