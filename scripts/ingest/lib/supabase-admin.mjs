@@ -185,6 +185,31 @@ function dedupeByExternalIdMergeNulls(rows) {
 // 더 작은 단위로 쪼갠다.
 const SELECT_LOOKUP_BATCH_SIZE = 200;
 
+// [SEOUL_YEYAK events upsert 간헐적 statement timeout 진단/수정](2026-09-13 사용자
+// 지시): "왜 쿼리가 타임아웃나는지 원인 진단해서 고쳐줘" — 실측 확인(Supabase
+// Management API로 직접 조회):
+//   1) events 테이블에 statement_timeout(2분)을 넘기게 만드는 요인이 여러 개
+//      겹쳐 있다 — (a) events.updated_at 자동 갱신 트리거(2026-09-12,
+//      set_updated_at)가 UPDATE되는 모든 행에 대해 to_jsonb(new)/to_jsonb(old)
+//      전체 컬럼 직렬화+비교를 수행하고, (b) events에는 title/description/
+//      venue_name 3개의 trigram 인덱스가 있어(idx_events_description_trgm만
+//      29MB) 그 컬럼들이 바뀔 때마다 인덱스 유지 비용이 추가로 든다.
+//   2) run-daily.mjs의 STEPS 순서상 SEOUL_YEYAK이 가장 마지막에 실행돼, 바로
+//      앞 소스(SEOUL_CULTURE_EVENTS, 18000+건)의 대량 upsert 직후라 DB가 이미
+//      부하를 받은 상태에서 시작한다 — 정작 행 수는 SEOUL_YEYAK(2600여건)이
+//      SEOUL_CULTURE_EVENTS보다 훨씬 적은데도 이쪽만 반복적으로 타임아웃 나는
+//      이유다(pg_stat_user_tables 실측: n_tup_upd 1,084,005 vs n_live_tup
+//      32,888 — 하루하루 거의 전체 테이블을 다시 쓰는 재적재 패턴이라 트리거/
+//      인덱스 비용이 매번 누적됨).
+//   3) 가장 직접적이고 안전한 완화책은 "한 번의 UPSERT 문이 처리하는 행 수"를
+//      줄이는 것이다 — 문 하나가 statement_timeout 안에 끝나기만 하면 되므로,
+//      500건씩 보내던 것을 이미 검증된 SELECT_LOOKUP_BATCH_SIZE(200)와 동일한
+//      값으로 낮춰 트리거/인덱스 비용이 실리는 단일 SQL 문의 크기 자체를
+//      줄인다. upsertRows()(SafeMerge를 쓰지 않는 나머지 25개 단일 테이블
+//      어댑터)는 이 트리거 비용 문제가 없는 open_spaces 등에도 쓰이므로
+//      그대로 500을 유지한다 — SafeMerge 경로에만 적용해 영향 범위를 좁힌다.
+const SAFE_MERGE_UPSERT_BATCH_SIZE = 200;
+
 // [예약/운영 상태 필드는 항상 최신값으로 갱신](2026-09-12 사용자 지시): "서울형 키즈카페"
 // 실측 확인 결과, 위 SafeMerge의 "기존 값이 있으면 보존" 규칙이 events.start_date/
 // end_date/reservation_start_date/reservation_end_date/is_active/booking_status처럼
@@ -209,8 +234,8 @@ export async function upsertRowsSafeMerge(client, table, rows) {
   let totalCount = 0;
   let mergedWithExisting = 0;
 
-  for (let i = 0; i < dedupedRows.length; i += UPSERT_BATCH_SIZE) {
-    const batch = dedupedRows.slice(i, i + UPSERT_BATCH_SIZE);
+  for (let i = 0; i < dedupedRows.length; i += SAFE_MERGE_UPSERT_BATCH_SIZE) {
+    const batch = dedupedRows.slice(i, i + SAFE_MERGE_UPSERT_BATCH_SIZE);
 
     const existingById = new Map();
     for (let j = 0; j < batch.length; j += SELECT_LOOKUP_BATCH_SIZE) {

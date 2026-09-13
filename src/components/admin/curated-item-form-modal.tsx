@@ -1,8 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useBackdropDismiss } from '@/lib/admin/use-backdrop-dismiss';
 import { SpotPicker, SpotOption } from '@/components/community/spot-picker';
+import { SpotServiceCategoryCheck } from '@/components/admin/spot-service-category-check';
+import { ServiceCategory } from '@/lib/admin/service-category';
 
 // [관리자 화면(/admin/data-grid) 기능 고도화 및 범용 제휴 상품 테이블 개편](2026-08-30
 // 사용자 지시) 요구사항 2: "[+ 신규 상품 등록]"/각 행의 "[수정]"이 여는 팝업 폼. 신규
@@ -54,6 +56,21 @@ export function CuratedItemFormModal({
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // [노출 중분류 확인/입력](2026-09-13 사용자 지시): "큐레이션/제휴 상품 등록탭에서도
+  // 장소 입력하면 해당 장소가 노출 중분류 없으면 관리자가 입력할수있도록.. events쪽의
+  // 관리자 상세 팝업에서.. 하는것처럼" — 이 폼은 원래 serviceCategories를 쓸 일이
+  // 없어 조회하지 않았는데, SpotServiceCategoryCheck에 넘겨주려고 자체적으로
+  // 조회한다(다른 자기완결 모달과 동일한 관례 — 새 prop을 부모 체인에 꿰지 않음).
+  const [serviceCategories, setServiceCategories] = useState<ServiceCategory[]>([]);
+  useEffect(() => {
+    fetch('/api/admin/service-categories')
+      .then((res) => res.json())
+      .then((data: { items?: ServiceCategory[] }) => setServiceCategories(data.items ?? []))
+      .catch(() => {
+        // 실패해도 노출 중분류 상태만 안 보일 뿐 상품 등록/수정 자체는 그대로 가능하다.
+      });
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -181,6 +198,7 @@ export function CuratedItemFormModal({
             <p className="text-xs text-gray-400">
               장소를 연동하면 노출 활성화 시 스팟픽 지도에서 특가/Hot 마커로 강조됩니다.
             </p>
+            <SpotServiceCategoryCheck spotId={spot?.id ?? null} serviceCategories={serviceCategories} />
           </div>
 
           <div className="flex gap-3">

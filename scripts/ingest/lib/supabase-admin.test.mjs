@@ -271,17 +271,23 @@ describe('upsertRowsSafeMerge', () => {
     );
   });
 
-  it('행이 500건을 넘으면 upsert는 500건 단위로 나누고, 조회(.in())는 그보다 더 잘게 나눈다', async () => {
+  it('행이 200건을 넘으면 upsert도 200건 단위로 나눈다', async () => {
     const { client, upsert, inFn } = makeSafeMergeMockClient({ existingRows: [] });
     const rows = Array.from({ length: 1200 }, (_, i) => ({ external_id: `id-${i}` }));
 
     const result = await upsertRowsSafeMerge(client, 'open_spaces', rows);
 
-    // upsert(POST 본문)는 500/500/200 3배치. 조회(.in(), GET 쿼리스트링)는 500건을 한 번에
-    // 넣으면 "fetch failed"가 실측 확인돼(2026-08-25) 200건 단위로 더 쪼갠다:
-    // 500→200+200+100(3회), 500→200+200+100(3회), 200→200(1회) = 총 7회.
-    expect(upsert).toHaveBeenCalledTimes(3);
-    expect(inFn).toHaveBeenCalledTimes(7);
+    // [SEOUL_YEYAK events upsert 간헐적 statement timeout 수정](2026-09-13 사용자 지시):
+    // "왜 쿼리가 타임아웃나는지 원인 진단해서 고쳐줘" — SafeMerge upsert 배치 크기를
+    // 500 → 200(이미 검증된 SELECT_LOOKUP_BATCH_SIZE와 동일)으로 낮췄다. 단일 SQL
+    // UPSERT 문이 처리하는 행 수를 줄여, 그 문 하나에 실리는 트리거(events.updated_at
+    // 자동 갱신)/trigram 인덱스 유지 비용을 줄이는 것이 목적이다(events 테이블에
+    // statement_timeout 2분을 넘겨 upsert가 반복 실패한 실측 진단 결과 — 상세는
+    // implementation/2026-09-13-events-upsert-timeout-fix.md 참고).
+    // upsert(POST 본문): 1200/200 = 정확히 6배치. 조회(.in(), GET)는 배치 크기가
+    // SELECT_LOOKUP_BATCH_SIZE(200)와 같아져 배치당 추가로 쪼갤 필요가 없다 — 6회.
+    expect(upsert).toHaveBeenCalledTimes(6);
+    expect(inFn).toHaveBeenCalledTimes(6);
     expect(inFn.mock.calls.every(([, ids]) => ids.length <= 200)).toBe(true);
     expect(result).toEqual({ count: 1200, duplicateWithinBatch: 0, mergedWithExisting: 0 });
   });

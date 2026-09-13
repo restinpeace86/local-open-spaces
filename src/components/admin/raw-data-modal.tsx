@@ -14,6 +14,7 @@ import { GroupMemberRow } from '@/app/api/admin/spot-dedup/group-members/route';
 import { cleanupMessyText, looksLikeMessyText } from '@/lib/admin/cleanup-messy-text';
 import { EVENTS_ALLOWED_CATEGORY_MINS } from '@/lib/admin/category-min-groups';
 import { OperatingScheduleUpdatedHandler } from '@/components/admin/operating-schedule-editor';
+import { SpotServiceCategoryCheck } from '@/components/admin/spot-service-category-check';
 
 // [개편] 행 클릭 시 해당 행의 전체 원천 컬럼(구조화된 값) + raw_data/raw_payload 원문 JSON을
 // 함께 보여주는 Read-Only 뷰어. 3개 탭(open_spaces/events/raw_ingest_data) 행 형태가 서로
@@ -413,20 +414,13 @@ function SpaceLinkEditor({
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // undefined = 아직 조회 전, null = 조회 완료했지만 노출 중분류 없음.
-  const [spaceServiceCategoryId, setSpaceServiceCategoryId] = useState<string | null | undefined>(undefined);
-  const [isLoadingSpaceInfo, setIsLoadingSpaceInfo] = useState(false);
-  const [categoryDraft, setCategoryDraft] = useState('');
-  const [isSavingCategory, setIsSavingCategory] = useState(false);
-  const [categoryErrorMessage, setCategoryErrorMessage] = useState<string | null>(null);
-
+  // [노출 중분류 확인/입력 UI 분리](2026-09-13): 원래 이 이펙트가 이름 확인과 노출
+  // 중분류 조회를 함께 했는데, 노출 중분류 쪽은 SpotServiceCategoryCheck로 뽑아
+  // curated-item-form-modal.tsx와 공유한다(제5장 제4조). 이름 확인(placeholder →
+  // 실제 이름)만 여기 남긴다.
   useEffect(() => {
     const spaceId = selected?.id ?? null;
-    if (!spaceId) {
-      setSpaceServiceCategoryId(undefined);
-      return;
-    }
-    setIsLoadingSpaceInfo(true);
+    if (!spaceId) return;
     fetch(`/api/admin/data-grid/space-link?space_id=${encodeURIComponent(spaceId)}`)
       .then(async (res) => {
         const data = await res.json();
@@ -434,20 +428,15 @@ function SpaceLinkEditor({
         setSelected((prev) =>
           prev && prev.id === spaceId ? { ...prev, name: data.space.standard_name ?? data.space.name ?? prev.name } : prev
         );
-        setSpaceServiceCategoryId(data.space.service_category_id ?? null);
-        setCategoryDraft(data.space.service_category_id ?? '');
       })
       .catch(() => {
         // 조용한 부가 조회 실패는 연결 자체를 막지 않는다(제5장 제11조).
-      })
-      .finally(() => setIsLoadingSpaceInfo(false));
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected?.id]);
 
   async function handleSelect(spot: SpotOption | null) {
     setSelected(spot);
-    setSpaceServiceCategoryId(undefined);
-    setCategoryErrorMessage(null);
     setIsSaving(true);
     setErrorMessage(null);
     try {
@@ -466,28 +455,6 @@ function SpaceLinkEditor({
     }
   }
 
-  async function handleSaveCategory() {
-    if (!selected) return;
-    setIsSavingCategory(true);
-    setCategoryErrorMessage(null);
-    try {
-      const res = await fetch('/api/admin/open-spaces/bulk-category-mapping', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: [selected.id], service_category_id: categoryDraft || null }),
-      });
-      const json = await res.json();
-      if (!res.ok) throw new Error(json.error ?? '노출 중분류 저장 실패');
-      setSpaceServiceCategoryId(categoryDraft || null);
-    } catch (err) {
-      setCategoryErrorMessage(err instanceof Error ? err.message : '노출 중분류 저장 실패');
-    } finally {
-      setIsSavingCategory(false);
-    }
-  }
-
-  const currentCategory = serviceCategories.find((c) => c.id === spaceServiceCategoryId);
-
   return (
     <div className="mt-3 rounded-xl border border-gray-200 p-3">
       <h3 className="text-xs font-semibold text-gray-500 mb-2">
@@ -504,46 +471,7 @@ function SpaceLinkEditor({
       <SpotPicker selected={selected} onSelect={handleSelect} />
       {errorMessage && <p className="mt-1.5 text-xs text-red-500">{errorMessage}</p>}
 
-      {selected && isLoadingSpaceInfo && spaceServiceCategoryId === undefined && (
-        <p className="mt-2 text-[11px] text-gray-400">노출 중분류 확인 중...</p>
-      )}
-
-      {selected && !isLoadingSpaceInfo && spaceServiceCategoryId && (
-        <p className="mt-2 text-[11px] font-medium text-emerald-700">
-          ✅ 노출 중분류: {currentCategory ? `${currentCategory.parent_category} > ${currentCategory.category_name}` : spaceServiceCategoryId}
-        </p>
-      )}
-
-      {selected && !isLoadingSpaceInfo && spaceServiceCategoryId === null && (
-        <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50/60 p-2.5">
-          <p className="text-[11px] font-semibold text-amber-800 mb-1.5">
-            ⚠️ 이 스팟은 노출 중분류가 없어요 — 카테고리 필터로는 스팟픽에서 찾을 수 없어요. 지금 지정해 주세요.
-          </p>
-          <div className="flex items-center gap-2">
-            <select
-              value={categoryDraft}
-              onChange={(e) => setCategoryDraft(e.target.value)}
-              className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs flex-1"
-            >
-              <option value="">(선택 안 함)</option>
-              {serviceCategories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.parent_category} &gt; {c.category_name}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              onClick={handleSaveCategory}
-              disabled={isSavingCategory || !categoryDraft}
-              className="shrink-0 rounded-full bg-purple-600 text-white text-xs font-semibold px-3 py-1.5 disabled:opacity-40 hover:bg-purple-700"
-            >
-              {isSavingCategory ? '저장 중...' : '저장'}
-            </button>
-          </div>
-          {categoryErrorMessage && <p className="mt-1.5 text-xs text-red-500">{categoryErrorMessage}</p>}
-        </div>
-      )}
+      <SpotServiceCategoryCheck spotId={selected?.id ?? null} serviceCategories={serviceCategories} />
     </div>
   );
 }

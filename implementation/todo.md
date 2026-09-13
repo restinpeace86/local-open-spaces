@@ -549,6 +549,28 @@
       EventBlogCurationModal/MobileCurationWorkbench 3곳 전부 이 공용
       컴포넌트를 쓰므로 한 번의 수정으로 전부 반영됨.
       (완료: 2026-09-13, 상세: implementation/2026-09-13-blog-curation-manual-url-when-no-results.md)
+- [x] Step 148 (사용자 지시, 2026-09-13): "어 왜 쿼리가 타임아웃나는지.. 원인
+      진단해서 고쳐줘. 그리고 큐레이션/제휴 상품 등록탭에서도 장소 입력하면
+      해당 장소가 노출 중분류 없으면 관리자가 입력할수있도록 노출중분류도
+      뜨게 해줘 events쪽 의 관리자 상세 팝업에서 장소 넣으면 노출중분류
+      매핑되어있는지 체크해서 없으면 넣으라고해주는것처럼." 두 가지 작업.
+      (1) events upsert statement timeout 진단/수정: Supabase Management
+      API로 직접 실측 — events.updated_at 자동 갱신 트리거(2026-09-12,
+      전체 컬럼 jsonb 비교)와 trigram 인덱스 3종(description 29MB 포함)
+      유지 비용이 겹치고, SEOUL_YEYAK이 run-daily.mjs STEPS 순서상 대량
+      upsert(SEOUL_CULTURE_EVENTS 18000+건) 직후 마지막에 실행돼 DB가
+      부하 받은 상태에서 시작하는 게 겹쳐 간헐적으로 2분 statement_timeout을
+      넘김을 확인(pg_stat_user_tables: n_tup_upd 108만 vs n_live_tup 3.3만
+      — 매일 테이블 전체를 다시 쓰는 패턴). 가장 안전한 완화책으로
+      upsertRowsSafeMerge()의 UPSERT 배치 크기를 500 → 200(기존
+      SELECT_LOOKUP_BATCH_SIZE와 동일)으로 낮춰 단일 SQL 문에 실리는 트리거/
+      인덱스 비용 자체를 줄임(스키마 변경 없음, upsertRows()가 쓰는 나머지
+      25개 어댑터는 영향 없음). (2) 큐레이션/제휴 상품 등록 폼(curated-item-
+      form-modal.tsx)에 스팟 연동 시 노출 중분류 확인/입력 UI 추가 — 기존
+      events 탭 상세 팝업(raw-data-modal.tsx의 SpaceLinkEditor)에 있던 로직을
+      SpotServiceCategoryCheck로 뽑아 공유(제5장 제4조).
+      (완료: 2026-09-13, 상세: implementation/2026-09-13-events-upsert-timeout-fix.md,
+      implementation/2026-09-13-curated-items-service-category-check.md)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.
