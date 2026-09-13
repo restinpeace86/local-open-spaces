@@ -366,6 +366,46 @@ describe('BlogCurationModal', () => {
     });
   });
 
+  // [자동 검색 0건이어도 URL 직접 추가 가능](2026-09-13 사용자 지시): "네이버 예약
+  // 링크를 걸려고 해도.. 이게 url 안주어지는데? 안으로 숨긴거 아니야?" — 네이버
+  // 블로그 검색 API는 블로그 글만 검색하므로 예약 페이지 링크는 검색 결과에
+  // 나올 수 없다. 결과가 0건이면 "다른 URL로 바꾸기" 입력창 자체가 없어 관리자가
+  // URL을 넣을 방법이 없던 문제를 고쳤다.
+  describe('자동 검색 0건일 때 URL 직접 추가(2026-09-13)', () => {
+    it('검색 결과가 없어도 "URL 직접 추가하기"로 URL을 넣고 저장할 수 있다', async () => {
+      const fetchMock = mockFetchByUrl({
+        blogSearch: { items: [], hasRecentReview: false, hasNoResults: true },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(
+        <BlogCurationModal spot={SPOT} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+      );
+
+      await screen.findByText('⚠️ 관련 블로그 글을 찾지 못했습니다 - 폐업/방치 검토');
+      fireEvent.click(screen.getByText('🔗 URL 직접 추가하기(예: 네이버 예약 링크 등)'));
+      fireEvent.change(screen.getByPlaceholderText('https://...'), {
+        target: { value: 'https://booking.naver.com/booking/some-shop' },
+      });
+      fireEvent.click(screen.getByText('적용'));
+
+      // 결과가 생겼으니 "찾지 못했습니다" 경고는 사라지고, 방금 넣은 URL이 블로그
+      // 1 슬롯으로 보여야 체크해서 저장할 수 있다.
+      expect(screen.queryByText('⚠️ 관련 블로그 글을 찾지 못했습니다 - 폐업/방치 검토')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByLabelText(/블로그 1/));
+      fireEvent.click(screen.getByText('저장 및 완료'));
+
+      const saveCall = await vi.waitFor(() => {
+        const call = fetchMock.mock.calls.find(
+          (c) => (c[0] as string) === '/api/admin/spot-curations' && (c[1] as RequestInit)?.method === 'POST'
+        );
+        expect(call).toBeDefined();
+        return call!;
+      });
+      const body = JSON.parse((saveCall[1] as RequestInit).body as string);
+      expect(body.blog_url_1).toBe('https://booking.naver.com/booking/some-shop');
+    });
+  });
+
   // [정렬 기준을 화면에서 전환](2026-09-06 사용자 지시): "나중에는 sim 기준으로도
   // 변경할수있도록.. 화면에서 sim/date 기준 변경해서도 호출할수 있게.. default는
   // date로."

@@ -303,6 +303,53 @@ export function BlogReferenceViewer({
           )}
         </>
       )}
+
+      {/* [자동 검색 0건이어도 URL 직접 추가 가능](2026-09-13 사용자 지시): "네이버
+          예약 링크를 걸려고 해도.. 이게 url 안주어지는데? 안으로 숨긴거
+          아니야?" — 네이버 블로그 검색 API는 블로그 글만 찾으므로 예약
+          페이지 같은 다른 종류의 링크는 애초에 검색 결과에 나올 수 없다.
+          기존엔 검색 결과가 있을 때(activeItem 존재)만 "다른 URL로 바꾸기"가
+          보여서, 결과가 0건이면 관리자가 URL을 넣을 입력창 자체가 화면에
+          없었다(숨긴 게 아니라 렌더 조건이 결과 존재를 전제해 아예 안
+          그려졌던 것). 결과가 0건일 때도 같은 입력을 띄운다. */}
+      {blogItems && blogItems.length === 0 && onOverrideUrl && (
+        <div className="flex flex-col gap-1.5">
+          {!isEditingUrl ? (
+            <button
+              type="button"
+              onClick={startEditingUrl}
+              className="self-start rounded-full border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-600 hover:bg-gray-50"
+            >
+              🔗 URL 직접 추가하기(예: 네이버 예약 링크 등)
+            </button>
+          ) : (
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={urlDraft}
+                onChange={(e) => setUrlDraft(e.target.value)}
+                placeholder="https://..."
+                className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-xs"
+              />
+              <button
+                type="button"
+                onClick={applyUrlOverride}
+                disabled={!urlDraft.trim()}
+                className="shrink-0 rounded-full bg-gray-900 text-white px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+              >
+                적용
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsEditingUrl(false)}
+                className="shrink-0 text-xs text-gray-500 hover:text-gray-800"
+              >
+                취소
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

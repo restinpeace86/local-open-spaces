@@ -535,6 +535,20 @@
       바꿔도(저장 없이 선택만 해도) 이미 불러온 블로그 본문이 즉시
       재하이라이트된다는 것을 코드로 확인하고 그대로 반영했다.
       (완료: 2026-09-13, 상세: implementation/2026-09-13-curation-workbench-section-reorder.md)
+- [x] Step 147 (사용자 지시, 2026-09-13): "네이버 예약 링크를 걸려고 해도..
+      이게 url 안주어지는데? 안으로 숨긴거 아니야?" — 실측 확인: 네이버
+      블로그 검색 API(search/v1/blog)는 블로그 글만 검색하므로 예약 페이지
+      링크는 애초에 검색 결과로 나올 수 없고, 기존 "다른 URL로 바꾸기"
+      수동 입력 UI는 이미 있는 검색 결과 슬롯이 있을 때만(activeItem 존재)
+      나타나도록 짜여 있어 검색 결과가 0건이면 관리자가 URL을 입력할 곳
+      자체가 화면에 없었다(숨긴 게 아니라 렌더 조건 문제). (1)
+      use-spot-curation-form.ts의 overrideActiveUrl 가드를 완화해 검색 결과가
+      0건이어도(빈 배열) 새 슬롯을 만들 수 있게 하고, 성공 시 hasNoResults를
+      false로 되돌림. (2) blog-reference-viewer.tsx에 결과 0건일 때도 보이는
+      "🔗 URL 직접 추가하기" 버튼+입력 UI를 추가. BlogCurationModal/
+      EventBlogCurationModal/MobileCurationWorkbench 3곳 전부 이 공용
+      컴포넌트를 쓰므로 한 번의 수정으로 전부 반영됨.
+      (완료: 2026-09-13, 상세: implementation/2026-09-13-blog-curation-manual-url-when-no-results.md)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.

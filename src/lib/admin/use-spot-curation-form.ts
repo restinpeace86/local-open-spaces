@@ -353,12 +353,19 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
   // 경우가 실측으로 확인됐다(Naver 쪽 데이터 품질 문제 — 우리 쪽에서 순위 자체를
   // 바로잡을 방법은 없음). 관리자가 직접 찾은 정확한 블로그 URL로 현재 탭의 슬롯을
   // 바꿔치기할 수 있게 한다 — 저장 시 이 URL이 그대로 blog_url_N에 들어간다.
+  // [자동 검색 결과가 0건일 때도 URL 직접 추가 가능](2026-09-13 사용자 지시):
+  // "네이버 예약 링크를 걸려고 해도.. 이게 url 안주어지는데?" — 네이버 "블로그"
+  // 검색 API(search/v1/blog)는 애초에 블로그 글만 검색하므로 예약 페이지 같은
+  // 다른 종류의 링크는 결과에 나올 수 없다(추측이 아니라 API 스펙상 그렇다).
+  // 원래 이 함수는 "기존 검색 결과 슬롯을 다른 URL로 바꿔치기"만 지원해서
+  // (`!prev[activeTab]`이면 아무 것도 안 함) 검색 결과가 0건이면 관리자가
+  // 직접 URL을 넣을 방법 자체가 없었다 — blogItems가 빈 배열이어도(슬롯이
+  // 없어도) activeTab 위치에 새 항목을 만들 수 있게 가드를 완화한다.
   function overrideActiveUrl(url: string) {
     const trimmed = url.trim();
     if (!trimmed) return;
     setBlogItems((prev) => {
-      if (!prev || !prev[activeTab]) return prev;
-      const next = [...prev];
+      const next = prev ? [...prev] : [];
       next[activeTab] = {
         title: '(관리자가 직접 입력한 URL)',
         link: trimmed,
@@ -369,6 +376,9 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
       };
       return next;
     });
+    // 자동 검색은 여전히 0건이었지만 관리자가 방금 직접 URL을 채웠으므로
+    // "관련 블로그 글을 찾지 못했습니다" 경고는 더 이상 맞지 않다.
+    setHasNoResults(false);
   }
 
   function toggleBadge(key: string) {
