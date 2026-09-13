@@ -586,6 +586,16 @@
       "애매한 후보"로 보고만 하고 삭제하지 않음(사용자가 이 둘은 승인하지
       않았음).
       (완료: 2026-09-13, 상세: implementation/2026-09-13-drop-unused-events-indexes.md)
+- [x] Step 150 (사용자 지시, 2026-09-13): "어 수집안된거 재수집은 했어
+      오늘꺼?" → "오늘 놓친거 해줘 재수집". 오늘 두 번 실패했던 SEOUL_YEYAK
+      소스를 `node scripts/ingest/run-daily.mjs --only=SEOUL_YEYAK`로 수동
+      재실행했다. Step 148에서 적용한 배치 크기 축소(500→200) 이후 첫 실제
+      실행이었는데, "canceling statement due to statement timeout" 에러 없이
+      깨끗하게 성공(events 2572건 적재, 에러 0건, 드롭 0건 확인) — 타임아웃
+      완화 조치가 실제로 효과가 있었음을 확인했다. docs/pipeline-log.md에
+      자동 기록된 실행 로그를 그대로 커밋.
+      (완료: 2026-09-13, 별도 implementation 기록 없음 — docs/pipeline-log.md
+      자체가 실행 기록이며, 원인 진단/수정 내용은 Step 148에 이미 기록됨)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.
