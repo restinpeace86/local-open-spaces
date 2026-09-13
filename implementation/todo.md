@@ -571,6 +571,21 @@
       SpotServiceCategoryCheck로 뽑아 공유(제5장 제4조).
       (완료: 2026-09-13, 상세: implementation/2026-09-13-events-upsert-timeout-fix.md,
       implementation/2026-09-13-curated-items-service-category-check.md)
+- [x] Step 149 (사용자 지시, 2026-09-13): "안쓰이는 인덱스에 대하여 정리하게
+      인덱스의 여태까지 사용 비율같은거랑 어디에 사용되는지를 조사해서
+      알려줘" → "어 그래 2개 삭제해줘". events 테이블 인덱스 21개 전수를
+      pg_stat_user_indexes 실측 + 코드 전수 조사로 대조해 보고한 뒤, 사용자가
+      승인한 2개를 삭제했다. (1) idx_events_description_trgm(29MB, idx_scan=2,
+      idx_tup_fetch=0 — 21개 중 가장 크면서 가장 안 쓰임, 2026-09-13 events
+      upsert statement timeout의 원인 중 하나로 이미 지목됨). (2)
+      idx_events_category_maj(672KB, idx_scan=10 — category_maj 컬럼은
+      코드 전체에서 INSERT/표시에만 쓰이고 .eq()/.in() 등 필터·정렬 조건으로
+      쓰이는 곳이 전무함을 grep 전수 확인). 마이그레이션 파일 작성 후
+      Supabase Management API로 프로덕션에 직접 적용, pg_indexes 재조회로
+      실제 삭제 확인. idx_events_target_audience/idx_events_reservation은
+      "애매한 후보"로 보고만 하고 삭제하지 않음(사용자가 이 둘은 승인하지
+      않았음).
+      (완료: 2026-09-13, 상세: implementation/2026-09-13-drop-unused-events-indexes.md)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.

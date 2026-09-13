@@ -1,0 +1,32 @@
+-- [events upsert 간헐적 statement timeout 후속 — 안 쓰이는 인덱스 정리](2026-09-13
+-- 사용자 지시): "안쓰이는 인덱스에 대하여 정리하게 인덱스의 여태까지 사용 비율같은거랑
+-- 어디에 사용되는지를 조사해서 알려줘" → "어 그래 2개 삭제해줘".
+--
+-- pg_stat_user_indexes + 코드 전수 조사(실측, 추측 아님)로 확인한 두 인덱스:
+--
+-- 1. idx_events_description_trgm (29MB, idx_scan=2, idx_tup_read=4, idx_tup_fetch=0)
+--    get-home-feed.ts가 title/description/venue_name을 .or(ilike)로 함께 검색하긴
+--    하지만, 실측상 planner가 이 인덱스를 사실상 선택하지 않는다(다른 두 trgm
+--    인덱스는 각각 145/127회 쓰임과 대비됨). 21개 인덱스 중 가장 크면서 가장 안
+--    쓰이고, events.updated_at 자동 갱신 트리거(2026-09-12)와 맞물려 매일 벌어지는
+--    대량 upsert(하루 여러 번 테이블 전체 재적재)마다 쓰기 비용만 계속 낸다 —
+--    2026-09-13 events upsert statement timeout 진단(implementation/2026-09-13-
+--    events-upsert-timeout-fix.md)에서 지목된 요인 중 하나.
+--
+-- 2. idx_events_category_maj (672KB, idx_scan=10)
+--    코드 전체(src/lib, src/app/api)에서 category_maj는 INSERT/SELECT(표시)에만
+--    쓰이고, .eq()/.in() 등 필터·정렬 조건으로 쓰이는 곳이 단 한 곳도 없다(실측
+--    확인 — grep 전수 검사). 10회의 idx_scan은 관리자 화면 등에서의 산발적 조회로
+--    추정되며, 상시적인 애플리케이션 쿼리 경로가 아니다.
+--
+-- [CONCURRENTLY를 쓰지 않은 이유] 두 인덱스 모두 events 테이블(3.3만 행) 기준으로
+-- DROP 자체는 짧은 ACCESS EXCLUSIVE 락으로 즉시 끝나는 가벼운 작업이라(대형 테이블의
+-- 장시간 DROP과는 다름), 트랜잭션 밖에서만 허용되는 CONCURRENTLY로 복잡도를 늘리지
+-- 않는다.
+--
+-- [되돌리기] 필요해지면 원래 정의 그대로 재생성 가능하다(값이 아니라 인덱스만
+-- 삭제하므로 데이터 손실 없음):
+--   create index idx_events_description_trgm on public.events using gin (description gin_trgm_ops);
+--   create index idx_events_category_maj on public.events using btree (category_maj);
+drop index if exists public.idx_events_description_trgm;
+drop index if exists public.idx_events_category_maj;
