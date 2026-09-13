@@ -206,13 +206,25 @@ export function MomPickView() {
         ✍️
       </button>
 
+      {/* [3영역 화면 실제 가용 높이 기준 분할](2026-09-13 사용자 지시): "하단 버튼
+          (맘스픽/스팟픽/이벤트픽/마이) 영역을 고려를 안했어.. 이만큼 높이 빼고
+          3분할 하던가" — 이전엔 min-h-[28vh](뷰포트 전체 기준)를 썼는데, vh는
+          RootLayout의 하단 탭바(BottomTabs, body의 형제 요소)가 이미 떼어간
+          공간을 반영하지 못한다는 게 이 프로젝트에 이미 한 번 확인된 문제다
+          (data-grid-client.tsx의 동일한 vh 관련 주석 참고 — 그때도 vh 대신
+          "실제 남은 높이를 갖는 요소" 기준 비율로 바꿔 해결했다). 여기서는 %
+          숫자를 또 하드코딩하는 대신, flex-1을 이 wrapper부터 3개 섹션까지
+          그대로 이어 붙여 "헤더/하단 탭바를 뺀 실제 남은 화면 높이"를 3등분
+          하도록 만든다(body가 h-dvh flex column이고 BottomTabs가 shrink-0라
+          이 컴포넌트의 최상위 div가 이미 그 나머지 높이만큼만 flex-1로
+          받고 있다 — 그 값을 그대로 상속). */}
       {(state === 'allowed' || state === 'guest' || state === 'not_sprout_yet') && (
-        <div className="relative">
+        <div className="relative flex flex-1 flex-col">
           {dashboardError && <p className="text-xs text-red-600">{dashboardError}</p>}
           {!dashboard && !dashboardError ? (
             <p className="text-sm text-gray-400">피드를 불러오는 중...</p>
           ) : dashboard ? (
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-1 flex-col gap-4">
               <ExpertPickSection posts={dashboard.expert} />
               <TrendingPickSection posts={dashboard.trending} />
               <LivePickSection posts={dashboard.live} />
