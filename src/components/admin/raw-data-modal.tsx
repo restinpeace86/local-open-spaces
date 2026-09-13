@@ -711,7 +711,7 @@ export function RawDataModal({
             </button>
           </div>
 
-          {table !== 'raw_ingest_data' && table !== 'curated_items' && table !== 'spot_curations' && table !== 'mom_pick_posts' && table !== 'spot_dedup' && table !== 'category_mapping' && onCategoryMinUpdated && (
+          {table !== 'raw_ingest_data' && table !== 'curated_items' && table !== 'spot_curations' && table !== 'mom_pick_posts' && table !== 'mom_pick_unmapped_spots' && table !== 'spot_dedup' && table !== 'category_mapping' && onCategoryMinUpdated && (
             <CategoryMinEditor
               table={table}
               row={row as AdminOpenSpaceRow | AdminEventRow}

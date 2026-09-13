@@ -100,6 +100,7 @@ const EMPTY_FILTER_OPTIONS = {
   curated_items: {},
   spot_curations: {},
   mom_pick_posts: {},
+  mom_pick_unmapped_spots: {},
   spot_dedup: {},
   category_mapping: {},
 };
@@ -151,6 +152,72 @@ describe('AdminDataGridClient — curated_items 탭 통합', () => {
     // 전용 필터(제목/시설명 검색 placeholder)는 더 이상 보이지 않아야 한다.
     expect(await screen.findByPlaceholderText('상품명 키워드 검색')).toBeInTheDocument();
     expect(screen.getByText('+ 신규 상품 등록')).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText('제목/시설명, 주소 키워드 검색')).not.toBeInTheDocument();
+  });
+});
+
+// [노출 중분류 미지정 + 맘스픽 글 있음 우선순위 큐 — 탭 배지](2026-09-13 사용자
+// 지시): "그 탭에 그런게 수시로 올라올수 있으니 탭 자체에 1건이라도 있을경우
+// 탭에 표시" — 탭을 열지 않아도 마운트 시점에 개수를 조회해 배지로 보여주는지,
+// 탭을 누르면 MomPickUnmappedSpotsPanel이 렌더링되는지 확인한다(패널 내부 동작
+// 자체는 mom-pick-unmapped-spots-panel.test.tsx가 담당).
+describe('AdminDataGridClient — mom_pick_unmapped_spots 탭 + 배지(2026-09-13)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('노출 중분류 미지정 스팟이 1건 이상이면 탭에 배지(개수)가 표시된다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/admin/mom-pick-unmapped-spots')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ spots: [{ id: 's1' }, { id: 's2' }] }) } as Response);
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ rows: [], total: 0 }) } as Response);
+      })
+    );
+
+    const { container } = render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+
+    await waitFor(() => expect(container.querySelector('[aria-label="노출 중분류 미지정 2건"]')).toBeInTheDocument());
+  });
+
+  it('노출 중분류 미지정 스팟이 없으면 배지가 표시되지 않는다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/admin/mom-pick-unmapped-spots')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ spots: [] }) } as Response);
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ rows: [], total: 0 }) } as Response);
+      })
+    );
+
+    const { container } = render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+
+    // 탭을 눌러 MomPickUnmappedSpotsPanel이 같은 응답을 반영해 "없음" 문구를
+    // 보여줄 때까지 기다려, 카운트 조회가 끝났다는 것을 확인한 뒤 배지 부재를 본다.
+    fireEvent.click(screen.getByText('🚩 노출 중분류 필요'));
+    await screen.findByText('노출 중분류 지정이 필요한 장소가 없습니다.');
+    expect(container.querySelector('[aria-label^="노출 중분류 미지정"]')).not.toBeInTheDocument();
+  });
+
+  it('"🚩 노출 중분류 필요" 탭을 누르면 기존 공유 필터/테이블 대신 MomPickUnmappedSpotsPanel이 렌더링된다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/admin/mom-pick-unmapped-spots')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ spots: [] }) } as Response);
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ rows: [], total: 0 }) } as Response);
+      })
+    );
+
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+
+    fireEvent.click(screen.getByText('🚩 노출 중분류 필요'));
+
+    expect(await screen.findByText('노출 중분류 지정이 필요한 장소가 없습니다.')).toBeInTheDocument();
     expect(screen.queryByPlaceholderText('제목/시설명, 주소 키워드 검색')).not.toBeInTheDocument();
   });
 });

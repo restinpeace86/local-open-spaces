@@ -14,6 +14,7 @@ import { Pagination } from '@/components/admin/pagination';
 import { CuratedItemsPanel } from '@/components/admin/curated-items-panel';
 import { SpotCurationsPanel } from '@/components/admin/spot-curations-panel';
 import { MomPickPostsPanel } from '@/components/admin/mom-pick-posts-panel';
+import { MomPickUnmappedSpotsPanel } from '@/components/admin/mom-pick-unmapped-spots-panel';
 import { SpotDedupPanel } from '@/components/admin/spot-dedup-panel';
 import { CategoryMappingPanel } from '@/components/admin/category-mapping-panel';
 import { ServiceCategory } from '@/lib/admin/service-category';
@@ -33,6 +34,15 @@ import { ServiceCategory } from '@/lib/admin/service-category';
 // 중복 스팟 검수 탭을 분리해라" — 'category_mapping'을 일곱 번째 탭으로 추가하고,
 // spot_dedup 패널이 갖고 있던 "노출 중분류 관리"/"노출 중분류 대량 매핑" 섹션을
 // 그쪽(CategoryMappingPanel)으로 옮긴다.
+// [노출 중분류 미지정 + 맘스픽 글 있음 우선순위 큐](2026-09-13 사용자 지시): "맘스픽에
+// 대하여 노출 중분류가 없는 건 별도의 관리자화면의 탭에서.. 맘스픽 글이 올라왔고
+// 장소연결됐는데 노출중분류가 안되어 있다.. 탭 자체에 1건이라도 있을경우 표시" —
+// 'mom_pick_unmapped_spots'를 여덟 번째 탭으로 추가한다. 기존 'mom_pick_posts'(채택
+// 관리)와는 목적이 달라(이쪽은 "노출 중분류 미지정" 스팟을 찾아 처리하는 것이
+// 목적) 같은 탭에 합치지 않고 자기완결적인 별도 패널(MomPickUnmappedSpotsPanel)로
+// 분리한다. 탭 버튼 자체에 1건 이상이면 배지를 표시해야 하므로, 이 개수는
+// AdminDataGridClient 최상위에서 마운트 시 한 번 조회해 둔다(다른 자기완결 패널처럼
+// "탭을 열어야만 조회"하면 배지 자체가 애초에 뜰 수 없다).
 export type AdminTable =
   | 'open_spaces'
   | 'events'
@@ -40,6 +50,7 @@ export type AdminTable =
   | 'curated_items'
   | 'spot_curations'
   | 'mom_pick_posts'
+  | 'mom_pick_unmapped_spots'
   | 'spot_dedup'
   | 'category_mapping';
 
@@ -176,6 +187,7 @@ type FilterOptions = {
   curated_items: Record<string, never>;
   spot_curations: Record<string, never>;
   mom_pick_posts: Record<string, never>;
+  mom_pick_unmapped_spots: Record<string, never>;
   spot_dedup: Record<string, never>;
   category_mapping: Record<string, never>;
 };
@@ -205,6 +217,7 @@ const TAB_LABEL: Record<AdminTable, string> = {
   curated_items: '🏷️ 큐레이션/제휴 상품',
   spot_curations: '📍 스팟 큐레이션',
   mom_pick_posts: '👑 맘스픽 채택 관리',
+  mom_pick_unmapped_spots: '🚩 노출 중분류 필요',
   spot_dedup: '🔗 중복 스팟 검수 및 매핑',
   category_mapping: '🗂️ 노출 중분류 매핑',
 };
@@ -689,6 +702,27 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
   const router = useRouter();
   const [tab, setTab] = useState<AdminTable>('open_spaces');
 
+  // [노출 중분류 미지정 + 맘스픽 글 있음 우선순위 큐 — 탭 배지](2026-09-13 사용자
+  // 지시): "탭 자체에 1건이라도 그런게 있을경우 탭에 표시" — 다른 자기완결 패널은
+  // 탭을 열어야만 조회하지만(성능 최적화 관례), 배지는 탭을 열기 전에 이미 보여야
+  // 하므로 여기서만 예외적으로 마운트 시 한 번 조회한다. 실패해도(네트워크 오류 등)
+  // 배지가 안 보일 뿐 나머지 화면은 그대로 동작한다(제5장 제11조).
+  const [unmappedMomPickSpotCount, setUnmappedMomPickSpotCount] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/admin/mom-pick-unmapped-spots')
+      .then((res) => res.json())
+      .then((data: { spots?: unknown[] }) => {
+        if (!cancelled) setUnmappedMomPickSpotCount(Array.isArray(data.spots) ? data.spots.length : 0);
+      })
+      .catch(() => {
+        // 실패해도 배지만 안 뜰 뿐(0건 취급) 나머지 화면은 정상 동작해야 한다.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const [q, setQ] = useState('');
   const [debouncedQ, setDebouncedQ] = useState('');
   // [관리자 화면 필터 UI 압축](2026-09-05 사용자 지시): "등록일/표준 중분류/검색어
@@ -792,6 +826,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     curated_items: false,
     spot_curations: false,
     mom_pick_posts: false,
+    mom_pick_unmapped_spots: false,
     spot_dedup: false,
     category_mapping: false,
   });
@@ -1109,11 +1144,22 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
               key={t}
               type="button"
               onClick={() => switchTab(t)}
-              className={`shrink-0 px-3 py-1.5 text-xs font-semibold rounded-t-lg transition-colors ${
+              className={`relative shrink-0 px-3 py-1.5 text-xs font-semibold rounded-t-lg transition-colors ${
                 tab === t ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
               {TAB_LABEL[t]}
+              {/* [노출 중분류 미지정 + 맘스픽 글 있음 우선순위 큐 — 탭 배지]
+                  (2026-09-13 사용자 지시): "탭 자체에 1건이라도 그런게 있을경우
+                  탭에 표시" */}
+              {t === 'mom_pick_unmapped_spots' && unmappedMomPickSpotCount > 0 && (
+                <span
+                  aria-label={`노출 중분류 미지정 ${unmappedMomPickSpotCount}건`}
+                  className="absolute -right-1.5 -top-1.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[9px] font-bold text-white"
+                >
+                  {unmappedMomPickSpotCount > 99 ? '99+' : unmappedMomPickSpotCount}
+                </span>
+              )}
             </button>
           ))}
         </div>
@@ -1130,6 +1176,8 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
         <SpotCurationsPanel />
       ) : tab === 'mom_pick_posts' ? (
         <MomPickPostsPanel />
+      ) : tab === 'mom_pick_unmapped_spots' ? (
+        <MomPickUnmappedSpotsPanel />
       ) : tab === 'spot_dedup' ? (
         <SpotDedupPanel />
       ) : tab === 'category_mapping' ? (
@@ -1741,7 +1789,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
       </>
       )}
 
-      {selectedRow && tab !== 'raw_ingest_data' && tab !== 'curated_items' && tab !== 'spot_curations' && tab !== 'mom_pick_posts' && tab !== 'spot_dedup' && tab !== 'category_mapping' && (
+      {selectedRow && tab !== 'raw_ingest_data' && tab !== 'curated_items' && tab !== 'spot_curations' && tab !== 'mom_pick_posts' && tab !== 'mom_pick_unmapped_spots' && tab !== 'spot_dedup' && tab !== 'category_mapping' && (
         <RawDataModal
           table={tab}
           row={selectedRow}
