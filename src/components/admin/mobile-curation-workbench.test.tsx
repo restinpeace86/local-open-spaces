@@ -93,6 +93,24 @@ describe('MobileCurationWorkbench', () => {
     expect(screen.queryByText('합치기')).not.toBeInTheDocument();
   });
 
+  // [블로그 큐레이션 ↔ 노출 중분류 순서 변경](2026-09-13 사용자 지시): "블로그
+  // 큐레이션이 위에 있고 뱃지 다는게 아래있는건 안되나?" — 블로그 참고 섹션이
+  // 노출 중분류/뱃지 섹션보다 DOM상 먼저(위에) 오는지 검증한다. 하이라이팅이
+  // 저장 없이도 실시간으로 동작하는 것(curationCategoryId가 저장 여부와 무관한
+  // 현재 선택값에서 매 렌더 계산됨)은 useSpotCurationForm/blog-reference-viewer
+  // 자체의 기존 로직이라 순서를 바꿔도 별도 배선이 필요 없다.
+  it('블로그 참고 섹션이 노출 중분류 섹션보다 먼저(DOM상 위에) 온다', async () => {
+    vi.stubGlobal('fetch', mockFetchByUrl({}));
+    render(
+      <MobileCurationWorkbench spot={SPOT} serviceCategories={SERVICE_CATEGORIES} queue={QUEUE} onClose={vi.fn()} onAdvance={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
+    );
+
+    const blogHeading = await screen.findByText('1. 블로그 참고 (URL만 저장, 본문은 저장 안 함)');
+    const categoryHeading = screen.getByText('2. 노출 중분류 & 편의시설 뱃지');
+
+    expect(blogHeading.compareDocumentPosition(categoryHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it('"유지"를 누르면 배너가 사라지고 ignored 상태로 임시 저장한다', async () => {
     const fetchMock = mockFetchByUrl({
       nearby: { items: [{ id: 'near-1', name: '행복키즈카페 분점', category: 'CULTURE', category_min: '키즈카페', address: '바로 옆', distance_m: 12 }] },

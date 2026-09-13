@@ -521,6 +521,20 @@
       이상이면 탭 버튼에 빨간 숫자 배지를 표시(다른 패널의 "탭을 열어야
       조회" 관례의 예외 — 배지는 탭을 열기 전에 보여야 의미가 있음).
       (완료: 2026-09-13, 상세: implementation/2026-09-13-admin-mom-pick-unmapped-spots-tab.md)
+- [x] Step 146 (사용자 지시, 2026-09-13): "음 그런데.. 이거 블로그 큐레이션이
+      위에 있고 뱃지 다는게 아래있는건 안되나? 그리고 노출중분류 먼저 지정
+      저장한후에.. 블로그 큐레이션으로 불러와야 키워드가 매핑되어서 노란색
+      포인트 주는데..." — MobileCurationWorkbench(category-mapping-panel.tsx/
+      mom-pick-unmapped-spots-panel.tsx 공용)의 "2. 노출 중분류 & 편의시설
+      뱃지"/"3. 블로그 참고" 두 섹션 순서를 뒤집어 블로그 참고를 "1."로,
+      노출 중분류를 "2."로 옮겼다. 코드를 확인한 결과 하이라이팅(노란색
+      키워드 포인트)은 curationCategoryId가 저장 여부와 무관한 현재 드롭다운
+      선택값(serviceCategoryId, 메모리상 state)에서 매 렌더 계산되고
+      BlogReferenceViewer의 하이라이트 함수도 useMemo 없이 매 렌더 순수
+      계산돼, "저장까지 해야 매핑된다"는 전제 자체가 사실이 아니었다 — 순서를
+      바꿔도(저장 없이 선택만 해도) 이미 불러온 블로그 본문이 즉시
+      재하이라이트된다는 것을 코드로 확인하고 그대로 반영했다.
+      (완료: 2026-09-13, 상세: implementation/2026-09-13-curation-workbench-section-reorder.md)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.

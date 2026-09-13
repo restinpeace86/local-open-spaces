@@ -202,29 +202,23 @@ export function MobileCurationWorkbench({
           </div>
         ))}
 
-        {/* 2단: 중분류 선택 및 뱃지 태깅 폼 */}
+        {/* [블로그 큐레이션 ↔ 노출 중분류 순서 변경](2026-09-13 사용자 지시): "블로그
+            큐레이션이 위에 있고 뱃지 다는게 아래있는건 안되나?" — 블로그 참고
+            섹션을 노출 중분류/뱃지 섹션보다 먼저 보이도록 순서를 바꿨다.
+            [순서를 바꿔도 하이라이팅은 그대로 동작함] "노출중분류 먼저 지정
+            저장한후에.. 블로그 큐레이션으로 불러와야 키워드가 매핑되어서
+            노란색 포인트 주는데" — 실제로는 저장이 전혀 필요 없다.
+            useSpotCurationForm의 curationCategoryId는 (아래) 노출 중분류
+            드롭다운의 현재 선택값(serviceCategoryId, 저장 여부와 무관한
+            메모리상 state)에서 매 렌더마다 그대로 계산되고,
+            BlogReferenceViewer의 하이라이트도 매 렌더마다 순수 함수로 다시
+            계산된다(캐시/useMemo 없음) — 그래서 화면에 어느 섹션이 먼저
+            보이든, 노출 중분류를 "선택"만 해두면(저장 전이라도) 이미 불러온
+            블로그 본문도 즉시 그 카테고리 키워드로 노란색 하이라이트된다. */}
+        {/* 2단: 네이버 블로그 참고 & 형광펜 뷰어(2026-09-13부터 3단이었던 노출 중분류
+            섹션보다 먼저 보이도록 순서 변경) */}
         <section className="flex flex-col gap-2">
-          <h3 className="text-xs font-bold text-gray-400">2. 노출 중분류 & 편의시설 뱃지</h3>
-          <CurationBadgeForm
-            serviceCategoryId={form.serviceCategoryId}
-            onServiceCategoryChange={form.setServiceCategoryId}
-            serviceCategories={serviceCategories}
-            badgeGroups={form.badgeGroups}
-            badgeOptions={form.badgeOptions}
-            selectedBadges={form.selectedBadges}
-            savedBadgeKeys={form.savedBadgeKeys}
-            onToggleBadge={form.toggleBadge}
-            minAgeRecommended={form.minAgeRecommended}
-            onMinAgeChange={form.setMinAgeRecommended}
-            ageSuggestion={form.ageSuggestion}
-            curationNote={form.curationNote}
-            onCurationNoteChange={form.setCurationNote}
-          />
-        </section>
-
-        {/* 3단: 네이버 블로그 참고 & 형광펜 뷰어 */}
-        <section className="flex flex-col gap-2">
-          <h3 className="text-xs font-bold text-gray-400">3. 블로그 참고 (URL만 저장, 본문은 저장 안 함)</h3>
+          <h3 className="text-xs font-bold text-gray-400">1. 블로그 참고 (URL만 저장, 본문은 저장 안 함)</h3>
           <BlogReferenceViewer
             searchQuery={form.searchQuery}
             onSearchQueryChange={form.setSearchQuery}
@@ -273,6 +267,26 @@ export function MobileCurationWorkbench({
               )}
             </div>
           )}
+        </section>
+
+        {/* 3단: 중분류 선택 및 뱃지 태깅 폼 */}
+        <section className="flex flex-col gap-2">
+          <h3 className="text-xs font-bold text-gray-400">2. 노출 중분류 & 편의시설 뱃지</h3>
+          <CurationBadgeForm
+            serviceCategoryId={form.serviceCategoryId}
+            onServiceCategoryChange={form.setServiceCategoryId}
+            serviceCategories={serviceCategories}
+            badgeGroups={form.badgeGroups}
+            badgeOptions={form.badgeOptions}
+            selectedBadges={form.selectedBadges}
+            savedBadgeKeys={form.savedBadgeKeys}
+            onToggleBadge={form.toggleBadge}
+            minAgeRecommended={form.minAgeRecommended}
+            onMinAgeChange={form.setMinAgeRecommended}
+            ageSuggestion={form.ageSuggestion}
+            curationNote={form.curationNote}
+            onCurationNoteChange={form.setCurationNote}
+          />
         </section>
 
         {form.saveError && <p className="text-xs text-red-600">{form.saveError}</p>}
