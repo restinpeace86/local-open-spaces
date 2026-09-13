@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMomPickAccess } from '@/hooks/use-mom-pick-access';
 import { getMyProfile } from '@/lib/auth/profile';
 import { LoginPromptModal } from './login-prompt-modal';
@@ -45,19 +45,26 @@ export function MomPickView() {
   // Soft-wall 모달 — 페이지 진입 즉시(state==='guest') 여는 게 아니라, 실제로 쓰려고
   // 시도하는 그 순간에만 연다는 점이 기존 LoginPromptModal 용례(진입 즉시 강제)와 다르다.
   const [isGuestWritePromptOpen, setIsGuestWritePromptOpen] = useState(false);
-  // [맘스픽 첫 글쓰기 소프트월 통일](2026-09-12 사용자 지시): "로그인은 했지만 첫 글은
-  // 안 쓴 상태(not_sprout_yet)면 맘스픽 내용만 보여야지, 첫글쓰기의 장소선택이 같이
-  // 보이면 안 된다.. 뭔가 눌러서 보려는 액션을 하면 그때 팝업이 떠서 권한이 없다고
-  // 하면서 첫 글 쓰러 가자고 해야" — 이전엔 not_sprout_yet도 실제 글쓰기 폼
-  // (SurveyReviewComposer, 첫 단계가 장소선택)이 항상 화면에 그대로 노출돼 있었다
-  // (guest만 소프트월 버튼이었음). 이제 guest와 동일하게, 실제로 "쓰겠다"고 액션할
-  // 때까지 SurveyReviewComposer 자체를 렌더링하지 않는다 — 안내 모달의 "첫 글 쓰러
-  // 가기"를 눌러야만 true가 되어 폼이 나타난다.
-  const [isComposerRevealed, setIsComposerRevealed] = useState(false);
+  // [맘스픽 메인 화면 항상 동일하게 노출 + 진짜 화면 전환](2026-09-13 사용자 지시):
+  // "로그인 유저든 비로그인 유저든 맘스픽 하단 버튼 눌러서 가면 맘스픽의 메인화면만
+  // 보여야돼.. 로그인하러가기라던가 첫글쓰기 같은거 보이면 안돼.. 그냥 새싹맘
+  // 유저처럼 맘스픽 화면 동일하게 보여야돼. 여기서 뭔가 누르려고 하면 그때..
+  // 완전히 화면이 전환되어야해. 지금은 첫글쓰기할때 아래 맘스픽 화면 메뉴가
+  // 같이나옴.. 공존이 아니고 글쓰기 화면으로 완전히 전환되어야해." — 이전엔
+  // guest/not_sprout_yet이 각자 다른 문구의 소프트월 버튼("로그인하고 후기
+  // 남기기"/"첫 글 쓰고 맘스픽 시작하기")을 봤고, 안내 모달을 거쳐 글쓰기 폼을
+  // "열면"(isComposerRevealed) 같은 페이지 안에서 스크롤만 될 뿐 하단 탭이 계속
+  // 함께 보였다. 이제 (1) 글쓰기 영역은 상태와 무관하게 항상 SurveyReviewComposer를
+  // 그대로 렌더링하고(그 위에 투명 인터셉트만 얹어 실제 상호작용만 막음 — 아래
+  // 피드 영역과 동일한 기존 패턴 재사용) (2) 실제로 쓰려는 액션이 확인되면
+  // isFullScreenComposerOpen을 열어, 이 컴포넌트가 헤더/피드 없이 fixed inset-0
+  // 전체 화면만 조기 반환(early return)하도록 바꾼다 — 하단 탭(RootLayout이 항상
+  // 렌더)까지 시각적으로 덮으면서, 배경 콘텐츠가 DOM에 남아있지 않아 진짜 "화면
+  // 전환"에 가깝다(별도 /write 라우트를 새로 만들지 않고도).
+  const [isFullScreenComposerOpen, setIsFullScreenComposerOpen] = useState(false);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [dashboardKey, setDashboardKey] = useState(0);
-  const composerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     setProfile(initialProfile);
@@ -115,6 +122,44 @@ export function MomPickView() {
     );
   }
 
+  // [맘스픽 메인 화면 항상 동일하게 노출 + 진짜 화면 전환](2026-09-13 사용자 지시):
+  // "글쓰기 화면으로 완전히 전환되어야해" — CSS(fixed 오버레이)로 배경을 덮기만
+  // 하는 대신, 이 상태일 땐 아예 이 화면만 반환한다(헤더/피드/하단 탭과 동시에
+  // DOM에 남아있지 않음 — 접근성과 "완전 전환"이라는 요구를 모두 충족).
+  if (isFullScreenComposerOpen) {
+    return (
+      <div className="fixed inset-0 z-[100] flex flex-col bg-white">
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
+          <h2 className="text-base font-bold text-gray-900">✍️ 첫 글 쓰기</h2>
+          <button
+            type="button"
+            onClick={() => setIsFullScreenComposerOpen(false)}
+            aria-label="닫기"
+            className="text-gray-400 hover:text-gray-600"
+          >
+            ✕
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-5">
+          <SurveyReviewComposer
+            onPosted={() => {
+              setIsFullScreenComposerOpen(false);
+              refreshProfileAfterPost();
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // [맘스픽 메인 화면 항상 동일하게 노출 + 진짜 화면 전환](2026-09-13 사용자 지시):
+  // "비로그인 유저는 로그인 인증화면으로 완전 전환되는거고" — 위 글쓰기 전환과
+  // 동일한 이유로 조기 반환한다(LoginPromptModal 자체는 이미 fixed 전체 화면
+  // 컴포넌트지만, 배경 헤더/피드가 DOM에 남아있지 않도록 여기서 반환한다).
+  if (isGuestWritePromptOpen) {
+    return <LoginPromptModal onClose={() => setIsGuestWritePromptOpen(false)} />;
+  }
+
   // [todo.md 개선사항 10](2026-09-03): 'guest' | 'not_sprout_yet' | 'allowed' 셋 다 같은
   // 레이아웃(헤더 + 글쓰기 영역 + 피드)을 공유한다 — 다른 점은 글쓰기 영역이 실제
   // SurveyReviewComposer인지 로그인 유도 CTA인지, 그리고 피드가 노출되는지뿐이다. 이전에는
@@ -129,30 +174,24 @@ export function MomPickView() {
 
       {state === 'allowed' && profile && <PersonalizedBanner birthYears={profile.birth_years} />}
 
-      <div ref={composerRef}>
-        {state === 'guest' ? (
-          // [todo.md 개선사항 10](2026-09-03) Soft-wall: 실제 작성 폼(SurveyReviewComposer)은
-          // 전혀 렌더링하지 않고, 클릭하는 즉시 로그인 유도만 띄운다 — 개선사항 8과
-          // 동일한 원칙("입력을 시작하기 전에 막는다").
+      {/* [맘스픽 메인 화면 항상 동일하게 노출](2026-09-13 사용자 지시): "그냥 새싹맘
+          유저처럼 맘스픽 화면 동일하게 보여야돼" — guest/not_sprout_yet도 allowed와
+          똑같이 SurveyReviewComposer를 그대로 렌더링한다(장소선택 1단계가 그대로
+          보임). 아래 피드 영역의 투명 인터셉트 레이어와 동일한 패턴으로, 실제
+          클릭/입력만 가로채 로그인/첫 글쓰기 화면 전환으로 이어준다. */}
+      <div className="relative">
+        <SurveyReviewComposer onPosted={refreshProfileAfterPost} />
+        {(state === 'guest' || state === 'not_sprout_yet') && (
           <button
             type="button"
-            onClick={() => setIsGuestWritePromptOpen(true)}
-            className="w-full rounded-xl border border-dashed border-gray-300 bg-white p-4 text-center text-sm font-medium text-gray-500 hover:bg-gray-50"
-          >
-            ✍️ 로그인하고 후기 남기기
-          </button>
-        ) : state === 'not_sprout_yet' && !isComposerRevealed ? (
-          // [맘스픽 첫 글쓰기 소프트월 통일](2026-09-12 사용자 지시): guest와 동일한
-          // 소프트월 버튼 — 누르기 전엔 장소선택 등 실제 작성 폼이 전혀 보이지 않는다.
-          <button
-            type="button"
-            onClick={() => setIsGuideModalOpen(true)}
-            className="w-full rounded-xl border border-dashed border-gray-300 bg-white p-4 text-center text-sm font-medium text-gray-500 hover:bg-gray-50"
-          >
-            ✍️ 첫 글 쓰고 맘스픽 시작하기
-          </button>
-        ) : (
-          <SurveyReviewComposer onPosted={refreshProfileAfterPost} />
+            aria-label={
+              state === 'guest'
+                ? '로그인하고 맘스픽 커뮤니티 이용하기'
+                : '첫 글을 작성하고 맘스픽 모든 기능 이용하기'
+            }
+            onClick={() => (state === 'guest' ? setIsGuestWritePromptOpen(true) : setIsGuideModalOpen(true))}
+            className="absolute inset-0 z-10 w-full cursor-pointer bg-transparent"
+          />
         )}
       </div>
 
@@ -213,15 +252,11 @@ export function MomPickView() {
         <SaessakMomGuideModal
           onWriteClick={() => {
             setIsGuideModalOpen(false);
-            // [맘스픽 첫 글쓰기 소프트월 통일](2026-09-12 사용자 지시): 이전엔 폼이 이미
-            // 화면에 떠 있어 스크롤만 하면 됐지만, 이제는 이 시점까지 렌더되지 않았으므로
-            // 먼저 실제로 드러낸(reveal) 뒤 스크롤한다.
-            setIsComposerRevealed(true);
-            // jsdom(테스트 환경)에는 scrollIntoView 구현체가 없어 존재 여부를 방어적으로
-            // 확인한다(제5장 제11조 — 없는 환경에서도 화면이 죽지 않아야 함).
-            if (typeof composerRef.current?.scrollIntoView === 'function') {
-              composerRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }
+            // [맘스픽 메인 화면 항상 동일하게 노출 + 진짜 화면 전환](2026-09-13 사용자
+            // 지시): "글쓰기 화면으로 완전히 전환되어야해" — 이전엔 같은 페이지 안
+            // 폼을 드러내고 스크롤만 했지만(하단 탭이 계속 함께 보임), 이제
+            // 하단 탭까지 덮는 완전한 화면 전환을 연다.
+            setIsFullScreenComposerOpen(true);
           }}
           // [개선사항8 - 미등업 유저 진입 플로우 개선](2026-09-04 todo.md): "'X' 버튼을
           // 누르면 모달이 닫히며 다시 맘스픽 메인 화면으로 돌아가 탐색을 지속할 수
@@ -231,8 +266,6 @@ export function MomPickView() {
           onClose={() => setIsGuideModalOpen(false)}
         />
       )}
-
-      {isGuestWritePromptOpen && <LoginPromptModal onClose={() => setIsGuestWritePromptOpen(false)} />}
     </div>
   );
 }
