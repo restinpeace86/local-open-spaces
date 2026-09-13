@@ -885,6 +885,35 @@ describe('MapExplorer 스팟 딥링크(?spot=, 2026-09-13)', () => {
     expect(screen.getAllByText('딥링크스팟').length).toBeGreaterThan(0);
   });
 
+  // [닫아도 지도에 임시 마커로 유지](2026-09-13 사용자 지시): "닫았을때도 그 스팟을
+  // 지도에 임시로라도 마커로 보여줘.. 얘가 스팟픽 벗어날때까지는" — 이 스팟이
+  // 노출 중분류가 없어 평소엔 items/categoryItems에 전혀 없어도, 상세 카드를
+  // 닫은 뒤에도 지도 마커(KakaoMapView items)에는 계속 남아있어야 한다.
+  it('상세 카드를 닫아도 지도에 마커는 그대로 남는다', async () => {
+    mockSearchParams.set('spot', 'space-9');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/spots/by-id')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ item: makeSpaceRow({ id: 'space-9', name: '딥링크스팟' }) }),
+          } as Response);
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ item: null }) } as Response);
+      })
+    );
+    render(<MapExplorer />);
+
+    await screen.findByText('주소');
+    expect(screen.getByText('simulate-marker-click-딥링크스팟')).toBeInTheDocument();
+
+    fireEvent.click(screen.getAllByLabelText('닫기')[0]);
+
+    await waitFor(() => expect(screen.queryByText('주소')).not.toBeInTheDocument());
+    expect(screen.getByText('simulate-marker-click-딥링크스팟')).toBeInTheDocument();
+  });
+
   it('spot 파라미터가 없으면 상세 모달이 자동으로 열리지 않는다', async () => {
     vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ item: null }) } as Response)));
     rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow()], error: null });

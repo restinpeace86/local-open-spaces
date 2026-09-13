@@ -164,6 +164,16 @@ export function MapExplorer() {
   // 그 id로 스팟 1건을 조회해 곧장 전체 상세(DetailModal)를 연다 — 개선사항10의
   // "Event ➔ Spot"(연결된 장소 탭 → setLinkedDetailItem) 이동과 목적은 같지만
   // 진입 경로가 페이지 간 이동이라 쿼리 파라미터로 받는다는 점만 다르다.
+  // [닫아도 지도에 임시 마커로 유지](2026-09-13 사용자 지시): "닫았을때도 그 스팟을
+  // 지도에 임시로라도 마커로 보여줘.. 얘가 스팟픽 벗어날때까지는.. 다음에 다시
+  // 진입시는 안보이겠지" — 이 스팟이 노출 중분류가 없어 평소엔 지도/목록에 전혀
+  // 안 뜨는 경우, 상세 카드를 닫아도 마커 자체는 사라지면 안 된다는 요구다.
+  // selectedItem(상세 모달 열림 여부)과 별개로 linkedSpotItem에 따로 저장해두고,
+  // 아래 baseItems에서 "제휴 상품 연동 스팟"(2026-09-10, 노출 중분류 무관 노출)과
+  // 동일한 mergeById 관례로 항상 끼워 넣는다. 컴포넌트 로컬 state라 /nearby를
+  // 벗어나면(다른 탭 이동 = 언마운트) 자동으로 사라지고, 다음 진입 시에는
+  // ?spot= 파라미터가 없는 한 다시 나타나지 않는다.
+  const [linkedSpotItem, setLinkedSpotItem] = useState<NearbyItem | null>(null);
   const spotIdParam = searchParams.get('spot');
   useEffect(() => {
     if (!spotIdParam) return;
@@ -171,7 +181,9 @@ export function MapExplorer() {
     fetch(`/api/spots/by-id?id=${encodeURIComponent(spotIdParam)}`)
       .then((res) => res.json())
       .then((data: { item?: NearbyItem | null }) => {
-        if (!cancelled && data.item) setSelectedItem(data.item);
+        if (cancelled || !data.item) return;
+        setSelectedItem(data.item);
+        setLinkedSpotItem(data.item);
       })
       .catch(() => {
         // 조회 실패해도 지도 화면 자체는 평소처럼 정상 동작해야 한다(제5장 제11조).
@@ -414,14 +426,21 @@ export function MapExplorer() {
   };
 
   const baseItems = useMemo(() => {
-    if (isSearchMode) return searchResults ?? [];
-    // 노출 중분류를 골랐을 때만 제휴 스팟을 병합한다 — 중분류 필터가 제외한
-    // 제휴 스팟을 되살리는 것이 목적. 기본(반경) 모드는 반경 내 모든 스팟을 이미
-    // 보여주므로(제휴 여부 무관) 병합이 불필요. 검색 모드는 "콕 짚어 찾기"라 제외.
-    if (!selectedCategoryId) return items;
-    return mergeById(provinceScopedCategoryItems, provinceScopedDealItems);
+    const resolved = isSearchMode
+      ? searchResults ?? []
+      : // 노출 중분류를 골랐을 때만 제휴 스팟을 병합한다 — 중분류 필터가 제외한
+        // 제휴 스팟을 되살리는 것이 목적. 기본(반경) 모드는 반경 내 모든 스팟을 이미
+        // 보여주므로(제휴 여부 무관) 병합이 불필요. 검색 모드는 "콕 짚어 찾기"라 제외.
+        !selectedCategoryId
+        ? items
+        : mergeById(provinceScopedCategoryItems, provinceScopedDealItems);
+    // [맘스픽 → 스팟픽 임시 마커](2026-09-13 사용자 지시): 제휴 스팟과 동일하게
+    // 노출 중분류/검색 모드와 무관하게 항상 끼워 넣는다. MARKER_LIMIT로 잘릴 때
+    // 이 스팟까지 잘려나가지 않도록 맨 앞에 둔다(사용자가 이 화면에 들어온 이유
+    // 그 자체이므로).
+    return linkedSpotItem ? mergeById([linkedSpotItem], resolved) : resolved;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSearchMode, searchResults, selectedCategoryId, provinceScopedCategoryItems, items, provinceScopedDealItems]);
+  }, [isSearchMode, searchResults, selectedCategoryId, provinceScopedCategoryItems, items, provinceScopedDealItems, linkedSpotItem]);
 
   const visibleItems = useMemo(() => baseItems.slice(0, MARKER_LIMIT), [baseItems]);
   const isOverLimit = baseItems.length > MARKER_LIMIT;
