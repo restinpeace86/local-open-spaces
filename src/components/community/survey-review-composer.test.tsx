@@ -6,6 +6,10 @@ vi.mock('@/hooks/use-user-location', () => ({
   useUserLocation: () => ({ center: { lat: 37.5665, lng: 126.978 } }),
 }));
 
+vi.mock('./spot-picker', () => ({
+  SpotPicker: () => <div data-testid="spot-picker">이름으로 검색 UI</div>,
+}));
+
 const createSurveyReviewMock = vi.fn();
 vi.mock('@/lib/community/posts', () => ({
   createSurveyReview: (...args: unknown[]) => createSurveyReviewMock(...args),
@@ -43,24 +47,52 @@ describe('SurveyReviewComposer', () => {
     );
   }
 
-  it('1단계에서 내 주변 인기 스팟 목록을 30km lat/lng로 조회해 보여준다', async () => {
+  // 1단계에서 "내 주변에서 찾기" 목록을 보려면 검색 모드에서 토글해야 한다
+  // (2026-09-13 기본값 변경 이후) — 목록이 이미 도착해 있어야 클릭할 수 있으므로
+  // 토글 전에 fetch가 끝나길 기다린다.
+  async function switchToNearbyListMode() {
+    fireEvent.click(screen.getByText('📍 내 주변에서 찾기'));
+  }
+
+  // [맘스픽 글쓰기 장소선택 속도 개선](2026-09-13 사용자 지시): "어느 스팟인가요
+  // 해서 내 주변 찾는거 엄청 느린데?.. 힘들면 그냥 이름으로 검색이 처음에
+  // 나오도록해" — 1단계 진입 시 "내 주변 인기 스팟"을 기다릴 필요 없이 이름
+  // 검색(SpotPicker) UI가 바로 보여야 한다.
+  it('1단계 진입 시 "내 주변 인기 스팟"을 기다리지 않고 이름 검색 UI가 바로 보인다', async () => {
+    stubPopularFetch();
+    render(<SurveyReviewComposer onPosted={vi.fn()} />);
+
+    expect(screen.getByTestId('spot-picker')).toBeInTheDocument();
+    expect(screen.queryByText('행복어린이공원')).not.toBeInTheDocument();
+    expect(screen.queryByText('내 주변 인기 스팟을 찾는 중...')).not.toBeInTheDocument();
+  });
+
+  it('"내 주변에서 찾기"로 전환하면 30km lat/lng로 이미 조회해 둔 목록을 보여준다', async () => {
     const fetchMock = vi.fn((_url: string) =>
       Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [popularItem()] }) } as Response)
     );
     vi.stubGlobal('fetch', fetchMock);
     render(<SurveyReviewComposer onPosted={vi.fn()} />);
 
+    // 검색 모드가 기본이어도 "내 주변 인기 스팟" 조회 자체는 백그라운드로 계속
+    // 진행된다(토글했을 때 바로 보이도록).
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalled();
+      const calledUrl = fetchMock.mock.calls[0][0] as string;
+      expect(calledUrl).toContain('/api/mom-pick/popular-spots');
+      expect(calledUrl).toContain('lat=37.5665');
+      expect(calledUrl).toContain('lng=126.978');
+    });
+
+    await switchToNearbyListMode();
     expect(await screen.findByText('행복어린이공원')).toBeInTheDocument();
-    const calledUrl = fetchMock.mock.calls[0][0] as string;
-    expect(calledUrl).toContain('/api/mom-pick/popular-spots');
-    expect(calledUrl).toContain('lat=37.5665');
-    expect(calledUrl).toContain('lng=126.978');
   });
 
   it('이벤트 항목은 🎪 아이콘과 함께 노출된다', async () => {
     stubPopularFetch([popularItem({ id: 'event-1', name: '가을 나들이 축제', item_type: 'EVENT', category_min: null })]);
     render(<SurveyReviewComposer onPosted={vi.fn()} />);
 
+    await switchToNearbyListMode();
     const nameEl = await screen.findByText('가을 나들이 축제');
     expect(nameEl).toBeInTheDocument();
     expect(nameEl.parentElement?.textContent).toContain('🎪');
@@ -69,7 +101,6 @@ describe('SurveyReviewComposer', () => {
   it('장소를 선택하지 않고 "다음"을 누르면 에러 문구를 보여주고 단계가 넘어가지 않는다', async () => {
     stubPopularFetch();
     render(<SurveyReviewComposer onPosted={vi.fn()} />);
-    await screen.findByText('행복어린이공원');
 
     fireEvent.click(screen.getByText('다음'));
 
@@ -80,6 +111,7 @@ describe('SurveyReviewComposer', () => {
   it('장소 선택 후 2단계(설문)로 넘어가 다중/단일 선택 문항에 응답할 수 있다', async () => {
     stubPopularFetch();
     render(<SurveyReviewComposer onPosted={vi.fn()} />);
+    await switchToNearbyListMode();
     fireEvent.click(await screen.findByText('행복어린이공원'));
     fireEvent.click(screen.getByText('다음'));
 
@@ -102,6 +134,7 @@ describe('SurveyReviewComposer', () => {
     const onPosted = vi.fn();
     render(<SurveyReviewComposer onPosted={onPosted} />);
 
+    await switchToNearbyListMode();
     fireEvent.click(await screen.findByText('행복어린이공원'));
     fireEvent.click(screen.getByText('다음')); // → 2단계
     fireEvent.click(screen.getByText('영유아'));
@@ -126,6 +159,7 @@ describe('SurveyReviewComposer', () => {
     createSurveyReviewMock.mockResolvedValue({ id: 'post-2' });
     render(<SurveyReviewComposer onPosted={vi.fn()} />);
 
+    await switchToNearbyListMode();
     fireEvent.click(await screen.findByText(/가을 나들이 축제/));
     fireEvent.click(screen.getByText('다음'));
     fireEvent.click(screen.getByText('다음'));
@@ -136,17 +170,19 @@ describe('SurveyReviewComposer', () => {
     );
   });
 
-  it('등록에 성공하면 폼이 초기화되어 다시 1단계로 돌아간다', async () => {
+  it('등록에 성공하면 폼이 초기화되어 다시 1단계로 돌아간다(검색 모드가 기본)', async () => {
     stubPopularFetch();
     createSurveyReviewMock.mockResolvedValue({ id: 'post-1' });
     render(<SurveyReviewComposer onPosted={vi.fn()} />);
 
+    await switchToNearbyListMode();
     fireEvent.click(await screen.findByText('행복어린이공원'));
     fireEvent.click(screen.getByText('다음'));
     fireEvent.click(screen.getByText('다음'));
     fireEvent.click(screen.getByText('등록하기'));
 
     await waitFor(() => expect(screen.getByText('어느 스팟인가요?')).toBeInTheDocument());
-    expect(await screen.findByText('행복어린이공원')).toBeInTheDocument(); // 목록에서 다시 고를 수 있는 상태
+    // 폼이 초기화되면 검색 모드(기본값)로 돌아가 이름 검색 UI가 바로 보인다.
+    expect(await screen.findByTestId('spot-picker')).toBeInTheDocument();
   });
 });

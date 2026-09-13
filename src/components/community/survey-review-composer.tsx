@@ -106,7 +106,14 @@ export function SurveyReviewComposer({ onPosted }: { onPosted: (post: MomPickPos
   const [popularItems, setPopularItems] = useState<PopularItem[] | null>(null);
   const [popularError, setPopularError] = useState<string | null>(null);
   const [selected, setSelected] = useState<SelectedTarget | null>(null);
-  const [isSearchMode, setIsSearchMode] = useState(false);
+  // [맘스픽 글쓰기 장소선택 속도 개선](2026-09-13 사용자 지시): "어느 스팟인가요
+  // 해서 내 주변 찾는거 엄청 느린데?.. 힘들면 그냥 이름으로 검색이 처음에
+  // 나오도록해" — 실측(get_nearby_spaces_and_events, 반경 30km) 결과 1~4초가
+  // 걸려 "내 주변 인기 스팟"을 기다리는 동안 아무것도 할 수 없었다. 이름 검색은
+  // 기다릴 필요가 없으므로 기본값을 검색 모드로 바꾼다(주변 목록은 백그라운드로
+  // 계속 불러와 두되, 토글을 눌러야만 보여준다 — 순서만 뒤집혔을 뿐 두 방법 다
+  // 그대로 남아있다).
+  const [isSearchMode, setIsSearchMode] = useState(true);
   const [searchSpot, setSearchSpot] = useState<SpotOption | null>(null);
 
   // 2단계: 설문
@@ -187,7 +194,7 @@ export function SurveyReviewComposer({ onPosted }: { onPosted: (post: MomPickPos
     setStep(1);
     setSelected(null);
     setSearchSpot(null);
-    setIsSearchMode(false);
+    setIsSearchMode(true);
     setSurvey(emptySurveyAnswers());
     setContent('');
     setPhotoUrls([]);
@@ -251,42 +258,50 @@ export function SurveyReviewComposer({ onPosted }: { onPosted: (post: MomPickPos
 
           {!selected && (
             <>
-              {popularError && <p className="text-xs text-red-600">{popularError}</p>}
-              {!popularError && popularItems === null && <p className="text-xs text-gray-400">내 주변 인기 스팟을 찾는 중...</p>}
-              {popularItems && popularItems.length === 0 && (
-                <p className="text-xs text-gray-400">주변 30km 이내에 추천할 스팟이 아직 없어요. 검색으로 직접 찾아보세요.</p>
-              )}
-              {popularItems && popularItems.length > 0 && (
-                <ul className="flex max-h-64 flex-col divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-100">
-                  {popularItems.map((item) => (
-                    <li key={item.id}>
-                      <button
-                        type="button"
-                        onClick={() => selectPopularItem(item)}
-                        className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left hover:bg-gray-50"
-                      >
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate text-sm text-gray-800">
-                            {item.item_type === 'EVENT' && <span className="mr-1">🎪</span>}
-                            {item.name}
-                          </span>
-                          <span className="block truncate text-xs text-gray-400">{item.category_min ?? item.address}</span>
-                        </span>
-                        <span className="shrink-0 text-xs text-gray-400">{formatDistance(item.distance_meters)}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
+              {/* [맘스픽 글쓰기 장소선택 속도 개선](2026-09-13 사용자 지시): 기본값이
+                  검색 모드라 이름 검색이 먼저 보인다 — "내 주변 인기 스팟"은 토글을
+                  눌러야만 나타난다(백그라운드 조회 자체는 계속 진행된다). */}
               <button
                 type="button"
                 onClick={() => setIsSearchMode((v) => !v)}
                 className="self-start text-xs font-medium text-blue-600 hover:underline"
               >
-                {isSearchMode ? '목록에서 고르기' : '🔍 이름으로 직접 검색'}
+                {isSearchMode ? '📍 내 주변에서 찾기' : '🔍 이름으로 직접 검색'}
               </button>
-              {isSearchMode && <SpotPicker selected={searchSpot} onSelect={selectSearchSpot} />}
+
+              {isSearchMode ? (
+                <SpotPicker selected={searchSpot} onSelect={selectSearchSpot} />
+              ) : (
+                <>
+                  {popularError && <p className="text-xs text-red-600">{popularError}</p>}
+                  {!popularError && popularItems === null && <p className="text-xs text-gray-400">내 주변 인기 스팟을 찾는 중...</p>}
+                  {popularItems && popularItems.length === 0 && (
+                    <p className="text-xs text-gray-400">주변 30km 이내에 추천할 스팟이 아직 없어요. 검색으로 직접 찾아보세요.</p>
+                  )}
+                  {popularItems && popularItems.length > 0 && (
+                    <ul className="flex max-h-64 flex-col divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-100">
+                      {popularItems.map((item) => (
+                        <li key={item.id}>
+                          <button
+                            type="button"
+                            onClick={() => selectPopularItem(item)}
+                            className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left hover:bg-gray-50"
+                          >
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-sm text-gray-800">
+                                {item.item_type === 'EVENT' && <span className="mr-1">🎪</span>}
+                                {item.name}
+                              </span>
+                              <span className="block truncate text-xs text-gray-400">{item.category_min ?? item.address}</span>
+                            </span>
+                            <span className="shrink-0 text-xs text-gray-400">{formatDistance(item.distance_meters)}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
             </>
           )}
         </div>

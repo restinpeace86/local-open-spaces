@@ -160,11 +160,17 @@ export function MomPickView() {
     return <LoginPromptModal onClose={() => setIsGuestWritePromptOpen(false)} />;
   }
 
-  // [todo.md 개선사항 10](2026-09-03): 'guest' | 'not_sprout_yet' | 'allowed' 셋 다 같은
-  // 레이아웃(헤더 + 글쓰기 영역 + 피드)을 공유한다 — 다른 점은 글쓰기 영역이 실제
-  // SurveyReviewComposer인지 로그인 유도 CTA인지, 그리고 피드가 노출되는지뿐이다. 이전에는
-  // 'guest'만 별도의 하드 블록 화면(피드 자체를 렌더링하지 않음)을 썼는데, 이제 그
-  // 분기를 없애 View-Only 열람이 자연스럽게 가능해진다.
+  // [맘스픽 화면은 맘스픽 컨텐츠만](2026-09-13 사용자 지시): "맘스픽 들어가면 어느
+  // 스팟인가요? 장소 묻는거 뜨고 그아래 파워맘 우수맘 추천.. 뜨는데? 이럼 안되지..
+  // 맘스픽화면은 맘스픽 컨텐츠만 나와야지 왜 글쓰기 도입부가 가장 위에 있어?" —
+  // 바로 전 조치(2026-09-13 이전 커밋)에서 "새싹맘과 동일하게 보여야" 한다는
+  // 요구를 글쓰기 폼(SurveyReviewComposer, 장소선택 1단계 포함)까지 그대로
+  // 인라인 노출하는 것으로 구현했는데, 실제로는 그 폼 자체가 "맘스픽 컨텐츠"가
+  // 아니라는 지적이다. 이제 상단엔 상태와 무관하게 완전히 동일한 문구의 작은
+  // "✍️ 글쓰기" 버튼만 두고(로그인 여부를 드러내지 않는다는 원칙은 유지),
+  // 실제 작성 폼은 버튼을 눌러야만 열리는 전체 화면 전환(위 isFullScreenComposerOpen
+  // 등)에서만 나타난다 — 메인 화면엔 오직 피드(파워맘·우수맘 추천/인기·우수글/
+  // 실시간 라이브)만 남는다.
   return (
     <div className="flex-1 flex flex-col gap-4 overflow-y-auto p-5">
       <div className="flex items-center justify-between">
@@ -174,26 +180,17 @@ export function MomPickView() {
 
       {state === 'allowed' && profile && <PersonalizedBanner birthYears={profile.birth_years} />}
 
-      {/* [맘스픽 메인 화면 항상 동일하게 노출](2026-09-13 사용자 지시): "그냥 새싹맘
-          유저처럼 맘스픽 화면 동일하게 보여야돼" — guest/not_sprout_yet도 allowed와
-          똑같이 SurveyReviewComposer를 그대로 렌더링한다(장소선택 1단계가 그대로
-          보임). 아래 피드 영역의 투명 인터셉트 레이어와 동일한 패턴으로, 실제
-          클릭/입력만 가로채 로그인/첫 글쓰기 화면 전환으로 이어준다. */}
-      <div className="relative">
-        <SurveyReviewComposer onPosted={refreshProfileAfterPost} />
-        {(state === 'guest' || state === 'not_sprout_yet') && (
-          <button
-            type="button"
-            aria-label={
-              state === 'guest'
-                ? '로그인하고 맘스픽 커뮤니티 이용하기'
-                : '첫 글을 작성하고 맘스픽 모든 기능 이용하기'
-            }
-            onClick={() => (state === 'guest' ? setIsGuestWritePromptOpen(true) : setIsGuideModalOpen(true))}
-            className="absolute inset-0 z-10 w-full cursor-pointer bg-transparent"
-          />
-        )}
-      </div>
+      <button
+        type="button"
+        onClick={() => {
+          if (state === 'guest') setIsGuestWritePromptOpen(true);
+          else if (state === 'not_sprout_yet') setIsGuideModalOpen(true);
+          else setIsFullScreenComposerOpen(true);
+        }}
+        className="w-full rounded-xl border border-dashed border-gray-300 bg-white p-3 text-center text-sm font-medium text-gray-500 hover:bg-gray-50"
+      >
+        ✍️ 글쓰기
+      </button>
 
       {(state === 'allowed' || state === 'guest' || state === 'not_sprout_yet') && (
         <div className="relative">
