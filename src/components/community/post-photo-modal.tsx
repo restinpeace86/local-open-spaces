@@ -7,8 +7,18 @@ import { useState } from 'react';
 // 확인가능하게" — 카드 안에 사진 썸네일을 인라인으로 두지 않고, 이 모달에서
 // 한 장씩 넘겨보게 한다(detail-modal.tsx의 이벤트 이미지 슬라이드와 동일한
 // 좌우 화살표 관례 — 제5장 제4조 기존 구조 우선).
-export function PostPhotoModal({ photoUrls, onClose }: { photoUrls: string[]; onClose: () => void }) {
-  const [index, setIndex] = useState(0);
+export function PostPhotoModal({
+  photoUrls,
+  initialIndex = 0,
+  onClose,
+}: {
+  photoUrls: string[];
+  // [맘스픽 프리뷰/상세 카드 분리](2026-09-13 사용자 지시): 상세 카드에서 여러 장
+  // 중 특정 사진을 탭했을 때 그 사진부터 바로 보여주기 위한 시작 인덱스.
+  initialIndex?: number;
+  onClose: () => void;
+}) {
+  const [index, setIndex] = useState(initialIndex);
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col bg-black/90" onClick={onClose}>

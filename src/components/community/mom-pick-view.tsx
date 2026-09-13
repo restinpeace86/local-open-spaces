@@ -6,7 +6,6 @@ import { getMyProfile } from '@/lib/auth/profile';
 import { LoginPromptModal } from './login-prompt-modal';
 import { SaessakMomGuideModal } from './saessak-mom-guide-modal';
 import { SurveyReviewComposer } from './survey-review-composer';
-import { PersonalizedBanner } from './personalized-banner';
 import { PreviewSection } from './preview-section';
 import { GRADE_LABEL } from '@/lib/community/grades';
 import { DashboardPost } from '@/lib/community/mom-pick-dashboard';
@@ -186,7 +185,10 @@ export function MomPickView() {
         {profile && <span className="text-sm font-medium text-gray-600">{GRADE_LABEL[profile.grade]}</span>}
       </div>
 
-      {state === 'allowed' && profile && <PersonalizedBanner birthYears={profile.birth_years} />}
+      {/* [맘스픽 화면은 맘스픽 컨텐츠만](2026-09-13 사용자 지시): "성남시 분당구에
+          사는 3살 3살 아이와 이번주말 여기 어때요? 가 맘스픽 상단에 왜뜨지?" —
+          PersonalizedBanner(맞춤 환영 문구)도 "맘스픽 컨텐츠"(다른 유저 글)가
+          아니라는 지적으로 받아들여 제거한다. */}
 
       {/* [글쓰기 버튼을 우측 하단 플로팅으로](2026-09-13 사용자 지시): "글쓰기는
           맨 상단 말고 floating으로 해서 우측하단에 글쓰기 버튼으로" — 다른

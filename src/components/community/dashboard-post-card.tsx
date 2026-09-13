@@ -10,19 +10,19 @@ import {
   SATISFACTION_POINT_LABELS,
   VISIT_ENVIRONMENT_LABELS,
 } from '@/lib/community/survey-options';
-import { PostPhotoModal } from './post-photo-modal';
+import { PostDetailModal } from './post-detail-modal';
 
 // [맘스픽 메인 화면 기획](2026-09-02 사용자 지시): 3개 섹션(파워맘/우수맘 추천, 인기글,
 // 실시간 피드) 전체보기 페이지와 메인 미리보기가 공유하는 카드. "작성자의 닉네임과...
 // 등급 배지 필수 표시" 요구사항을 그대로 반영한다. 닉네임을 설정하지 않은 사용자는
 // 실명/이메일을 노출하지 않고 "이름 없는 맘"으로 안전하게 대체한다.
 //
-// [맘스픽 게시글 카드 컴팩트화](2026-09-13 사용자 지시): "글 한개가 차지하는 공간이
-// 너무 커.. 사진은 사진 보기 버튼으로 대체.. 제목 올렸으면 그 라인 우측에 닉네임과
-// 등급이 보이던가.. tag들도 너무 많네" — (1) 스팟명(제목)과 작성자 닉네임/등급을
-// 한 줄에 배치해 별도 줄 하나를 없애고, (2) 뱃지(태그)는 최대 3개만 보여주고
-// 나머지는 "+N개"로 요약하며, (3) 사진은 인라인 썸네일 대신 "📷 사진 N장 보기"
-// 버튼으로 대체해 눌렀을 때만 PostPhotoModal로 확인한다.
+// [맘스픽 프리뷰/상세 카드 분리](2026-09-13 사용자 지시): "좀더 줄였으면 좋겠어..
+// 프리뷰카드라고 치고.. 내용글도 1줄만.. tag 정도만.. 사진 보기도 없애.. 그냥
+// 프리뷰 카드 누르면 상세카드가 보이게 되는 구조.. 찜도 없애.. 일자도.. 굳이
+// 프리뷰에서 볼일은 없지 않나?" — 이 카드는 이제 완전히 "미리보기 전용"이다.
+// 날짜/좋아요/사진 버튼을 전부 없애고 카드 전체를 버튼으로 만들어, 누르면
+// PostDetailModal(날짜/전체 태그/전체 내용/사진/좋아요를 전부 보여줌)이 뜬다.
 const MAX_VISIBLE_TAGS = 3;
 
 function TagChips({ tags }: { tags: { key: string; label: string; className: string }[] }) {
@@ -44,8 +44,7 @@ function TagChips({ tags }: { tags: { key: string; label: string; className: str
 }
 
 export function DashboardPostCard({ post, wide = false }: { post: DashboardPost; wide?: boolean }) {
-  const [isPhotoModalOpen, setIsPhotoModalOpen] = useState(false);
-  const photoUrls = post.photo_urls ?? [];
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
 
   const surveyTags =
     post.post_type === 'survey_review'
@@ -75,58 +74,48 @@ export function DashboardPostCard({ post, wide = false }: { post: DashboardPost;
       : [];
 
   return (
-    <div className={`rounded-xl border border-gray-200 bg-white p-3 ${wide ? 'flex flex-col gap-1.5' : ''}`}>
-      {/* [제목 줄에 작성자/등급 함께 표시](2026-09-13 사용자 지시): 별도 줄을 없애
-          카드 높이를 줄인다. */}
-      <div className="flex items-center justify-between gap-2">
-        <p className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-800">
-          {post.is_adopted && <span className="mr-1">✨</span>}
-          {post.spotName ?? '알 수 없는 스팟'}
-        </p>
-        <div className="flex shrink-0 items-center gap-1">
-          <span className="text-xs text-gray-500">{post.author.nickname ?? '이름 없는 맘'}</span>
-          <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600">
-            {GRADE_LABEL[post.author.grade]}
-          </span>
-        </div>
-      </div>
-
-      {post.post_type === 'micro_review' ? (
-        <div className="mt-1 flex flex-col gap-1">
-          <p className="text-yellow-400">
-            {'★'.repeat(post.rating ?? 0)}
-            {'☆'.repeat(5 - (post.rating ?? 0))}
+    <>
+      <button
+        type="button"
+        onClick={() => setIsDetailOpen(true)}
+        className={`w-full rounded-xl border border-gray-200 bg-white p-3 text-left hover:bg-gray-50 ${wide ? 'flex flex-col gap-1.5' : ''}`}
+      >
+        {/* [제목 줄에 작성자/등급 함께 표시](2026-09-13 사용자 지시): 별도 줄을 없애
+            카드 높이를 줄인다. */}
+        <div className="flex items-center justify-between gap-2">
+          <p className="min-w-0 flex-1 truncate text-sm font-semibold text-gray-800">
+            {post.is_adopted && <span className="mr-1">✨</span>}
+            {post.spotName ?? '알 수 없는 스팟'}
           </p>
-          {post.content && <p className="text-sm text-gray-600 line-clamp-2">{post.content}</p>}
+          <div className="flex shrink-0 items-center gap-1">
+            <span className="text-xs text-gray-500">{post.author.nickname ?? '이름 없는 맘'}</span>
+            <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-[10px] font-semibold text-gray-600">
+              {GRADE_LABEL[post.author.grade]}
+            </span>
+          </div>
         </div>
-      ) : post.post_type === 'checklist' ? (
-        <TagChips tags={checklistTags} />
-      ) : (
-        // [Decision 020](2026-09-04) survey_review: 설문 문항 뱃지는 최대 3개까지만
-        // 보여주고 나머지는 "+N개"로 요약한다(카드가 과도하게 길어지지 않도록).
-        <div className="mt-1 flex flex-col gap-1.5">
-          <TagChips tags={surveyTags} />
-          {post.content && <p className="text-sm text-gray-600 line-clamp-2">{post.content}</p>}
-        </div>
-      )}
 
-      <div className="mt-1.5 flex items-center justify-between text-xs text-gray-400">
-        <div className="flex items-center gap-2">
-          <span>{new Date(post.created_at).toLocaleDateString('ko-KR')}</span>
-          <span>❤️ {post.like_count}</span>
-        </div>
-        {photoUrls.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setIsPhotoModalOpen(true)}
-            className="rounded-full bg-gray-100 px-2 py-1 text-[11px] font-medium text-gray-600 hover:bg-gray-200"
-          >
-            📷 사진 {photoUrls.length}장 보기
-          </button>
+        {post.post_type === 'micro_review' ? (
+          <div className="mt-1 flex flex-col gap-1">
+            <p className="text-yellow-400 text-xs">
+              {'★'.repeat(post.rating ?? 0)}
+              {'☆'.repeat(5 - (post.rating ?? 0))}
+            </p>
+            {post.content && <p className="text-sm text-gray-600 line-clamp-1">{post.content}</p>}
+          </div>
+        ) : post.post_type === 'checklist' ? (
+          <TagChips tags={checklistTags} />
+        ) : (
+          // [Decision 020](2026-09-04) survey_review: 설문 문항 뱃지는 최대 3개까지만
+          // 보여주고 나머지는 "+N개"로 요약한다(카드가 과도하게 길어지지 않도록).
+          <div className="mt-1 flex flex-col gap-1.5">
+            <TagChips tags={surveyTags} />
+            {post.content && <p className="text-sm text-gray-600 line-clamp-1">{post.content}</p>}
+          </div>
         )}
-      </div>
+      </button>
 
-      {isPhotoModalOpen && <PostPhotoModal photoUrls={photoUrls} onClose={() => setIsPhotoModalOpen(false)} />}
-    </div>
+      {isDetailOpen && <PostDetailModal post={post} onClose={() => setIsDetailOpen(false)} />}
+    </>
   );
 }

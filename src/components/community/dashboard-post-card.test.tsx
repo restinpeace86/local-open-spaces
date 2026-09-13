@@ -1,7 +1,20 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { DashboardPostCard } from './dashboard-post-card';
 import { DashboardPost } from '@/lib/community/mom-pick-dashboard';
+
+// [맘스픽 프리뷰/상세 카드 분리](2026-09-13 사용자 지시): PostDetailModal이
+// useUser()(→ supabase client)를 쓰므로, 실제 로그인 상태를 조회하지 않도록
+// 비로그인(guest)으로 고정한다 — detail-modal.test.tsx 등 기존 테스트와 동일한
+// 관례.
+vi.mock('@/lib/supabase/client', () => ({
+  createClient: () => ({
+    auth: {
+      getUser: () => Promise.resolve({ data: { user: null } }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: vi.fn() } } }),
+    },
+  }),
+}));
 
 function basePost(overrides: Partial<DashboardPost> = {}): DashboardPost {
   return {
@@ -28,13 +41,14 @@ function basePost(overrides: Partial<DashboardPost> = {}): DashboardPost {
 }
 
 // [Decision 020](2026-09-04) / spec/community/mom-pick-grades.md 2.1: survey_review
-// 타입 카드 렌더링 — 설문 요약 뱃지 + 자유글 + 사진 버튼을 보여주는지 검증한다.
-// 기존 micro_review/checklist 렌더링은 회귀 없이 그대로 유지돼야 한다(과거 데이터
+// 타입 카드 렌더링 — 설문 요약 뱃지 + 자유글을 보여주는지 검증한다. 기존
+// micro_review/checklist 렌더링은 회귀 없이 그대로 유지돼야 한다(과거 데이터
 // 하위 호환).
-// [맘스픽 게시글 카드 컴팩트화](2026-09-13 사용자 지시): "글 한개가 차지하는 공간이
-// 너무 커.. 사진은 사진 보기 버튼으로.. 제목 라인 우측에 닉네임/등급.. tag들도
-// 너무 많네" — 제목/작성자 한 줄 배치, 태그 최대 3개+overflow, 사진은 버튼+팝업으로
-// 검증한다.
+// [맘스픽 프리뷰/상세 카드 분리](2026-09-13 사용자 지시): "좀더 줄였으면 좋겠어..
+// 내용글도 1줄만.. tag 정도만.. 사진 보기도 없애.. 프리뷰 카드 누르면 상세카드가
+// 보이게.. 찜도 없애.. 일자도.. 굳이 프리뷰에서 볼일은 없지 않나?" — 프리뷰
+// 카드에서 날짜/좋아요/사진 버튼을 전부 없애고, 카드 전체가 클릭 가능해 누르면
+// 상세 모달(PostDetailModal)이 뜨는지 검증한다.
 describe('DashboardPostCard', () => {
   it('제목(스팟명) 줄 오른쪽에 작성자 닉네임과 등급이 함께 표시된다', () => {
     render(<DashboardPostCard post={basePost({ author: { id: 'user-1', nickname: '하린맘', grade: 'sprout' } })} />);
@@ -44,7 +58,7 @@ describe('DashboardPostCard', () => {
     expect(screen.getByText('🌱 새싹맘')).toBeInTheDocument();
   });
 
-  it('survey_review는 설문 뱃지(최대 3개)와 자유글을 보여주고, 사진은 버튼으로 대체한다', () => {
+  it('survey_review는 설문 뱃지(최대 3개)와 자유글 1줄만 보여주고, 날짜/좋아요/사진 버튼은 없다', () => {
     render(
       <DashboardPostCard
         post={basePost({
@@ -54,6 +68,7 @@ describe('DashboardPostCard', () => {
           satisfaction_points: ['parking'],
           content: '아이가 정말 좋아했어요',
           photo_urls: ['https://example.com/photo1.jpg', 'https://example.com/photo2.jpg'],
+          like_count: 5,
         })}
       />
     );
@@ -69,30 +84,38 @@ describe('DashboardPostCard', () => {
 
     expect(screen.getByText('아이가 정말 좋아했어요')).toBeInTheDocument();
 
-    // 사진은 인라인 썸네일이 아니라 버튼으로만 보인다.
-    expect(screen.queryByRole('img')).not.toBeInTheDocument();
-    expect(screen.getByText('📷 사진 2장 보기')).toBeInTheDocument();
-  });
-
-  it('사진 보기 버튼을 누르면 팝업으로 사진을 확인할 수 있다', () => {
-    render(<DashboardPostCard post={basePost({ photo_urls: ['https://example.com/photo1.jpg'] })} />);
-
-    fireEvent.click(screen.getByText('📷 사진 1장 보기'));
-
-    expect(screen.getByRole('img')).toHaveAttribute('src', 'https://example.com/photo1.jpg');
-    fireEvent.click(screen.getByLabelText('닫기'));
-    expect(screen.queryByRole('img')).not.toBeInTheDocument();
-  });
-
-  it('사진이 없으면 사진 보기 버튼 자체가 없다', () => {
-    render(<DashboardPostCard post={basePost({ content: '짧은 소감만 남겼어요' })} />);
-    expect(screen.getByText('짧은 소감만 남겼어요')).toBeInTheDocument();
+    // 날짜/좋아요/사진 버튼은 프리뷰 카드에서 전부 빠졌다(상세로 이동).
+    expect(screen.queryByText(/2026\./)).not.toBeInTheDocument();
+    expect(screen.queryByText(/❤️/)).not.toBeInTheDocument();
     expect(screen.queryByText(/사진.*보기/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
   });
 
-  it('survey_review인데 설문/사진이 전부 비어있어도(전부 선택 사항) 에러 없이 렌더링된다', () => {
+  it('카드를 누르면 상세 모달(PostDetailModal)이 열려 날짜/사진/전체 태그를 보여준다', async () => {
+    render(
+      <DashboardPostCard
+        post={basePost({
+          visit_environment: 'outdoor',
+          duration_type: 'half_day',
+          photo_urls: ['https://example.com/photo1.jpg'],
+        })}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /행복어린이공원/ }));
+
+    expect(await screen.findByRole('dialog', { name: '게시글 상세' })).toBeInTheDocument();
+    expect(screen.getByText(/2026\.09\.04/)).toBeInTheDocument();
+    expect(screen.getByRole('img')).toHaveAttribute('src', 'https://example.com/photo1.jpg');
+  });
+
+  it('사진이 없어도 카드는 정상 렌더링되고, 상세를 열어도 사진 영역이 없다', async () => {
     render(<DashboardPostCard post={basePost({ content: '짧은 소감만 남겼어요' })} />);
     expect(screen.getByText('짧은 소감만 남겼어요')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /행복어린이공원/ }));
+    await screen.findByRole('dialog', { name: '게시글 상세' });
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
   });
 
   it('기존 micro_review 렌더링은 회귀 없이 그대로 동작한다', () => {

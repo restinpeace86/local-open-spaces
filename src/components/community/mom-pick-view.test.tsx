@@ -24,7 +24,6 @@ vi.mock('@/lib/auth/profile', () => {
 vi.mock('./survey-review-composer', () => ({
   SurveyReviewComposer: () => <div data-testid="composer">설문형 리뷰 작성 폼</div>,
 }));
-vi.mock('./personalized-banner', () => ({ PersonalizedBanner: () => <div /> }));
 // 소셜 로그인 버튼(supabase OAuth)을 실제로 렌더하지 않도록 모달을 가볍게 스텁.
 vi.mock('./login-prompt-modal', () => ({
   LoginPromptModal: () => <div>👑 맘스픽은 로그인 후 이용할 수 있어요</div>,

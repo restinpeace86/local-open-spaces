@@ -393,6 +393,20 @@
       태그 최대 3개+"+N개", 사진 인라인 대신 "📷 사진 N장 보기" 버튼 +
       PostPhotoModal 팝업.
       (완료: 2026-09-13, 상세: implementation/2026-09-13-mom-pick-fab-and-feed-fixes.md)
+- [x] Step 139 (사용자 지시, 2026-09-13): "성남시 분당구에 사는 3살 3살 아이와..
+      가 맘스픽 상단에 왜뜨지? 좀더 줄였으면.. 프리뷰카드라고 치고.. 내용글도
+      1줄만.. tag 정도만.. 사진 1장 보기도 없애.. 프리뷰 카드 누르면 상세카드가
+      보이게 되는 구조.. 찜도 없애.. 찜기능은 상세 카드쪽에서.. 일자도.. 굳이
+      프리뷰에서 볼일은 없지 않나?" — (1) PersonalizedBanner(맞춤 환영 문구)를
+      "맘스픽 컨텐츠 아님" 지적으로 받아들여 렌더링 제거(파일은 보존). (2)
+      DashboardPostCard를 완전한 미리보기 전용으로 재정의: 자유글 line-clamp-1,
+      날짜/좋아요/사진버튼 전부 제거, 카드 전체를 버튼화해 누르면 상세로 이동.
+      (3) 신규 PostDetailModal: 날짜/전체 태그(날씨·인프라·동반형태 포함)/전체
+      내용/사진 그리드(탭하면 PostPhotoModal이 그 인덱스부터 열림)/찜(좋아요)
+      버튼을 전부 여기로 이동 — 좋아요는 기존 사장된 MomPickFeed가 갖고 있던
+      toggleLike/getMyLikedPostIds를 재사용, Decision 019(열심맘 이상만 노출)
+      규칙 유지.
+      (완료: 2026-09-13, 상세: implementation/2026-09-13-mom-pick-preview-detail-card-split.md)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.
