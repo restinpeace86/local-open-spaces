@@ -49,6 +49,10 @@ GitHub Actions cron으로 직접 표현할 수 없다는 사실을 확인했다 
 
 | 실행 일시 | 수집 권역 | RAW 적재 건수 | Service 적재 건수 | 파싱 에러 | 상태 | 비고 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 2026-09-14 05:37 | SEOUL_YEYAK | 2579 | 2579 | 27 | ✅ [OK] |  |
+| 2026-09-14 05:27 | GG_CULTURE_EVENTS | - | 0 | N/A | 🚨 [CRITICAL] | GG_CULTURE_EVENTS: 전체(GGCULTUREVENTSTUS(문화행사), GGCULFOUEVENSTM(문화재단행사)) 수집 실패 — GGCULTUREVENTSTUS(문화행사):GgCultureEvents(GGCULTUREVENTSTUS) 호출 실패 (HTTP 500): <!doctype html><html lang="en"><head><title>HTTP Status 500 – Internal Server Error</title><style type="text/css">body {font-family:Tahoma,Arial,sans-serif;} h1, h2, h3, b {color:white;background-color:#525D76;} h1 {font-size:22px;} h2 {font-size:16px;} h3 {font-size:14px;} p {font-size:12px;} a {co | GGCULFOUEVENSTM(문화재단행사):GgCultureEvents(GGCULFOUEVENSTM) 호출 실패 (HTTP 500): <!doctype html><html lang="en"><head><title>HTTP Status 500 – Internal Server Error</title><style type="text/css">body {font-family:Tahoma,Arial,sans-serif;} h1, h2, h3, b {color:white;background-color:#525D76;} h1 {font-size:22px;} h2 {font-size:16px;} h3 {font-size:14px;} p {font-size:12px;} a {co |
+| 2026-09-14 05:05 | SEOUL_YEYAK | 2579 | 2579 | 27 | ✅ [OK] |  |
+| 2026-09-14 04:54 | GG_CULTURE_EVENTS | - | 0 | N/A | 🚨 [CRITICAL] | GG_CULTURE_EVENTS: 전체(GGCULTUREVENTSTUS(문화행사), GGCULFOUEVENSTM(문화재단행사)) 수집 실패 — GGCULTUREVENTSTUS(문화행사):This operation was aborted (원인: 20: This operation was aborted) | GGCULFOUEVENSTM(문화재단행사):This operation was aborted (원인: 20: This operation was aborted) |
 | 2026-09-13 19:09 | SEOUL_YEYAK | 2572 | 2572 | 27 | ✅ [OK] |  |
 | 2026-09-13 05:28 | SEOUL_YEYAK | 2625 | 0 | 2652 | 🚨 [CRITICAL] | 테이블별 부분 실패: events(events upsert 실패: canceling statement due to statement timeout) |
 | 2026-09-13 05:15 | GG_CULTURE_EVENTS | - | 0 | N/A | 🚨 [CRITICAL] | GG_CULTURE_EVENTS: 전체(GGCULTUREVENTSTUS(문화행사), GGCULFOUEVENSTM(문화재단행사)) 수집 실패 — GGCULTUREVENTSTUS(문화행사):GgCultureEvents(GGCULTUREVENTSTUS) 응답이 JSON이 아닙니다: {"GGCULTUREVENTSTUS":[{"head":[{"list_total_count":3087},{"RESULT":{"CODE":"INFO-000","MESSAGE":"정상 처리되었습니다."}},{"api_version":"1.0"}]},{"row":[{"INST_NM":"경기문화재단","TITLE":"2026 안산 펫페스티벌 위드(with) 첨벙하개","CATEGORY_NM":"행사","URL":"https://ggc.ggcf.kr/cultureEvents/view/6a97884ad179b47f66217292","EVENT_ | GGCULFOUEVENSTM(문화재단행사):This operation was aborted (원인: 20: This operation was aborted) |
@@ -1603,3 +1607,89 @@ The server returned an invalid or incomplete response.
 | seoul_public_reservation | 2599 | 2572 | 0 | 2557 | 0 |  |
 
 **검증**: 전체 RAW 수신 2599건 vs DB 적재 2572건 (+에러 0건 +범위제외 27건) → **드롭 0건 확인 ✅**
+
+<details>
+<summary>2026-09-14 05:05 SEOUL_YEYAK 상세 리포트</summary>
+
+**테이블별 적재**
+
+| 테이블 | 가져온 건수 | DB 적재 건수 | 배치 내 중복(NULL 병합) | 기존 DB 병합 |
+| :--- | ---: | ---: | ---: | ---: |
+| open_spaces | 0 | 0 | 0 | 0 |
+| events | 2579 | 2579 | 0 | 2572 |
+
+**범위 제외**: 27건
+
+**에러 상세**
+
+| 원인 | 건수 |
+| :--- | ---: |
+| COORDINATE_PARSE_FAIL | 13 |
+
+</details>
+
+## [2026-09-14 05:10:29] [Daily Events Batch] Ingestion Log
+
+| API 출처 식별자 (`source`) | RAW 수신 건수 | events 적재 건수 | open_spaces 적재 건수 | Safe Merge 건수 | 에러 건수 | 비고 |
+| :--- | ---: | ---: | ---: | ---: | ---: | :--- |
+| GG_CULTURE_EVENTS | - | 0 | 0 | 0 | - | ❌ 실행 실패: GG_CULTURE_EVENTS: 전체(GGCULTUREVENTSTUS(문화행사), GGCULFOUEVENSTM(문화재단행사)) 수집 실패 — GGCULTUREVENTSTUS(문화행사):This operation was aborted (원인: 20: This operation was aborted) | GGCULFOUEVENSTM(문화재단행사):This operation was aborted (원인: 20: This operation was aborted) |
+| seoul_public_culture | 19517 | 18974 | 0 | 18992 | 543 |  |
+| tourapi_4.0 | 283 | 283 | 0 | 283 | 0 |  |
+| seoul_public_reservation | 2606 | 2579 | 0 | 2572 | 0 |  |
+| gg_public | - | 0 | 0 | 0 | - | ❌ 실행 실패: GG_CULTURE_EVENTS 실패로 건너뜀 |
+| CATEGORY_RULES_APPLICATION | 17574 | 0 | 0 | 0 | 0 | category_min 신규 룰 매칭 후처리(신규 적재 아님) — open_spaces 0/2083건, events 0/15491건 |
+| DETAILED_CATEGORY_FALLBACK | 0 | 0 | 0 | 0 | 0 | 세부 중분류 미분류 잔여를 '기타'로 안전 적재(8개 대상 source_type 한정) — 0/0건 |
+| LEGACY_SOURCE_CATEGORY_MAPPING | 0 | 0 | 0 | 0 | 0 | docs/null-category-analysis.md 적용 범위(어린이놀이시설/수영장/키즈카페/바닥분수·물놀이시설) 매핑 — 0건, 내역: {} |
+| DEACTIVATE_EXPIRED_EVENTS | 18596 | 18596 | 0 | 0 | 0 | end_date < 2026-09-13 이면서 is_active=true였던 행 18596건을 false로 전환(신규 적재 아닌 만료 정리 후처리) |
+| DEDUPE_OPEN_SPACES | 0 | 0 | 0 | 0 | 0 | 교차 출처 중복 정제 완료 — 0개 그룹, survivor 병합 0건, 삭제 0건 |
+| AUTO_ASSIGN_TO_EXISTING_GROUPS | - | 0 | 0 | 0 | - | ❌ 실행 실패: 기존 그룹 자동 편입 실패: canceling statement due to statement timeout |
+| MATCH_EVENTS_TO_OPEN_SPACES | - | 0 | 0 | 0 | - | ❌ 실행 실패: 이벤트-스팟 자동 매칭 실패: canceling statement due to statement timeout |
+| DELETE_EXPIRED_RESERVATION_SPACES | 0 | 0 | 0 | 0 | 0 | 서비스 이용 종료일(SVCOPNENDDT) < 2026-09-13인 한시성 예약 스팟 0건 삭제(신규 적재 아닌 만료 정리 후처리) |
+| ANALYZE_OPEN_SPACES | 0 | 0 | 0 | 0 | 0 | open_spaces 플래너 통계 갱신 완료(신규 적재 아닌 유지보수 후처리) — statement timeout 재발 방지 |
+| REFRESH_SIGUNGU_OPTIONS_CACHE | 0 | 0 | 0 | 0 | 0 | 시/군/구 목록 캐시 갱신 완료(오늘 배치로 새로 추가된 지역이 있다면 반영됨) |
+| REFRESH_EVENTS_FILTER_OPTIONS_CACHE | 0 | 0 | 0 | 0 | 0 | 관리자 화면 events 필터 옵션 캐시 갱신 완료(신규 적재 아닌 유지보수 후처리) — statement timeout 재발 방지 |
+
+**검증**: 전체 RAW 수신 22406건(일부 소스 실패/미확인 — 완전한 대조 불가) vs DB 적재 21836건 (+에러 543건 +범위제외 27건)
+
+<details>
+<summary>2026-09-14 05:37 SEOUL_YEYAK 상세 리포트</summary>
+
+**테이블별 적재**
+
+| 테이블 | 가져온 건수 | DB 적재 건수 | 배치 내 중복(NULL 병합) | 기존 DB 병합 |
+| :--- | ---: | ---: | ---: | ---: |
+| open_spaces | 0 | 0 | 0 | 0 |
+| events | 2579 | 2579 | 0 | 2579 |
+
+**범위 제외**: 27건
+
+**에러 상세**
+
+| 원인 | 건수 |
+| :--- | ---: |
+| COORDINATE_PARSE_FAIL | 13 |
+
+</details>
+
+## [2026-09-14 05:42:54] [Daily Events Batch] Ingestion Log
+
+| API 출처 식별자 (`source`) | RAW 수신 건수 | events 적재 건수 | open_spaces 적재 건수 | Safe Merge 건수 | 에러 건수 | 비고 |
+| :--- | ---: | ---: | ---: | ---: | ---: | :--- |
+| GG_CULTURE_EVENTS | - | 0 | 0 | 0 | - | ❌ 실행 실패: GG_CULTURE_EVENTS: 전체(GGCULTUREVENTSTUS(문화행사), GGCULFOUEVENSTM(문화재단행사)) 수집 실패 — GGCULTUREVENTSTUS(문화행사):GgCultureEvents(GGCULTUREVENTSTUS) 호출 실패 (HTTP 500): <!doctype html><html lang="en"><head><title>HTTP Status 500 – Internal Server Error</title><style type="text/css">body {font-family:Tahoma,Arial,sans-serif;} h1, h2, h3, b {color:white;background-color:#525D76;} h1 {font-size:22px;} h2 {font-size:16px;} h3 {font-size:14px;} p {font-size:12px;} a {co | GGCULFOUEVENSTM(문화재단행사):GgCultureEvents(GGCULFOUEVENSTM) 호출 실패 (HTTP 500): <!doctype html><html lang="en"><head><title>HTTP Status 500 – Internal Server Error</title><style type="text/css">body {font-family:Tahoma,Arial,sans-serif;} h1, h2, h3, b {color:white;background-color:#525D76;} h1 {font-size:22px;} h2 {font-size:16px;} h3 {font-size:14px;} p {font-size:12px;} a {co |
+| seoul_public_culture | 19517 | 18974 | 0 | 18992 | 543 |  |
+| tourapi_4.0 | 283 | 283 | 0 | 283 | 0 |  |
+| seoul_public_reservation | 2606 | 2579 | 0 | 2579 | 0 |  |
+| gg_public | - | 0 | 0 | 0 | - | ❌ 실행 실패: GG_CULTURE_EVENTS 실패로 건너뜀 |
+| CATEGORY_RULES_APPLICATION | 17574 | 0 | 0 | 0 | 0 | category_min 신규 룰 매칭 후처리(신규 적재 아님) — open_spaces 0/2083건, events 0/15491건 |
+| DETAILED_CATEGORY_FALLBACK | 0 | 0 | 0 | 0 | 0 | 세부 중분류 미분류 잔여를 '기타'로 안전 적재(8개 대상 source_type 한정) — 0/0건 |
+| LEGACY_SOURCE_CATEGORY_MAPPING | 0 | 0 | 0 | 0 | 0 | docs/null-category-analysis.md 적용 범위(어린이놀이시설/수영장/키즈카페/바닥분수·물놀이시설) 매핑 — 0건, 내역: {} |
+| DEACTIVATE_EXPIRED_EVENTS | 18572 | 18572 | 0 | 0 | 0 | end_date < 2026-09-13 이면서 is_active=true였던 행 18572건을 false로 전환(신규 적재 아닌 만료 정리 후처리) |
+| DEDUPE_OPEN_SPACES | 0 | 0 | 0 | 0 | 0 | 교차 출처 중복 정제 완료 — 0개 그룹, survivor 병합 0건, 삭제 0건 |
+| AUTO_ASSIGN_TO_EXISTING_GROUPS | - | 0 | 0 | 0 | - | ❌ 실행 실패: 기존 그룹 자동 편입 실패: canceling statement due to statement timeout |
+| MATCH_EVENTS_TO_OPEN_SPACES | - | 0 | 0 | 0 | - | ❌ 실행 실패: 이벤트-스팟 자동 매칭 실패: canceling statement due to statement timeout |
+| DELETE_EXPIRED_RESERVATION_SPACES | 0 | 0 | 0 | 0 | 0 | 서비스 이용 종료일(SVCOPNENDDT) < 2026-09-13인 한시성 예약 스팟 0건 삭제(신규 적재 아닌 만료 정리 후처리) |
+| ANALYZE_OPEN_SPACES | 0 | 0 | 0 | 0 | 0 | open_spaces 플래너 통계 갱신 완료(신규 적재 아닌 유지보수 후처리) — statement timeout 재발 방지 |
+| REFRESH_SIGUNGU_OPTIONS_CACHE | 0 | 0 | 0 | 0 | 0 | 시/군/구 목록 캐시 갱신 완료(오늘 배치로 새로 추가된 지역이 있다면 반영됨) |
+| REFRESH_EVENTS_FILTER_OPTIONS_CACHE | - | 0 | 0 | 0 | - | ❌ 실행 실패: events_filter_options_cache 갱신 실패: canceling statement due to statement timeout |
+
+**검증**: 전체 RAW 수신 22406건(일부 소스 실패/미확인 — 완전한 대조 불가) vs DB 적재 21836건 (+에러 543건 +범위제외 27건)
