@@ -596,6 +596,23 @@
       자동 기록된 실행 로그를 그대로 커밋.
       (완료: 2026-09-13, 별도 implementation 기록 없음 — docs/pipeline-log.md
       자체가 실행 기록이며, 원인 진단/수정 내용은 Step 148에 이미 기록됨)
+- [x] Step 151 (사용자 지시, 2026-09-13): "어 원인 진단 및 조치해" — 관리자
+      화면 운영 가이드 캡처 중 발견된 `get_events_filter_options 조회 실패:
+      canceling statement due to statement timeout`(Step 133에서 이미 한 번
+      고쳤던 RPC가 재발) 진단/수정. 실측(EXPLAIN ANALYZE, pg_roles): raw_data
+      ->>'MINCLASSNM'/'SVCSTATNM' 서브쿼리 2개가 array_agg(distinct.. order by)
+      정렬 비용까지 겹쳐 최대 3초 이상 걸렸고, 4개 서브쿼리 합산 시간이
+      authenticated/anon 롤의 실제 statement_timeout(8초 — Management API
+      세션의 2분과는 다른 값임을 실측으로 처음 확인)을 넘을 수 있었다. 이
+      두 필드는 SEOUL_YEYAK 소스에만 있어 그 소스가 매일 대량 재적재될 때마다
+      재현 가능. get_sigungu_options()를 고쳤던 것과 동일한 근본 원인(요청마다
+      재집계할 필요 없는 참조성 데이터)이라 동일한 해법(머티리얼라이즈드 뷰
+      캐싱)을 그대로 적용 — events_filter_options_cache 뷰 생성, 함수는
+      캐시를 읽기만 하도록 재정의(시그니처 동일이라 프런트엔드 무변경),
+      run-daily.mjs에 REFRESH_EVENTS_FILTER_OPTIONS_CACHE 후처리 단계 추가.
+      실측 검증: 조회 시간이 4.7ms 수준으로 즉시 응답하도록 개선(수 초~타임아웃
+      → 0.1ms대).
+      (완료: 2026-09-13, 상세: implementation/2026-09-13-events-filter-options-timeout-recurrence-fix.md)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.

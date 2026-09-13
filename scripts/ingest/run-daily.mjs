@@ -24,6 +24,7 @@ import {
   createAdminClient,
   analyzeOpenSpaces,
   refreshSigunguOptionsCache,
+  refreshEventsFilterOptionsCache,
   autoAssignOpenSpacesToExistingGroups,
   matchEventsToOpenSpaces,
 } from './lib/supabase-admin.mjs';
@@ -434,6 +435,45 @@ async function runRefreshSigunguOptionsCache({ dryRun }) {
   };
 }
 
+// [get_events_filter_options() 간헐적 statement timeout 진단/수정](2026-09-13
+// 사용자 지시): "canceling statement due to statement timeout" — REFRESH_SIGUNGU_
+// OPTIONS_CACHE와 동일한 이유(요청마다 재집계할 필요 없는 참조성 데이터를 매 요청
+// 실시간 집계하다 8초 timeout을 넘김)로 머티리얼라이즈드 뷰 캐싱을 적용했다
+// (scripts/migrations/2026-09-13-events-filter-options-cache.sql). 오늘 배치가
+// 끝난 직후 한 번 갱신해 다음 조회부터 최신 소스/원천 중분류/접수상태 값까지
+// 반영되게 한다.
+async function runRefreshEventsFilterOptionsCache({ dryRun }) {
+  if (dryRun) {
+    return {
+      sourceKey: 'REFRESH_EVENTS_FILTER_OPTIONS_CACHE',
+      source: null,
+      targetTable: 'events_filter_options_cache',
+      rawCount: 0,
+      count: 0,
+      upserted: false,
+      safeMergeCount: 0,
+      errorCount: 0,
+      excludeFromVerification: true,
+      note: 'dry-run: 실제 REFRESH는 실행하지 않음',
+    };
+  }
+
+  const client = createAdminClient();
+  await refreshEventsFilterOptionsCache(client);
+  return {
+    sourceKey: 'REFRESH_EVENTS_FILTER_OPTIONS_CACHE',
+    source: null,
+    targetTable: 'events_filter_options_cache',
+    rawCount: 0,
+    count: 0,
+    upserted: false,
+    safeMergeCount: 0,
+    errorCount: 0,
+    excludeFromVerification: true,
+    note: '관리자 화면 events 필터 옵션 캐시 갱신 완료(신규 적재 아닌 유지보수 후처리) — statement timeout 재발 방지',
+  };
+}
+
 // [open_spaces 중복 데이터 정제](2026-08-28): 서로 다른 두 개 이상의 어댑터(source_type)가
 // 각자 원본 API에서 같은 실제 장소를 카탈로그에 등재해두면(예: "선화랑"이 KOR_TOUR_API_V4와
 // seoul_public_culture 양쪽에 존재), 각 어댑터는 서로 다른 external_id를 매기므로
@@ -610,6 +650,14 @@ export async function runDailyBatch({ dryRun = false } = {}) {
   } catch (err) {
     console.error(`❌ [REFRESH_SIGUNGU_OPTIONS_CACHE] 실패: ${err.message}`);
     results.push({ failed: true, sourceKey: 'REFRESH_SIGUNGU_OPTIONS_CACHE', source: null, note: err.message });
+  }
+
+  console.log('\n=== [REFRESH_EVENTS_FILTER_OPTIONS_CACHE] ===');
+  try {
+    results.push(await runRefreshEventsFilterOptionsCache({ dryRun }));
+  } catch (err) {
+    console.error(`❌ [REFRESH_EVENTS_FILTER_OPTIONS_CACHE] 실패: ${err.message}`);
+    results.push({ failed: true, sourceKey: 'REFRESH_EVENTS_FILTER_OPTIONS_CACHE', source: null, note: err.message });
   }
 
   if (!dryRun) {

@@ -342,6 +342,20 @@ export async function refreshSigunguOptionsCache(client) {
   if (error) throw new Error(`sigungu_options_cache 갱신 실패: ${error.message}`);
 }
 
+// [get_events_filter_options() 간헐적 statement timeout 진단/수정](2026-09-13 사용자
+// 지시): "canceling statement due to statement timeout" — 실측 진단 결과 raw_data->>
+// 'MINCLASSNM'/'SVCSTATNM' 서브쿼리 두 개가 array_agg(distinct ... order by ...) 정렬
+// 비용까지 겹쳐 최대 3초 이상 걸렸고, 4개 서브쿼리 합산 시간이 authenticated/anon
+// 롤의 statement_timeout(8초, 실측 확인)을 넘을 수 있었다. MINCLASSNM/SVCSTATNM은
+// SEOUL_YEYAK 소스에만 있는 필드라, 이 소스가 매일 대량 재적재될 때마다 재현
+// 가능성이 있다. get_sigungu_options()를 고쳤던 것과 정확히 같은 이유(요청마다
+// 재집계할 필요 없는 참조성 데이터)로 events_filter_options_cache 머티리얼라이즈드
+// 뷰로 캐싱했다(scripts/migrations/2026-09-13-events-filter-options-cache.sql).
+export async function refreshEventsFilterOptionsCache(client) {
+  const { error } = await client.rpc('refresh_events_filter_options_cache');
+  if (error) throw new Error(`events_filter_options_cache 갱신 실패: ${error.message}`);
+}
+
 // [긴급 아키텍처 개편] RAW 레이어 재가공(2단계 단독 재실행)용 — 원본 API를 다시 호출하지 않고
 // 이미 raw_ingest_data에 보존된 원본을 읽어온다.
 export async function fetchRawIngestData(client, source) {
