@@ -139,12 +139,21 @@ export async function getExpertPosts(limit: number, page = 1): Promise<PagedResu
 // (user_bookmarks)은 스팟/이벤트 전용이고 게시글(mom_pick_posts) 자체에는 찜 기능이
 // 없다(Decision 019 스펙에 없는 개념을 추측으로 만들지 않음) — 게시글의 인기도는
 // like_count만으로 판단한다.
+// [방금 올린 글이 인기글에 바로 뜨는 문제 수정](2026-09-13 사용자 지시): "쓴 글이
+// 실시간 라이브라던가 인기 우수글에 바로 뜨는데.. 인기 우수글은 무슨 기준으로
+// 바로 뜨는거지?.. 방금올린글이 인기 우수글에 보이는건 아닌거 같아" — 실측 확인:
+// like_count가 전부 0(=동률)일 때 2차 정렬(created_at DESC)이 사실상 순위를
+// 결정해, 좋아요가 하나도 없는 방금 쓴 글도 최신순으로 상위에 노출되고 있었다.
+// "인기"라 부르려면 최소한 좋아요가 1개 이상은 있어야 한다는 최소 기준을 추가한다
+// (댓글 기능은 이 앱에 없고, 주간 집계 등은 지금 표본이 1건뿐이라 판단 근거가
+// 부족해 이번엔 손대지 않는다 — 제3장 제5조 추측 금지, 필요해지면 별도로 설계).
 export async function getTrendingPosts(limit: number, page = 1): Promise<PagedResult<DashboardPost>> {
   const admin = createAdminClient();
   const from = (page - 1) * limit;
   const { data, error, count } = await admin
     .from('mom_pick_posts')
     .select(POST_COLUMNS, { count: 'exact' })
+    .gt('like_count', 0)
     .order('like_count', { ascending: false })
     .order('created_at', { ascending: false })
     .range(from, from + limit - 1);

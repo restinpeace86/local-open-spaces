@@ -19,7 +19,15 @@ import { canAccessCommunityFeed } from '@/lib/community/grades';
 // 동작 중이라 이번 작업에서 새로 만들 필요가 없다.
 export type MomPickAccessState = 'loading' | 'guest' | 'not_sprout_yet' | 'allowed';
 
-export function useMomPickAccess(): { state: MomPickAccessState; profile: Profile | null } {
+// [등업 직후 게이팅 상태가 안 바뀌는 버그 수정](2026-09-13 사용자 지시): "글하나
+// 썼고 새싹맘 됐는데 글쓰기 버튼이나 다른 전체보기 등 누르면 아직 새싹맘 등급이
+// 아니에요 첫글 쓰러가기 나옴" — 첫 글 작성 시 DB 트리거가 grade를 signed_up→
+// sprout로 승급시키지만, 이 훅은 `user`가 바뀔 때만(로그인/로그아웃) 프로필을
+// 다시 조회했다 — 같은 세션에서 글만 새로 썼을 땐 `user`가 그대로라 이 훅의
+// 내부 profile/state가 갱신되지 않고 계속 예전 값(signed_up)에 머물러 있었다.
+// 호출부(mom-pick-view.tsx)가 글 등록 후 이 값을 증가시키면 재조회하도록
+// 옵션 인자를 추가한다.
+export function useMomPickAccess(refreshKey?: number): { state: MomPickAccessState; profile: Profile | null } {
   const { user, isLoading: isUserLoading } = useUser();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [isProfileLoading, setIsProfileLoading] = useState(false);
@@ -45,7 +53,7 @@ export function useMomPickAccess(): { state: MomPickAccessState; profile: Profil
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, refreshKey]);
 
   if (isUserLoading || (user && isProfileLoading)) return { state: 'loading', profile };
   if (!user) return { state: 'guest', profile: null };

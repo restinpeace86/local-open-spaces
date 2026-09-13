@@ -379,6 +379,20 @@
       최적화는 범위 밖(다른 화면과 공유하는 핵심 RPC라 위험도 높음, 사용자도
       조건부 대안을 제시).
       (완료: 2026-09-13, 상세: implementation/2026-09-13-mom-pick-content-only-and-search-first-place-picker.md)
+- [x] Step 138 (사용자 지시, 2026-09-13): "글쓰기는 맨 상단 말고 floating으로
+      해서 우측하단에.. 글하나 썼고 새싹맘 됐는데 글쓰기 버튼이나 전체보기
+      누르면 아직 새싹맘 아니에요 나옴.. 쓴 글이 인기 우수글에 바로 뜨는데
+      무슨 기준?.. 글 한개가 차지하는 공간이 너무 커.. 사진은 사진 보기
+      버튼으로.. 제목 라인 우측에 닉네임과 등급.. tag들도 너무 많네" — (1)
+      글쓰기 버튼을 다른 화면 AI챗봇과 동일한 우측하단 FAB로 이동. (2) 버그
+      수정: useMomPickAccess가 user 불변 시 프로필 재조회를 안 해 첫글
+      작성 직후(grade 승급)에도 게이팅 state가 갱신 안 되던 문제 —
+      refreshKey 옵션 인자 추가 + 글 등록 후 증가. (3) getTrendingPosts에
+      like_count>0 조건 추가(좋아요 0인 방금 쓴 글이 동률 최신순으로 상위에
+      뜨던 문제). (4) DashboardPostCard 컴팩트화: 제목줄에 닉네임/등급 통합,
+      태그 최대 3개+"+N개", 사진 인라인 대신 "📷 사진 N장 보기" 버튼 +
+      PostPhotoModal 팝업.
+      (완료: 2026-09-13, 상세: implementation/2026-09-13-mom-pick-fab-and-feed-fixes.md)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.

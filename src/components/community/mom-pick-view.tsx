@@ -38,29 +38,28 @@ import { DashboardPost } from '@/lib/community/mom-pick-dashboard';
 type DashboardData = { expert: DashboardPost[]; trending: DashboardPost[]; live: DashboardPost[] };
 
 export function MomPickView() {
-  const { state, profile: initialProfile } = useMomPickAccess();
+  // [등업 직후 게이팅 상태가 안 바뀌는 버그 수정](2026-09-13 사용자 지시): "글하나
+  // 썼고 새싹맘 됐는데 글쓰기 버튼이나 다른 전체보기 등 누르면 아직 새싹맘 등급이
+  // 아니에요 첫글 쓰러가기 나옴" — useMomPickAccess는 user가 바뀔 때만 프로필을
+  // 다시 조회해 state(guest/not_sprout_yet/allowed)를 계산한다. 같은 세션에서
+  // 첫 글을 써서 DB 트리거가 grade를 승급시켜도 user 자체는 그대로라 이 훅이
+  // 재조회하지 않았다 — accessRefreshKey를 글 등록 직후 증가시켜 강제로
+  // 재조회하게 한다(아래 refreshProfileAfterPost).
+  const [accessRefreshKey, setAccessRefreshKey] = useState(0);
+  const { state, profile: initialProfile } = useMomPickAccess(accessRefreshKey);
   const [profile, setProfile] = useState(initialProfile);
   const [isGuideModalOpen, setIsGuideModalOpen] = useState(false);
   // [todo.md 개선사항 10](2026-09-03): 비로그인 사용자가 "글쓰기"를 눌렀을 때만 여는
   // Soft-wall 모달 — 페이지 진입 즉시(state==='guest') 여는 게 아니라, 실제로 쓰려고
   // 시도하는 그 순간에만 연다는 점이 기존 LoginPromptModal 용례(진입 즉시 강제)와 다르다.
   const [isGuestWritePromptOpen, setIsGuestWritePromptOpen] = useState(false);
-  // [맘스픽 메인 화면 항상 동일하게 노출 + 진짜 화면 전환](2026-09-13 사용자 지시):
-  // "로그인 유저든 비로그인 유저든 맘스픽 하단 버튼 눌러서 가면 맘스픽의 메인화면만
-  // 보여야돼.. 로그인하러가기라던가 첫글쓰기 같은거 보이면 안돼.. 그냥 새싹맘
-  // 유저처럼 맘스픽 화면 동일하게 보여야돼. 여기서 뭔가 누르려고 하면 그때..
-  // 완전히 화면이 전환되어야해. 지금은 첫글쓰기할때 아래 맘스픽 화면 메뉴가
-  // 같이나옴.. 공존이 아니고 글쓰기 화면으로 완전히 전환되어야해." — 이전엔
-  // guest/not_sprout_yet이 각자 다른 문구의 소프트월 버튼("로그인하고 후기
-  // 남기기"/"첫 글 쓰고 맘스픽 시작하기")을 봤고, 안내 모달을 거쳐 글쓰기 폼을
-  // "열면"(isComposerRevealed) 같은 페이지 안에서 스크롤만 될 뿐 하단 탭이 계속
-  // 함께 보였다. 이제 (1) 글쓰기 영역은 상태와 무관하게 항상 SurveyReviewComposer를
-  // 그대로 렌더링하고(그 위에 투명 인터셉트만 얹어 실제 상호작용만 막음 — 아래
-  // 피드 영역과 동일한 기존 패턴 재사용) (2) 실제로 쓰려는 액션이 확인되면
+  // [맘스픽 메인 화면 항상 동일하게 노출 + 진짜 화면 전환](2026-09-13 사용자 지시,
+  // Step 136/137): 메인 화면(헤더 + 피드)에는 글쓰기 폼을 두지 않고 상태 무관
+  // 동일한 "✍️ 글쓰기" 버튼만 둔다. 실제로 쓰려는 액션이 확인되면
   // isFullScreenComposerOpen을 열어, 이 컴포넌트가 헤더/피드 없이 fixed inset-0
-  // 전체 화면만 조기 반환(early return)하도록 바꾼다 — 하단 탭(RootLayout이 항상
-  // 렌더)까지 시각적으로 덮으면서, 배경 콘텐츠가 DOM에 남아있지 않아 진짜 "화면
-  // 전환"에 가깝다(별도 /write 라우트를 새로 만들지 않고도).
+  // 전체 화면만 조기 반환(early return)한다 — 하단 탭(RootLayout이 항상 렌더)까지
+  // 시각적으로 덮으면서, 배경 콘텐츠가 DOM에 남아있지 않아 진짜 "화면 전환"에
+  // 가깝다(별도 /write 라우트를 새로 만들지 않고도).
   const [isFullScreenComposerOpen, setIsFullScreenComposerOpen] = useState(false);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
@@ -111,6 +110,11 @@ export function MomPickView() {
 
   async function refreshProfileAfterPost() {
     setDashboardKey((k) => k + 1);
+    // [등업 직후 게이팅 상태가 안 바뀌는 버그 수정](2026-09-13 사용자 지시): state
+    // (guest/not_sprout_yet/allowed)를 계산하는 useMomPickAccess도 강제로
+    // 재조회시킨다 — 안 그러면 글 등록 직후 grade가 sprout로 승급돼도 이 화면이
+    // 계속 예전 state를 참조해 "첫 글 쓰러 가기" 안내가 다시 뜨는 문제가 있었다.
+    setAccessRefreshKey((k) => k + 1);
     setProfile(await getMyProfile());
   }
 
@@ -166,13 +170,17 @@ export function MomPickView() {
   // 바로 전 조치(2026-09-13 이전 커밋)에서 "새싹맘과 동일하게 보여야" 한다는
   // 요구를 글쓰기 폼(SurveyReviewComposer, 장소선택 1단계 포함)까지 그대로
   // 인라인 노출하는 것으로 구현했는데, 실제로는 그 폼 자체가 "맘스픽 컨텐츠"가
-  // 아니라는 지적이다. 이제 상단엔 상태와 무관하게 완전히 동일한 문구의 작은
-  // "✍️ 글쓰기" 버튼만 두고(로그인 여부를 드러내지 않는다는 원칙은 유지),
-  // 실제 작성 폼은 버튼을 눌러야만 열리는 전체 화면 전환(위 isFullScreenComposerOpen
-  // 등)에서만 나타난다 — 메인 화면엔 오직 피드(파워맘·우수맘 추천/인기·우수글/
-  // 실시간 라이브)만 남는다.
+  // 아니라는 지적이다. 이제 메인 화면 상단엔 아무 글쓰기 진입점도 두지 않고
+  // (아래 FAB 참고), 오직 피드(파워맘·우수맘 추천/인기·우수글/실시간 라이브)만
+  // 남는다.
+  function handleWriteClick() {
+    if (state === 'guest') setIsGuestWritePromptOpen(true);
+    else if (state === 'not_sprout_yet') setIsGuideModalOpen(true);
+    else setIsFullScreenComposerOpen(true);
+  }
+
   return (
-    <div className="flex-1 flex flex-col gap-4 overflow-y-auto p-5">
+    <div className="relative flex-1 flex flex-col gap-4 overflow-y-auto p-5">
       <div className="flex items-center justify-between">
         <h1 className="text-lg font-bold text-gray-900">👑 맘스픽</h1>
         {profile && <span className="text-sm font-medium text-gray-600">{GRADE_LABEL[profile.grade]}</span>}
@@ -180,16 +188,18 @@ export function MomPickView() {
 
       {state === 'allowed' && profile && <PersonalizedBanner birthYears={profile.birth_years} />}
 
+      {/* [글쓰기 버튼을 우측 하단 플로팅으로](2026-09-13 사용자 지시): "글쓰기는
+          맨 상단 말고 floating으로 해서 우측하단에 글쓰기 버튼으로" — 다른
+          화면의 AI 챗봇 FAB(ai-chat-fab.tsx)와 동일한 위치/톤 관례를 따른다
+          (제5장 제4조 기존 구조 우선). 버튼 자체는 상태와 무관하게 항상
+          동일하다(로그인 여부를 드러내지 않는다는 원칙 유지). */}
       <button
         type="button"
-        onClick={() => {
-          if (state === 'guest') setIsGuestWritePromptOpen(true);
-          else if (state === 'not_sprout_yet') setIsGuideModalOpen(true);
-          else setIsFullScreenComposerOpen(true);
-        }}
-        className="w-full rounded-xl border border-dashed border-gray-300 bg-white p-3 text-center text-sm font-medium text-gray-500 hover:bg-gray-50"
+        onClick={handleWriteClick}
+        aria-label="글쓰기"
+        className="fixed bottom-20 right-4 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 text-2xl text-white shadow-lg transition-transform hover:scale-105 active:scale-95 md:bottom-6"
       >
-        ✍️ 글쓰기
+        ✍️
       </button>
 
       {(state === 'allowed' || state === 'guest' || state === 'not_sprout_yet') && (

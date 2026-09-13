@@ -77,7 +77,7 @@ describe('MomPickView — 투명 오버레이 온보딩(개선사항4)', () => {
 
     await screen.findByText('🔥 인기 · 우수글');
     expect(screen.queryByTestId('composer')).not.toBeInTheDocument();
-    expect(screen.getByText('✍️ 글쓰기')).toBeInTheDocument();
+    expect(screen.getByLabelText('글쓰기')).toBeInTheDocument();
     expect(screen.queryByText('✍️ 첫 글 쓰고 맘스픽 시작하기')).not.toBeInTheDocument();
     expect(screen.queryByText('✍️ 로그인하고 후기 남기기')).not.toBeInTheDocument();
   });
@@ -87,7 +87,7 @@ describe('MomPickView — 투명 오버레이 온보딩(개선사항4)', () => {
     render(<MomPickView />);
 
     await screen.findByText('🔥 인기 · 우수글');
-    fireEvent.click(screen.getByText('✍️ 글쓰기'));
+    fireEvent.click(screen.getByLabelText('글쓰기'));
 
     expect(await screen.findByText('🌱 아직 새싹맘 등급이 아니에요!')).toBeInTheDocument();
     expect(screen.queryByTestId('composer')).not.toBeInTheDocument();
@@ -102,7 +102,7 @@ describe('MomPickView — 투명 오버레이 온보딩(개선사항4)', () => {
     render(<MomPickView />);
 
     await screen.findByText('🔥 인기 · 우수글');
-    fireEvent.click(screen.getByText('✍️ 글쓰기'));
+    fireEvent.click(screen.getByLabelText('글쓰기'));
     fireEvent.click(await screen.findByText('첫 글 쓰러 가기'));
 
     expect(await screen.findByText('✍️ 첫 글 쓰기')).toBeInTheDocument();
@@ -117,7 +117,7 @@ describe('MomPickView — 투명 오버레이 온보딩(개선사항4)', () => {
     render(<MomPickView />);
 
     await screen.findByText('🔥 인기 · 우수글');
-    fireEvent.click(screen.getByText('✍️ 글쓰기'));
+    fireEvent.click(screen.getByLabelText('글쓰기'));
     fireEvent.click(await screen.findByText('첫 글 쓰러 가기'));
     await screen.findByText('✍️ 첫 글 쓰기');
 
@@ -135,7 +135,7 @@ describe('MomPickView — 투명 오버레이 온보딩(개선사항4)', () => {
     await screen.findByText('🔥 인기 · 우수글');
     expect(screen.queryByLabelText('첫 글을 작성하고 맘스픽 모든 기능 이용하기')).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByText('✍️ 글쓰기'));
+    fireEvent.click(screen.getByLabelText('글쓰기'));
 
     expect(await screen.findByText('✍️ 첫 글 쓰기')).toBeInTheDocument();
   });
@@ -148,7 +148,7 @@ describe('MomPickView — 투명 오버레이 온보딩(개선사항4)', () => {
     render(<MomPickView />);
 
     expect(await screen.findByText('🔥 인기 · 우수글')).toBeInTheDocument();
-    expect(screen.getByText('✍️ 글쓰기')).toBeInTheDocument();
+    expect(screen.getByLabelText('글쓰기')).toBeInTheDocument();
     expect(screen.queryByText('✍️ 로그인하고 후기 남기기')).not.toBeInTheDocument();
   });
 
@@ -170,7 +170,7 @@ describe('MomPickView — 투명 오버레이 온보딩(개선사항4)', () => {
     render(<MomPickView />);
 
     await screen.findByText('🔥 인기 · 우수글');
-    fireEvent.click(screen.getByText('✍️ 글쓰기'));
+    fireEvent.click(screen.getByLabelText('글쓰기'));
 
     expect(await screen.findByText('👑 맘스픽은 로그인 후 이용할 수 있어요')).toBeInTheDocument();
   });
@@ -181,7 +181,7 @@ describe('MomPickView — 투명 오버레이 온보딩(개선사항4)', () => {
     render(<MomPickView />);
 
     await screen.findByText('🔥 인기 · 우수글');
-    fireEvent.click(screen.getByText('✍️ 글쓰기'));
+    fireEvent.click(screen.getByLabelText('글쓰기'));
 
     expect(screen.queryByText('🌱 아직 새싹맘 등급이 아니에요!')).not.toBeInTheDocument();
   });
