@@ -42,6 +42,7 @@ function basePost(overrides: Partial<DashboardPost> = {}): DashboardPost {
     is_adopted: false,
     created_at: '2026-09-04T00:00:00Z',
     spotName: '행복어린이공원',
+    spotId: 'spot-1',
     author: { id: 'author-1', nickname: '민지맘', grade: 'sprout' },
     ...overrides,
   };
@@ -114,5 +115,22 @@ describe('PostDetailModal', () => {
 
     fireEvent.click(screen.getByLabelText('닫기'));
     expect(onClose).toHaveBeenCalled();
+  });
+
+  // [맘스픽 상세 → 스팟픽 이동](2026-09-13 사용자 지시): "어쨌든 맘스픽으로부터
+  // 스팟픽의 해당 장소로 갈수 있어야해.. 상세카드내에 그게 있어야해" — spot_id가
+  // 있으면 /nearby?spot=<id>로 가는 링크가 보이고, 없으면(이벤트를 가리키거나
+  // 과거 데이터라 둘 다 비어있는 글) 보이지 않는지 검증한다.
+  it('spotId가 있으면 "스팟픽에서 이 장소 보기" 링크가 /nearby?spot=<id>로 연결된다', () => {
+    render(<PostDetailModal post={basePost({ spotId: 'spot-42' })} onClose={vi.fn()} />);
+
+    const link = screen.getByText('📍 스팟픽에서 이 장소 보기').closest('a');
+    expect(link).toHaveAttribute('href', '/nearby?spot=spot-42');
+  });
+
+  it('spotId가 없으면 스팟픽 이동 링크가 보이지 않는다', () => {
+    render(<PostDetailModal post={basePost({ spotId: null })} onClose={vi.fn()} />);
+
+    expect(screen.queryByText('📍 스팟픽에서 이 장소 보기')).not.toBeInTheDocument();
   });
 });

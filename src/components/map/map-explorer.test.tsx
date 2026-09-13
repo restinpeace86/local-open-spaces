@@ -855,3 +855,42 @@ describe('MapExplorer 바텀시트 GPS 거리순 정렬(개선사항3-1)', () =>
     expect(screen.getAllByText('부산먼곳')).toHaveLength(1); // 데스크톱 목록에만(바텀시트 제외)
   });
 });
+
+// [맘스픽 상세 → 스팟픽 이동](2026-09-13 사용자 지시): "맘스픽으로부터 스팟픽의
+// 해당 장소로 갈수 있어야해" — PostDetailModal이 "/nearby?spot=<id>"로 이동시키면,
+// 이 화면이 그 id로 스팟을 조회해 곧장 전체 상세(DetailModal)를 자동으로 연다.
+describe('MapExplorer 스팟 딥링크(?spot=, 2026-09-13)', () => {
+  afterEach(() => {
+    mockSearchParams.delete('spot');
+    vi.unstubAllGlobals();
+  });
+
+  it('?spot=<id>로 들어오면 해당 스팟의 전체 상세가 자동으로 열린다', async () => {
+    mockSearchParams.set('spot', 'space-9');
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/spots/by-id')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ item: makeSpaceRow({ id: 'space-9', name: '딥링크스팟' }) }),
+          } as Response);
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ item: null }) } as Response);
+      })
+    );
+    render(<MapExplorer />);
+
+    expect(await screen.findByText('주소')).toBeInTheDocument();
+    expect(screen.getAllByText('딥링크스팟').length).toBeGreaterThan(0);
+  });
+
+  it('spot 파라미터가 없으면 상세 모달이 자동으로 열리지 않는다', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ item: null }) } as Response)));
+    rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow()], error: null });
+    render(<MapExplorer />);
+    await waitFor(() => expect(rpcMock).toHaveBeenCalledTimes(1));
+
+    expect(screen.queryByText('주소')).not.toBeInTheDocument();
+  });
+});

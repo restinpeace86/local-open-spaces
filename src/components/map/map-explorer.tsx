@@ -158,6 +158,28 @@ export function MapExplorer() {
   const [items, setItems] = useState<NearbyItem[]>([]);
   const [selectedItem, setSelectedItem] = useState<NearbyItem | null>(null);
   const [selectedGroup, setSelectedGroup] = useState<NearbyItem[] | null>(null);
+
+  // [맘스픽 상세 → 스팟픽 이동](2026-09-13 사용자 지시): "맘스픽으로부터 스팟픽의
+  // 해당 장소로 갈수 있어야해" — PostDetailModal이 "/nearby?spot=<id>"로 이동시킨다.
+  // 그 id로 스팟 1건을 조회해 곧장 전체 상세(DetailModal)를 연다 — 개선사항10의
+  // "Event ➔ Spot"(연결된 장소 탭 → setLinkedDetailItem) 이동과 목적은 같지만
+  // 진입 경로가 페이지 간 이동이라 쿼리 파라미터로 받는다는 점만 다르다.
+  const spotIdParam = searchParams.get('spot');
+  useEffect(() => {
+    if (!spotIdParam) return;
+    let cancelled = false;
+    fetch(`/api/spots/by-id?id=${encodeURIComponent(spotIdParam)}`)
+      .then((res) => res.json())
+      .then((data: { item?: NearbyItem | null }) => {
+        if (!cancelled && data.item) setSelectedItem(data.item);
+      })
+      .catch(() => {
+        // 조회 실패해도 지도 화면 자체는 평소처럼 정상 동작해야 한다(제5장 제11조).
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [spotIdParam]);
   // [장소 단위 대표 1건 노출 — 그룹 펼쳐보기](2026-09-09 사용자 지시): 겹친 마커 그룹
   // (좌표 우연 일치)과 group_id 그룹(관리자가 명시적으로 같은 장소로 묶은 예약 옵션들)은
   // 개념이 달라 모달 문구를 구분한다 — null이면 MarkerGroupModal 기본 문구를 그대로 쓴다.

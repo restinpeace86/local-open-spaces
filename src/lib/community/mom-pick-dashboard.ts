@@ -45,11 +45,19 @@ export type DashboardPost = {
   is_adopted: boolean;
   created_at: string;
   spotName: string | null;
+  // [맘스픽 상세 → 스팟픽 이동](2026-09-13 사용자 지시): "맘스픽으로부터 스팟픽의
+  // 해당 장소로 갈수 있어야해" — mom_pick_posts.spot_id(open_spaces 참조, 이
+  // 테이블 최초 생성 시부터 있던 컬럼)를 그대로 노출해, PostDetailModal이 이
+  // id로 /nearby?spot=<id> 딥링크를 만들 수 있게 한다. spotName만으로는(단순
+  // 표시 문자열) 정확히 어떤 open_spaces 행인지 특정할 수 없다(이름 중복 가능).
+  // 이벤트를 가리키는 글(event_id)은 이번 요청 범위(스팟픽 이동)에 포함되지
+  // 않아 event_id는 노출하지 않는다.
+  spotId: string | null;
   author: DashboardAuthor;
 };
 
 const POST_COLUMNS =
-  'id, author_id, post_type, rating, content, checklist_answers, age_groups, visit_environment, satisfaction_points, duration_type, weather_tags, infra_tags, companion_type, photo_urls, like_count, is_adopted, created_at, open_spaces(name), events(title)';
+  'id, author_id, post_type, rating, content, checklist_answers, age_groups, visit_environment, satisfaction_points, duration_type, weather_tags, infra_tags, companion_type, photo_urls, like_count, is_adopted, created_at, spot_id, open_spaces(name), events(title)';
 
 type RawPostRow = {
   id: string;
@@ -69,6 +77,7 @@ type RawPostRow = {
   like_count: number;
   is_adopted: boolean;
   created_at: string;
+  spot_id: string | null;
   open_spaces: { name: string } | null;
   events: { title: string } | null;
 };
@@ -104,6 +113,7 @@ async function attachAuthors(rows: RawPostRow[]): Promise<DashboardPost[]> {
     is_adopted: row.is_adopted,
     created_at: row.created_at,
     spotName: row.open_spaces?.name ?? row.events?.title ?? null,
+    spotId: row.spot_id,
     author: authorsById.get(row.author_id) ?? fallbackAuthor(row.author_id),
   }));
 }

@@ -459,6 +459,24 @@
       getLivePosts()가 created_at 내림차순(최신순)으로 조회하고 있어 별도
       코드 수정 없이 요구사항을 충족하는 상태임을 확인.
       (완료: 2026-09-13, 상세: implementation/2026-09-13-mom-pick-real-height-split-and-section-tint.md)
+- [x] Step 143 (사용자 지시, 2026-09-13): "맘스픽의 상세카드까지 넘어갔으면
+      상세카드에서 그 이장소가 궁금하신가요? 문구랑 해당 장소 넘어가기?
+      가보기? 이런거 버튼넣는게 나으려나 아니면 장소 옆에 해당 스팟 가는 거
+      넣는게 좋으려나? 어떤형식이 더 좋을까? 더 나아보이는 방식으로 좀
+      추천해줘 어쨌든 맘스픽으로부터 스팟픽의 해당 장소로 갈수 있어야해..
+      상세카드내에 그게 있어야해" — 두 형식 중, 지도 화면(detail-modal.tsx)에
+      이미 있던 "📍 연결된 장소: ... ›" 행 버튼과 같은 컴팩트한 행 형식을
+      추천·채택(스크롤 없이 항상 보이고 기존 앱 톤과 일치, 헤더에 스팟명이
+      이미 있어 "궁금하신가요?" 블록은 정보 중복). 구현: (1) mom_pick_posts.
+      spot_id(최초 테이블 생성 시부터 있던 컬럼)를 DashboardPost.spotId로
+      노출. (2) 신규 GET /api/spots/by-id?id=<uuid> — 기존 /api/events/
+      linked-spot과 동일하게 SPACE_COLUMNS/toSpaceItem 재사용해 단건 조회.
+      (3) PostDetailModal: spotId가 있으면 "📍 스팟픽에서 이 장소 보기 ›"
+      링크(/nearby?spot=<id>)를 헤더 바로 아래에 노출. (4) map-explorer.tsx:
+      ?spot=<id> 쿼리 파라미터를 읽어 그 스팟을 조회 후 곧장 전체 상세
+      (DetailModal)를 자동으로 연다(개선사항10의 "Event➔Spot" 이동과 같은
+      목적, 페이지 간 이동이라 쿼리 파라미터로 받는다는 점만 다름).
+      (완료: 2026-09-13, 상세: implementation/2026-09-13-mom-pick-to-spot-navigation.md)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.

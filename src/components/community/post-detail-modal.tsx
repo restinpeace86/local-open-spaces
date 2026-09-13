@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useUser } from '@/hooks/use-user';
 import { getMyProfile } from '@/lib/auth/profile';
 import { getMyLikedPostIds, toggleLike } from '@/lib/community/posts';
@@ -101,6 +102,26 @@ export function PostDetailModal({ post, onClose }: { post: DashboardPost; onClos
             ✕
           </button>
         </div>
+
+        {/* [맘스픽 상세 → 스팟픽 이동](2026-09-13 사용자 지시): "어쨌든 맘스픽으로
+            부터 스팟픽의 해당 장소로 갈수 있어야해.. 상세카드내에 그게 있어야해" —
+            지도 화면(detail-modal.tsx)의 기존 "📍 연결된 장소: ... ›" 행 버튼
+            관례를 그대로 재사용한다(제5장 제4조). 헤더에 스팟명이 이미 보이므로
+            이름을 반복하지 않고 "스팟픽에서 보기"로만 안내한다. spot_id가 없는
+            글(이벤트를 가리키거나 과거 데이터로 둘 다 비어있는 글)은 이동할 곳이
+            없어 행 자체를 숨긴다.
+            [형식 선택] "궁금하신가요?" 안내 블록 대신 이 컴팩트한 행을 골랐다 —
+            스크롤 없이 항상 바로 보이고, 이미 있는 태그/사진/좋아요 영역과 부딪히지
+            않으며, 앱에 이미 있는 "장소 옆에 가는 버튼" 관례와 톤이 일치한다. */}
+        {post.spotId && (
+          <Link
+            href={`/nearby?spot=${post.spotId}`}
+            className="mb-3 flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+          >
+            <span>📍 스팟픽에서 이 장소 보기</span>
+            <span aria-hidden>›</span>
+          </Link>
+        )}
 
         {post.post_type === 'survey_review' ? (
           <div className="flex flex-col gap-3 text-sm">

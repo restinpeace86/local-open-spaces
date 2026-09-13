@@ -28,6 +28,7 @@ function basePost(overrides: Partial<DashboardPost> = {}): DashboardPost {
     is_adopted: false,
     created_at: new Date().toISOString(),
     spotName: '행복어린이공원',
+    spotId: 'spot-1',
     author: { id: 'author-1', nickname: '민지맘', grade: 'sprout' },
     ...overrides,
   };
