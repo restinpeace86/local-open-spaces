@@ -10,6 +10,35 @@ vi.mock('./spot-picker', () => ({
   SpotPicker: () => <div data-testid="spot-picker">이름으로 검색 UI</div>,
 }));
 
+// FaceStickerEditor는 tfjs/canvas에 의존하므로 jsdom에서 직접 검증하지 않고,
+// 큐 진행 로직(confirm/skip/cancel 콜백)만 검증하기 위해 간단히 대체한다.
+vi.mock('./face-sticker-editor', () => ({
+  FaceStickerEditor: ({
+    file,
+    onConfirm,
+    onSkip,
+    onCancel,
+  }: {
+    file: File;
+    onConfirm: (blob: Blob) => void;
+    onSkip: () => void;
+    onCancel: () => void;
+  }) => (
+    <div data-testid="face-sticker-editor">
+      <span>편집 대상: {file.name}</span>
+      <button type="button" onClick={() => onConfirm(new Blob(['stub'], { type: 'image/png' }))}>
+        완료(스텁)
+      </button>
+      <button type="button" onClick={onSkip}>
+        편집 없이 올리기(스텁)
+      </button>
+      <button type="button" onClick={onCancel}>
+        이 사진 취소(스텁)
+      </button>
+    </div>
+  ),
+}));
+
 const createSurveyReviewMock = vi.fn();
 vi.mock('@/lib/community/posts', () => ({
   createSurveyReview: (...args: unknown[]) => createSurveyReviewMock(...args),
@@ -184,5 +213,112 @@ describe('SurveyReviewComposer', () => {
     await waitFor(() => expect(screen.getByText('어느 스팟인가요?')).toBeInTheDocument());
     // 폼이 초기화되면 검색 모드(기본값)로 돌아가 이름 검색 UI가 바로 보인다.
     expect(await screen.findByTestId('spot-picker')).toBeInTheDocument();
+  });
+
+  // [Decision — 2026-09-14 사용자 지시] "최종적으로 얼굴 인식해서 얼굴에
+  // 스티커 합성해줘.. 사용자가 최종 판단하고.. 클릭으로 수동으로도": 사진을
+  // 고르면 바로 업로드하지 않고 FaceStickerEditor를 거치도록 큐를 진행한다.
+  describe('3단계 사진 업로드 — 얼굴 스티커 편집 큐', () => {
+    function fetchMockFor(uploadUrl = 'https://storage.example/photo.png') {
+      return vi.fn((url: string) => {
+        if (url.includes('/api/mom-pick/popular-spots')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [popularItem()] }) } as Response);
+        }
+        if (url.includes('/api/mom-pick/upload-image')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ url: uploadUrl }) } as Response);
+        }
+        return Promise.reject(new Error(`unexpected fetch: ${url}`));
+      });
+    }
+
+    async function goToStep3() {
+      await switchToNearbyListMode();
+      fireEvent.click(await screen.findByText('행복어린이공원'));
+      fireEvent.click(screen.getByText('다음'));
+      fireEvent.click(screen.getByText('다음'));
+    }
+
+    function selectPhotoFiles(...files: File[]) {
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+      fireEvent.change(input, { target: { files } });
+    }
+
+    it('사진을 고르면 즉시 업로드하지 않고 FaceStickerEditor가 먼저 열린다', async () => {
+      vi.stubGlobal('fetch', fetchMockFor());
+      render(<SurveyReviewComposer onPosted={vi.fn()} />);
+      await goToStep3();
+
+      const file = new File(['x'], 'photo1.png', { type: 'image/png' });
+      selectPhotoFiles(file);
+
+      expect(await screen.findByTestId('face-sticker-editor')).toBeInTheDocument();
+      expect(screen.getByText('편집 대상: photo1.png')).toBeInTheDocument();
+    });
+
+    it('편집기에서 "완료"를 누르면 편집된 결과(blob)가 업로드되고 썸네일이 추가된다', async () => {
+      const fetchMock = fetchMockFor('https://storage.example/edited.png');
+      vi.stubGlobal('fetch', fetchMock);
+      render(<SurveyReviewComposer onPosted={vi.fn()} />);
+      await goToStep3();
+
+      selectPhotoFiles(new File(['x'], 'photo1.png', { type: 'image/png' }));
+      await screen.findByTestId('face-sticker-editor');
+      fireEvent.click(screen.getByText('완료(스텁)'));
+
+      await waitFor(() => {
+        const uploadCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('upload-image'));
+        expect(uploadCall).toBeTruthy();
+      });
+      await waitFor(() => expect(screen.queryByTestId('face-sticker-editor')).not.toBeInTheDocument());
+      expect(await screen.findByAltText('')).toBeInTheDocument();
+    });
+
+    it('"편집 없이 올리기"를 누르면 원본 파일이 그대로 업로드된다', async () => {
+      const fetchMock = fetchMockFor();
+      vi.stubGlobal('fetch', fetchMock);
+      render(<SurveyReviewComposer onPosted={vi.fn()} />);
+      await goToStep3();
+
+      selectPhotoFiles(new File(['x'], 'photo1.png', { type: 'image/png' }));
+      await screen.findByTestId('face-sticker-editor');
+      fireEvent.click(screen.getByText('편집 없이 올리기(스텁)'));
+
+      await waitFor(() => {
+        const uploadCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('upload-image'));
+        expect(uploadCall).toBeTruthy();
+      });
+      await waitFor(() => expect(screen.queryByTestId('face-sticker-editor')).not.toBeInTheDocument());
+    });
+
+    it('"이 사진 취소"를 누르면 업로드 없이 큐에서 제거된다', async () => {
+      const fetchMock = fetchMockFor();
+      vi.stubGlobal('fetch', fetchMock);
+      render(<SurveyReviewComposer onPosted={vi.fn()} />);
+      await goToStep3();
+
+      selectPhotoFiles(new File(['x'], 'photo1.png', { type: 'image/png' }));
+      await screen.findByTestId('face-sticker-editor');
+      fireEvent.click(screen.getByText('이 사진 취소(스텁)'));
+
+      await waitFor(() => expect(screen.queryByTestId('face-sticker-editor')).not.toBeInTheDocument());
+      const uploadCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('upload-image'));
+      expect(uploadCall).toBeFalsy();
+    });
+
+    it('여러 장을 고르면 한 장씩 순서대로 편집기가 열린다', async () => {
+      vi.stubGlobal('fetch', fetchMockFor());
+      render(<SurveyReviewComposer onPosted={vi.fn()} />);
+      await goToStep3();
+
+      selectPhotoFiles(
+        new File(['x'], 'photo1.png', { type: 'image/png' }),
+        new File(['y'], 'photo2.png', { type: 'image/png' })
+      );
+
+      expect(await screen.findByText('편집 대상: photo1.png')).toBeInTheDocument();
+      fireEvent.click(screen.getByText('편집 없이 올리기(스텁)'));
+
+      expect(await screen.findByText('편집 대상: photo2.png')).toBeInTheDocument();
+    });
   });
 });

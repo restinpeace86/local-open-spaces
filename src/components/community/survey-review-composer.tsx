@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useUserLocation } from '@/hooks/use-user-location';
 import { createSurveyReview, MomPickPost } from '@/lib/community/posts';
 import { formatDistance } from '@/lib/spaces/format';
+import { FaceStickerEditor } from './face-sticker-editor';
 import { SpotPicker, SpotOption } from './spot-picker';
 import {
   AGE_GROUP_OPTIONS,
@@ -124,6 +125,11 @@ export function SurveyReviewComposer({ onPosted }: { onPosted: (post: MomPickPos
   const [photoUrls, setPhotoUrls] = useState<string[]>([]);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [photoError, setPhotoError] = useState<string | null>(null);
+  // [Decision — 2026-09-14 사용자 지시] 얼굴 스티커 편집: 선택한 사진들을
+  // 큐에 넣어 한 장씩 FaceStickerEditor로 보여주고, 사용자가 확정/건너뛰기
+  // 한 결과만 업로드한다.
+  const [editQueue, setEditQueue] = useState<File[]>([]);
+  const editingFile = editQueue[0] ?? null;
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -161,29 +167,48 @@ export function SurveyReviewComposer({ onPosted }: { onPosted: (post: MomPickPos
     });
   }
 
-  async function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+  function handlePhotoSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []).slice(0, MAX_PHOTOS - photoUrls.length);
     e.target.value = ''; // 같은 파일을 다시 골라도 onChange가 또 발생하도록 초기화
     if (files.length === 0) return;
-
     setPhotoError(null);
+    setEditQueue((prev) => [...prev, ...files]);
+  }
+
+  async function uploadPhoto(fileOrBlob: File | Blob, name: string) {
     setIsUploadingPhoto(true);
     try {
-      for (const file of files) {
-        const formData = new FormData();
-        formData.append('file', file);
-        // eslint-disable-next-line no-await-in-loop
-        const res = await fetch('/api/mom-pick/upload-image', { method: 'POST', body: formData });
-        // eslint-disable-next-line no-await-in-loop
-        const data = await res.json();
-        if (!res.ok) throw new Error(data.error ?? '사진 업로드에 실패했습니다.');
-        setPhotoUrls((prev) => [...prev, data.url]);
-      }
+      const formData = new FormData();
+      formData.append('file', fileOrBlob, name);
+      const res = await fetch('/api/mom-pick/upload-image', { method: 'POST', body: formData });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? '사진 업로드에 실패했습니다.');
+      setPhotoUrls((prev) => [...prev, data.url]);
     } catch (err) {
       setPhotoError(err instanceof Error ? err.message : '사진 업로드에 실패했습니다.');
     } finally {
       setIsUploadingPhoto(false);
     }
+  }
+
+  function advanceEditQueue() {
+    setEditQueue((prev) => prev.slice(1));
+  }
+
+  async function handleEditorConfirm(blob: Blob) {
+    if (!editingFile) return;
+    await uploadPhoto(blob, editingFile.name);
+    advanceEditQueue();
+  }
+
+  async function handleEditorSkip() {
+    if (!editingFile) return;
+    await uploadPhoto(editingFile, editingFile.name);
+    advanceEditQueue();
+  }
+
+  function handleEditorCancel() {
+    advanceEditQueue();
   }
 
   function removePhoto(url: string) {
@@ -198,6 +223,7 @@ export function SurveyReviewComposer({ onPosted }: { onPosted: (post: MomPickPos
     setSurvey(emptySurveyAnswers());
     setContent('');
     setPhotoUrls([]);
+    setEditQueue([]);
   }
 
   async function handleSubmit() {
@@ -451,6 +477,16 @@ export function SurveyReviewComposer({ onPosted }: { onPosted: (post: MomPickPos
           </button>
         )}
       </div>
+
+      {editingFile && (
+        <FaceStickerEditor
+          key={`${editingFile.name}-${editingFile.lastModified}`}
+          file={editingFile}
+          onConfirm={handleEditorConfirm}
+          onSkip={handleEditorSkip}
+          onCancel={handleEditorCancel}
+        />
+      )}
     </div>
   );
 }
