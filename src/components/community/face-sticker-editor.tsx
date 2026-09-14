@@ -20,12 +20,30 @@ type FaceBox = {
 
 const STICKER_OPTIONS = ['🐻', '🐰', '🐱', '🐶', '⭐', '😊'] as const;
 
-// [버그 수정 — 2026-09-14 사용자 리포트] "사진 올리니깐 사진이 엄청
-// 길어지더라? 취소버튼도 안보여" — 세로로 긴 휴대폰 세로사진의 경우 폭만
-// 제한하면 높이가 화면 밖까지 늘어나 버튼이 가려졌다. 폭/높이를 함께
-// 제한한다.
-const MAX_DISPLAY_WIDTH = 380;
-const MAX_DISPLAY_HEIGHT = 380;
+// [버그 수정 2차 — 2026-09-14 사용자 리포트] "사진이 왜이렇게 길지 가로길이가?
+// 사이즈조절이 자동안되는거 같은데? 처음에 자동인식으로 가려지는거 안되는데?"
+// 세 가지가 한 원인에서 갈라져 나왔다:
+// 1) 캔버스를 고정 px 인라인 style(width/height)로 그렸는데, 모달 카드
+//    실제 폭(약 350px)보다 큰 값이면 CSS `max-w-full`이 "폭만" 줄이고
+//    height는 그대로 남아 이미지가 찌그러져 보였다(가로가 이상해 보인 원인).
+//    → width:100%, height:auto로 브라우저가 비율을 유지한 채 컨테이너
+//      폭에 맞춰 자동으로 줄이도록 바꾼다("사이즈조절 자동 안 됨" 해결).
+// 2) 직전 수정에서 "너무 길어보이는 문제"를 잡으려고 표시 캔버스 자체를
+//    가로/세로 380px로 작게 캡했는데, 그 작아진 캔버스를 그대로 얼굴 인식
+//    입력으로도 재사용해 얼굴이 차지하는 실제 픽셀 수가 줄어들어 인식률이
+//    떨어졌다("자동인식이 안 가려지는" 원인). → 인식/렌더링용 캔버스 해상도는
+//    더 넉넉하게(긴 변 기준 480px) 잡고, 화면에는 CSS로만 축소해 보여준다
+//    (내부 해상도와 화면 표시 크기를 분리).
+const MAX_LONG_SIDE = 480;
+
+// [버그 수정 3차 — 2026-09-14] flex 컨테이너 안에서 캔버스에 `width:100%`를
+// 주는 방식은 브라우저/레이아웃에 따라 비율이 깨질 수 있음을 Playwright로
+// 재현 확인(가로 사진은 정상, 세로 사진만 렌더링 비율이 어긋남). 대신 화면에
+// 보여줄 크기(cssSize)를 캔버스 내부 해상도(displaySize)와 완전히 분리해
+// JS에서 직접 계산한 고정 px 값으로 지정한다 — 두 값 모두 같은 비율에서
+// 계산되므로 절대 찌그러지지 않는다.
+const CSS_MAX_WIDTH = 300;
+const CSS_MAX_HEIGHT = 420;
 
 type DetectionState = 'loading-model' | 'detecting' | 'ready' | 'unavailable';
 
@@ -47,6 +65,13 @@ export function FaceStickerEditor({
   const [sticker, setSticker] = useState<(typeof STICKER_OPTIONS)[number]>('🐻');
   const [status, setStatus] = useState<DetectionState>('loading-model');
 
+  const cssSize = displaySize
+    ? (() => {
+        const cssScale = Math.min(1, CSS_MAX_WIDTH / displaySize.width, CSS_MAX_HEIGHT / displaySize.height);
+        return { width: Math.round(displaySize.width * cssScale), height: Math.round(displaySize.height * cssScale) };
+      })()
+    : null;
+
   // 이미지 로드 + 얼굴 자동 인식
   useEffect(() => {
     let cancelled = false;
@@ -55,7 +80,7 @@ export function FaceStickerEditor({
     img.onload = async () => {
       if (cancelled) return;
       imageRef.current = img;
-      const scale = Math.min(1, MAX_DISPLAY_WIDTH / img.naturalWidth, MAX_DISPLAY_HEIGHT / img.naturalHeight);
+      const scale = Math.min(1, MAX_LONG_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
       const width = Math.round(img.naturalWidth * scale);
       const height = Math.round(img.naturalHeight * scale);
       setDisplaySize({ width, height });
@@ -70,8 +95,9 @@ export function FaceStickerEditor({
         await tf.ready();
         setStatus('detecting');
 
-        // 인식 자체는 표시용 캔버스(작은 해상도)에서 수행 — 화면 좌표계와
-        // 그대로 일치하므로 별도 스케일 변환 없이 바로 사용할 수 있다.
+        // 인식은 내부 렌더링 캔버스(긴 변 기준 최대 480px)와 동일한 해상도로
+        // 수행 — 렌더링 캔버스와 좌표계가 그대로 일치하므로 별도 스케일 변환
+        // 없이 바로 사용할 수 있다(화면에 보이는 CSS 크기와는 별개).
         const detectCanvas = document.createElement('canvas');
         detectCanvas.width = width;
         detectCanvas.height = height;
@@ -216,12 +242,16 @@ export function FaceStickerEditor({
           </p>
 
           <div className="flex justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
-            {displaySize ? (
+            {displaySize && cssSize ? (
+              // 캔버스의 내부 해상도(displaySize, width/height 속성 — 아래
+              // useEffect에서 설정)와 화면에 보이는 크기(cssSize)를 완전히
+              // 분리한다. 둘 다 같은 비율에서 JS로 직접 계산한 고정 px 값이라
+              // 어떤 레이아웃 상황에서도 찌그러지지 않는다.
               <canvas
                 ref={canvasRef}
                 onClick={handleCanvasClick}
-                style={{ width: displaySize.width, height: displaySize.height, cursor: 'pointer' }}
-                className="max-w-full"
+                style={{ width: cssSize.width, height: cssSize.height, cursor: 'pointer' }}
+                className="block"
               />
             ) : (
               <div className="flex h-40 w-full items-center justify-center text-xs text-gray-400">이미지 불러오는 중...</div>
