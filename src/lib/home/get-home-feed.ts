@@ -1,7 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { haversineDistanceMeters } from '@/lib/geo/haversine';
-import { escapeIlikePattern, splitSearchTokens } from '@/lib/search/keyword-search';
+import { escapeIlikePattern, selectTrigramFriendlyTokens, splitSearchTokens } from '@/lib/search/keyword-search';
 import { GYEONGGI_SIGUN_NAMES, resolveProvinceMembers, SEOUL_GU_NAMES } from '@/lib/geo/region-hierarchy';
 import { getProvinceFromText, getVisibleProvinces, isSpotInProvinces } from '@/lib/spaces/province';
 import {
@@ -898,7 +898,7 @@ export async function searchEvents(keyword: string, limit = 30): Promise<NearbyI
     .not('category_min', 'in', EXCLUDED_CATEGORY_MIN_FILTER)
     .gte('end_date', today);
 
-  for (const token of splitSearchTokens(keyword)) {
+  for (const token of selectTrigramFriendlyTokens(splitSearchTokens(keyword))) {
     const escaped = escapeIlikePattern(token);
     query = query.or(`title.ilike.%${escaped}%,description.ilike.%${escaped}%,venue_name.ilike.%${escaped}%`);
   }
@@ -954,7 +954,7 @@ export async function searchSpacesNationwide(
   let query = supabase.from('open_spaces').select(SPACE_COLUMNS).eq('location_precision', 'EXACT');
   if (categoryMin) query = query.eq('category_min', categoryMin);
 
-  for (const token of tokens) {
+  for (const token of selectTrigramFriendlyTokens(tokens)) {
     const escaped = escapeIlikePattern(token);
     query = query.or(`name.ilike.%${escaped}%,address.ilike.%${escaped}%`);
   }

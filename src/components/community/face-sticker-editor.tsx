@@ -45,6 +45,11 @@ const MAX_LONG_SIDE = 480;
 const CSS_MAX_WIDTH = 300;
 const CSS_MAX_HEIGHT = 420;
 
+// [버그 수정 — 2026-09-14] 업로드용 최종 이미지의 긴 변 상한. 실제 표시는
+// 96px 썸네일이나 화면 폭 이내 모달이 전부라(post-detail-modal.tsx,
+// post-photo-modal.tsx) 원본 해상도(수천 px)를 그대로 올릴 필요가 없다.
+const OUTPUT_MAX_LONG_SIDE = 1600;
+
 type DetectionState = 'loading-model' | 'detecting' | 'ready' | 'unavailable';
 
 // [버그 조사 — 2026-09-14 사용자 리포트, 안드로이드 크롬] "사진첩 찾아보고
@@ -85,6 +90,24 @@ export function FaceStickerEditor({
   const [faces, setFaces] = useState<FaceBox[]>([]);
   const [sticker, setSticker] = useState<(typeof STICKER_OPTIONS)[number]>('🐻');
   const [status, setStatus] = useState<DetectionState>('loading-model');
+  // [버그 수정 — 2026-09-14 사용자 리포트] "완료버튼 누를때도 반응속도가 너무
+  // 늦어 안된건가 싶어서 2번이나 누르고 그러니 2번이나 선택되네" — 버튼에
+  // 처리 중 비활성화가 없어, 인코딩+업로드가 끝나기 전에 두 번째 클릭이
+  // 그대로 또 실행되어 사진이 중복 업로드됐다. 세 버튼(완료/건너뛰기/취소)
+  // 중 하나라도 누르면 즉시 잠가서 중복 실행을 막는다.
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  function handleSkipClick() {
+    if (isProcessing) return;
+    setIsProcessing(true);
+    onSkip();
+  }
+
+  function handleCancelClick() {
+    if (isProcessing) return;
+    setIsProcessing(true);
+    onCancel();
+  }
 
   const cssSize = displaySize
     ? (() => {
@@ -214,15 +237,29 @@ export function FaceStickerEditor({
   }
 
   function handleConfirm() {
+    if (isProcessing) return; // [버그 수정 — 2026-09-14] 중복 클릭 가드(아래 참고)
     const img = imageRef.current;
     if (!img || !displaySize) return;
+    setIsProcessing(true);
+    // [버그 수정 — 2026-09-14 사용자 리포트] "사진 선택하고 완료버튼 누를때도
+    // 반응속도가 너무 늦어" — 원본 해상도(휴대폰 사진은 보통 3000~4000px,
+    // 수 MB) 그대로 캔버스에 다시 그려 인코딩+업로드하고 있었다. 이 앱에서
+    // 사진은 최대 96px 썸네일이나 화면 폭에 맞춘 모달로만 보여지므로,
+    // 업로드 전에 긴 변 기준 1600px로 다운스케일해 인코딩 시간과 업로드
+    // 용량을 크게 줄인다(화질 차이는 실사용에서 체감되지 않는 수준).
+    const outScale = Math.min(1, OUTPUT_MAX_LONG_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
+    const outWidth = Math.round(img.naturalWidth * outScale);
+    const outHeight = Math.round(img.naturalHeight * outScale);
     const outCanvas = document.createElement('canvas');
-    outCanvas.width = img.naturalWidth;
-    outCanvas.height = img.naturalHeight;
+    outCanvas.width = outWidth;
+    outCanvas.height = outHeight;
     const ctx = outCanvas.getContext('2d');
-    if (!ctx) return;
-    ctx.drawImage(img, 0, 0);
-    const scale = img.naturalWidth / displaySize.width;
+    if (!ctx) {
+      setIsProcessing(false);
+      return;
+    }
+    ctx.drawImage(img, 0, 0, outWidth, outHeight);
+    const scale = outWidth / displaySize.width;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     for (const face of faces) {
@@ -237,7 +274,7 @@ export function FaceStickerEditor({
         if (blob) onConfirm(blob);
       },
       file.type === 'image/png' ? 'image/png' : 'image/jpeg',
-      0.9,
+      0.85,
     );
   }
 
@@ -250,7 +287,7 @@ export function FaceStickerEditor({
     // 눌러도 취소되도록(표준 모달 이탈 경로) 만든다.
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={onCancel}
+      onClick={handleCancelClick}
     >
       <div
         onClick={(e) => e.stopPropagation()}
@@ -309,25 +346,27 @@ export function FaceStickerEditor({
         <div className="flex shrink-0 gap-2 border-t border-gray-100 p-4">
           <button
             type="button"
-            onClick={onCancel}
-            className="rounded-full border border-gray-300 px-3 py-2 text-xs font-medium text-gray-500 hover:bg-gray-50"
+            onClick={handleCancelClick}
+            disabled={isProcessing}
+            className="rounded-full border border-gray-300 px-3 py-2 text-xs font-medium text-gray-500 hover:bg-gray-50 disabled:opacity-50"
           >
             이 사진 취소
           </button>
           <button
             type="button"
-            onClick={onSkip}
-            className="rounded-full border border-gray-300 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50"
+            onClick={handleSkipClick}
+            disabled={isProcessing}
+            className="rounded-full border border-gray-300 px-3 py-2 text-xs font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-50"
           >
             편집 없이 올리기
           </button>
           <button
             type="button"
             onClick={handleConfirm}
-            disabled={!displaySize}
+            disabled={!displaySize || isProcessing}
             className="flex-1 rounded-full bg-indigo-600 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
           >
-            완료
+            {isProcessing ? '처리 중...' : '완료'}
           </button>
         </div>
       </div>

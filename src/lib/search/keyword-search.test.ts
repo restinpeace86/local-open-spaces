@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { escapeIlikePattern, splitSearchTokens } from './keyword-search';
+import { escapeIlikePattern, selectTrigramFriendlyTokens, splitSearchTokens } from './keyword-search';
 
 describe('splitSearchTokens', () => {
   it('공백으로 구분된 여러 단어를 토큰 배열로 나눈다', () => {
@@ -33,5 +33,29 @@ describe('escapeIlikePattern', () => {
 
   it('특수문자가 없는 일반 검색어는 그대로 반환한다', () => {
     expect(escapeIlikePattern('용인 어린이상상')).toBe('용인 어린이상상');
+  });
+});
+
+// [성능 버그 수정 — 2026-09-14 사용자 리포트] "장소찾는것도 엄청느리고" —
+// 실측(EXPLAIN ANALYZE)으로 확인: pg_trgm GIN 인덱스는 3글자 미만 토큰에서는
+// 완전한 trigram을 만들 수 없어 사실상 테이블 전체를 후보로 반환해버린다.
+// "행복 어린이집"처럼 짧은 단어가 섞인 자연스러운 검색에서 8초 넘게 걸리던
+// 것을, 3자 미만 토큰을 걸러내는 것으로 100ms대까지 줄였다(실측).
+describe('selectTrigramFriendlyTokens', () => {
+  it('3자 미만 토큰은 걸러내고, 3자 이상 토큰만 남긴다', () => {
+    expect(selectTrigramFriendlyTokens(['행복', '어린이집'])).toEqual(['어린이집']);
+    expect(selectTrigramFriendlyTokens(splitSearchTokens('용인 어린이상상'))).toEqual(['어린이상상']);
+  });
+
+  it('모든 토큰이 3자 이상이면 그대로 반환한다', () => {
+    expect(selectTrigramFriendlyTokens(['강남구', '어린이집'])).toEqual(['강남구', '어린이집']);
+  });
+
+  it('모든 토큰이 3자 미만이면(예외적인 경우) 결과가 아예 없는 것보다 낫도록 원래 토큰을 그대로 반환한다', () => {
+    expect(selectTrigramFriendlyTokens(['행복', '집'])).toEqual(['행복', '집']);
+  });
+
+  it('빈 배열은 빈 배열을 반환한다', () => {
+    expect(selectTrigramFriendlyTokens([])).toEqual([]);
   });
 });

@@ -17,3 +17,25 @@ export function splitSearchTokens(query: string): string[] {
 export function escapeIlikePattern(value: string): string {
   return value.replace(/[\\%_]/g, (char) => `\\${char}`);
 }
+
+// [성능 버그 수정 — 2026-09-14 사용자 리포트] "장소찾는것도 엄청느리고" —
+// 실측(EXPLAIN ANALYZE)으로 원인을 찾았다: pg_trgm GIN 인덱스는 패턴에서
+// 완전한 3글자 조합(trigram)을 뽑아낼 수 있어야 ILIKE '%...%'를 빠르게
+// 걸러낼 수 있는데, 2글자 이하 토큰은 애초에 3글자 조합을 만들 수 없어
+// 인덱스가 사실상 "테이블 전체가 후보"라고 답해버린다("행복"만 검색했을 때
+// bitmap index scan이 140,689행 중 143,214행을 후보로 반환하는 것으로 실측
+// 확인). "행복 어린이집"처럼 자연스러운 여러 단어 검색에서, 프런트엔드는
+// 전체 문자열 길이(3자 이상)만 검사하고 토큰 단위로는 검사하지 않아, 짧은
+// 토큰("행복", 2자)이 그대로 섞여 들어가 8초 넘게 걸리는 쿼리를 만들고
+// 있었다. pg_bigm(2글자용 인덱스) 확장은 이 Supabase 프로젝트에 설치되어
+// 있지 않아(pg_available_extensions로 확인) 짧은 토큰 자체를 인덱스로
+// 빠르게 거를 방법이 없다 — 대신 3자 미만 토큰은 검색 조건에서 제외해
+// 나머지(인덱스 효율이 있는) 토큰만으로 빠르게 찾도록 한다. 모든 토큰이
+// 3자 미만이면(드문 경우) 결과가 아예 없는 것보다 느리더라도 원래 토큰
+// 그대로 검색하는 쪽을 택한다.
+const TRIGRAM_EFFECTIVE_MIN_LENGTH = 3;
+
+export function selectTrigramFriendlyTokens(tokens: string[]): string[] {
+  const longEnough = tokens.filter((t) => t.length >= TRIGRAM_EFFECTIVE_MIN_LENGTH);
+  return longEnough.length > 0 ? longEnough : tokens;
+}

@@ -1683,7 +1683,11 @@ describe('searchEvents', () => {
     expect(items[0].name).toBe('분당 여름 물놀이 체험');
   });
 
-  it('공백으로 구분된 여러 단어는 토큰마다 별도 .or()를 체이닝한다("용인 어린이상상" 같은 사례)', async () => {
+  // [성능 버그 수정 — 2026-09-14 사용자 리포트] "장소찾는것도 엄청느리고" 원인
+  // 실측 결과, pg_trgm GIN 인덱스는 3자 미만 토큰에서는 trigram을 만들 수 없어
+  // 사실상 인덱스를 못 타 8초 넘게 걸렸다. "용인"(2자)처럼 짧은 토큰은 검색
+  // 조건에서 제외하고 3자 이상 토큰("어린이상상")만으로 검색한다.
+  it('공백으로 구분된 여러 단어 중 3자 미만 토큰("용인")은 제외하고 3자 이상 토큰만으로 검색한다', async () => {
     const row = eventRow({ id: 'match-2', title: '용인어린이상상의숲 체험' });
     const { builder, orMock } = makeSearchBuilder(row);
 
@@ -1694,10 +1698,28 @@ describe('searchEvents', () => {
     const { searchEvents } = await import('./get-home-feed');
     await searchEvents('용인 어린이상상');
 
-    expect(orMock).toHaveBeenNthCalledWith(1, 'title.ilike.%용인%,description.ilike.%용인%,venue_name.ilike.%용인%');
+    expect(orMock).toHaveBeenCalledTimes(1);
+    expect(orMock).toHaveBeenNthCalledWith(
+      1,
+      'title.ilike.%어린이상상%,description.ilike.%어린이상상%,venue_name.ilike.%어린이상상%'
+    );
+  });
+
+  it('토큰이 모두 3자 이상이면 토큰마다 별도 .or()를 체이닝한다', async () => {
+    const row = eventRow({ id: 'match-2b', title: '강남구 어린이집 체험' });
+    const { builder, orMock } = makeSearchBuilder(row);
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => builder }),
+    }));
+
+    const { searchEvents } = await import('./get-home-feed');
+    await searchEvents('강남구 어린이집');
+
+    expect(orMock).toHaveBeenNthCalledWith(1, 'title.ilike.%강남구%,description.ilike.%강남구%,venue_name.ilike.%강남구%');
     expect(orMock).toHaveBeenNthCalledWith(
       2,
-      'title.ilike.%어린이상상%,description.ilike.%어린이상상%,venue_name.ilike.%어린이상상%'
+      'title.ilike.%어린이집%,description.ilike.%어린이집%,venue_name.ilike.%어린이집%'
     );
   });
 
@@ -1793,7 +1815,11 @@ describe('searchSpacesNationwide', () => {
     expect(items[0].distance_meters).toBe(-1);
   });
 
-  it('공백으로 구분된 여러 단어는 토큰마다 별도 .or()를 체이닝한다("용인 어린이상상" 같은 사례)', async () => {
+  // [성능 버그 수정 — 2026-09-14 사용자 리포트] "장소찾는것도 엄청느리고" 원인
+  // 실측 결과, pg_trgm GIN 인덱스는 3자 미만 토큰에서는 trigram을 만들 수 없어
+  // 사실상 인덱스를 못 타 8초 넘게 걸렸다. "용인"(2자)처럼 짧은 토큰은 검색
+  // 조건에서 제외하고 3자 이상 토큰("어린이상상")만으로 검색한다.
+  it('공백으로 구분된 여러 단어 중 3자 미만 토큰("용인")은 제외하고 3자 이상 토큰만으로 검색한다', async () => {
     const row = spaceRow({ id: 'nationwide-2', name: '용인어린이상상의숲' });
     const { builder, orMock } = makeSearchBuilder(row);
 
@@ -1804,8 +1830,23 @@ describe('searchSpacesNationwide', () => {
     const { searchSpacesNationwide } = await import('./get-home-feed');
     await searchSpacesNationwide('용인 어린이상상');
 
-    expect(orMock).toHaveBeenNthCalledWith(1, 'name.ilike.%용인%,address.ilike.%용인%');
-    expect(orMock).toHaveBeenNthCalledWith(2, 'name.ilike.%어린이상상%,address.ilike.%어린이상상%');
+    expect(orMock).toHaveBeenCalledTimes(1);
+    expect(orMock).toHaveBeenNthCalledWith(1, 'name.ilike.%어린이상상%,address.ilike.%어린이상상%');
+  });
+
+  it('토큰이 모두 3자 이상이면 토큰마다 별도 .or()를 체이닝한다', async () => {
+    const row = spaceRow({ id: 'nationwide-2b', name: '강남구 어린이집' });
+    const { builder, orMock } = makeSearchBuilder(row);
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => builder }),
+    }));
+
+    const { searchSpacesNationwide } = await import('./get-home-feed');
+    await searchSpacesNationwide('강남구 어린이집');
+
+    expect(orMock).toHaveBeenNthCalledWith(1, 'name.ilike.%강남구%,address.ilike.%강남구%');
+    expect(orMock).toHaveBeenNthCalledWith(2, 'name.ilike.%어린이집%,address.ilike.%어린이집%');
   });
 
   it('ILIKE 와일드카드 특수문자(%, _)가 포함된 검색어는 이스케이프해 리터럴로 취급한다', async () => {
