@@ -45,10 +45,13 @@ const MAX_LONG_SIDE = 480;
 const CSS_MAX_WIDTH = 300;
 const CSS_MAX_HEIGHT = 420;
 
-// [버그 수정 — 2026-09-14] 업로드용 최종 이미지의 긴 변 상한. 실제 표시는
-// 96px 썸네일이나 화면 폭 이내 모달이 전부라(post-detail-modal.tsx,
+// [조정 — 2026-09-14 사용자 지시] 업로드용 최종 이미지의 긴 변 상한. 실제
+// 표시는 96px 썸네일이나 화면 폭 이내 모달이 전부라(post-detail-modal.tsx,
 // post-photo-modal.tsx) 원본 해상도(수천 px)를 그대로 올릴 필요가 없다.
-const OUTPUT_MAX_LONG_SIDE = 1600;
+// 요즘 폰 화면(레티나 배율 포함) 기준 선명하게 보이는 데 필요한 해상도는
+// 대략 900~1300px 정도라, 1400px이면 여유를 두면서도 1600px보다 용량을
+// 더 줄일 수 있다.
+const OUTPUT_MAX_LONG_SIDE = 1400;
 
 type DetectionState = 'loading-model' | 'detecting' | 'ready' | 'unavailable';
 
@@ -245,8 +248,9 @@ export function FaceStickerEditor({
     // 반응속도가 너무 늦어" — 원본 해상도(휴대폰 사진은 보통 3000~4000px,
     // 수 MB) 그대로 캔버스에 다시 그려 인코딩+업로드하고 있었다. 이 앱에서
     // 사진은 최대 96px 썸네일이나 화면 폭에 맞춘 모달로만 보여지므로,
-    // 업로드 전에 긴 변 기준 1600px로 다운스케일해 인코딩 시간과 업로드
-    // 용량을 크게 줄인다(화질 차이는 실사용에서 체감되지 않는 수준).
+    // 업로드 전에 긴 변 기준 OUTPUT_MAX_LONG_SIDE(1400px)로 다운스케일해
+    // 인코딩 시간과 업로드 용량을 크게 줄인다(화질 차이는 실사용에서
+    // 체감되지 않는 수준).
     const outScale = Math.min(1, OUTPUT_MAX_LONG_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
     const outWidth = Math.round(img.naturalWidth * outScale);
     const outHeight = Math.round(img.naturalHeight * outScale);
