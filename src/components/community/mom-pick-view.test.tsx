@@ -104,7 +104,7 @@ describe('MomPickView — 투명 오버레이 온보딩(개선사항4)', () => {
     fireEvent.click(screen.getByLabelText('글쓰기'));
     fireEvent.click(await screen.findByText('첫 글 쓰러 가기'));
 
-    expect(await screen.findByText('✍️ 첫 글 쓰기')).toBeInTheDocument();
+    expect(await screen.findByText('✍️ 글쓰기')).toBeInTheDocument();
     expect(screen.queryByText('🌱 아직 새싹맘 등급이 아니에요!')).not.toBeInTheDocument();
     // 전체 화면 전환이므로 뒤의 헤더/피드는 더 이상 화면에 없다(공존하지 않음).
     expect(screen.queryByText('👑 맘스픽')).not.toBeInTheDocument();
@@ -118,12 +118,12 @@ describe('MomPickView — 투명 오버레이 온보딩(개선사항4)', () => {
     await screen.findByText('🔥 지금 가장 뜨거운 인기 우수글');
     fireEvent.click(screen.getByLabelText('글쓰기'));
     fireEvent.click(await screen.findByText('첫 글 쓰러 가기'));
-    await screen.findByText('✍️ 첫 글 쓰기');
+    await screen.findByText('✍️ 글쓰기');
 
     fireEvent.click(screen.getByLabelText('닫기'));
 
     expect(await screen.findByText('👑 맘스픽')).toBeInTheDocument();
-    expect(screen.queryByText('✍️ 첫 글 쓰기')).not.toBeInTheDocument();
+    expect(screen.queryByText('✍️ 글쓰기')).not.toBeInTheDocument();
   });
 
   it('allowed: 투명 인터셉트 레이어가 없고, "✍️ 글쓰기" 버튼을 누르면 바로 전체 화면 글쓰기가 열린다', async () => {
@@ -136,7 +136,7 @@ describe('MomPickView — 투명 오버레이 온보딩(개선사항4)', () => {
 
     fireEvent.click(screen.getByLabelText('글쓰기'));
 
-    expect(await screen.findByText('✍️ 첫 글 쓰기')).toBeInTheDocument();
+    expect(await screen.findByText('✍️ 글쓰기')).toBeInTheDocument();
   });
 
   // [2026-09-11 사용자 지시] 비로그인(guest)도 미리보기는 보되 '전체보기' 등

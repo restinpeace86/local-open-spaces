@@ -135,7 +135,12 @@ export function MomPickView() {
     return (
       <div className="fixed inset-0 z-[100] flex flex-col bg-white">
         <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
-          <h2 className="text-base font-bold text-gray-900">✍️ 첫 글 쓰기</h2>
+          {/* [버그 수정 — 2026-09-14 사용자 리포트] "이거 제목이 왜 첫글쓰기야?
+              난 여러번째 글쓰기 중인데.." — 이 화면은 새싹맘 등업 전 안내
+              팝업의 "첫 글 쓰러 가기"뿐 아니라, 이미 글을 여러 번 쓴 유저의
+              평소 "✍️ 글쓰기" 플로팅 버튼(handleWriteClick의 else 분기)으로도
+              똑같이 열린다 — "첫"이라고 고정할 근거가 없다. */}
+          <h2 className="text-base font-bold text-gray-900">✍️ 글쓰기</h2>
           <button
             type="button"
             onClick={() => setIsFullScreenComposerOpen(false)}
