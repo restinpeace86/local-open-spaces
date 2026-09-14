@@ -20,7 +20,12 @@ type FaceBox = {
 
 const STICKER_OPTIONS = ['🐻', '🐰', '🐱', '🐶', '⭐', '😊'] as const;
 
-const MAX_DISPLAY_WIDTH = 420;
+// [버그 수정 — 2026-09-14 사용자 리포트] "사진 올리니깐 사진이 엄청
+// 길어지더라? 취소버튼도 안보여" — 세로로 긴 휴대폰 세로사진의 경우 폭만
+// 제한하면 높이가 화면 밖까지 늘어나 버튼이 가려졌다. 폭/높이를 함께
+// 제한한다.
+const MAX_DISPLAY_WIDTH = 380;
+const MAX_DISPLAY_HEIGHT = 380;
 
 type DetectionState = 'loading-model' | 'detecting' | 'ready' | 'unavailable';
 
@@ -50,7 +55,7 @@ export function FaceStickerEditor({
     img.onload = async () => {
       if (cancelled) return;
       imageRef.current = img;
-      const scale = Math.min(1, MAX_DISPLAY_WIDTH / img.naturalWidth);
+      const scale = Math.min(1, MAX_DISPLAY_WIDTH / img.naturalWidth, MAX_DISPLAY_HEIGHT / img.naturalHeight);
       const width = Math.round(img.naturalWidth * scale);
       const height = Math.round(img.naturalHeight * scale);
       setDisplaySize({ width, height });
@@ -190,53 +195,67 @@ export function FaceStickerEditor({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-      <div className="flex w-full max-w-sm flex-col gap-3 rounded-xl bg-white p-4">
-        <p className="text-sm font-medium text-gray-800">
-          얼굴에 스티커를 붙여 보호해 주세요
-          <span className="ml-1 text-xs font-normal text-gray-400">(자동 인식은 참고용, 최종 확인은 직접 해주세요)</span>
-        </p>
+    // [버그 수정 — 2026-09-14 사용자 리포트] "취소버튼도 안보여.. 뒤로가기
+    // 누르니깐 완전히 빠져나오던데" — 세로 사진이 길면 버튼이 화면 밖으로
+    // 밀려나 보이지 않았고, 그래서 사용자가 대신 브라우저/앱 뒤로가기를 눌러
+    // 글쓰기 화면 전체를 빠져나가 버렸다. 카드 전체 높이를 화면 안으로
+    // 제한하고, 버튼 줄은 스크롤 영역 밖에 항상 고정해 두며, 어두운 배경을
+    // 눌러도 취소되도록(표준 모달 이탈 경로) 만든다.
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={onCancel}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="flex max-h-[85vh] w-full max-w-sm flex-col rounded-xl bg-white"
+      >
+        <div className="flex flex-1 flex-col gap-3 overflow-y-auto p-4">
+          <p className="text-sm font-medium text-gray-800">
+            얼굴에 스티커를 붙여 보호해 주세요
+            <span className="ml-1 text-xs font-normal text-gray-400">(자동 인식은 참고용, 최종 확인은 직접 해주세요)</span>
+          </p>
 
-        <div className="flex justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
-          {displaySize ? (
-            <canvas
-              ref={canvasRef}
-              onClick={handleCanvasClick}
-              style={{ width: displaySize.width, height: displaySize.height, cursor: 'pointer' }}
-              className="max-w-full"
-            />
-          ) : (
-            <div className="flex h-40 w-full items-center justify-center text-xs text-gray-400">이미지 불러오는 중...</div>
+          <div className="flex justify-center overflow-hidden rounded-lg border border-gray-200 bg-gray-50">
+            {displaySize ? (
+              <canvas
+                ref={canvasRef}
+                onClick={handleCanvasClick}
+                style={{ width: displaySize.width, height: displaySize.height, cursor: 'pointer' }}
+                className="max-w-full"
+              />
+            ) : (
+              <div className="flex h-40 w-full items-center justify-center text-xs text-gray-400">이미지 불러오는 중...</div>
+            )}
+          </div>
+
+          {status === 'loading-model' && <p className="text-xs text-gray-400">얼굴 인식 준비 중...</p>}
+          {status === 'detecting' && <p className="text-xs text-gray-400">얼굴을 찾는 중...</p>}
+          {status === 'unavailable' && (
+            <p className="text-xs text-amber-600">자동 인식을 불러오지 못했어요. 화면을 눌러 직접 스티커를 붙일 수 있어요.</p>
           )}
+          {status === 'ready' && faces.length === 0 && (
+            <p className="text-xs text-gray-400">인식된 얼굴이 없어요. 필요하면 화면을 눌러 직접 스티커를 붙여주세요.</p>
+          )}
+          <p className="text-[11px] text-gray-400">스티커 위를 다시 누르면 제거돼요.</p>
+
+          <div className="flex items-center gap-1.5">
+            {STICKER_OPTIONS.map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => setSticker(opt)}
+                aria-pressed={sticker === opt}
+                className={`flex h-8 w-8 items-center justify-center rounded-full text-lg ${
+                  sticker === opt ? 'bg-indigo-100 ring-2 ring-indigo-400' : 'bg-gray-100'
+                }`}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {status === 'loading-model' && <p className="text-xs text-gray-400">얼굴 인식 준비 중...</p>}
-        {status === 'detecting' && <p className="text-xs text-gray-400">얼굴을 찾는 중...</p>}
-        {status === 'unavailable' && (
-          <p className="text-xs text-amber-600">자동 인식을 불러오지 못했어요. 화면을 눌러 직접 스티커를 붙일 수 있어요.</p>
-        )}
-        {status === 'ready' && faces.length === 0 && (
-          <p className="text-xs text-gray-400">인식된 얼굴이 없어요. 필요하면 화면을 눌러 직접 스티커를 붙여주세요.</p>
-        )}
-        <p className="text-[11px] text-gray-400">스티커 위를 다시 누르면 제거돼요.</p>
-
-        <div className="flex items-center gap-1.5">
-          {STICKER_OPTIONS.map((opt) => (
-            <button
-              key={opt}
-              type="button"
-              onClick={() => setSticker(opt)}
-              aria-pressed={sticker === opt}
-              className={`flex h-8 w-8 items-center justify-center rounded-full text-lg ${
-                sticker === opt ? 'bg-indigo-100 ring-2 ring-indigo-400' : 'bg-gray-100'
-              }`}
-            >
-              {opt}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex gap-2 pt-1">
+        <div className="flex shrink-0 gap-2 border-t border-gray-100 p-4">
           <button
             type="button"
             onClick={onCancel}
