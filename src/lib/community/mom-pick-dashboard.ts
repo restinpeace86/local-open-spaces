@@ -120,7 +120,15 @@ async function attachAuthors(rows: RawPostRow[]): Promise<DashboardPost[]> {
 
 export type PagedResult<T> = { items: T[]; total: number };
 
-// ① 파워맘/우수맘 추천(Expert Curation) — 상급 등급 작성자의 글만, 최신순.
+// ① 파워맘/우수맘 추천(Expert Curation) — 상급 등급 작성자의 글 중 관리자가
+// "채택"(is_adopted)한 글만, 최신순.
+// [Decision — 2026-09-15 사용자 지시] "내가 쓴글 빈약한데 파워만돼서 파워맘
+// 추천픽에 노출됐잖아" — 등급은 활동량(이번 달 글쓰기 횟수) 기준 게이미피케이션
+// 일 뿐이라, 등급만으로 추천픽을 고르면 내용 품질과 무관하게 노출될 수 있다.
+// is_adopted는 관리자가 실제로 글을 검수해 "우수하다"고 수동 지정하는
+// 필드(spec/community/mom-pick-grades.md 2.1)로, 원래 이 용도(품질 큐레이션)를
+// 위해 만들어졌던 컬럼이다 — 등급(양)과 추천픽 노출(질)을 분리해, 등급이 높아도
+// 아직 채택된 글이 없으면 추천픽에 뜨지 않고, 채택되면 뜨도록 한다.
 export async function getExpertPosts(limit: number, page = 1): Promise<PagedResult<DashboardPost>> {
   const admin = createAdminClient();
   const { data: expertProfiles, error: profilesError } = await admin
@@ -137,6 +145,7 @@ export async function getExpertPosts(limit: number, page = 1): Promise<PagedResu
     .from('mom_pick_posts')
     .select(POST_COLUMNS, { count: 'exact' })
     .in('author_id', expertIds)
+    .eq('is_adopted', true)
     .order('created_at', { ascending: false })
     .range(from, from + limit - 1);
   if (error) throw new Error(`파워맘/우수맘 추천 조회 실패: ${error.message}`);
