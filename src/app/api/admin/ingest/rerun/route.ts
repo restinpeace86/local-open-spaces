@@ -1,5 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 
+// [버그 수정 — 2026-09-15 사용자 지시("개별 소스 수동 재수집 제대로 동작하는지
+// 확인해봐 문제 있으면 수정하고")] 실측 확인: SEOUL_YEYAK 하나만 재수집해도
+// 157초가 걸렸다(2,601건 조회 → 2,574건 반영). Next.js는 이 export 없이는
+// Vercel 서버리스 함수의 기본 실행 시간 제한(플랫폼 기본값은 통상 수십 초
+// 이내)을 그대로 적용하는데, 이 라우트는 원래도(2026-08-30 주석) 아래턱
+// fetch~upsert를 동기적으로 끝까지 도는 구조라 실제로는 십중팔구 타임아웃
+// 났을 것이다 — 로컬 개발 서버에는 이 제한이 없어 지금까지 드러나지 않았다.
+// maxDuration을 명시적으로 늘려 플랫폼이 허용하는 한도까지 여유를 준다
+// (Hobby 플랜이면 Vercel이 자체 상한선으로 자동으로 낮춰 적용한다 — 안전).
+export const maxDuration = 300;
+
 // [배치 수집 안정성 고도화](2026-08-30 사용자 지시) 요구사항 "관리자 수동 재수집 트리거":
 // 관리자 화면에서 실패한 특정 API 소스 하나만 지정해 즉시 재수집을 실행한다.
 // scripts/ingest/run-daily.mjs / run-monthly.mjs가 이미 export하는 runSingleDailySource/

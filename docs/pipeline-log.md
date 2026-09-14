@@ -49,6 +49,8 @@ GitHub Actions cron으로 직접 표현할 수 없다는 사실을 확인했다 
 
 | 실행 일시 | 수집 권역 | RAW 적재 건수 | Service 적재 건수 | 파싱 에러 | 상태 | 비고 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| 2026-09-15 07:04 | SWIMMING_POOL | 2551 | 1543 | 1022 | ✅ [OK] |  |
+| 2026-09-15 07:02 | SEOUL_YEYAK | 2574 | 2574 | 27 | ✅ [OK] |  |
 | 2026-09-15 06:46 | SEOUL_YEYAK | 2574 | 2574 | 27 | ✅ [OK] |  |
 | 2026-09-15 06:36 | GG_CULTURE_EVENTS | - | 0 | N/A | 🚨 [CRITICAL] | GG_CULTURE_EVENTS: 전체(GGCULTUREVENTSTUS(문화행사), GGCULFOUEVENSTM(문화재단행사)) 수집 실패 — GGCULTUREVENTSTUS(문화행사):fetch failed (원인: UND_ERR_CONNECT_TIMEOUT: Connect Timeout Error (attempted address: openapi.gg.go.kr:443, timeout: 10000ms)) | GGCULFOUEVENSTM(문화재단행사):fetch failed (원인: UND_ERR_CONNECT_TIMEOUT: Connect Timeout Error (attempted address: openapi.gg.go.kr:443, timeout: 10000ms)) |
 | 2026-09-15 06:14 | SEOUL_YEYAK | 2574 | 2574 | 27 | ✅ [OK] |  |
@@ -1783,3 +1785,39 @@ The server returned an invalid or incomplete response.
 | REFRESH_EVENTS_FILTER_OPTIONS_CACHE | - | 0 | 0 | 0 | - | ❌ 실행 실패: events_filter_options_cache 갱신 실패: canceling statement due to statement timeout |
 
 **검증**: 전체 RAW 수신 22133건(일부 소스 실패/미확인 — 완전한 대조 불가) vs DB 적재 21562건 (+에러 544건 +범위제외 27건)
+
+<details>
+<summary>2026-09-15 07:02 SEOUL_YEYAK 상세 리포트</summary>
+
+**테이블별 적재**
+
+| 테이블 | 가져온 건수 | DB 적재 건수 | 배치 내 중복(NULL 병합) | 기존 DB 병합 |
+| :--- | ---: | ---: | ---: | ---: |
+| open_spaces | 0 | 0 | 0 | 0 |
+| events | 2574 | 2574 | 0 | 2574 |
+
+**범위 제외**: 27건
+
+**에러 상세**
+
+| 원인 | 건수 |
+| :--- | ---: |
+| COORDINATE_PARSE_FAIL | 13 |
+
+</details>
+
+## [2026-09-15 07:02:57] [Daily Events Batch (개별 재수집: SEOUL_YEYAK)] Ingestion Log
+
+| API 출처 식별자 (`source`) | RAW 수신 건수 | events 적재 건수 | open_spaces 적재 건수 | Safe Merge 건수 | 에러 건수 | 비고 |
+| :--- | ---: | ---: | ---: | ---: | ---: | :--- |
+| seoul_public_reservation | 2601 | 2574 | 0 | 2574 | 0 |  |
+
+**검증**: 전체 RAW 수신 2601건 vs DB 적재 2574건 (+에러 0건 +범위제외 27건) → **드롭 0건 확인 ✅**
+
+## [2026-09-15 07:04:45] [Monthly Spaces Batch (개별 재수집: SWIMMING_POOL)] Ingestion Log
+
+| API 출처 식별자 (`source`) | RAW 수신 건수 | events 적재 건수 | open_spaces 적재 건수 | Safe Merge 건수 | 에러 건수 | 비고 |
+| :--- | ---: | ---: | ---: | ---: | ---: | :--- |
+| swimming_pool | 2565 | 0 | 1543 | 1525 | 1022 |  |
+
+**검증**: 전체 RAW 수신 2565건 vs DB 적재 1543건 (+에러 1022건 +범위제외 0건) → **드롭 0건 확인 ✅**

@@ -773,6 +773,19 @@
       글을 어떤 기준으로 채택할지 물어봐, 사진 첨부/자유글 구체성/체크리스트
       완성도 기준의 운영 가이드도 제안(코드 강제 아님, 대화 기록).
       (완료: 2026-09-15, 상세: implementation/2026-09-15-expert-pick-adopted-only.md)
+- [x] Step 162 (사용자 지시, 2026-09-15): "관리자화면에서 개별 소스 수동
+      재수집 제대로 동작하는지 확인해봐 문제 있으면 수정하고" —
+      /api/admin/ingest/rerun을 실제 개발 서버로 띄워 daily(SEOUL_YEYAK)/
+      monthly(SWIMMING_POOL) 각 1개 소스씩 운영 DB 대상 실측. 둘 다 기능
+      자체는 정상 동작(SEOUL_YEYAK: 2601건 수신/2574건 반영/에러 0건,
+      SWIMMING_POOL: 2565건 수신/1543건 반영 — 에러 1022건은
+      docs/pipeline-log.md 과거 기록 대조 결과 이 소스의 오래된 정상
+      특성으로 확인, 버그 아님). 다만 SEOUL_YEYAK 하나만으로도 응답까지
+      157초가 걸렸는데, 이 라우트에 Next.js maxDuration 설정이 없어 실제
+      운영(Vercel) 환경에서는 플랫폼 기본 실행시간 제한에 걸려 타임아웃
+      났을 가능성이 높음을 실측으로 확인 — `export const maxDuration =
+      300`을 추가해 조치.
+      (완료: 2026-09-15, 상세: implementation/2026-09-15-ingest-rerun-verification.md)
 
 # To-Do List
 [개선사항 1] 현재 '맘스픽' 메인 화면의 UI 구조와 접근 제어(Gating) 로직을 아래와 같이 전면 수정해 주세요.
