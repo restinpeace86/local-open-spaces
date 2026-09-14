@@ -47,6 +47,27 @@ const CSS_MAX_HEIGHT = 420;
 
 type DetectionState = 'loading-model' | 'detecting' | 'ready' | 'unavailable';
 
+// [버그 조사 — 2026-09-14 사용자 리포트, 안드로이드 크롬] "사진첩 찾아보고
+// 어느순간 닫으면 처음으로 넘어와 있음" — 안드로이드 크롬은 메모리 압박이
+// 있으면 백그라운드로 간 탭을 통째로 버리고(discard), 돌아왔을 때 페이지를
+// 처음부터 다시 불러온다(모든 React 상태 소실). blazeface의 `BlazeFaceModel`
+// 은 내부 GraphModel을 private로 감싸고 있어 공개 dispose 메서드가 없다 —
+// 즉 한 번 로드하면 그 GPU 메모리를 우리 쪽에서 직접 해제할 방법이 없다.
+// 여러 장을 연달아 편집(사진 큐)할 때마다 `blazeface.load()`를 새로 부르면
+// 사진 수만큼 모델이 계속 쌓여 메모리 압박을 스스로 키우게 된다 — 모듈
+// 레벨에 캐시해 세션당 딱 한 번만 로드하고 이후로는 재사용한다(페이지를
+// 완전히 벗어나면 이 캐시도 자연히 사라진다). 다만 이건 "탭이 아예
+// 버려지는" 근본 원인(OS/브라우저 메모리 관리) 자체를 없애지는 못하고,
+// 그 확률을 낮추는 완화책이다.
+let cachedModelPromise: ReturnType<typeof import('@tensorflow-models/blazeface').load> | null = null;
+
+async function loadBlazefaceModel(blazeface: typeof import('@tensorflow-models/blazeface')) {
+  if (!cachedModelPromise) {
+    cachedModelPromise = blazeface.load();
+  }
+  return cachedModelPromise;
+}
+
 export function FaceStickerEditor({
   file,
   onConfirm,
@@ -105,7 +126,7 @@ export function FaceStickerEditor({
         if (!dctx) throw new Error('canvas context 생성 실패');
         dctx.drawImage(img, 0, 0, width, height);
 
-        const model = await blazeface.load();
+        const model = await loadBlazefaceModel(blazeface);
         if (cancelled) return;
         const predictions = await model.estimateFaces(detectCanvas, false);
         if (cancelled) return;
