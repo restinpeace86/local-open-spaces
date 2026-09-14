@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { resizeImageForStorage } from '@/lib/images/resize-for-storage';
 
 // [개발 종합 요청] 스팟픽 MVP 스마트 폴백, 관리자 큐레이션 및 배치 안정화 고도화(2026-09-01)
 // 섹션 2 "클립보드 이미지 Ctrl+V 바로 업로드": 브라우저 clipboard 이벤트에서 얻은 이미지
@@ -33,7 +34,8 @@ export async function POST(request: NextRequest) {
 
     const admin = createAdminClient();
     const path = `${crypto.randomUUID()}.${extension}`;
-    const buffer = Buffer.from(await file.arrayBuffer());
+    const rawBuffer = Buffer.from(await file.arrayBuffer());
+    const buffer = await resizeImageForStorage(rawBuffer, file.type);
 
     const { error: uploadError } = await admin.storage.from(BUCKET).upload(path, buffer, {
       contentType: file.type,

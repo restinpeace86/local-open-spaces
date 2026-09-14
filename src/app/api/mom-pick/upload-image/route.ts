@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { resizeImageForStorage } from '@/lib/images/resize-for-storage';
 
 // [Decision 020](2026-09-04) / spec/community/mom-pick-grades.md 2.1: [설문형 스마트
 // 리뷰 폼] 3단계 사진 업로드. `/api/admin/spot-curations/upload-image`(2026-09-01)와
@@ -41,7 +42,8 @@ export async function POST(request: NextRequest) {
 
     const admin = createAdminClient();
     const path = `${user.id}/${crypto.randomUUID()}.${extension}`;
-    const buffer = Buffer.from(await file.arrayBuffer());
+    const rawBuffer = Buffer.from(await file.arrayBuffer());
+    const buffer = await resizeImageForStorage(rawBuffer, file.type);
 
     const { error: uploadError } = await admin.storage.from(BUCKET).upload(path, buffer, {
       contentType: file.type,
