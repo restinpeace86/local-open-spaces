@@ -136,6 +136,38 @@ export function buildProactiveWeatherSuggestion(snapshot: WeatherSnapshot, isoDa
   return `${whenLabel} 날씨는 야외도 실내도 무난할 것 같아요!${numberSentence}${airCaveat} 어떤 스타일로 알아봐드릴까요?`;
 }
 
+// [상단 날씨 위젯 및 실시간·주말 날씨 바텀시트](2026-09-15 사용자 지시,
+// implementation/todo.md [개선사항 7]): 메인 홈 헤더의 날씨 위젯/바텀시트 전용 문구.
+// 위 buildWeatherReactionText/buildProactiveWeatherSuggestion은 챗봇 인터뷰 대화
+// 흐름("이동 거리까지 접수 완료했습니다!")에 맞춘 톤이라 이 위젯 맥락에는 맞지 않는다 —
+// 같은 WeatherSnapshot/recommendMode 판단 로직은 그대로 재사용하되(제5장 제4조),
+// 짧고 독립적인 안내문 하나만 새로 만든다. 요청 원문 예시("오늘 미세먼지가 나쁘니
+// 실내 놀이방 식당을 추천해요!")의 톤을 그대로 따른다.
+export function buildWidgetGuideMessage(snapshot: WeatherSnapshot): string | null {
+  if (!snapshot.available) return null;
+
+  const badAir = snapshot.airQualityAvailable && (BAD_AIR_GRADES.includes(snapshot.pm10Grade ?? '') || BAD_AIR_GRADES.includes(snapshot.pm25Grade ?? ''));
+  const rainy = snapshot.precipitationProb != null && snapshot.precipitationProb >= RAIN_THRESHOLD_INDOOR;
+  const mode = recommendMode(snapshot);
+
+  if (badAir) return '오늘 미세먼지가 나쁘니 실내 놀이방 식당을 추천해요! 🏠';
+  if (rainy) return '오늘은 비 소식이 있어요. 실내 나들이가 어때요? ☔';
+  if (mode === 'OUTDOOR') return '오늘은 날씨가 맑아요! 야외 나들이하기 좋은 날이에요. ☀️';
+  return null;
+}
+
+// [주말 예보 카드 한 줄 평] 탭2("이번 주말 예보")의 토/일 각 카드에 붙는 짧은 추천
+// 문구. 위 buildWidgetGuideMessage와 동일한 판단 기준(recommendMode)을 쓰지만, 미래
+// 날짜라 미세먼지 데이터가 없다는 전제(airQualityAvailable=false)가 기본이라 강수
+// 확률/기온만으로 판단한다.
+export function buildWeekendOneLiner(snapshot: WeatherSnapshot): string | null {
+  if (!snapshot.available) return null;
+  const mode = recommendMode(snapshot);
+  if (mode === 'OUTDOOR') return '나들이하기 좋은 날씨예요 ☀️';
+  if (mode === 'INDOOR') return '실내 활동을 추천해요 🏠';
+  return '야외도 실내도 무난해요';
+}
+
 type NearestWeatherRow = {
   temperature: number | null;
   precipitation_prob: number | null;

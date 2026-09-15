@@ -1,5 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
-import { buildProactiveWeatherSuggestion, buildWeatherReactionText, recommendMode, resolveWeatherSnapshot, WeatherSnapshot } from './weather-reaction';
+import {
+  buildProactiveWeatherSuggestion,
+  buildWeatherReactionText,
+  buildWeekendOneLiner,
+  buildWidgetGuideMessage,
+  recommendMode,
+  resolveWeatherSnapshot,
+  WeatherSnapshot,
+} from './weather-reaction';
 import * as kmaForecast from './kma-forecast';
 
 function snapshot(overrides: Partial<WeatherSnapshot> = {}): WeatherSnapshot {
@@ -185,5 +193,43 @@ describe('resolveWeatherSnapshot', () => {
     const result = await resolveWeatherSnapshot('2026-09-10', 15, 37.5665, 126.978, null, now);
     expect(result.available).toBe(false);
     vi.restoreAllMocks();
+  });
+});
+
+// [상단 날씨 위젯 및 실시간·주말 날씨 바텀시트](2026-09-15 사용자 지시,
+// implementation/todo.md [개선사항 7]).
+describe('buildWidgetGuideMessage', () => {
+  it('미세먼지가 나쁘면 실내 놀이방 식당을 추천한다', () => {
+    expect(buildWidgetGuideMessage(snapshot({ pm10Grade: '나쁨' }))).toContain('미세먼지');
+  });
+
+  it('강수확률이 높으면 실내 나들이를 추천한다', () => {
+    expect(buildWidgetGuideMessage(snapshot({ precipitationProb: 70, pm10Grade: '좋음', pm25Grade: '좋음' }))).toContain('비 소식');
+  });
+
+  it('맑고 대기질이 좋으면 야외 나들이를 추천한다', () => {
+    expect(buildWidgetGuideMessage(snapshot())).toContain('맑아요');
+  });
+
+  it('특별히 권장할 이유가 없으면(EITHER) null이다', () => {
+    expect(buildWidgetGuideMessage(snapshot({ precipitationProb: 40, pm10Grade: '나쁨', airQualityAvailable: false }))).toBeNull();
+  });
+
+  it('날씨 데이터 자체가 없으면 null이다', () => {
+    expect(buildWidgetGuideMessage(snapshot({ available: false }))).toBeNull();
+  });
+});
+
+describe('buildWeekendOneLiner', () => {
+  it('야외 권장이면 나들이 문구를 반환한다', () => {
+    expect(buildWeekendOneLiner(snapshot())).toContain('나들이');
+  });
+
+  it('실내 권장이면 실내 활동 문구를 반환한다', () => {
+    expect(buildWeekendOneLiner(snapshot({ precipitationProb: 70 }))).toContain('실내');
+  });
+
+  it('데이터가 없으면 null이다', () => {
+    expect(buildWeekendOneLiner(snapshot({ available: false }))).toBeNull();
   });
 });

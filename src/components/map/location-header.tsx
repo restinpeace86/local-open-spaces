@@ -12,7 +12,7 @@ export function LocationHeader({
     <button
       type="button"
       onClick={onClick}
-      className="self-start shrink-0 max-w-[45vw] flex items-center gap-1.5 rounded-full bg-white border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50"
+      className="self-start shrink-0 max-w-[28vw] flex items-center gap-1.5 rounded-full bg-white border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50"
     >
       <span aria-hidden>📍</span>
       <span className="truncate">{addressName ?? '내 동네 설정하기'}</span>

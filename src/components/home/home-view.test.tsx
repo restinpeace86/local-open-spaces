@@ -503,7 +503,11 @@ describe('HomeView', () => {
 
   // 사용자 피드백(2026-08-22): 헤더 위치 표기가 상세 도로명주소라서 검색바를 가릴 정도였다 —
   // 짧은 sigunguName을 우선 보여줘야 한다.
-  it('헤더 위치 표기는 상세 주소가 아니라 짧은 sigunguName을 보여준다', () => {
+  // [상단 헤더 컴팩트 레이아웃](2026-09-15 사용자 지시, todo.md 개선사항7): "성남시
+  // 분당구로 시/군/구까지 되어있는데 분당구만 보여주고 가로폭 축소할 것" — 화면
+  // 표시만 마지막 토큰으로 더 줄었다(API 쿼리에 쓰이는 sigunguName 값 자체는 그대로
+  // "성남시 분당구" 유지 — 위 테스트가 이미 검증).
+  it('헤더 위치 표기는 상세 주소도 전체 sigunguName도 아니라 마지막 토큰(구/군)만 보여준다', () => {
     localStorage.setItem(
       'user_location',
       JSON.stringify({
@@ -516,7 +520,8 @@ describe('HomeView', () => {
 
     render(<HomeView initialHeroEvents={[]} />);
 
-    expect(screen.getByText('성남시 분당구')).toBeInTheDocument();
+    expect(screen.getByText('분당구')).toBeInTheDocument();
+    expect(screen.queryByText('성남시 분당구')).not.toBeInTheDocument();
     expect(
       screen.queryByText('경기도 성남시 분당구 판교로 546번길 15 (판교동, 코너스퀘어)')
     ).not.toBeInTheDocument();

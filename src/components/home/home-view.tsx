@@ -21,6 +21,17 @@ import { AiChatFab } from '@/components/chat/ai-chat-fab';
 // "전체 보기" CTA 카드(/events/today 연동, Task 9-6-6)로 대체한다.
 const HERO_VISIBLE_COUNT = 10;
 
+// [상단 헤더 컴팩트 레이아웃](2026-09-15 사용자 지시, implementation/todo.md
+// [개선사항 7]): "성남시 분당구로 시/군/구까지 되어있는데 분당구만 보여주고 가로폭
+// 축소할 것" — sigunguName 값 자체(다른 곳에서 API 쿼리 파라미터로도 그대로 쓰임,
+// 예: params.set('sigungu', region.sigunguName))는 절대 바꾸지 않고, 헤더에 보여줄
+// 표시 문구만 마지막 토큰(구/군/시)으로 줄인다.
+function shortenSigunguForDisplay(sigunguName: string | null): string | null {
+  if (!sigunguName) return null;
+  const tokens = sigunguName.trim().split(/\s+/);
+  return tokens[tokens.length - 1];
+}
+
 // [홈 화면 큐레이션 섹션 추가 및 상단 탭 정리](2026-08-30 사용자 지시): "이번 주말 실패 없는
 // 베스트 나들이 픽" 전용 데이터 훅. 상단 탭이 전부 삭제되어 더 이상 "탭 선택 시 지연
 // 페칭" 트리거가 없으므로, 큐레이션 콘텐츠가 위치와 무관한 수동 큐레이션 콘텐츠라는
@@ -341,10 +352,12 @@ export function HomeView({
           나오면 검색바가 가려질 정도로 좁아진다고 해서, 시/군/구 단위 짧은 이름
           (sigunguName)을 우선 보여주는 부분은 그대로 유지한다. */}
       <HomeHeader
-        locationLabel={sigunguName ?? addressName}
+        locationLabel={shortenSigunguForDisplay(sigunguName) ?? addressName}
         onLocationClick={openOnboarding}
         searchValue={searchKeyword}
         onSearchChange={handleSearchChange}
+        weatherLat={region.lat}
+        weatherLng={region.lng}
       />
 
       <div className="flex-1 overflow-y-auto py-4 flex flex-col gap-5">

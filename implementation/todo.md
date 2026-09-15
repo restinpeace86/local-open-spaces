@@ -341,7 +341,14 @@
 ----------------------------------------------
 
 
-[개선사항 7] [Feature Implementation Task] 상단 날씨 위젯 및 실시간·주말 날씨 바텀시트(Bottom Sheet) 구현
+[x] [개선사항 7] [Feature Implementation Task] 상단 날씨 위젯 및 실시간·주말 날씨 바텀시트(Bottom Sheet) 구현
+> **완료 (2026-09-15)**: 요청대로 챗봇 백엔드의 기존 날씨 로직(resolveWeatherSnapshot/
+> get_nearest_spot_weather RPC/kma-forecast.ts/date-resolver.ts)을 100% 재사용,
+> 이 화면 전용 GET API(/api/home/weather) + 헤더 미니 위젯(☀️ 24°) + [오늘 실시간]/
+> [이번 주말 예보] 탭 바텀시트(미세먼지·초미세먼지 컬러 뱃지, 스마트 가이드 멘트)
+> 신규 구현. 헤더는 위치 표시를 "분당구"만 보이도록 줄이고(API 쿼리용 값은 그대로
+> 유지) 3-요소 flex로 재구성. 운영 데이터로 실측 검증(예보 범위 밖 주말은 정직하게
+> "데이터 없음" 처리 확인). 상세: implementation/2026-09-15-weather-widget-bottom-sheet.md
 
 부모 유저를 위한 키즈/놀이방 식당 및 이벤트 큐레이션 앱의 **메인 홈 상단 헤더(Header) 및 날씨 정보 연동 UI**를 구현하고자 합니다. 
 
