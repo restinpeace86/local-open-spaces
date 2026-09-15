@@ -143,20 +143,39 @@ describe('buildDescriptionCandidate (소스2: 원천 설명)', () => {
   });
 });
 
-describe('buildBlogCandidate (소스1: 기존 블로그 큐레이션 결과 재사용)', () => {
-  it('curated_blog_urls와 price_text가 이미 있으면 found다', () => {
-    const result = buildBlogCandidate({ curatedBlogUrls: ['https://blog.naver.com/x'], existingPriceText: '성인 12,000원' });
-    expect(result).toMatchObject({ source: 'blog', status: 'found', priceText: '성인 12,000원', sourceUrl: 'https://blog.naver.com/x' });
+// [실측 버그 수정](2026-09-16 사용자 지적): "소스1은 블로그 큐레이션과 유사하게..
+// 적합한 블로그들 최대 3개에 대하여 내용들 크롤링하여 가격 정보 있는지 확인하고
+// 있다면 가져와서 보여주는구조인데?" — 예전 구현은 블로그 본문을 전혀 열어보지
+// 않고 관리자가 수동 입력한 events.price_text를 그대로 되돌려 보여주기만 했다.
+describe('buildBlogCandidate (소스1: 큐레이션된 블로그 본문 크롤링 분석)', () => {
+  it('첫 블로그 본문에서 가격을 찾으면 그 블로그를 후보로 반환한다', () => {
+    const result = buildBlogCandidate([{ url: 'https://m.blog.naver.com/x', bodyText: '이용료: 12,000원' }]);
+    expect(result).toMatchObject({ source: 'blog', status: 'found', priceText: '이용료 12,000원', sourceUrl: 'https://m.blog.naver.com/x' });
   });
 
-  it('블로그 URL 자체가 없으면 not_found다(아직 블로그 큐레이션을 안 한 것)', () => {
-    const result = buildBlogCandidate({ curatedBlogUrls: [], existingPriceText: null });
-    expect(result.status).toBe('not_found');
+  it('첫 블로그에서 못 찾고 두 번째 블로그에서 찾으면 두 번째를 후보로 반환한다', () => {
+    const result = buildBlogCandidate([
+      { url: 'https://m.blog.naver.com/a', bodyText: '오늘 다녀온 나들이 후기입니다.' },
+      { url: 'https://m.blog.naver.com/b', bodyText: '관람료는 전액 무료입니다.' },
+    ]);
+    expect(result).toMatchObject({ status: 'found', priceText: '관람료 무료', sourceUrl: 'https://m.blog.naver.com/b' });
   });
 
-  it('블로그 URL은 있지만 price_text가 비어 있으면 not_found(링크는 그대로 노출)', () => {
-    const result = buildBlogCandidate({ curatedBlogUrls: ['https://blog.naver.com/x'], existingPriceText: null });
-    expect(result).toMatchObject({ status: 'not_found', sourceUrl: 'https://blog.naver.com/x' });
+  it('크롤링할 블로그 자체가 없으면 not_found다(아직 블로그 큐레이션을 안 한 것)', () => {
+    expect(buildBlogCandidate([]).status).toBe('not_found');
+  });
+
+  it('블로그는 있지만 어느 본문에서도 가격/연령 신호를 못 찾으면 not_found(첫 링크는 그대로 노출)', () => {
+    const result = buildBlogCandidate([{ url: 'https://m.blog.naver.com/x', bodyText: '그냥 놀러 간 후기입니다.' }]);
+    expect(result).toMatchObject({ status: 'not_found', sourceUrl: 'https://m.blog.naver.com/x' });
+  });
+
+  it('본문 크롤링 자체가 실패(bodyText: null)해도 다음 블로그로 넘어간다', () => {
+    const result = buildBlogCandidate([
+      { url: 'https://blog.tistory.com/a', bodyText: null },
+      { url: 'https://m.blog.naver.com/b', bodyText: '참가비 5,000원' },
+    ]);
+    expect(result).toMatchObject({ status: 'found', priceText: '참가비 5,000원', sourceUrl: 'https://m.blog.naver.com/b' });
   });
 });
 

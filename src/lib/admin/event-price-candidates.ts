@@ -200,27 +200,50 @@ export function buildDescriptionCandidate(description: string | null | undefined
   };
 }
 
-// 소스1: 이미 존재하는 "블로그 큐레이션" 기능(event-blog-curation-modal.tsx)이
-// curated_blog_urls/price_text를 이미 저장해 두므로, 여기서는 그 저장된 결과를
-// 후보로 재구성한다 — 블로그 검색·본문 조회 UI를 이 화면에서 다시 만들지 않는다
-// (제5장 제4조 기존 구조 우선. 블로그 자체를 다시 검수하고 싶으면 기존 "🔍 블로그
-// 큐레이션" 버튼을 쓰면 된다).
-export function buildBlogCandidate(params: {
-  curatedBlogUrls: string[] | null | undefined;
-  existingPriceText: string | null | undefined;
-}): PriceCandidate {
-  const firstUrl = params.curatedBlogUrls?.[0] ?? null;
-  if (!firstUrl) {
+// [실측 버그 수정](2026-09-16 사용자 지적): "소스1은 블로그 큐레이션과 유사하게..
+// 적합한 블로그들 최대 3개에 대하여 내용들 크롤링하여 가격 정보 있는지 확인하고
+// 있다면 가져와서 보여주는구조인데?" — 스펙 원문("소스 1: 연동된 선별 블로그
+// **본문 내** 가격 및 연령 키워드 텍스트 추출")도 명확히 본문 텍스트 추출을
+// 요구하는데, 예전 구현은 이미 존재하는 "블로그 큐레이션" 모달에서 관리자가
+// 수동으로 입력해 둔 events.price_text를 그대로 되돌려 보여주기만 했다 — 블로그
+// 본문 자체는 한 번도 열어보지 않는 잘못된 구현이었다(관리자가 아직 그 수동
+// 필드를 안 채웠으면 실제로 가격이 있어도 항상 "데이터 없음"으로 나옴). 소스3
+// (공식 홈페이지)이 이미 하는 것과 동일하게 실제 블로그 본문 HTML을 크롤링해
+// parsePriceFromText로 분석하도록 고쳤다 — 실제 네트워크 크롤링(최대 3개
+// curated_blog_urls, 각각 본문 추출)은 API 라우트가 수행하고, 이 함수는 그 결과
+// (성공/실패 목록)를 받아 "그중 가격 정보를 찾은 첫 블로그"를 후보로 만드는
+// 순수 로직만 담당한다(테스트 용이성 유지).
+export type BlogBodyFetchResult = {
+  url: string;
+  // null이면 이 URL은 크롤링 실패(네이버 블로그가 아니거나, 본문 영역을 못 찾았거나,
+  // HTTP 오류 등) — naver-blog-body.ts와 동일하게 네이버 블로그만 지원 범위다
+  // (추측으로 다른 사이트 구조까지 처리하지 않음, 제3장 제5조).
+  bodyText: string | null;
+};
+
+export function buildBlogCandidate(results: BlogBodyFetchResult[]): PriceCandidate {
+  if (results.length === 0) {
     return { source: 'blog', status: 'not_found', priceText: null, ageText: null, priceTiers: [] };
   }
-  return {
-    source: 'blog',
-    status: params.existingPriceText ? 'found' : 'not_found',
-    priceText: params.existingPriceText ?? null,
-    ageText: extractAgeText(params.existingPriceText),
-    priceTiers: parsePriceAgeTiers(params.existingPriceText),
-    sourceUrl: firstUrl,
-  };
+  for (const result of results) {
+    if (!result.bodyText) continue;
+    const priceText = parsePriceFromText(result.bodyText);
+    const ageText = extractAgeText(result.bodyText);
+    if (priceText || ageText) {
+      return {
+        source: 'blog',
+        status: 'found',
+        priceText,
+        ageText,
+        priceTiers: parsePriceAgeTiers(result.bodyText),
+        sourceUrl: result.url,
+        excerpt: truncate(result.bodyText),
+      };
+    }
+  }
+  // 어느 블로그에서도 가격/연령 신호를 못 찾았어도, 관리자가 직접 열어 확인할 수
+  // 있도록 첫 번째 블로그 링크는 그대로 노출한다(기존 동작 유지).
+  return { source: 'blog', status: 'not_found', priceText: null, ageText: null, priceTiers: [], sourceUrl: results[0].url };
 }
 
 const PAGE_TEXT_MAX_LENGTH = 20000;

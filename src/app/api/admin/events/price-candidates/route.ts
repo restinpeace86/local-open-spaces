@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { fetchWithTimeout } from '@/lib/http/fetch-with-timeout';
+import { extractBlogBodyText, toMobileNaverBlogUrl } from '@/lib/admin/naver-blog-body';
 import {
+  BlogBodyFetchResult,
   buildBlogCandidate,
   buildDescriptionCandidate,
   buildOfficialSiteCandidate,
@@ -17,6 +19,33 @@ import {
 // events.price_text/is_free도 함께 갱신한다 — 확정 UI가 있어도 events 테이블을
 // 갱신하지 않으면 유저 화면에는 아무 효과가 없기 때문이다.
 const FETCH_TIMEOUT_MS = 8000;
+// [소스1 실측 버그 수정](2026-09-16 사용자 지적): "적합한 블로그들 최대 3개에
+// 대하여 내용들 크롤링" — curated_blog_urls에 여러 개가 있어도 최대 3개까지만
+// 본문을 크롤링한다(무제한 크롤링으로 인한 지연/비용 방지).
+const MAX_BLOG_CRAWL_COUNT = 3;
+
+// [소스1: 블로그 본문 크롤링](2026-09-16 사용자 지적 수정) — naver-blog-body.ts
+// (spot-curations/blog-body 라우트가 이미 쓰고 있는 것과 동일한 함수, 제5장
+// 제4조 기존 구조 우선)로 네이버 블로그 URL을 모바일 버전으로 바꿔 본문을
+// 추출한다. 네이버 블로그가 아니거나 본문을 못 찾으면 bodyText: null로 반환해
+// buildBlogCandidate가 다음 URL로 넘어가게 한다(제5장 제11조 — 한 URL 실패가
+// 전체를 막지 않음).
+async function fetchBlogBody(url: string): Promise<BlogBodyFetchResult> {
+  const mobileUrl = toMobileNaverBlogUrl(url);
+  if (!mobileUrl) return { url, bodyText: null };
+  try {
+    const res = await fetchWithTimeout(
+      mobileUrl,
+      { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' } },
+      FETCH_TIMEOUT_MS
+    );
+    if (!res.ok) return { url, bodyText: null };
+    const html = await res.text();
+    return { url, bodyText: extractBlogBodyText(html) };
+  } catch {
+    return { url, bodyText: null };
+  }
+}
 
 async function collectOfficialSiteCandidate(sourceUrl: string | null): Promise<PriceCandidate> {
   if (!sourceUrl) {
@@ -50,16 +79,20 @@ export async function GET(request: NextRequest) {
 
     const admin = createAdminClient();
     const [{ data: event, error: eventError }, { data: existing, error: existingError }] = await Promise.all([
-      admin.from('events').select('description, price_text, source_url, curated_blog_urls, raw_data').eq('id', eventId).single(),
+      admin.from('events').select('description, source_url, curated_blog_urls, raw_data').eq('id', eventId).single(),
       admin.from('event_price_verifications').select('*').eq('event_id', eventId).maybeSingle(),
     ]);
     if (eventError) throw new Error(eventError.message);
     if (existingError) throw new Error(existingError.message);
 
-    const officialSiteCandidate = await collectOfficialSiteCandidate(event?.source_url ?? null);
+    const blogUrls = (event?.curated_blog_urls ?? []).slice(0, MAX_BLOG_CRAWL_COUNT);
+    const [blogResults, officialSiteCandidate] = await Promise.all([
+      Promise.all(blogUrls.map(fetchBlogBody)),
+      collectOfficialSiteCandidate(event?.source_url ?? null),
+    ]);
 
     const candidates: PriceCandidate[] = [
-      buildBlogCandidate({ curatedBlogUrls: event?.curated_blog_urls, existingPriceText: event?.price_text }),
+      buildBlogCandidate(blogResults),
       buildDescriptionCandidate(event?.description),
       officialSiteCandidate,
       buildRawFieldCandidate(event?.raw_data),
