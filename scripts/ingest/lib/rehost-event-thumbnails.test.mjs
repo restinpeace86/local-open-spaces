@@ -7,6 +7,7 @@ vi.mock('./fetch-with-timeout.mjs', () => ({
 
 const { rehostEventThumbnails, EVENT_THUMBNAIL_BUCKET } = await import('./rehost-event-thumbnails.mjs');
 const { fetchWithTimeout } = await import('./fetch-with-timeout.mjs');
+const { computeExpiryCutoffDate } = await import('./deactivate-expired-events.mjs');
 
 // [이벤트픽 성능 개선](2026-09-15, implementation/todo.md [개선사항 1]) — 외부
 // thumbnail_url을 다운로드해 리사이징 후 우리 Storage로 재호스팅하는 로직 검증.
@@ -21,6 +22,7 @@ function makeClient({ rows, uploadError = null, updateError = null }) {
   const selectBuilder = {
     select: () => selectBuilder,
     not: () => selectBuilder,
+    gte: () => selectBuilder,
     limit: () => Promise.resolve({ data: rows, error: null }),
   };
 
@@ -126,6 +128,7 @@ describe('rehostEventThumbnails', () => {
 
   it('이미 우리 버킷 URL로 재호스팅된 행은 조회 조건 자체에서 제외된다(멱등성)', async () => {
     let capturedFilters = [];
+    let capturedGte = null;
     const client = {
       from: (table) => {
         expect(table).toBe('events');
@@ -133,6 +136,10 @@ describe('rehostEventThumbnails', () => {
           select: () => builder,
           not: (col, op, val) => {
             capturedFilters.push([col, op, val]);
+            return builder;
+          },
+          gte: (col, val) => {
+            capturedGte = [col, val];
             return builder;
           },
           limit: () => Promise.resolve({ data: [], error: null }),
@@ -145,6 +152,34 @@ describe('rehostEventThumbnails', () => {
     const result = await rehostEventThumbnails(client, { limit: 10 });
 
     expect(capturedFilters).toContainEqual(['thumbnail_url', 'ilike', `%/storage/v1/object/public/${EVENT_THUMBNAIL_BUCKET}/%`]);
+    expect(capturedGte[0]).toBe('end_date');
     expect(result).toEqual({ processed: 0, succeeded: 0, failed: 0, skipped: 0 });
+  });
+
+  // [스코프 축소](2026-09-15 사용자 지시): "이벤트일자가 현재 일자보다 미래인 데이터들만
+  // 고려하면 됨. 이미 현재일자보다 과거인 데이터들은 노출될 일이 없음" — end_date가
+  // 지난(과거) 이벤트는 재호스팅 대상에서 제외돼야 한다.
+  it('end_date가 오늘 이후(미래/오늘)인 이벤트만 대상으로 조회한다', async () => {
+    let capturedGte = null;
+    const client = {
+      from: () => {
+        const builder = {
+          select: () => builder,
+          not: () => builder,
+          gte: (col, val) => {
+            capturedGte = [col, val];
+            return builder;
+          },
+          limit: () => Promise.resolve({ data: [], error: null }),
+        };
+        return builder;
+      },
+      storage: { from: () => ({ upload: vi.fn(), getPublicUrl: vi.fn() }) },
+    };
+
+    const now = new Date('2026-09-15T10:00:00.000Z');
+    await rehostEventThumbnails(client, { limit: 10, now });
+
+    expect(capturedGte).toEqual(['end_date', computeExpiryCutoffDate(now)]);
   });
 });

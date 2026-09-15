@@ -3,7 +3,7 @@ import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { haversineDistanceMeters } from '@/lib/geo/haversine';
 import { escapeIlikePattern, selectTrigramFriendlyTokens, splitSearchTokens } from '@/lib/search/keyword-search';
 import { GYEONGGI_SIGUN_NAMES, resolveProvinceMembers, SEOUL_GU_NAMES } from '@/lib/geo/region-hierarchy';
-import { getProvinceFromText, getVisibleProvinces, isSpotInProvinces } from '@/lib/spaces/province';
+import { getProvinceFromText, getVisibleProvinces } from '@/lib/spaces/province';
 import {
   AMBIGUOUS_SPACE_SOURCE_TYPES,
   buildThemeKeywordFilter,
@@ -488,49 +488,6 @@ async function fetchRegionFirstRows<T extends { id: string }>(
   return [...rows, ...others];
 }
 
-// [개선사항5](2026-09-11 사용자 지시, implementation/todo.md): "전체보기" 목록도 지도
-// (Decision 023, province.ts)와 동일하게 먼저 도(道) 단위로 후보군을 좁힌 뒤 거리순으로
-// 정렬한다 — 그래야 서울 근처 사용자에게 제주도 이벤트가 그냥 "거리순"으로 섞여 나오지
-// 않는다. province.ts의 기존 함수를 그대로 재사용한다(제5장 제4조 기존 구조 우선 —
-// "스팟픽과 동일한 구조"라는 요구사항 원문과도 일치). 판별 실패(주소 정보 없음)면
-// 필터하지 않는다(안전 폴백 — isSpotInProvinces 자체 원칙과 동일, 근거 없이 스팟을
-// 숨기지 않는다).
-function filterByProvinceIfKnown(items: NearbyItem[], region: HomeRegion): NearbyItem[] {
-  const province = getProvinceFromText(region.addressName) ?? getProvinceFromText(region.sigunguName);
-  const visibleProvinces = getVisibleProvinces(province);
-  if (!visibleProvinces) return items;
-  return items.filter((item) => isSpotInProvinces(item.address, item.sigungu_name, visibleProvinces));
-}
-
-// [개선사항5](2026-09-11 사용자 지시): "전체보기" 목록은 이제 (도 단위 필터 →) 거리순
-// 정렬을 먼저 마친 뒤에 페이지를 잘라야 해서, 기존 DB `.range()` 오프셋 페이지네이션
-// 대신 조건에 맞는 전체 행을 한 번에 모아 애플리케이션에서 정렬·페이지네이션한다.
-// supabase/config.toml의 PostgREST `max_rows = 1000` 때문에 단일 요청으로는 1,000행까지만
-// 받을 수 있어(실측 확인: 2026-08-29 기록상 ongoing 전국 1,972건 — 1,000 초과), `.range()`를
-// 반복 호출해 전량을 모은다(각 청크가 꽉 찼을 때만 다음 청크를 요청 — 마지막 페이지 도달을
-// 안전하게 감지). FETCH_CAP은 실측 최대치(약 2,000건)의 2배 이상 여유를 둔 안전 상한이다.
-const BROWSE_ALL_FETCH_CHUNK = 1000;
-const BROWSE_ALL_FETCH_CAP = 5000;
-
-async function fetchAllRowsChunked<T>(
-  buildQuery: (
-    from: number,
-    to: number
-  ) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>
-): Promise<T[]> {
-  const all: T[] = [];
-  let offset = 0;
-  while (offset < BROWSE_ALL_FETCH_CAP) {
-    const { data, error } = await buildQuery(offset, offset + BROWSE_ALL_FETCH_CHUNK - 1);
-    if (error) throw new Error(error.message);
-    const rows = data ?? [];
-    all.push(...rows);
-    if (rows.length < BROWSE_ALL_FETCH_CHUNK) break;
-    offset += BROWSE_ALL_FETCH_CHUNK;
-  }
-  return all;
-}
-
 // docs/spec.md 2.2 ①: "당일 진행 중인 행사/이벤트 중 추천 5~10개 동적 페칭"
 // docs/spec.md 1: "사전 예약 마감건은 제외하고, 오늘/주말 당일 즉시 방문 가능한 정보를 우선 추천"
 // Task 9-1-6: Hero Carousel은 Strict Location-First — 선택 지역 당일 이벤트로 limit이 충족되면
@@ -739,71 +696,79 @@ export async function getCurrentlyOngoingEvents(
 // [전체보기 페이지](2026-08-27 사용자 지시): 홈 미리보기(getCurrentlyOngoingEvents/
 // getReservationOpenEvents)는 "몇 개만 보여주고 끝"이라 전체를 확인할 방법이 없다는 지적 —
 // Hero Carousel의 "오늘 전체보기"(/events/today)와 동일하게, 두 섹션에도 전부 훑어볼 수
-// 있는 전용 페이지를 만든다. dedupeAndMergeFree(제목 유사 병합)는 하지 않는다(오프셋
-// 페이지네이션과 사후 병합을 같이 쓰면 페이지마다 건수가 들쭉날쭉해진다 — 이 결정은
-// [개선사항5] 이후에도 유지).
-// [전체보기 마감임박순 정렬](2026-08-29 사용자 지시): 기간이 매우 긴 이벤트가 start_date
-// 기준으로는 맨 앞에 고정돼 버리는 문제가 있어, 정렬 기준을 end_date 오름차순(마감임박순)으로
-// 바꿨다(거리를 모를 때의 폴백 정렬로 유지).
-// [개선사항5](2026-09-11 사용자 지시, implementation/todo.md): "전체보기 목록 정렬 기준을
-// 일괄 '현재 위치 기준 거리 가까운 순'으로, 그 전에 도(道) 단위로 1차 필터" — 기존에는
-// "지역/거리 큐레이션을 적용하지 않는다"는 결정이었으나(위 옛 주석 참고) 이번 사용자 지시가
-// 이를 명시적으로 대체한다. DB `.range()` 오프셋 페이지네이션(정확한 count 포함) 대신,
-// 조건에 맞는 전체 행을 모아(fetchAllRowsChunked) 도 단위로 거르고(filterByProvinceIfKnown)
-// 거리순 정렬(sortByDistanceIfKnown) 한 뒤 그 결과를 애플리케이션에서 페이지네이션한다 —
-// "정렬 후 자르기"가 정확하려면 정렬이 페이지 경계보다 먼저 전체 데이터에 적용돼야 하기
-// 때문이다(오프셋 SQL 정렬만으로는 도 단위 필터링을 표현할 수 없어 병행 불가).
+// 있는 전용 페이지를 만든다.
+//
+// [DB 레벨 거리 계산/페이지네이션 전면 리팩토링](2026-09-15 사용자 지시): 기존에는
+// fetchAllRowsChunked(조건에 맞는 전체 행을 `.range()` 반복 호출로 애플리케이션
+// 메모리에 전부 모음) → filterByProvinceIfKnown(도 단위 JS 필터) →
+// sortByDistanceIfKnown(Haversine, JS 정렬) → 배열 slice(JS 페이지 자르기) 순으로
+// 처리했다. 데이터가 늘어날수록 이 전체 로드 자체가 병목이 될 위험이 있어, 세 단계
+// 전부(거리 계산/정렬/필터/페이지네이션)를 PostgreSQL RPC(get_events_browse_page,
+// scripts/migrations/2026-09-15-events-browse-page-db-pagination.sql) 하나로
+// 옮겼다 — PostGIS(이미 이 프로젝트 전역에서 쓰는 방식, 상세 근거는 그 SQL 파일
+// 헤더 주석 참고)로 거리를 계산하고, LIMIT/OFFSET + count(*) over()로 페이지와
+// 총 건수를 한 번에 받는다. 세 함수(오늘 마감/현재 운영중/예약 접수중)는 이제
+// p_mode만 다르게 이 RPC를 호출하는 얇은 래퍼가 됐다.
 export type PagedEvents = { items: NearbyItem[]; total: number };
 
 const BROWSE_ALL_PAGE_SIZE = 24;
 
-// [개선사항5] 정렬/페이지네이션 공통 마무리 단계 — 도 단위 필터 → 거리순 정렬(모르면
-// end_date 오름차순 폴백 유지) → 페이지 자르기. 세 함수(오늘/현재운영중/접수중)가 똑같이
-// 반복하므로 한 곳에 모은다(제5장 제4조 기존 구조 우선).
-function finalizeBrowsePage(items: NearbyItem[], region: HomeRegion, page: number, pageSize: number): PagedEvents {
-  const provinceFiltered = filterByProvinceIfKnown(items, region);
-  const sorted =
-    typeof region.lat === 'number' && typeof region.lng === 'number'
-      ? sortByDistanceIfKnown(provinceFiltered, region)
-      : sortByEndDateAscending(provinceFiltered);
-  const from = (page - 1) * pageSize;
-  return { items: sorted.slice(from, from + pageSize), total: sorted.length };
+// RPC가 반환하는 한 행 — EventRow와 필드명이 동일하고(RPC의 RETURNS TABLE을
+// EVENT_COLUMNS와 1:1로 맞춰 설계) distance_meters/total_count만 추가로 붙는다.
+// PostgREST가 geometry 컬럼을 GeoJSON({type,coordinates,crs})으로 직렬화해 주므로
+// extractCoords()가 기대하는 모양과도 그대로 맞는다(실측 확인).
+type BrowsePageRow = EventRow & { distance_meters: number | null; total_count: number };
+
+type BrowseMode = 'TODAY_DEADLINE' | 'ONGOING' | 'RESERVATION_OPEN';
+
+// [개선사항5](2026-09-11) 도 단위 1차 필터의 실제 판정 로직(getProvinceFromText/
+// getVisibleProvinces, province.ts)은 TS에 그대로 둔다 — 이미 검증된 로직(경기↔서울
+// 상호 포함 등)을 SQL로 다시 구현해 이중 관리하지 않는다(제5장 제4조). RPC에는 최종
+// 계산 결과(허용 광역 코드 배열)만 넘기고, "이 행이 어느 광역인지" 판정만 SQL
+// 헬퍼(event_province_code)가 담당한다.
+function resolveVisibleProvinces(region: HomeRegion): string[] | null {
+  const province = getProvinceFromText(region.addressName) ?? getProvinceFromText(region.sigunguName);
+  const visible = getVisibleProvinces(province);
+  return visible ? [...visible] : null;
+}
+
+async function fetchBrowsePage(
+  mode: BrowseMode,
+  page: number,
+  pageSize: number,
+  categoryMins: readonly string[] | undefined,
+  region: HomeRegion
+): Promise<PagedEvents> {
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc('get_events_browse_page', {
+    p_mode: mode,
+    p_page: page,
+    p_page_size: pageSize,
+    p_category_mins: categoryMins && categoryMins.length > 0 ? [...categoryMins] : undefined,
+    p_visible_provinces: resolveVisibleProvinces(region) ?? undefined,
+    p_user_lat: typeof region.lat === 'number' ? region.lat : undefined,
+    p_user_lng: typeof region.lng === 'number' ? region.lng : undefined,
+  });
+  if (error) throw new Error(error.message);
+
+  const rows = (data ?? []) as unknown as BrowsePageRow[];
+  const total = rows[0]?.total_count ?? 0;
+  const items = rows.map((row) => toEventItem(row));
+  return { items, total };
 }
 
 // [개선사항5] "오늘 전체보기"는 기존 getTodayEvents(Hero 미리보기, heroRegionTier 그룹핑)와
 // 분리된 전용 함수다 — 전체보기는 순수 "도 단위 1차 필터 → 거리순" 한 기준만 적용해야 하고
 // (그룹핑이 섞이면 "거리순"이라는 이름과 실제 순서가 어긋난다), 무한 스크롤 페이지네이션도
-// 필요하다(기존엔 limit=60 단일 조회였음). WHERE 조건은 getTodayEvents와 동일하게 유지한다
-// (오늘 종료/활성/이벤트픽 대상 연령/중분류 제외 목록/예약 마감 제외).
+// 필요하다. WHERE 조건은 getTodayEvents와 동일하게 유지한다(오늘 종료/활성/이벤트픽 대상
+// 연령/중분류 제외 목록/예약 마감 제외 — 전부 RPC 'TODAY_DEADLINE' 모드로 이관됨).
 export async function getTodayEventsPage(
   page = 1,
   pageSize = BROWSE_ALL_PAGE_SIZE,
   categoryMins?: readonly string[],
   region: HomeRegion = DEFAULT_HOME_REGION
 ): Promise<PagedEvents> {
-  const supabase = await createClient();
-  const today = new Date().toISOString().slice(0, 10);
-  const nowIso = new Date().toISOString();
-
-  const rows = await fetchAllRowsChunked<EventRow>((from, to) => {
-    let query = supabase
-      .from('events')
-      .select(EVENT_COLUMNS)
-      .eq('end_date', today)
-      .eq('is_active', true)
-      .in('target_audience', EVENT_PICK_TARGET_AUDIENCES)
-      .not('category_min', 'is', null)
-      .not('category_min', 'in', EXCLUDED_CATEGORY_MIN_FILTER)
-      .or(`is_reservation_required.eq.false,reservation_end_date.gte.${nowIso},reservation_end_date.is.null`);
-    if (categoryMins && categoryMins.length > 0) query = query.in('category_min', categoryMins);
-    // "오늘 전체보기"는 기존 지역 선택 셀렉트(REGION_OPTIONS)를 그대로 유지한다 — 요구사항
-    // 원문 "유저의 현재 위치 기반(또는 수동 선택된) 도 단위" 중 "수동 선택된" 경로.
-    // provinceMembers는 그 선택된 지역이 속한 시/군/구 목록이라 SQL에서 바로 필터할 수 있다.
-    if (region.provinceMembers) query = query.or(regionOrFilter(region.provinceMembers, 'venue_name'));
-    return query.order('end_date', { ascending: true }).range(from, to);
-  });
-
-  return finalizeBrowsePage(filterEventsOperatingToday(rows).map(toEventItem), region, page, pageSize);
+  return fetchBrowsePage('TODAY_DEADLINE', page, pageSize, categoryMins, region);
 }
 
 // [이벤트픽 전체보기 바텀시트化](2026-08-29 사용자 지시): 페이지 이동 대신 바텀시트에서
@@ -815,26 +780,7 @@ export async function getCurrentlyOngoingEventsPage(
   categoryMins?: readonly string[],
   region: HomeRegion = DEFAULT_HOME_REGION
 ): Promise<PagedEvents> {
-  const supabase = await createClient();
-  const today = new Date().toISOString().slice(0, 10);
-
-  const rows = await fetchAllRowsChunked<EventRow>((from, to) => {
-    let query = supabase
-      .from('events')
-      .select(EVENT_COLUMNS)
-      .eq('is_active', true)
-      .in('target_audience', EVENT_PICK_TARGET_AUDIENCES)
-      .not('category_min', 'is', null)
-      .not('category_min', 'in', EXCLUDED_CATEGORY_MIN_FILTER)
-      .lte('start_date', today)
-      .gte('end_date', today);
-    if (categoryMins && categoryMins.length > 0) query = query.in('category_min', categoryMins);
-    // [전체보기 마감임박순 정렬](2026-08-29 사용자 지시): start_date 오름차순은 기간이 매우 긴
-    // 이벤트가 맨 앞에 고정되는 문제가 있어 end_date 오름차순(마감임박순)으로 바꿨다.
-    return query.order('end_date', { ascending: true }).range(from, to);
-  });
-
-  return finalizeBrowsePage(filterEventsOperatingToday(rows).map(toEventItem), region, page, pageSize);
+  return fetchBrowsePage('ONGOING', page, pageSize, categoryMins, region);
 }
 
 export async function getReservationOpenEventsPage(
@@ -843,27 +789,7 @@ export async function getReservationOpenEventsPage(
   categoryMins?: readonly string[],
   region: HomeRegion = DEFAULT_HOME_REGION
 ): Promise<PagedEvents> {
-  const supabase = await createClient();
-  const today = new Date().toISOString().slice(0, 10);
-
-  // getReservationOpenEvents의 두 조건(booking_status='접수중' OR SEOUL_YEYAK 원본
-  // SVCSTATNM='접수중')을 하나의 or() 그룹으로 합친다(두 쿼리로 나눠 각각 페이지네이션하면
-  // 병합 시 페이지 경계가 어긋난다 — 제5장 제5조 데이터 중심, count가 실제 화면과 어긋나면 안 됨).
-  const rows = await fetchAllRowsChunked<EventRow>((from, to) => {
-    let query = supabase
-      .from('events')
-      .select(EVENT_COLUMNS)
-      .eq('is_active', true)
-      .in('target_audience', EVENT_PICK_TARGET_AUDIENCES)
-      .not('category_min', 'is', null)
-      .not('category_min', 'in', EXCLUDED_CATEGORY_MIN_FILTER)
-      .gte('end_date', today)
-      .or(`booking_status.eq.접수중,and(source.eq.seoul_public_reservation,raw_data->>SVCSTATNM.eq.접수중)`);
-    if (categoryMins && categoryMins.length > 0) query = query.in('category_min', categoryMins);
-    return query.order('end_date', { ascending: true }).range(from, to);
-  });
-
-  return finalizeBrowsePage(filterEventsOperatingToday(rows).map(toEventItem), region, page, pageSize);
+  return fetchBrowsePage('RESERVATION_OPEN', page, pageSize, categoryMins, region);
 }
 
 // [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "GNB 헤더 & 글로벌 위치 상태 공유"):

@@ -15,6 +15,7 @@
 // 자동으로 대상에서 빠진다(멱등적 — 같은 행을 반복 처리하지 않음).
 import { fetchWithTimeout } from './fetch-with-timeout.mjs';
 import { resizeThumbnail } from './resize-image.mjs';
+import { computeExpiryCutoffDate } from './deactivate-expired-events.mjs';
 
 export const EVENT_THUMBNAIL_BUCKET = 'event-thumbnails';
 const DEFAULT_BATCH_SIZE = 100;
@@ -33,15 +34,24 @@ function isAlreadyHosted(url) {
   return url.includes(`/storage/v1/object/public/${EVENT_THUMBNAIL_BUCKET}/`);
 }
 
+// [스코프 축소](2026-09-15 사용자 지시): "이벤트일자가 현재 일자보다 미래인 데이터들만
+// 고려하면 됨. 이미 현재일자보다 과거인 데이터들은 노출될 일이 없음" — end_date가
+// 이미 지난 이벤트는 (deactivate-expired-events.mjs가 is_active=false로 비활성화하고
+// 나면) 어차피 유저 화면에 다시 노출될 일이 없어, 그 썸네일을 재호스팅하는 것은 매일
+// 100건의 배치 예산을 낭비하는 것이다. "오늘" 계산은 이 프로젝트가 날짜 전용(DATE)
+// 컬럼 비교에 이미 쓰는 관례(deactivate-expired-events.mjs, UTC 기준)를 그대로
+// 재사용한다(제5장 제4조 기존 구조 우선 — 같은 날짜 계산을 중복 구현하지 않음).
 // 반환값: { processed, succeeded, failed, skipped }. 개별 행 실패는 배치 전체를
 // 막지 않고 건너뛴다(원천 URL이 죽어있거나 형식이 이상한 경우가 실제로 있다 —
 // 이미지 하나 실패했다고 나머지 99건까지 못 돌게 하면 안 됨).
-export async function rehostEventThumbnails(client, { limit = DEFAULT_BATCH_SIZE } = {}) {
+export async function rehostEventThumbnails(client, { limit = DEFAULT_BATCH_SIZE, now = new Date() } = {}) {
+  const todayDate = computeExpiryCutoffDate(now);
   const { data: rows, error } = await client
     .from('events')
     .select('id, thumbnail_url')
     .not('thumbnail_url', 'is', null)
     .not('thumbnail_url', 'ilike', `%/storage/v1/object/public/${EVENT_THUMBNAIL_BUCKET}/%`)
+    .gte('end_date', todayDate)
     .limit(limit);
   if (error) throw new Error(`재호스팅 대상 이벤트 조회 실패: ${error.message}`);
 

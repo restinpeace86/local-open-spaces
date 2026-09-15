@@ -1260,385 +1260,156 @@ describe('getCurrentlyOngoingEvents', () => {
   });
 });
 
-// [전체보기 페이지](2026-08-27 사용자 지시): 미리보기가 최대 20건만 보여주고 끝나는 문제 —
-// 실제 DB 페이지네이션(.range(), count:'exact')으로 전부 훑어볼 수 있어야 한다. 이 기능
-// 전용으로 range()/count를 지원하는 별도 스텁을 쓴다(makeFilteringChainable은 range를
-// 지원하지 않음).
-function evalSimpleCondition(row: Record<string, unknown>, cond: string): boolean {
-  const [column, operator, ...rest] = cond.split('.');
-  const rawValue = rest.join('.');
-  if (operator === 'eq') return String(row[column]) === rawValue;
-  return false;
+// [DB 레벨 거리 계산/페이지네이션 전면 리팩토링](2026-09-15 사용자 지시): 기존에는
+// getTodayEventsPage/getCurrentlyOngoingEventsPage/getReservationOpenEventsPage가
+// 직접 PostgREST 쿼리를 구성하고(.eq/.in/.range 등), 그 결과를 JS에서 필터/정렬/
+// 페이지네이션했다 — 그 로직을 검증하던 makeRangeChainable 스텁도 함께 걷어냈다.
+// 이제 세 함수는 전부 단일 RPC(get_events_browse_page, PostGIS 거리 계산 + LIMIT/
+// OFFSET을 SQL이 직접 수행)를 호출하는 얇은 래퍼라, 이 테스트 스위트가 검증할 것도
+// 바뀌었다: (1) 각 함수가 올바른 p_mode로 RPC를 호출하는지, (2) page/pageSize/
+// categoryMins/region(위치·주소)이 RPC 파라미터로 정확히 변환되는지, (3) RPC가 돌려준
+// 행(distance_meters/total_count 포함)을 PagedEvents{items,total}로 정확히 매핑하는지.
+// 실제 필터링/정렬/페이지네이션 로직 자체(SQL)는 이 테스트 스위트가 검증할 수 없는
+// 영역이라 운영 DB에 대한 실측(implementation/2026-09-15-events-browse-db-pagination.md
+// 참고)으로 별도 확인했다.
+function mockRpc(rows: Array<Record<string, unknown>>) {
+  const rpc = vi.fn(() => Promise.resolve({ data: rows, error: null }));
+  return { rpc, createClient: () => Promise.resolve({ rpc }) };
 }
 
-// and(...)로 묶인 그룹(booking_status OR (source AND raw_data->>SVCSTATNM))만 이 테스트
-// 스위트에서 필요해, 그 형태만 최소한으로 해석한다.
-function matchesOrGroup(row: Record<string, unknown>, group: string): boolean {
-  const topConditions: string[] = [];
-  let depth = 0;
-  let current = '';
-  for (const ch of group) {
-    if (ch === '(') depth += 1;
-    if (ch === ')') depth -= 1;
-    if (ch === ',' && depth === 0) {
-      topConditions.push(current);
-      current = '';
-      continue;
-    }
-    current += ch;
-  }
-  if (current) topConditions.push(current);
-
-  return topConditions.some((cond) => {
-    const andMatch = cond.match(/^and\((.*)\)$/);
-    if (andMatch) {
-      const inner = andMatch[1].split(',');
-      return inner.every((c) => evalSimpleCondition(row, c));
-    }
-    return evalSimpleCondition(row, cond);
-  });
+function browseRow(overrides: Record<string, unknown> = {}) {
+  return { ...eventRow(), distance_meters: null, total_count: 1, ...overrides };
 }
 
-function makeRangeChainable(rows: Array<Record<string, unknown>>) {
-  const eqFilters: Record<string, unknown> = {};
-  const inFilters: Record<string, unknown[]> = {};
-  const notNullFilters: string[] = [];
-  const gteFilters: Record<string, unknown> = {};
-  const lteFilters: Record<string, unknown> = {};
-  const orFilterGroups: string[] = [];
-  const builder: Record<string, unknown> = {};
-  builder.select = () => builder;
-  builder.eq = (column: string, value: unknown) => {
-    eqFilters[column] = value;
-    return builder;
-  };
-  builder.in = (column: string, values: unknown[]) => {
-    inFilters[column] = values;
-    return builder;
-  };
-  builder.not = (column: string, operator: string, value: unknown) => {
-    if (operator === 'is' && value === null) notNullFilters.push(column);
-    return builder;
-  };
-  builder.gte = (column: string, value: unknown) => {
-    gteFilters[column] = value;
-    return builder;
-  };
-  builder.lte = (column: string, value: unknown) => {
-    lteFilters[column] = value;
-    return builder;
-  };
-  builder.or = (expr: string) => {
-    orFilterGroups.push(expr);
-    return builder;
-  };
-  builder.order = vi.fn(() => builder);
-  builder.range = (from: number, to: number) => {
-    let filtered = rows;
-    filtered = filtered.filter((row) => Object.entries(eqFilters).every(([col, val]) => row[col] === val));
-    filtered = filtered.filter((row) =>
-      Object.entries(inFilters).every(([col, vals]) => vals.includes(row[col]))
-    );
-    filtered = filtered.filter((row) => notNullFilters.every((col) => row[col] !== null && row[col] !== undefined));
-    filtered = filtered.filter((row) =>
-      Object.entries(gteFilters).every(([col, val]) => row[col] !== null && String(row[col]) >= String(val))
-    );
-    filtered = filtered.filter((row) =>
-      Object.entries(lteFilters).every(([col, val]) => row[col] !== null && String(row[col]) <= String(val))
-    );
-    for (const group of orFilterGroups) {
-      filtered = filtered.filter((row) => matchesOrGroup(row, group));
-    }
-
-    const total = filtered.length;
-    return Promise.resolve({ data: filtered.slice(from, to + 1), error: null, count: total });
-  };
-  return builder;
-}
-
-describe('getCurrentlyOngoingEventsPage', () => {
+describe('getTodayEventsPage / getCurrentlyOngoingEventsPage / getReservationOpenEventsPage — RPC 위임', () => {
   afterEach(() => {
     vi.doUnmock('@/lib/supabase/server');
     vi.resetModules();
   });
 
-  it('page/pageSize에 맞춰 .range()로 잘라 반환하고 정확한 total을 함께 준다', async () => {
-    const rows = Array.from({ length: 30 }, (_, i) =>
-      eventRow({ id: `ongoing-${i}`, title: `행사 ${i}`, is_active: true })
+  it.each([
+    ['getTodayEventsPage', 'TODAY_DEADLINE'],
+    ['getCurrentlyOngoingEventsPage', 'ONGOING'],
+    ['getReservationOpenEventsPage', 'RESERVATION_OPEN'],
+  ] as const)('%s는 p_mode=%s로 get_events_browse_page RPC를 호출한다', async (fnName, mode) => {
+    const { rpc, createClient } = mockRpc([browseRow()]);
+    vi.doMock('@/lib/supabase/server', () => ({ createClient }));
+
+    const mod = await import('./get-home-feed');
+    await mod[fnName](1, 24);
+
+    expect(rpc).toHaveBeenCalledWith('get_events_browse_page', expect.objectContaining({ p_mode: mode }));
+  });
+
+  it('page/pageSize/categoryMins를 RPC 파라미터로 그대로 전달한다', async () => {
+    const { rpc, createClient } = mockRpc([browseRow()]);
+    vi.doMock('@/lib/supabase/server', () => ({ createClient }));
+
+    const { getCurrentlyOngoingEventsPage } = await import('./get-home-feed');
+    await getCurrentlyOngoingEventsPage(2, 10, ['캠핑장', '산림여가']);
+
+    expect(rpc).toHaveBeenCalledWith(
+      'get_events_browse_page',
+      expect.objectContaining({ p_page: 2, p_page_size: 10, p_category_mins: ['캠핑장', '산림여가'] })
     );
+  });
 
-    vi.doMock('@/lib/supabase/server', () => ({
-      createClient: () => Promise.resolve({ from: () => makeRangeChainable(rows) }),
-    }));
+  it('categoryMins를 넘기지 않으면 p_category_mins는 undefined다(전체 조회)', async () => {
+    const { rpc, createClient } = mockRpc([browseRow()]);
+    vi.doMock('@/lib/supabase/server', () => ({ createClient }));
 
     const { getCurrentlyOngoingEventsPage } = await import('./get-home-feed');
-    const page1 = await getCurrentlyOngoingEventsPage(1, 10);
-    const page2 = await getCurrentlyOngoingEventsPage(2, 10);
+    await getCurrentlyOngoingEventsPage(1, 24);
 
-    expect(page1.total).toBe(30);
-    expect(page1.items).toHaveLength(10);
-    expect(page2.items).toHaveLength(10);
-    expect(page1.items.map((i) => i.id)).not.toEqual(page2.items.map((i) => i.id));
+    expect(rpc).toHaveBeenCalledWith('get_events_browse_page', expect.objectContaining({ p_category_mins: undefined }));
   });
 
-  // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시) 요구사항 4: 바텀시트 대분류 칩 필터.
-  it('categoryMins를 넘기면 그 목록에 속한 category_min만 반환하고 total도 그 기준으로 좁아진다', async () => {
-    const rows = [
-      eventRow({ id: 'camp-1', category_min: '캠핑장', is_active: true }),
-      eventRow({ id: 'camp-2', category_min: '산림여가', is_active: true }),
-      eventRow({ id: 'festival-1', category_min: '지역축제/페스티벌', is_active: true }),
-    ];
-
-    vi.doMock('@/lib/supabase/server', () => ({
-      createClient: () => Promise.resolve({ from: () => makeRangeChainable(rows) }),
-    }));
+  it('region.lat/lng이 있으면 p_user_lat/p_user_lng로 전달한다', async () => {
+    const { rpc, createClient } = mockRpc([browseRow()]);
+    vi.doMock('@/lib/supabase/server', () => ({ createClient }));
 
     const { getCurrentlyOngoingEventsPage } = await import('./get-home-feed');
-    const result = await getCurrentlyOngoingEventsPage(1, 10, ['캠핑장', '산림여가', '공원탐방']);
+    await getCurrentlyOngoingEventsPage(1, 24, undefined, { sigunguName: null, lat: 37.3809, lng: 127.1287 });
 
-    expect(result.items.map((i) => i.id).sort()).toEqual(['camp-1', 'camp-2']);
-    expect(result.total).toBe(2);
-  });
-
-  // [전체보기 마감임박순 정렬](2026-08-29 사용자 지시): 기간이 매우 긴 이벤트가 맨 앞에
-  // 고정되지 않도록 start_date 대신 end_date 오름차순으로 정렬해야 한다.
-  it('end_date 오름차순으로 정렬한다(start_date 아님)', async () => {
-    const builder = makeRangeChainable([eventRow({ id: 'e1', is_active: true })]);
-
-    vi.doMock('@/lib/supabase/server', () => ({
-      createClient: () => Promise.resolve({ from: () => builder }),
-    }));
-
-    const { getCurrentlyOngoingEventsPage } = await import('./get-home-feed');
-    await getCurrentlyOngoingEventsPage(1, 10);
-
-    expect(builder.order).toHaveBeenCalledWith('end_date', { ascending: true });
-  });
-});
-
-describe('getReservationOpenEventsPage', () => {
-  afterEach(() => {
-    vi.doUnmock('@/lib/supabase/server');
-    vi.resetModules();
-  });
-
-  it('booking_status="접수중"과 SEOUL_YEYAK SVCSTATNM="접수중" 둘 다 하나의 페이지에 포함한다', async () => {
-    const statusOpen = eventRow({ id: 'status-open', title: '일반 접수중', booking_status: '접수중', is_active: true });
-    const yeyakOpen = eventRow({
-      id: 'yeyak-open',
-      title: 'YEYAK 접수중',
-      booking_status: null,
-      is_active: true,
-      source: 'seoul_public_reservation',
-      'raw_data->>SVCSTATNM': '접수중',
-    });
-    const closed = eventRow({ id: 'closed', title: '마감', booking_status: '접수마감', is_active: true });
-
-    vi.doMock('@/lib/supabase/server', () => ({
-      createClient: () => Promise.resolve({ from: () => makeRangeChainable([statusOpen, yeyakOpen, closed]) }),
-    }));
-
-    const { getReservationOpenEventsPage } = await import('./get-home-feed');
-    const result = await getReservationOpenEventsPage(1, 10);
-
-    expect(result.items.map((i) => i.id).sort()).toEqual(['status-open', 'yeyak-open']);
-    expect(result.total).toBe(2);
-  });
-
-  // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시) 요구사항 4: 바텀시트 대분류 칩 필터.
-  it('categoryMins를 넘기면 그 목록에 속한 category_min만 반환한다', async () => {
-    const rows = [
-      eventRow({ id: 'edu-1', booking_status: '접수중', category_min: '교육체험', is_active: true }),
-      eventRow({ id: 'camp-1', booking_status: '접수중', category_min: '캠핑장', is_active: true }),
-    ];
-
-    vi.doMock('@/lib/supabase/server', () => ({
-      createClient: () => Promise.resolve({ from: () => makeRangeChainable(rows) }),
-    }));
-
-    const { getReservationOpenEventsPage } = await import('./get-home-feed');
-    const result = await getReservationOpenEventsPage(1, 10, ['교육체험', '교양/어학', '교육시설']);
-
-    expect(result.items.map((i) => i.id)).toEqual(['edu-1']);
-    expect(result.total).toBe(1);
-  });
-
-  // [전체보기 마감임박순 정렬](2026-08-29 사용자 지시): 기간이 매우 긴 이벤트가 맨 앞에
-  // 고정되지 않도록 start_date 대신 end_date 오름차순으로 정렬해야 한다.
-  it('end_date 오름차순으로 정렬한다(start_date 아님)', async () => {
-    const builder = makeRangeChainable([eventRow({ id: 'e1', booking_status: '접수중', is_active: true })]);
-
-    vi.doMock('@/lib/supabase/server', () => ({
-      createClient: () => Promise.resolve({ from: () => builder }),
-    }));
-
-    const { getReservationOpenEventsPage } = await import('./get-home-feed');
-    await getReservationOpenEventsPage(1, 10);
-
-    expect(builder.order).toHaveBeenCalledWith('end_date', { ascending: true });
-  });
-});
-
-// [개선사항5](2026-09-11 사용자 지시, implementation/todo.md): "전체보기 목록도 도(道) 단위
-// 1차 필터 → 거리 가까운 순 정렬". getTodayEventsPage(신규)/getCurrentlyOngoingEventsPage/
-// getReservationOpenEventsPage 세 함수가 공유하는 finalizeBrowsePage 로직을 검증한다.
-describe('전체보기 페이지 — 개선사항5: 도 단위 필터 + 거리순 정렬', () => {
-  afterEach(() => {
-    vi.doUnmock('@/lib/supabase/server');
-    vi.resetModules();
-  });
-
-  it('getCurrentlyOngoingEventsPage: 유저 위치의 도(道)에 속하지 않는 행사는 결과에서 제외된다', async () => {
-    const nearRow = eventRow({
-      id: 'near-1',
-      is_active: true,
-      venue_name: '율동공원 야외무대',
-      sigungu_name: '성남시 분당구',
-      location: { coordinates: [127.1287, 37.3809] }, // 유저와 동일 좌표(거리 0)
-    });
-    const jejuRow = eventRow({
-      id: 'jeju-1',
-      is_active: true,
-      venue_name: '제주 함덕해변 축제',
-      sigungu_name: '제주시',
-      location: { coordinates: [126.66, 33.54] },
-    });
-
-    vi.doMock('@/lib/supabase/server', () => ({
-      createClient: () => Promise.resolve({ from: () => makeRangeChainable([nearRow, jejuRow]) }),
-    }));
-
-    const { getCurrentlyOngoingEventsPage } = await import('./get-home-feed');
-    const result = await getCurrentlyOngoingEventsPage(1, 10, undefined, {
-      sigunguName: null,
-      addressName: '경기 성남시 분당구',
-      lat: 37.3809,
-      lng: 127.1287,
-    });
-
-    expect(result.items.map((i) => i.id)).toEqual(['near-1']);
-    expect(result.total).toBe(1);
-  });
-
-  it('getCurrentlyOngoingEventsPage: 같은 도 안에서는 유저 위치 기준 거리 가까운 순으로 정렬한다', async () => {
-    const far = eventRow({
-      id: 'far',
-      is_active: true,
-      venue_name: '수원 화성행궁',
-      location: { coordinates: [127.03, 37.28] }, // 유저(판교)에서 더 먼 좌표
-    });
-    const near = eventRow({
-      id: 'near',
-      is_active: true,
-      venue_name: '판교 공원',
-      location: { coordinates: [127.1, 37.4] }, // 유저에서 더 가까운 좌표
-    });
-
-    vi.doMock('@/lib/supabase/server', () => ({
-      // 일부러 far를 먼저 반환해도(원래 순서), 거리 재정렬이 실제로 일어나는지 검증한다.
-      createClient: () => Promise.resolve({ from: () => makeRangeChainable([far, near]) }),
-    }));
-
-    const { getCurrentlyOngoingEventsPage } = await import('./get-home-feed');
-    const result = await getCurrentlyOngoingEventsPage(1, 10, undefined, {
-      sigunguName: null,
-      addressName: '경기 성남시 분당구',
-      lat: 37.3809,
-      lng: 127.1287,
-    });
-
-    expect(result.items.map((i) => i.id)).toEqual(['near', 'far']);
-  });
-
-  it('유저 위치를 모르면(lat/lng 없음) 기존처럼 도 단위 필터/거리 정렬 없이 마감임박순 폴백을 유지한다', async () => {
-    const farFutureDate = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
-    const nearFutureDate = new Date(Date.now() + 20 * 86400000).toISOString().slice(0, 10);
-    const rows = [
-      eventRow({ id: 'a', is_active: true, end_date: farFutureDate }),
-      eventRow({ id: 'jeju', is_active: true, sigungu_name: '제주시', end_date: nearFutureDate }),
-    ];
-
-    vi.doMock('@/lib/supabase/server', () => ({
-      createClient: () => Promise.resolve({ from: () => makeRangeChainable(rows) }),
-    }));
-
-    const { getCurrentlyOngoingEventsPage } = await import('./get-home-feed');
-    const result = await getCurrentlyOngoingEventsPage(1, 10);
-
-    // 위치를 모르므로 제주 행사도 배제되지 않고, end_date 오름차순(마감임박순) 그대로다.
-    expect(result.items.map((i) => i.id)).toEqual(['jeju', 'a']);
-  });
-
-  it('getReservationOpenEventsPage에도 동일하게 도 단위 필터 + 거리순 정렬이 적용된다', async () => {
-    const near = eventRow({
-      id: 'near',
-      is_active: true,
-      booking_status: '접수중',
-      location: { coordinates: [127.1287, 37.3809] },
-    });
-    const jeju = eventRow({
-      id: 'jeju',
-      is_active: true,
-      booking_status: '접수중',
-      sigungu_name: '제주시',
-      location: { coordinates: [126.66, 33.54] },
-    });
-
-    vi.doMock('@/lib/supabase/server', () => ({
-      createClient: () => Promise.resolve({ from: () => makeRangeChainable([near, jeju]) }),
-    }));
-
-    const { getReservationOpenEventsPage } = await import('./get-home-feed');
-    const result = await getReservationOpenEventsPage(1, 10, undefined, {
-      sigunguName: null,
-      addressName: '경기 성남시 분당구',
-      lat: 37.3809,
-      lng: 127.1287,
-    });
-
-    expect(result.items.map((i) => i.id)).toEqual(['near']);
-  });
-
-  // [개선사항5] "오늘 전체보기"는 heroRegionTier 그룹핑 없는 전용 페이지 함수를 쓴다.
-  it('getTodayEventsPage: 기존 getTodayEvents와 동일한 조건(오늘 종료/활성/예약 미마감)으로 필터링하고 거리순 정렬한다', async () => {
-    const todayRow = eventRow({
-      id: 'today-near',
-      is_active: true,
-      end_date: TODAY_STR,
-      location: { coordinates: [127.1287, 37.3809] },
-    });
-    const notTodayRow = eventRow({ id: 'not-today', is_active: true, end_date: '2099-01-01' });
-
-    vi.doMock('@/lib/supabase/server', () => ({
-      createClient: () => Promise.resolve({ from: () => makeRangeChainable([todayRow, notTodayRow]) }),
-    }));
-
-    const { getTodayEventsPage } = await import('./get-home-feed');
-    const result = await getTodayEventsPage(1, 10, undefined, {
-      sigunguName: '성남시 분당구',
-      lat: 37.3809,
-      lng: 127.1287,
-    });
-
-    expect(result.items.map((i) => i.id)).toEqual(['today-near']);
-  });
-
-  it('getTodayEventsPage: page/pageSize로 정렬된 결과를 정확히 잘라 반환한다', async () => {
-    const rows = Array.from({ length: 15 }, (_, i) =>
-      eventRow({ id: `today-${i}`, is_active: true, end_date: TODAY_STR })
+    expect(rpc).toHaveBeenCalledWith(
+      'get_events_browse_page',
+      expect.objectContaining({ p_user_lat: 37.3809, p_user_lng: 127.1287 })
     );
+  });
 
-    vi.doMock('@/lib/supabase/server', () => ({
-      createClient: () => Promise.resolve({ from: () => makeRangeChainable(rows) }),
-    }));
+  it('region.lat/lng이 없으면 p_user_lat/p_user_lng는 undefined다(거리 계산 없이 종료일순 폴백)', async () => {
+    const { rpc, createClient } = mockRpc([browseRow()]);
+    vi.doMock('@/lib/supabase/server', () => ({ createClient }));
 
-    const { getTodayEventsPage } = await import('./get-home-feed');
-    const page1 = await getTodayEventsPage(1, 10);
-    const page2 = await getTodayEventsPage(2, 10);
+    const { getCurrentlyOngoingEventsPage } = await import('./get-home-feed');
+    await getCurrentlyOngoingEventsPage(1, 24);
 
-    expect(page1.total).toBe(15);
-    expect(page1.items).toHaveLength(10);
-    expect(page2.items).toHaveLength(5);
+    expect(rpc).toHaveBeenCalledWith(
+      'get_events_browse_page',
+      expect.objectContaining({ p_user_lat: undefined, p_user_lng: undefined })
+    );
+  });
+
+  // [개선사항5](2026-09-11) 도 단위 1차 필터 판정(province.ts)은 TS에 그대로 남아있다 —
+  // RPC에는 이미 계산된 허용 광역 코드 배열만 넘긴다.
+  it('region.addressName으로 판별한 광역(경기↔서울 상호 포함)을 p_visible_provinces로 전달한다', async () => {
+    const { rpc, createClient } = mockRpc([browseRow()]);
+    vi.doMock('@/lib/supabase/server', () => ({ createClient }));
+
+    const { getCurrentlyOngoingEventsPage } = await import('./get-home-feed');
+    await getCurrentlyOngoingEventsPage(1, 24, undefined, { sigunguName: null, addressName: '경기 성남시 분당구' });
+
+    expect(rpc).toHaveBeenCalledWith(
+      'get_events_browse_page',
+      expect.objectContaining({ p_visible_provinces: ['경기', '서울'] })
+    );
+  });
+
+  it('광역을 판별할 수 없으면(주소 정보 없음) p_visible_provinces는 undefined다(안전 폴백 — 전부 노출)', async () => {
+    const { rpc, createClient } = mockRpc([browseRow()]);
+    vi.doMock('@/lib/supabase/server', () => ({ createClient }));
+
+    const { getCurrentlyOngoingEventsPage } = await import('./get-home-feed');
+    await getCurrentlyOngoingEventsPage(1, 24);
+
+    expect(rpc).toHaveBeenCalledWith(
+      'get_events_browse_page',
+      expect.objectContaining({ p_visible_provinces: undefined })
+    );
+  });
+
+  it('RPC가 반환한 행을 NearbyItem으로 매핑하고 첫 행의 total_count를 total로 쓴다', async () => {
+    const rows = [
+      browseRow({ id: 'e1', title: '행사1', total_count: 42 }),
+      browseRow({ id: 'e2', title: '행사2', total_count: 42 }),
+    ];
+    const { createClient } = mockRpc(rows);
+    vi.doMock('@/lib/supabase/server', () => ({ createClient }));
+
+    const { getCurrentlyOngoingEventsPage } = await import('./get-home-feed');
+    const result = await getCurrentlyOngoingEventsPage(1, 24);
+
+    expect(result.total).toBe(42);
+    expect(result.items.map((i) => i.id)).toEqual(['e1', 'e2']);
+    expect(result.items[0].name).toBe('행사1');
+  });
+
+  it('RPC가 빈 배열을 반환하면 total은 0이다(첫 행이 없어 total_count를 읽을 수 없는 엣지 케이스)', async () => {
+    const { createClient } = mockRpc([]);
+    vi.doMock('@/lib/supabase/server', () => ({ createClient }));
+
+    const { getCurrentlyOngoingEventsPage } = await import('./get-home-feed');
+    const result = await getCurrentlyOngoingEventsPage(1, 24);
+
+    expect(result).toEqual({ items: [], total: 0 });
+  });
+
+  it('RPC 호출이 에러를 반환하면 예외를 던진다', async () => {
+    const rpc = vi.fn(() => Promise.resolve({ data: null, error: { message: 'boom' } }));
+    vi.doMock('@/lib/supabase/server', () => ({ createClient: () => Promise.resolve({ rpc }) }));
+
+    const { getCurrentlyOngoingEventsPage } = await import('./get-home-feed');
+    await expect(getCurrentlyOngoingEventsPage(1, 24)).rejects.toThrow('boom');
   });
 });
 

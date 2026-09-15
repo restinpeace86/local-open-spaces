@@ -1318,6 +1318,10 @@ export type Database = {
         | { Args: { table_name: string }; Returns: string }
       enablelongtransactions: { Args: never; Returns: string }
       equals: { Args: { geom1: unknown; geom2: unknown }; Returns: boolean }
+      event_province_code: {
+        Args: { p_sigungu_name: string; p_venue_name: string }
+        Returns: string
+      }
       find_nearby_open_spaces: {
         Args: { p_limit?: number; p_radius_meters?: number; p_spot_id: string }
         Returns: Json
@@ -1464,6 +1468,51 @@ export type Database = {
           stroller_accessible: boolean
           target_age_group: string
           thumbnail_url: string
+        }[]
+      }
+      get_events_browse_page: {
+        Args: {
+          p_category_mins?: string[]
+          p_mode: string
+          p_now?: string
+          p_page?: number
+          p_page_size?: number
+          p_user_lat?: number
+          p_user_lng?: number
+          p_visible_provinces?: string[]
+        }
+        Returns: {
+          booking_status: string
+          category_min: string
+          description: string
+          distance_meters: number
+          end_date: string
+          event_type: string
+          excluded_weekdays: string[]
+          facility_type: string
+          has_parking: boolean
+          id: string
+          is_free: boolean
+          is_kids_friendly: boolean
+          is_reservation_required: boolean
+          location: unknown
+          location_precision: string
+          operating_nth_weekdays: string[]
+          operating_weekdays: string[]
+          price_text: string
+          reservation_end_date: string
+          reservation_start_date: string
+          reservation_url: string
+          sigungu_name: string
+          source_url: string
+          start_date: string
+          stroller_accessible: boolean
+          target_age_group: string
+          target_audience: string
+          thumbnail_url: string
+          title: string
+          total_count: number
+          venue_name: string
         }[]
       }
       get_events_filter_options: {
@@ -1640,6 +1689,15 @@ export type Database = {
         }[]
       }
       gettransactionid: { Args: never; Returns: unknown }
+      is_event_operating_on: {
+        Args: {
+          p_at?: string
+          p_excluded_weekdays: string[]
+          p_operating_nth_weekdays: string[]
+          p_operating_weekdays: string[]
+        }
+        Returns: boolean
+      }
       longtransactionsenabled: { Args: never; Returns: boolean }
       match_events_to_open_spaces: { Args: never; Returns: number }
       normalize_address_region_prefix: {
@@ -1690,6 +1748,7 @@ export type Database = {
       refresh_sigungu_options_cache: { Args: never; Returns: undefined }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      spot_province_code: { Args: { p_text: string }; Returns: string }
       st_3dclosestpoint: {
         Args: { geom1: unknown; geom2: unknown }
         Returns: unknown
