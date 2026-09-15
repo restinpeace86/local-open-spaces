@@ -65,14 +65,30 @@ async function fetchVilageFcstRaw(nx: number, ny: number, now: Date): Promise<Vi
 
   const res = await fetchWithTimeout(url);
   const text = await res.text();
-  if (!res.ok) throw new Error(`KMA getVilageFcst 호출 실패(HTTP ${res.status}): ${text.slice(0, 300)}`);
 
-  let json: { response?: { header?: { resultCode?: string; resultMsg?: string }; body?: { items?: { item?: unknown } } } };
+  let json: {
+    response?: { header?: { resultCode?: string; resultMsg?: string }; body?: { items?: { item?: unknown } } };
+    OpenAPI_ServiceResponse?: { cmmMsgHeader?: { errMsg?: string; returnReasonCode?: string } };
+  } | null;
   try {
     json = JSON.parse(text);
   } catch {
-    throw new Error(`KMA getVilageFcst 응답이 JSON이 아닙니다: ${text.slice(0, 300)}`);
+    json = null;
   }
+
+  // data.go.kr은 일일 호출 한도 초과 시(HTTP 429 동반) 일반적인 {response:{header,body}}
+  // 형태가 아니라 {OpenAPI_ServiceResponse:{cmmMsgHeader:{errMsg:
+  // 'LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR'}}} 형태의 별도 에러 봉투를
+  // 반환한다 — "그 날짜는 예보 범위 밖이라 데이터가 없다"는 정상 상황과 원인이 전혀
+  // 다르므로, HTTP 상태와 무관하게 먼저 확인해 나중에 다시 진단할 필요 없이 에러
+  // 메시지만 보고도 바로 구분되도록 명시적으로 잡아낸다.
+  const quotaErr = json?.OpenAPI_ServiceResponse?.cmmMsgHeader;
+  if (quotaErr) {
+    throw new Error(`KMA getVilageFcst 일일 호출 한도 초과(${quotaErr.returnReasonCode} ${quotaErr.errMsg})`);
+  }
+
+  if (!res.ok) throw new Error(`KMA getVilageFcst 호출 실패(HTTP ${res.status}): ${text.slice(0, 300)}`);
+  if (!json) throw new Error(`KMA getVilageFcst 응답이 JSON이 아닙니다: ${text.slice(0, 300)}`);
 
   const header = json.response?.header;
   if (header?.resultCode !== '00') {

@@ -215,8 +215,13 @@ export async function resolveWeatherSnapshot(
   let forecast: DayForecast | null;
   try {
     forecast = await fetchLiveForecastForDate(lat, lng, isoDate, hour, now);
-  } catch {
-    forecast = null; // 외부 API 실패 시 서비스 중단 없이 "정보 없음"으로 우아하게 처리(제5장 제11조)
+  } catch (err) {
+    // 외부 API 실패 시 서비스 중단 없이 "정보 없음"으로 우아하게 처리한다(제5장 제11조).
+    // 다만 원인을 완전히 삼켜버리면(과거 구현) "예보 범위 밖이라 데이터가 없는 정상
+    // 상황"과 "일일 호출 한도 초과 등 실제 장애"를 나중에 구분할 방법이 없다 —
+    // 로그로만 남기고 사용자 응답은 그대로 유지한다.
+    console.error(`[weather-reaction] ${isoDate} 라이브 예보 조회 실패:`, err instanceof Error ? err.message : err);
+    forecast = null;
   }
 
   if (!forecast) {

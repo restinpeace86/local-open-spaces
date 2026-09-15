@@ -76,4 +76,33 @@ describe('fetchLiveForecastForDate', () => {
     delete process.env.PUBLIC_DATA_API_KEY;
     await expect(fetchLiveForecastForDate(37.5665, 126.978, '2026-09-02', 15)).rejects.toThrow(/PUBLIC_DATA_API_KEY/);
   });
+
+  // [주말 날씨 미노출 원인 확인](2026-09-15 사용자 지시 "왜 주말꺼 날씨는없지?"): 실측
+  // 결과 data.go.kr이 일일 호출 한도 초과 시 HTTP 429와 함께 일반 {response:{header,
+  // body}} 형태가 아닌 {OpenAPI_ServiceResponse:{cmmMsgHeader:{errMsg:'LIMITED_NUMBER_
+  // OF_SERVICE_REQUESTS_EXCEEDS_ERROR'}}} 봉투를 반환한다는 것을 확인했다 — "그 날짜는
+  // 예보 범위 밖이라 데이터가 없다"는 정상 상황과 원인이 다르므로 에러 메시지에서
+  // 명확히 구분되어야 한다.
+  it('일일 호출 한도 초과 응답(HTTP 429)을 예보 범위 밖과 구분되는 에러로 던진다', async () => {
+    process.env.PUBLIC_DATA_API_KEY = 'decoded-test-key';
+    const fetchMock = vi.fn(() =>
+      Promise.resolve({
+        ok: false,
+        status: 429,
+        text: () =>
+          Promise.resolve(
+            JSON.stringify({
+              OpenAPI_ServiceResponse: {
+                cmmMsgHeader: { errMsg: 'LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR', returnReasonCode: '22' },
+              },
+            })
+          ),
+      })
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await expect(fetchLiveForecastForDate(37.5665, 126.978, '2026-09-02', 15)).rejects.toThrow(
+      /일일 호출 한도 초과/
+    );
+  });
 });
