@@ -11,7 +11,13 @@ import { buildQueryVariants, buildVerificationPrompt, parseLlmVerificationRespon
 const NAVER_BLOG_SEARCH_URL = 'https://naverapihub.apigw.ntruss.com/search/v1/blog';
 const DISPLAY_PER_QUERY = 2;
 const GEMINI_MODEL = 'gemini-flash-lite-latest';
-const GEMINI_TIMEOUT_MS = 8000;
+// [실측 타임아웃 장애 수정](2026-09-16 사용자 보고: "라라코스트 부천"으로 분석 시
+// "fetch timeout after 8000ms" 발생): 정상 응답은 1~1.5초 내외였지만(직접 재현
+// 호출로 확인), 이 모델은 답변 전 내부 추론(thinking)을 거쳐 응답 시간 편차가 커서
+// 드물게 8초를 넘길 수 있다. 이 버튼은 실시간 채팅과 달리 관리자가 한 번 클릭하고
+// 기다리는 단발성 액션이라 응답을 조금 더 기다리는 편이 하드 실패보다 낫다고
+// 판단해 여유를 넉넉히 뒀다.
+const GEMINI_TIMEOUT_MS = 20000;
 const NAVER_TIMEOUT_MS = 8000;
 
 type NaverBlogApiItem = { title: string; description: string; bloggername: string; postdate: string };
