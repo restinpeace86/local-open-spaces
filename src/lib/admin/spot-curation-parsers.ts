@@ -1,3 +1,5 @@
+import { KIDS_MENU_ITEM_KEYWORDS } from './curation-badges';
+
 // [개발 종합 요청] 스팟픽 MVP 스마트 폴백, 관리자 큐레이션 및 배치 안정화 고도화(2026-09-01)
 // 섹션 2 "스마트 텍스트 파서": 영업시간/메뉴 텍스트 덩어리를 통째로 붙여넣으면 구조화된
 // 필드로 쪼개주는 순수 함수. 관리자가 실제로 웹에서 복사해 붙여넣을 법한 다양한 표기
@@ -93,7 +95,12 @@ export function parseOperatingHoursText(text: string): ParsedOperatingHours {
   };
 }
 
-export type ParsedMenuItem = { name: string; price: number };
+// [스팟 큐레이션 메뉴 파싱 및 '키즈메뉴' 자동 감지](2026-09-15 사용자 지시,
+// implementation/todo.md [개선사항 5]): 개별 메뉴 항목에 부여하는 플래그라 optional로
+// 둔다 — DB에 이미 저장된(이 기능 도입 이전) menu_items 값에는 이 필드가 아예 없을 수
+// 있고, JSONB라 스키마 마이그레이션 없이 그대로 확장 가능하다(제5장 제3조 — 스키마를
+// 억지로 바꾸지 않고 기존 유연한 구조를 그대로 활용).
+export type ParsedMenuItem = { name: string; price: number; is_kids_menu?: boolean };
 
 // "짜장면 7,000원" / "짬뽕 9000원" / "탕수육 15,000" 처럼 "이름 + 가격(원 접미사 선택)"
 // 한 줄씩을 파싱한다. 가격을 못 찾은 줄은 결과에서 제외한다(추측 금지 — 임의로 0원 등을
@@ -202,4 +209,18 @@ export function parseMenuText(text: string): ParsedMenuItem[] {
   }
 
   return items;
+}
+
+// [스팟 큐레이션 메뉴 파싱 및 '키즈메뉴' 자동 감지](2026-09-15 사용자 지시,
+// implementation/todo.md [개선사항 5]): 관리자가 [메뉴 파싱]("⚡ 자동 파싱") 버튼을
+// 누르면 parseMenuText()로 뽑아낸 각 메뉴 항목의 이름을 키워드 사전과 대조해
+// is_kids_menu를 판별한다. 요청 원문이 "Regex 또는 Includes 매칭"을 허용하고
+// 메뉴 이름은 자유 서술형 블로그 문단과 달리 이미 짧고 정제된 단일 품목명이라,
+// curation-badges.ts의 자유 텍스트용 공백 무시 하이라이트 정규식 엔진을 재사용하지
+// 않고 단순 includes 매칭으로 충분하다(과설계 방지).
+export function detectKidsMenuItems(items: ParsedMenuItem[]): ParsedMenuItem[] {
+  return items.map((item) => ({
+    ...item,
+    is_kids_menu: KIDS_MENU_ITEM_KEYWORDS.some((keyword) => item.name.includes(keyword)),
+  }));
 }

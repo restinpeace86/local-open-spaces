@@ -437,6 +437,34 @@ describe('DetailModal 스마트 폴백(View/Reservation Fallback, 2026-09-01)', 
     expect(await screen.findByText('짜장면 · 7,000원')).toBeInTheDocument();
   });
 
+  // [스팟 큐레이션 메뉴 파싱 및 '키즈메뉴' 자동 감지](2026-09-15 사용자 지시,
+  // implementation/todo.md [개선사항 5]).
+  it('is_kids_menu:true인 메뉴는 인포 배너와 함께 ⭐️[키즈추천] 태그를 보여준다', async () => {
+    mockCurationResponse({
+      id: 'curation-1',
+      spot_id: 'space-1',
+      image_url: null,
+      operating_hours_raw: null,
+      open_time: null,
+      close_time: null,
+      break_start: null,
+      break_end: null,
+      last_order: null,
+      menu_items: [
+        { name: '치즈돈까스', price: 9000, is_kids_menu: true },
+        { name: '김치찌개', price: 8000, is_kids_menu: false },
+      ],
+      naver_booking_url: null,
+      curation_note: null,
+    });
+    render(<DetailModal item={makeSpaceItem({ category_min: KIDS_RESTAURANT_CATEGORY_MIN })} onClose={() => {}} />);
+
+    expect(await screen.findByText(/아이들이 선호하는 인기 메뉴 데이터를 AI가 분석/)).toBeInTheDocument();
+    expect(screen.getByText('[키즈추천]')).toBeInTheDocument();
+    expect(await screen.findByText(/치즈돈까스/)).toBeInTheDocument();
+    expect(await screen.findByText(/김치찌개/)).toBeInTheDocument();
+  });
+
   // [가격 및 메뉴 '준비 중' 플레이스홀더](2026-09-08 사용자 지시, todo.md 개선사항3-5)
   describe('가격 정보', () => {
     it('큐레이션에 입장료(child_fee/guardian_fee)가 있으면 그대로 보여준다', async () => {

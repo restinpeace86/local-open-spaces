@@ -198,6 +198,91 @@ describe('SpotCurationsPanel — 리스트 기반 등록/수정 (2026-09-03)', (
       expect(body.guardian_fee).toBe(5000);
     });
   });
+
+  // [스팟 큐레이션 메뉴 파싱 및 '키즈메뉴' 자동 감지](2026-09-15 사용자 지시,
+  // implementation/todo.md [개선사항 5]).
+  it('메뉴를 자동 파싱해 키즈메뉴 키워드가 매칭되면 [키즈메뉴] 뱃지가 자동으로 켜지고, 등록 시 curation_badges에 포함된다', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/api/admin/data-grid')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ rows: [{ id: 'spot-1', name: '플레이버디 키즈카페', address: '경기도 의정부시' }], total: 1 }),
+        } as Response);
+      }
+      if (url.includes('/api/admin/spot-curations') && init?.method === 'POST') {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ item: { id: 'curation-1' } }) } as Response);
+      }
+      if (url.includes('/api/admin/spot-curations')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [] }) } as Response);
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<SpotCurationsPanel />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await waitFor(() => expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('플레이버디 키즈카페'));
+    expect(await screen.findByText('+ 스팟 큐레이션 등록')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText(/짜장면 7,000원/), {
+      target: { value: '치즈돈까스 9,000원\n김치찌개 8,000원' },
+    });
+    // 자동 파싱 버튼이 영업시간/메뉴/입장료 3곳에 있다(폼 순서: 영업시간, 메뉴,
+    // 입장료) — 두 번째(메뉴) 버튼을 지정한다.
+    const parseButtons = screen.getAllByText('⚡ 자동 파싱');
+    fireEvent.click(parseButtons[1]);
+
+    // 키즈메뉴 항목(치즈돈까스)에 ⭐[키즈추천] 표시가 붙는다.
+    expect(await screen.findByText('[키즈추천]')).toBeInTheDocument();
+    // 뱃지 체크박스가 자동으로 켜진다.
+    const badgeCheckbox = screen.getByLabelText(/키즈메뉴\] 뱃지/) as HTMLInputElement;
+    expect(badgeCheckbox.checked).toBe(true);
+
+    fireEvent.click(screen.getByText('등록하기'));
+
+    await waitFor(() => {
+      const saveCall = fetchMock.mock.calls.find(
+        (c) => (c[0] as string) === '/api/admin/spot-curations' && (c[1] as RequestInit)?.method === 'POST'
+      );
+      expect(saveCall).toBeDefined();
+      const body = JSON.parse((saveCall![1] as RequestInit).body as string);
+      expect(body.curation_badges).toContain('kids_menu');
+      expect(body.menu_items).toEqual([
+        { name: '치즈돈까스', price: 9000, is_kids_menu: true },
+        { name: '김치찌개', price: 8000, is_kids_menu: false },
+      ]);
+    });
+  });
+
+  it('키즈메뉴가 매칭되지 않으면 뱃지 체크박스를 자동으로 켜지 않는다', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/api/admin/data-grid')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ rows: [{ id: 'spot-1', name: '플레이버디 키즈카페', address: '경기도 의정부시' }], total: 1 }),
+        } as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [] }) } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<SpotCurationsPanel />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await waitFor(() => expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('플레이버디 키즈카페'));
+    expect(await screen.findByText('+ 스팟 큐레이션 등록')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText(/짜장면 7,000원/), {
+      target: { value: '설렁탕 12,000원' },
+    });
+    const parseButtons = screen.getAllByText('⚡ 자동 파싱');
+    fireEvent.click(parseButtons[1]);
+
+    await screen.findByText('설렁탕 · 12,000원');
+    const badgeCheckbox = screen.getByLabelText(/키즈메뉴\] 뱃지/) as HTMLInputElement;
+    expect(badgeCheckbox.checked).toBe(false);
+  });
 });
 
 // [노출중분류 있는것/없는것 따로 보기](2026-09-06 사용자 지시): "스팟 큐레이션 탭에

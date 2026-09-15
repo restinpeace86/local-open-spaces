@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseEntranceFeeText, parseMenuText, parseOperatingHoursText } from './spot-curation-parsers';
+import { detectKidsMenuItems, parseEntranceFeeText, parseMenuText, parseOperatingHoursText } from './spot-curation-parsers';
 
 describe('parseOperatingHoursText', () => {
   it('단순 영업시간(10:00~22:00)만 있으면 open/close만 채우고 나머지는 null이다', () => {
@@ -194,5 +194,40 @@ describe('parseEntranceFeeText', () => {
 
   it('빈 문자열이면 둘 다 null이다', () => {
     expect(parseEntranceFeeText('')).toEqual({ childFee: null, guardianFee: null });
+  });
+});
+
+// [스팟 큐레이션 메뉴 파싱 및 '키즈메뉴' 자동 감지](2026-09-15 사용자 지시,
+// implementation/todo.md [개선사항 5]).
+describe('detectKidsMenuItems', () => {
+  it('키워드 사전에 있는 메뉴는 is_kids_menu:true로 표시한다', () => {
+    const result = detectKidsMenuItems([
+      { name: '치즈돈까스', price: 9000 },
+      { name: '주먹밥 세트', price: 6000 },
+    ]);
+    expect(result).toEqual([
+      { name: '치즈돈까스', price: 9000, is_kids_menu: true },
+      { name: '주먹밥 세트', price: 6000, is_kids_menu: true },
+    ]);
+  });
+
+  // [오탐지 방지] 요청 원문 "일반 공기밥, 설렁탕류, 냉동너겟 등은 철저히 배제" —
+  // 키워드 사전에 없는 일반 메뉴는 매칭되지 않아야 한다.
+  it('키워드 사전에 없는 일반 메뉴(공기밥/설렁탕/냉동너겟 등)는 is_kids_menu:false다', () => {
+    const result = detectKidsMenuItems([
+      { name: '공기밥', price: 1000 },
+      { name: '설렁탕', price: 12000 },
+      { name: '냉동너겟', price: 5000 },
+    ]);
+    expect(result.every((item) => item.is_kids_menu === false)).toBe(true);
+  });
+
+  it('빈 배열이면 빈 배열을 반환한다', () => {
+    expect(detectKidsMenuItems([])).toEqual([]);
+  });
+
+  it('이미 is_kids_menu가 있어도 새로 재판정한 값으로 덮어쓴다', () => {
+    const result = detectKidsMenuItems([{ name: '계란찜', price: 4000, is_kids_menu: false }]);
+    expect(result[0].is_kids_menu).toBe(true);
   });
 });

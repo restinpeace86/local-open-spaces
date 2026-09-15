@@ -49,7 +49,10 @@ type SpotCuration = {
   break_start: string | null;
   break_end: string | null;
   last_order: string | null;
-  menu_items: Array<{ name: string; price: number }>;
+  // [스팟 큐레이션 메뉴 파싱 및 '키즈메뉴' 자동 감지](2026-09-15 사용자 지시,
+  // implementation/todo.md [개선사항 5]): is_kids_menu는 이 기능 도입 이전에 저장된
+  // 항목에는 없을 수 있어(JSONB, 스키마 없음) optional로 둔다.
+  menu_items: Array<{ name: string; price: number; is_kids_menu?: boolean }>;
   // [가격 및 입장료 스마트 파싱](2026-09-08 개선사항1-3에서 관리자가 입력)
   child_fee: number | null;
   guardian_fee: number | null;
@@ -910,13 +913,33 @@ export function DetailModal({
                   <dt className="text-gray-500 shrink-0">메뉴</dt>
                   <dd className="text-right text-gray-900">
                     {curation && curation.menu_items.length > 0 ? (
-                      <ul className="flex flex-col gap-0.5">
-                        {curation.menu_items.map((menuItem, i) => (
-                          <li key={`${menuItem.name}-${i}`}>
-                            {menuItem.name} · {menuItem.price.toLocaleString()}원
-                          </li>
-                        ))}
-                      </ul>
+                      <>
+                        {/* [스팟 큐레이션 메뉴 파싱 및 '키즈메뉴' 자동 감지](2026-09-15
+                            사용자 지시, todo.md [개선사항 5]): "[메뉴 정보] 섹션 타이틀
+                            바로 하단"에 은은한 인포 배너로 배치. */}
+                        <p className="mb-1 text-[11px] text-amber-700 bg-amber-50 rounded-md px-2 py-1 text-left">
+                          💡 &quot;아이들이 선호하는 인기 메뉴 데이터를 AI가 분석하여 ⭐️
+                          태그로 추천해드려요!&quot;
+                        </p>
+                        <ul className="flex flex-col gap-0.5">
+                          {curation.menu_items.map((menuItem, i) => (
+                            <li
+                              key={`${menuItem.name}-${i}`}
+                              className={
+                                menuItem.is_kids_menu
+                                  ? 'rounded-md bg-amber-50 px-1.5 py-0.5 text-amber-900'
+                                  : undefined
+                              }
+                            >
+                              {menuItem.is_kids_menu && <span className="mr-1">⭐️</span>}
+                              {menuItem.name} · {menuItem.price.toLocaleString()}원
+                              {menuItem.is_kids_menu && (
+                                <span className="ml-1 text-[11px] font-semibold text-amber-700">[키즈추천]</span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </>
                     ) : (
                       MENU_PLACEHOLDER
                     )}

@@ -42,6 +42,30 @@ type CurationCategoryConfig = {
 
 // [뱃지 목록 정정 이력](2026-09-05~06 사용자 지시) — "식당" config는 그 논의를
 // 그대로 이어받는다: 12개 → 룸/개별공간 재합침 + 예약가능 추가로 13개 확정.
+// [스팟 큐레이션 메뉴 파싱 및 '키즈메뉴' 자동 감지](2026-09-15 사용자 지시,
+// implementation/todo.md [개선사항 5]): "메뉴판에 실제로 단독 주문 가능한 품목으로
+// 등재되어 있으며, 아이들이 선호하거나 자극지 않는 메뉴들로 한정.. 일반 공기밥,
+// 설렁탕류, 냉동너겟 등은 철저히 배제" — 요청 원문의 키워드 사전을 그대로 반영한다.
+// 이 목록은 기존 blog-curation-modal(자유 텍스트 후기)의 kids_menu 뱃지 자동 체크
+// (matchBadgeKeysFromText)와 신규 spot-curations-panel의 개별 메뉴 항목 감지
+// (spot-curation-parsers.ts의 detectKidsMenuItems) 양쪽에서 공유한다 — 같은 뱃지가
+// 두 화면에서 서로 다른 키워드 기준으로 판정되면 혼란스럽다(제5장 제4조 기존 구조
+// 우선, 단일 출처).
+export const KIDS_MENU_ITEM_KEYWORDS: string[] = [
+  // 밥/주먹밥 계열
+  '주먹밥', '김가루밥', '꼬마김밥', '참치주먹밥', '볶음밥',
+  // 면/분식 계열
+  '잔치국수', '우동', '짜장', '짜장면', '카레라이스', '스파게티',
+  // 국물 계열(선별 적용)
+  '미역국', '소고기미역국',
+  // 고기/메인 찬 계열
+  '떡갈비', '함박스테이크', '돈까스', '돈가스', '치즈돈까스', '순살치킨', '불고기',
+  // 계란 및 사이드 계열
+  '계란말이', '치즈계란말이', '계란찜', '달걀찜', '감자튀김',
+  // 메뉴판 자체에 이미 이 라벨로 등재된 경우
+  '키즈메뉴', '어린이메뉴',
+];
+
 const RESTAURANT_KEYWORD_GROUPS: Record<string, string[]> = {
   parking: ['주차', '주차장', '파킹', '차댈곳', '발렛'],
   stroller: ['유모차', '유모차반입', '유모차동반'],
@@ -49,7 +73,7 @@ const RESTAURANT_KEYWORD_GROUPS: Record<string, string[]> = {
   diaper_table: ['기저귀', '갈이대', '기저귀존'],
   kids_chair: ['아기의자', '하이체어', '유아용의자', '유아의자'],
   kids_tableware: ['유아식기', '식판', '아기식기'],
-  kids_menu: ['키즈메뉴', '돈가스', '주먹밥', '어린이메뉴'],
+  kids_menu: KIDS_MENU_ITEM_KEYWORDS,
   floor_seating: ['좌식', '온돌'],
   private_room: ['룸', '개별룸', '단독룸', '프라이빗룸'],
   kids_zone: ['키즈존', '놀이방', '장난감', '정글짐'],

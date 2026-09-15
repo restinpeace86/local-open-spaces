@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { parseEntranceFeeText, parseMenuText, parseOperatingHoursText, ParsedMenuItem } from '@/lib/admin/spot-curation-parsers';
+import { detectKidsMenuItems, parseEntranceFeeText, parseMenuText, parseOperatingHoursText, ParsedMenuItem } from '@/lib/admin/spot-curation-parsers';
 import { KIDS_RESTAURANT_CATEGORY_MIN } from '@/lib/spaces/spot-category-groups';
 
 // [개발 종합 요청] 스팟픽 MVP 스마트 폴백, 관리자 큐레이션 및 배치 안정화 고도화(2026-09-01)
@@ -29,6 +29,12 @@ export type SpotCurationItem = {
   guardian_fee: number | null;
   naver_booking_url: string | null;
   curation_note: string | null;
+  // [스팟 큐레이션 메뉴 파싱 및 '키즈메뉴' 자동 감지](2026-09-15 사용자 지시,
+  // implementation/todo.md [개선사항 5]): '키즈메뉴' 뱃지 자동 ON/OFF 판정에 현재
+  // 저장된 다른 뱃지(blog-curation-modal에서 설정한 값 포함)를 보존한 채 병합해야
+  // 해서 이 화면도 curation_badges를 알아야 한다 — API는 이미 select('*')로 이
+  // 필드를 내려주고 있었다(신규 백엔드 작업 불필요).
+  curation_badges: string[];
   created_at: string;
   updated_at: string;
   open_spaces: { name: string; address: string | null; category: string } | null;
@@ -42,6 +48,11 @@ export type SpotSearchResult = { id: string; name: string; address: string | nul
 // 내려줘 페이지 수 계산이 서버 실제 동작과 어긋나는 버그가 될 뻔했다. 서버가 실제로
 // 허용하는 값 중 하나로 맞춘다.
 const PAGE_SIZE = 50;
+
+// [스팟 큐레이션 메뉴 파싱 및 '키즈메뉴' 자동 감지](2026-09-15 사용자 지시): 이미
+// curation-badges.ts의 RESTAURANT_CONFIG에 정의된 뱃지 키를 그대로 재사용한다(제5장
+// 제4조 기존 구조 우선 — 새 뱃지 키를 만들지 않음).
+const KIDS_MENU_BADGE_KEY = 'kids_menu';
 
 // [관리자 '스팟 큐레이션' 탭 대상 범위](2026-09-01 사용자 지시): 스팟 큐레이션은
 // 애초에 "키즈친화 식당"(gg-kidscafe-adapter.mjs가 적재하는 category_min='놀이방식당')을
@@ -135,6 +146,17 @@ export function CurationFormModal({
   const [lastOrder, setLastOrder] = useState(initial?.last_order ?? '');
   const [menuRaw, setMenuRaw] = useState('');
   const [menuItems, setMenuItems] = useState<ParsedMenuItem[]>(initial?.menu_items ?? []);
+  // [스팟 큐레이션 메뉴 파싱 및 '키즈메뉴' 자동 감지](2026-09-15 사용자 지시,
+  // implementation/todo.md [개선사항 5]): "매칭되는 키즈메뉴가 하나라도 발견될 경우
+  // [키즈메뉴] 뱃지가 자동으로 활성화(ON)... 관리자가 수동으로 끄거나 켤 수도
+  // 있어야 함" — 자동 감지는 OFF→ON 방향으로만 제안하고, 관리자가 언제든 체크박스로
+  // 뒤집을 수 있다. curation_badges의 다른 키(blog-curation-modal이 설정한 값)는
+  // otherBadges로 따로 보존해 저장 시 병합한다(이 화면이 그 뱃지들의 존재를 몰라도
+  // 덮어쓰지 않도록).
+  const otherBadges = (initial?.curation_badges ?? []).filter((key) => key !== KIDS_MENU_BADGE_KEY);
+  const [hasKidsMenuBadge, setHasKidsMenuBadge] = useState(
+    (initial?.curation_badges ?? []).includes(KIDS_MENU_BADGE_KEY)
+  );
   // [가격 및 입장료 스마트 파싱](2026-09-08 사용자 지시): "네이버 플레이스 등의
   // 가격 텍스트를 그대로 복사·붙여넣기할 수 있는 [가격 스마트 입력창]을 제공.. 어린이
   // 요금, 보호자 요금 등의 필드에 숫자가 자동으로 쪼개져 매핑되도록" — feeRaw(붙여넣기
@@ -184,7 +206,13 @@ export function CurationFormModal({
   }
 
   function handleParseMenu() {
-    setMenuItems(parseMenuText(menuRaw));
+    const detected = detectKidsMenuItems(parseMenuText(menuRaw));
+    setMenuItems(detected);
+    // 자동 감지는 OFF→ON 방향으로만 제안한다 — 매칭이 하나도 없다고 해서 관리자가
+    // 이미 수동으로 켜 둔 뱃지를 되돌리지 않는다(위 hasKidsMenuBadge 주석 참고).
+    if (detected.some((item) => item.is_kids_menu)) {
+      setHasKidsMenuBadge(true);
+    }
   }
 
   function handleRemoveMenuItem(index: number) {
@@ -219,6 +247,7 @@ export function CurationFormModal({
         guardian_fee: guardianFee,
         naver_booking_url: naverBookingUrl.trim() || null,
         curation_note: curationNote || null,
+        curation_badges: hasKidsMenuBadge ? [...otherBadges, KIDS_MENU_BADGE_KEY] : otherBadges,
       };
       const res = isEdit
         ? await fetch('/api/admin/spot-curations', {
@@ -391,9 +420,16 @@ export function CurationFormModal({
             {menuItems.length > 0 && (
               <ul className="mt-1 flex flex-col gap-1">
                 {menuItems.map((item, i) => (
-                  <li key={`${item.name}-${i}`} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 py-1.5 text-xs">
+                  <li
+                    key={`${item.name}-${i}`}
+                    className={`flex items-center justify-between rounded-lg px-3 py-1.5 text-xs ${
+                      item.is_kids_menu ? 'bg-amber-50 border border-amber-200' : 'bg-gray-50'
+                    }`}
+                  >
                     <span>
+                      {item.is_kids_menu && <span className="mr-1">⭐</span>}
                       {item.name} · {item.price.toLocaleString()}원
+                      {item.is_kids_menu && <span className="ml-1.5 text-amber-700 font-semibold">[키즈추천]</span>}
                     </span>
                     <button type="button" onClick={() => handleRemoveMenuItem(i)} className="text-gray-400 hover:text-red-500">
                       삭제
@@ -402,6 +438,16 @@ export function CurationFormModal({
                 ))}
               </ul>
             )}
+            {/* [개선사항 5] "관리자가 수동으로 끄거나 켤 수도 있어야 함" — 자동 파싱이
+                제안한 값을 여기서 직접 뒤집을 수 있다. */}
+            <label className="mt-1 flex items-center gap-1.5 text-xs text-gray-600">
+              <input
+                type="checkbox"
+                checked={hasKidsMenuBadge}
+                onChange={(e) => setHasKidsMenuBadge(e.target.checked)}
+              />
+              🌟 [키즈메뉴] 뱃지 (⚡ 자동 파싱 시 키즈메뉴 매칭되면 자동 체크됨, 수동 변경 가능)
+            </label>
           </div>
 
           {/* [가격 및 입장료 스마트 파싱](2026-09-08 사용자 지시): "네이버 플레이스
