@@ -222,16 +222,28 @@ const TAB_LABEL: Record<AdminTable, string> = {
   category_mapping: '🗂️ 노출 중분류 매핑',
 };
 
-// [매일 배치 신규 데이터 모니터링](2026-08-28): get-home-feed.ts와 동일한 관례로 날짜 문자열을
-// UTC 기준으로 다룬다(KST 변환 없음).
+// [타임존 버그 수정](2026-09-15 사용자 지시, todo.md [개선사항 4]): 기존
+// `toISOString().slice(0,10)`은 UTC 달력 날짜를 반환해, KST 00:00~09:00 사이에는
+// "어제" 날짜를 "오늘"로 잘못 계산했다(실측: KST 새벽 2시 = UTC 전날 17시). 이 화면은
+// 관리자가 실제로 한국 시간대에서 접속하는 내부 운영 도구라, 브라우저의 로컬 Date
+// 컴포넌트(getFullYear/getMonth/getDate)를 그대로 쓰면 이미 KST 기준 날짜가 나온다
+// (서버와 달리 브라우저는 "지금 관리자가 있는 시간대"를 그대로 반영하므로 명시적
+// +9시간 보정이 필요 없다 — 서버 전용 계산은 src/lib/admin/kst-date-range.ts 참고).
+function toLocalDateStr(d: Date): string {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function todayDateStr(): string {
-  return new Date().toISOString().slice(0, 10);
+  return toLocalDateStr(new Date());
 }
 
 function daysAgoDateStr(days: number): string {
   const d = new Date();
-  d.setUTCDate(d.getUTCDate() - days);
-  return d.toISOString().slice(0, 10);
+  d.setDate(d.getDate() - days);
+  return toLocalDateStr(d);
 }
 
 type DataGridSummary = {
@@ -269,20 +281,26 @@ function TodayBatchSummary() {
   }, []);
 
   if (errorMessage) return <p className="text-xs text-red-500">{errorMessage}</p>;
-  if (!summary) return <p className="text-xs text-gray-400">오늘 반영 현황 불러오는 중...</p>;
+  if (!summary) return <p className="text-xs text-gray-400" role="status">⏳ 오늘 반영 현황 불러오는 중...</p>;
 
   const openToday = summary.open_spaces_created_today;
   const eventsToday = summary.events_created_today;
   const eventsUpdatedToday = summary.events_updated_today;
-  const total = (openToday ?? 0) + (eventsToday ?? 0);
+  // [프론트엔드 상태 방어](2026-09-15 사용자 지시, todo.md [개선사항 4]): 개별 지표는
+  // 조회 자체가 실패하면 null을 받는다(summary/route.ts의 개별 job 에러 격리) — 이걸
+  // 그냥 0으로 합산하면 "일부 지표 조회 실패"와 "실제로 오늘 0건"을 구분할 수 없어
+  // 사용자가 보고한 "건수가 갑자기 0으로 튀어버림"과 똑같은 증상으로 보인다. 둘 다
+  // null일 때는 합계도 "-"로 표시해 실패를 숨기지 않는다.
+  const total = openToday == null && eventsToday == null ? null : (openToday ?? 0) + (eventsToday ?? 0);
+  const formatCount = (n: number | null | undefined) => (n == null ? '조회 실패' : `${n.toLocaleString('ko-KR')}건`);
 
   return (
     <div className="rounded-lg border border-blue-100 bg-blue-50/60 px-3 py-2 flex flex-wrap items-center gap-x-4 gap-y-1">
-      <span className="text-xs font-semibold text-blue-900">📅 오늘 신규 반영: Total {total.toLocaleString('ko-KR')}건</span>
-      <span className="text-xs text-blue-800">open_spaces {openToday ?? '-'}건</span>
-      <span className="text-xs text-blue-800">events {eventsToday ?? '-'}건</span>
+      <span className="text-xs font-semibold text-blue-900">📅 오늘 신규 반영: Total {formatCount(total)}</span>
+      <span className="text-xs text-blue-800">open_spaces {formatCount(openToday)}</span>
+      <span className="text-xs text-blue-800">events {formatCount(eventsToday)}</span>
       <span className="text-xs font-semibold text-emerald-800">
-        ✏️ events 오늘 갱신(내용 변경): {eventsUpdatedToday ?? '-'}건
+        ✏️ events 오늘 갱신(내용 변경): {formatCount(eventsUpdatedToday)}
       </span>
       <span className="text-[11px] text-blue-400">
         ※ open_spaces는 아직 updated_at 자동 갱신 트리거가 없어(관리자가 수동 수정할 때만
@@ -1577,7 +1595,10 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                 const updatedAt = isEvent ? (r as AdminEventRow).created_at : (r as AdminOpenSpaceRow).updated_at ?? (r as AdminOpenSpaceRow).created_at;
                 // 요구사항 3: 오늘 자정 이후 새로 생성된 건 [NEW] 뱃지. "내용 갱신([UPDATED])"은
                 // TodayBatchSummary 주석과 동일한 이유로 이번 범위에 포함하지 않는다.
-                const isNewToday = Boolean(r.created_at) && r.created_at!.slice(0, 10) === todayDateStr();
+                // [타임존 버그 수정](2026-09-15): created_at의 UTC 날짜 부분을 문자열로
+                // 직접 자르면(.slice(0,10)) KST 새벽 시간대에 하루 어긋난다 — new Date()로
+                // 파싱한 뒤 로컬(KST) 날짜로 다시 포맷해 todayDateStr()와 동일 기준으로 비교한다.
+                const isNewToday = Boolean(r.created_at) && toLocalDateStr(new Date(r.created_at!)) === todayDateStr();
 
                 return (
                   <tr

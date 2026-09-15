@@ -165,7 +165,15 @@
  
 ---
 
-[개선사항 4]  [Bug Fix & Performance Optimization] 관리자 대시보드 '오늘 반영 현황' 건수 초기화 및 로딩 속도 개선
+[x] [개선사항 4]  [Bug Fix & Performance Optimization] 관리자 대시보드 '오늘 반영 현황' 건수 초기화 및 로딩 속도 개선
+> **완료 (2026-09-15)**: 실측으로 원인 확정 — 서버(summary/route.ts, data-grid/route.ts)가
+> "오늘 00:00"을 UTC 자정으로 계산해 매일 KST 00:00~09:00 사이 생성분이 누락되는
+> 타임존 버그(신규 유틸 src/lib/admin/kst-date-range.ts로 수정), 프론트(todayDateStr
+> 등)도 같은 이유로 KST 새벽에 "어제" 날짜를 반환하던 버그 수정, `events.updated_at`
+> 인덱스 부재(집계 속도 저하 실제 원인) 확인 후 추가, 개별 지표 조회 실패를 "0건"과
+> 구분해 표시하도록 프론트 방어 로직 보강. GROUP BY RPC로의 재작성은 과거 실측으로
+> 이미 기각된 방식이라 의도적으로 유지(사유는 구현 기록 참고). 상세:
+> implementation/2026-09-15-admin-summary-timezone-fix.md
 
 현재 관리자 화면의 **[오늘 반영 현황 / 재수집 도구]** 탭에서 다음과 같은 치명적인 버그와 성능 저하 현상이 발생하고 있습니다. 이를 진단하고 수정해 주세요.
 

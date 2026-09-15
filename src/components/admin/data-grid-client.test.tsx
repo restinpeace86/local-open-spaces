@@ -647,8 +647,12 @@ describe('AdminDataGridClient — 수정일(updated_at) 필터(2026-09-12)', () 
     vi.unstubAllGlobals();
   });
 
+  // [타임존 버그 수정](2026-09-15): 컴포넌트가 이제 로컬 Date 컴포넌트 기준으로 날짜를
+  // 계산하므로(UTC toISOString이 아님), 테스트 헬퍼도 동일한 방식으로 맞춰야 테스트
+  // 실행 환경의 타임존과 무관하게 항상 일치한다.
   function todayDateStr(): string {
-    return new Date().toISOString().slice(0, 10);
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }
 
   it('open_spaces 탭에는 수정일 필터가 없다(events 전용)', () => {

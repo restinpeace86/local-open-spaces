@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { splitSearchTokens } from '@/lib/search/keyword-search';
+import { kstDateStringToUtcIso } from '@/lib/admin/kst-date-range';
 
 // [개편] /admin/data-grid: open_spaces/events/raw_ingest_data 3개 탭을 지원하도록 확장.
 // 표 데이터 검증용 도구이므로 필터 옵션은 하드코딩하지 않고 DB의 실제 값을 조회해 구성한다.
@@ -102,9 +103,10 @@ function parseDateFilter(value: string | null): string | null {
   return value && DATE_ONLY_PATTERN.test(value) ? value : null;
 }
 
-// created_to는 관리자 입장에서 "그 날짜까지 포함"이 직관적이라, 다음 날 00:00 UTC 미만
-// (`<`)으로 변환해 하루 전체를 포함시킨다. 이 프로젝트는 get-home-feed.ts와 동일하게 날짜
-// 문자열을 UTC 기준으로 다룬다(KST 변환 없음 — 기존 관례 그대로 따름).
+// created_to는 관리자 입장에서 "그 날짜까지 포함"이 직관적이라, 다음 날 KST 00:00 미만
+// (`<`)으로 변환해 하루 전체를 포함시킨다. 여기서는 순수 달력 날짜 문자열 계산만 하므로
+// (실제 시각으로의 변환은 applyDateRange의 kstDateStringToUtcIso가 담당) UTC 파싱으로도
+// 안전하다 — Z 접미사가 붙은 날짜 전용 문자열은 타임존과 무관하게 달력 계산이 정확하다.
 function nextDateString(dateStr: string): string {
   const d = new Date(`${dateStr}T00:00:00.000Z`);
   d.setUTCDate(d.getUTCDate() + 1);
@@ -114,6 +116,12 @@ function nextDateString(dateStr: string): string {
 // [events.updated_at 컬럼 + 자동 갱신 트리거](2026-09-12 사용자 지시): 원래 created_at
 // 전용이었던 이 헬퍼를 컬럼명을 받는 범용 함수로 넓혀 updated_at 범위 필터에도
 // 그대로 재사용한다(제5장 제4조 기존 구조 우선 — 날짜 범위 변환 로직을 중복 작성하지 않음).
+// [타임존 버그 수정](2026-09-15 사용자 지시, todo.md [개선사항 4]): 기존에는 날짜
+// 문자열을 그대로 `${dateStr}T00:00:00.000Z`(UTC 자정)로 해석해, "오늘"/"최근 3일"
+// 같은 KST 기준 달력 날짜 필터가 KST 00:00~09:00 사이에 9시간 어긋났다(예:
+// "2026-09-15"를 관리자는 KST 9/15 하루 전체로 기대하지만, 실제 쿼리는 KST 9/15
+// 09:00부터 9/16 09:00까지를 걸러 9/15 새벽 생성분을 놓쳤다). 날짜 문자열을 KST
+// 자정으로 해석하는 kstDateStringToUtcIso로 교체.
 function applyDateRange<Q extends { gte: (c: string, v: string) => Q; lt: (c: string, v: string) => Q }>(
   query: Q,
   column: string,
@@ -121,8 +129,8 @@ function applyDateRange<Q extends { gte: (c: string, v: string) => Q; lt: (c: st
   to: string | null
 ): Q {
   let next = query;
-  if (from) next = next.gte(column, `${from}T00:00:00.000Z`);
-  if (to) next = next.lt(column, `${nextDateString(to)}T00:00:00.000Z`);
+  if (from) next = next.gte(column, kstDateStringToUtcIso(from));
+  if (to) next = next.lt(column, kstDateStringToUtcIso(nextDateString(to)));
   return next;
 }
 

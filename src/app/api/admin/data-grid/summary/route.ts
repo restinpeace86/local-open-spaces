@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { todayStartIsoKst } from '@/lib/admin/kst-date-range';
 
 // /admin/data-grid 요약 메트릭. 실측 확인(2026-08-25): open_spaces(12만 건)는 커스텀 RPC
 // 함수(단일 패스 조건부 집계)로 묶어도 PostgREST RPC 경로의 8초 statement_timeout을 넘나들며
@@ -21,7 +22,13 @@ type MetricJob = { key: string; run: (supabase: SupabaseClientType) => PromiseLi
 // 제외해 "값이 하나도 안 바뀐 재적재"까지 오늘 갱신으로 잡히지 않게 함) events만
 // "오늘 갱신" 건수도 함께 집계한다. open_spaces는 여전히 트리거가 없어(수동 수정 시만
 // 갱신) 갱신 집계 대상에서 제외한다 — 이 스코프 밖(오늘 요청은 events 한정).
-const todayStartIso = () => `${new Date().toISOString().slice(0, 10)}T00:00:00.000Z`;
+//
+// [타임존 버그 수정](2026-09-15 사용자 지시, todo.md [개선사항 4]): 기존
+// `new Date().toISOString().slice(0,10)`은 UTC 달력 날짜를 쓴다 — Vercel 서버리스
+// 함수는 항상 UTC로 동작하므로, 매일 KST 00:00~09:00 사이에는 "오늘 UTC 자정"이
+// 아직 오지 않아 이미 KST로는 오늘 생성된 행이 "오늘 신규/갱신" 집계에서 누락됐다
+// (실측 재현: kst-date-range.test.ts). KST 자정을 명시적으로 계산하는 유틸로 교체.
+const todayStartIso = () => todayStartIsoKst();
 
 const JOBS: MetricJob[] = [
   { key: 'open_spaces_count', run: (s) => s.from('open_spaces').select('*', { count: 'exact', head: true }) },
