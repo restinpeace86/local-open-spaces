@@ -5,6 +5,9 @@ import { useSpotCurationForm } from '@/lib/admin/use-spot-curation-form';
 import { AGE_HINT_KEYWORDS } from '@/lib/admin/curation-badges';
 import { BlogReferenceViewer } from '@/components/admin/blog-reference-viewer';
 import { CurationBadgeForm } from '@/components/admin/curation-badge-form';
+import { LlmBlogVerificationPanel } from '@/components/admin/llm-blog-verification-panel';
+import { LlmVerificationResult } from '@/lib/admin/llm-blog-verification';
+import { isKnownCurationBadgeKey } from '@/lib/admin/curation-badges';
 
 // [관리자용 블로그 큐레이션 모달 및 스마트 뷰어](2026-09-05 사용자 지시, Decision 021):
 // "관리자가 장소 상세 페이지에서 버튼을 누르면, 네이버 블로그 검색 API를
@@ -42,6 +45,26 @@ export function BlogCurationModal({
   onServiceCategoryUpdated: (id: string, nextServiceCategoryId: string | null) => void;
 }) {
   const form = useSpotCurationForm(spot, serviceCategories);
+
+  // [LLM 기반 블로그 큐레이션 매장 검증](2026-09-15 사용자 지시): "AI가 분석해서 쏙쏙
+  // 채워준 최종 결과(자동완성된 폼)만 딱 받아보고 컨펌" — LLM 결과를 기존 뱃지
+  // 체계(curation-badges.ts)로 자동 반영한다. 이 화면 안에는 이미 이 세 뱃지 키가
+  // 정확히 존재하는 카테고리(RESTAURANT_CONFIG: kids_chair/kids_tableware/
+  // outdoor_yard)가 있어 새 뱃지 키를 만들지 않고 그대로 재사용한다(제5장 제4조).
+  // 다른 카테고리(예: 도서관)를 보고 있는 중이면 해당 키가 없어 조용히 건너뛴다 —
+  // 결과 자체는 화면에 계속 보이므로 관리자가 참고만 하고 넘어갈 수 있다.
+  function ensureBadgeOn(key: string) {
+    if (isKnownCurationBadgeKey(form.curationCategoryId, key) && !form.selectedBadges.has(key)) {
+      form.toggleBadge(key);
+    }
+  }
+
+  function handleApplyLlmResult(result: LlmVerificationResult) {
+    if (!result.is_valid_match) return; // 매장 불일치로 판정되면 뱃지를 자동 반영하지 않는다.
+    if (result.has_high_chair) ensureBadgeOn('kids_chair');
+    if (result.has_baby_tableware) ensureBadgeOn('kids_tableware');
+    if (result.space_type === 'outdoor' || result.space_type === 'mixed') ensureBadgeOn('outdoor_yard');
+  }
 
   async function handleSave() {
     const ok = await form.save();
@@ -127,6 +150,8 @@ export function BlogCurationModal({
           curationNote={form.curationNote}
           onCurationNoteChange={form.setCurationNote}
         />
+
+        <LlmBlogVerificationPanel defaultStoreName={spot.name} storeAddress={spot.address} onApply={handleApplyLlmResult} />
 
         {form.saveError && <p className="text-xs text-red-600">{form.saveError}</p>}
 

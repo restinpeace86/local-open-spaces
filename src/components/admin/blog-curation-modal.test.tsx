@@ -26,8 +26,13 @@ function mockFetchByUrl(handlers: {
   // [전체 본문 보기](2026-09-05 사용자 지시): 기본값은 "네이버 블로그가 아님/실패"로
   // 422를 돌려줘 기존 테스트들이 요약 스니펫 폴백 그대로 통과하게 한다.
   blogBodyText?: string | null;
+  // [LLM 기반 블로그 큐레이션 매장 검증](2026-09-15 사용자 지시, todo.md 개선사항8)
+  llmVerifyResult?: unknown;
 }) {
   return vi.fn((url: string, init?: RequestInit) => {
+    if (url.includes('/api/admin/spot-curations/llm-verify')) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ result: handlers.llmVerifyResult }) } as Response);
+    }
     if (url.includes('/api/admin/spot-curations/blog-search')) {
       const body = handlers.blogSearch ?? { items: [], hasRecentReview: false, hasNoResults: true };
       return Promise.resolve({ ok: !('error' in body), json: () => Promise.resolve(body) } as Response);
@@ -943,6 +948,65 @@ describe('BlogCurationModal', () => {
       fireEvent.click(screen.getByLabelText(/블로그 3/));
 
       expect(screen.getByText('최대 3개까지 선택할 수 있어요.')).toBeInTheDocument();
+    });
+  });
+
+  // [LLM 기반 블로그 큐레이션 매장 검증](2026-09-15 사용자 지시, implementation/todo.md
+  // [개선사항 8]): 뱃지들 바로 아래 패널이 렌더링되고, 분석 결과가 기존 뱃지 체계에
+  // 자동 반영되는지 검증한다.
+  describe('LLM 기반 매장 검증(개선사항8)', () => {
+    it('뱃지 영역 아래에 LLM 검증 패널이 렌더링된다', async () => {
+      const fetchMock = mockFetchByUrl({});
+      vi.stubGlobal('fetch', fetchMock);
+      render(<BlogCurationModal spot={SPOT} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />);
+
+      expect(await screen.findByText('🤖 LLM 매장 검증 (블로그 6건 자동 분석)')).toBeInTheDocument();
+    });
+
+    it('LLM이 매장 일치 + 아기의자/유아식기/실내외 공존을 반환하면 해당 뱃지가 자동으로 켜진다', async () => {
+      const fetchMock = mockFetchByUrl({
+        llmVerifyResult: {
+          store_name: '행복키즈카페',
+          is_valid_match: true,
+          has_high_chair: true,
+          has_baby_tableware: true,
+          space_type: 'mixed',
+          confidence: 'high',
+          evidence_summary: '아기의자/유아식기/테라스 언급 다수',
+        },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(<BlogCurationModal spot={SPOT} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />);
+
+      await screen.findByText('🤖 LLM 매장 검증 (블로그 6건 자동 분석)');
+      fireEvent.click(screen.getByText('🤖 LLM 분석'));
+
+      await screen.findByText('✅ 매장 일치 확인됨');
+      expect(screen.getByRole('checkbox', { name: '아기의자' })).toBeChecked();
+      expect(screen.getByRole('checkbox', { name: '유아 식기' })).toBeChecked();
+      expect(screen.getByRole('checkbox', { name: '야외 마당/테라스' })).toBeChecked();
+    });
+
+    it('LLM이 매장 불일치로 판정하면 뱃지를 자동으로 켜지 않는다', async () => {
+      const fetchMock = mockFetchByUrl({
+        llmVerifyResult: {
+          store_name: '행복키즈카페',
+          is_valid_match: false,
+          has_high_chair: true,
+          has_baby_tableware: true,
+          space_type: 'mixed',
+          confidence: 'low',
+          evidence_summary: '다른 지점(강남점) 후기만 발견됨',
+        },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(<BlogCurationModal spot={SPOT} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />);
+
+      await screen.findByText('🤖 LLM 매장 검증 (블로그 6건 자동 분석)');
+      fireEvent.click(screen.getByText('🤖 LLM 분석'));
+
+      await screen.findByText('⚠️ 매장 불일치(다른 지점/지역으로 판단됨)');
+      expect(screen.getByRole('checkbox', { name: '아기의자' })).not.toBeChecked();
     });
   });
 });
