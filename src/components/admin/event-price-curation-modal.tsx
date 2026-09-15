@@ -29,13 +29,90 @@ const PRICE_TYPE_OPTIONS: Array<{ value: 'free' | 'paid' | 'variable'; label: st
   { value: 'variable', label: '변동' },
 ];
 
-function CandidateCard({ candidate, onOpenExcerpt }: { candidate: PriceCandidate; onOpenExcerpt: (text: string) => void }) {
+// [소스1 검색어 표시/재검색](2026-09-16 사용자 지시): "어떤 걸로 검색했는지도 좀
+// 표시해줘.. 정말 맞는 검색어를 던져서 블로그 서치했고 봤는지 확인하게.. 블로그
+// 큐레이션 기존꺼 처럼 이상한 검색어면 내가 수동으로 수정해서 다시 던져보게" —
+// 소스1이 curated_blog_urls 대신 이 화면 안에서 독립적으로 네이버 블로그를
+// 검색하도록 바뀌면서(2026-09-16), 그 검색어와 검색 결과를 관리자가 직접
+// 확인·수정·재검색할 수 있는 컨트롤이 필요해졌다.
+type BlogSearchItem = { title: string; link: string; bloggername: string; postdate: string };
+
+function BlogSearchControls({
+  query,
+  onQueryChange,
+  onResearch,
+  isResearching,
+  items,
+}: {
+  query: string;
+  onQueryChange: (value: string) => void;
+  onResearch: () => void;
+  isResearching: boolean;
+  items: BlogSearchItem[];
+}) {
+  return (
+    <div className="flex flex-col gap-1.5 rounded-lg bg-gray-50 border border-gray-200 p-2">
+      <div className="flex gap-1.5">
+        <input
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          placeholder="블로그 검색어"
+          className="flex-1 rounded-md border border-gray-300 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <button
+          type="button"
+          onClick={onResearch}
+          disabled={isResearching || !query.trim()}
+          className="rounded-md bg-gray-900 text-white text-xs font-semibold px-2.5 py-1 disabled:opacity-50 shrink-0"
+        >
+          {isResearching ? '검색 중...' : '🔄 다시 검색'}
+        </button>
+      </div>
+      {items.length > 0 ? (
+        <ul className="flex flex-col gap-0.5">
+          {items.map((item) => (
+            <li key={item.link} className="text-[11px] text-gray-500 truncate">
+              · {item.title} ({item.bloggername}, {item.postdate})
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-[11px] text-gray-400">이 검색어로 찾은 블로그가 없습니다.</p>
+      )}
+    </div>
+  );
+}
+
+function CandidateCard({
+  candidate,
+  onOpenExcerpt,
+  blogSearch,
+}: {
+  candidate: PriceCandidate;
+  onOpenExcerpt: (text: string) => void;
+  blogSearch?: {
+    query: string;
+    onQueryChange: (value: string) => void;
+    onResearch: () => void;
+    isResearching: boolean;
+    items: BlogSearchItem[];
+  };
+}) {
   return (
     <div className="rounded-xl border border-gray-200 p-3 flex flex-col gap-1.5">
       <div className="flex items-center justify-between">
         <span className="text-sm font-semibold text-gray-900">{SOURCE_LABELS[candidate.source]}</span>
         <span className="text-xs">{STATUS_LABELS[candidate.status]}</span>
       </div>
+      {candidate.source === 'blog' && blogSearch && (
+        <BlogSearchControls
+          query={blogSearch.query}
+          onQueryChange={blogSearch.onQueryChange}
+          onResearch={blogSearch.onResearch}
+          isResearching={blogSearch.isResearching}
+          items={blogSearch.items}
+        />
+      )}
       {candidate.priceText && (
         <p className="text-sm text-gray-800">
           💰 <span className="font-medium">{candidate.priceText}</span>
@@ -93,6 +170,13 @@ export function EventPriceCurationModal({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [excerptModal, setExcerptModal] = useState<string | null>(null);
 
+  // [소스1 검색어 표시/재검색](2026-09-16 사용자 지시) — blogQuery는 입력창에
+  // 보여줄 현재 값(최초 로드 시 서버가 계산한 기본 검색어로 채워짐), blogSearchItems는
+  // 그 검색어로 실제로 찾은 블로그 목록(가격 발견 여부와 무관하게 전부)이다.
+  const [blogQuery, setBlogQuery] = useState('');
+  const [blogSearchItems, setBlogSearchItems] = useState<BlogSearchItem[]>([]);
+  const [isResearchingBlogs, setIsResearchingBlogs] = useState(false);
+
   const [finalPriceType, setFinalPriceType] = useState<'free' | 'paid' | 'variable' | null>(null);
   const [finalAgeText, setFinalAgeText] = useState('');
   const [finalPriceText, setFinalPriceText] = useState('');
@@ -100,12 +184,18 @@ export function EventPriceCurationModal({
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  function applyLoadedData(data: { candidates?: PriceCandidate[]; blogSearch?: { query: string; items: BlogSearchItem[] } }) {
+    setCandidates(data.candidates ?? []);
+    setBlogQuery(data.blogSearch?.query ?? '');
+    setBlogSearchItems(data.blogSearch?.items ?? []);
+  }
+
   useEffect(() => {
     fetch(`/api/admin/events/price-candidates?event_id=${encodeURIComponent(event.id)}`)
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? '가격 후보 수집에 실패했습니다.');
-        setCandidates(data.candidates ?? []);
+        applyLoadedData(data);
         if (data.final) {
           setFinalPriceType(data.final.final_price_type ?? null);
           setFinalAgeText(data.final.final_age_text ?? '');
@@ -116,6 +206,23 @@ export function EventPriceCurationModal({
       .catch((err) => setLoadError(err instanceof Error ? err.message : '가격 후보 수집에 실패했습니다.'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [event.id]);
+
+  async function handleResearchBlogs() {
+    if (isResearchingBlogs || !blogQuery.trim()) return;
+    setIsResearchingBlogs(true);
+    try {
+      const res = await fetch(
+        `/api/admin/events/price-candidates?event_id=${encodeURIComponent(event.id)}&blog_query=${encodeURIComponent(blogQuery.trim())}`
+      );
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? '블로그 재검색에 실패했습니다.');
+      applyLoadedData(data);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : '블로그 재검색에 실패했습니다.');
+    } finally {
+      setIsResearchingBlogs(false);
+    }
+  }
 
   async function handleSave() {
     if (isSaving) return;
@@ -166,7 +273,22 @@ export function EventPriceCurationModal({
         {candidates && (
           <div className="flex flex-col gap-2">
             {candidates.map((candidate) => (
-              <CandidateCard key={candidate.source} candidate={candidate} onOpenExcerpt={setExcerptModal} />
+              <CandidateCard
+                key={candidate.source}
+                candidate={candidate}
+                onOpenExcerpt={setExcerptModal}
+                blogSearch={
+                  candidate.source === 'blog'
+                    ? {
+                        query: blogQuery,
+                        onQueryChange: setBlogQuery,
+                        onResearch: handleResearchBlogs,
+                        isResearching: isResearchingBlogs,
+                        items: blogSearchItems,
+                      }
+                    : undefined
+                }
+              />
             ))}
             {/* [소스5 검토 결과](요청 원문 "그 외 방법 제안, 없으면 없다고 하기"):
                 코드베이스 전체를 조사한 결과 위 4개 소스 외에 이 서비스가 이미

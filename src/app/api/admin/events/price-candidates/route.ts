@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { fetchWithTimeout } from '@/lib/http/fetch-with-timeout';
 import { extractBlogBodyText, toMobileNaverBlogUrl } from '@/lib/admin/naver-blog-body';
+import { buildSmartBlogQuery, cleanNaverText } from '@/lib/admin/naver-blog-search';
 import {
   BlogBodyFetchResult,
   buildBlogCandidate,
@@ -19,10 +20,48 @@ import {
 // events.price_text/is_free도 함께 갱신한다 — 확정 UI가 있어도 events 테이블을
 // 갱신하지 않으면 유저 화면에는 아무 효과가 없기 때문이다.
 const FETCH_TIMEOUT_MS = 8000;
-// [소스1 실측 버그 수정](2026-09-16 사용자 지적): "적합한 블로그들 최대 3개에
-// 대하여 내용들 크롤링" — curated_blog_urls에 여러 개가 있어도 최대 3개까지만
-// 본문을 크롤링한다(무제한 크롤링으로 인한 지연/비용 방지).
+// [소스1: 검색어 최대 결과 수](2026-09-16 사용자 지적): "적합한 블로그들 최대
+// 3개에 대하여 내용들 크롤링" — 검색 결과 최대 3개까지만 본문을 크롤링한다
+// (무제한 크롤링으로 인한 지연/비용 방지).
 const MAX_BLOG_CRAWL_COUNT = 3;
+const NAVER_BLOG_SEARCH_URL = 'https://naverapihub.apigw.ntruss.com/search/v1/blog';
+
+type BlogSearchResultItem = { title: string; link: string; bloggername: string; postdate: string };
+
+// [소스1 독립 검색으로 재변경](2026-09-16 사용자 후속 지시): "어떤 걸로 검색했는지
+// 표시해줘.. 정말 맞는 검색어를 던져서 블로그 서치했고 봤는지 확인하게.. 이상한
+// 검색어면 수동으로 수정해서 다시 던져보게" — 기존 "🔍 블로그 큐레이션" 모달이
+// 미리 선택해 둔 curated_blog_urls에 더 이상 의존하지 않고, 이 화면 자체가 독립
+// 적으로 네이버 블로그를 검색한다(blog-search 라우트/llm-verify 라우트와 동일한
+// NAVER API HUB 엔드포인트·인증 헤더, 제5장 제4조 기존 구조 우선). 검색어와 검색
+// 결과를 응답에 그대로 실어 보내 관리자가 화면에서 확인·수정·재검색할 수 있게 한다.
+async function searchBlogs(query: string): Promise<BlogSearchResultItem[]> {
+  const clientId = process.env.NAVER_CLIENT_ID;
+  const clientSecret = process.env.NAVER_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return [];
+  try {
+    const url = `${NAVER_BLOG_SEARCH_URL}?${new URLSearchParams({
+      query,
+      display: String(MAX_BLOG_CRAWL_COUNT),
+      sort: 'date',
+    }).toString()}`;
+    const res = await fetchWithTimeout(
+      url,
+      { headers: { 'X-NCP-APIGW-API-KEY-ID': clientId, 'X-NCP-APIGW-API-KEY': clientSecret } },
+      FETCH_TIMEOUT_MS
+    );
+    if (!res.ok) return [];
+    const json = (await res.json()) as { items?: Array<{ title: string; link: string; bloggername: string; postdate: string }> };
+    return (json.items ?? []).slice(0, MAX_BLOG_CRAWL_COUNT).map((item) => ({
+      title: cleanNaverText(item.title),
+      link: item.link,
+      bloggername: cleanNaverText(item.bloggername),
+      postdate: item.postdate,
+    }));
+  } catch {
+    return [];
+  }
+}
 
 // [소스1: 블로그 본문 크롤링](2026-09-16 사용자 지적 수정) — naver-blog-body.ts
 // (spot-curations/blog-body 라우트가 이미 쓰고 있는 것과 동일한 함수, 제5장
@@ -79,17 +118,24 @@ export async function GET(request: NextRequest) {
 
     const admin = createAdminClient();
     const [{ data: event, error: eventError }, { data: existing, error: existingError }] = await Promise.all([
-      admin.from('events').select('description, source_url, curated_blog_urls, raw_data').eq('id', eventId).single(),
+      admin.from('events').select('title, sigungu_name, description, source_url, raw_data').eq('id', eventId).single(),
       admin.from('event_price_verifications').select('*').eq('event_id', eventId).maybeSingle(),
     ]);
     if (eventError) throw new Error(eventError.message);
     if (existingError) throw new Error(existingError.message);
 
-    const blogUrls = (event?.curated_blog_urls ?? []).slice(0, MAX_BLOG_CRAWL_COUNT);
-    const [blogResults, officialSiteCandidate] = await Promise.all([
-      Promise.all(blogUrls.map(fetchBlogBody)),
+    // [소스1 검색어](2026-09-16 사용자 후속 지시): 관리자가 ?blog_query=로 직접
+    // 수정한 검색어를 우선 쓰고, 없으면 기존 "블로그 큐레이션" 모달과 동일한 기본
+    // 검색어 생성 규칙(buildSmartBlogQuery)을 그대로 재사용한다(제5장 제4조).
+    const overrideQuery = searchParams.get('blog_query')?.trim();
+    const defaultQuery = event?.title ? buildSmartBlogQuery(event.title, event.sigungu_name) : '';
+    const blogQuery = overrideQuery || defaultQuery;
+
+    const [blogSearchItems, officialSiteCandidate] = await Promise.all([
+      blogQuery ? searchBlogs(blogQuery) : Promise.resolve([]),
       collectOfficialSiteCandidate(event?.source_url ?? null),
     ]);
+    const blogResults = await Promise.all(blogSearchItems.map((item) => fetchBlogBody(item.link)));
 
     const candidates: PriceCandidate[] = [
       buildBlogCandidate(blogResults),
@@ -100,6 +146,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       candidates,
+      blogSearch: { query: blogQuery, items: blogSearchItems },
       final: existing
         ? {
             final_price_type: existing.final_price_type,

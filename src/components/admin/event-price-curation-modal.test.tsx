@@ -11,15 +11,38 @@ function mockFetchByUrl(handlers: {
   final?: unknown;
   loadError?: string;
   saveOk?: boolean;
+  blogSearch?: { query: string; items: unknown[] };
+  // [소스1 재검색 테스트용](2026-09-16 사용자 지시): ?blog_query=<key>로 요청이 오면
+  // 이 맵에서 그 검색어 전용 응답을 돌려준다 — "검색어를 고치면 실제로 그 검색어로
+  // 다시 요청하는지" 검증하기 위함.
+  blogSearchByQuery?: Record<string, { candidates?: unknown[]; items: unknown[] }>;
 }) {
   return vi.fn((url: string, init?: RequestInit) => {
     if (url.includes('/api/admin/events/price-candidates') && (!init || init.method === undefined)) {
       if (handlers.loadError) {
         return Promise.resolve({ ok: false, json: () => Promise.resolve({ error: handlers.loadError }) } as Response);
       }
+      const blogQueryParam = new URL(url, 'http://localhost').searchParams.get('blog_query');
+      const override = blogQueryParam ? handlers.blogSearchByQuery?.[blogQueryParam] : undefined;
+      if (override) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              candidates: override.candidates ?? handlers.candidates ?? [],
+              blogSearch: { query: blogQueryParam, items: override.items },
+              final: handlers.final ?? null,
+            }),
+        } as Response);
+      }
       return Promise.resolve({
         ok: true,
-        json: () => Promise.resolve({ candidates: handlers.candidates ?? [], final: handlers.final ?? null }),
+        json: () =>
+          Promise.resolve({
+            candidates: handlers.candidates ?? [],
+            blogSearch: handlers.blogSearch ?? { query: '', items: [] },
+            final: handlers.final ?? null,
+          }),
       } as Response);
     }
     if (url.includes('/api/admin/events/price-candidates') && init?.method === 'PUT') {
@@ -57,6 +80,51 @@ it('모달을 열면 4개 소스 후보를 카드로 보여준다', async () => 
   expect(screen.getByText(/HTTP 404/)).toBeInTheDocument();
   expect(screen.getByText(/raw_data\.PARTCPT_EXPN_INFO/)).toBeInTheDocument();
   expect(screen.getByText('수집된 블로그 글 확인하기 ↗')).toBeInTheDocument();
+});
+
+// [소스1 검색어 표시/재검색](2026-09-16 사용자 지시): "어떤 걸로 검색했는지도 좀
+// 표시해줘.. 정말 맞는 검색어를 던져서 블로그 서치했고 봤는지 확인하게.. 블로그
+// 큐레이션 기존꺼 처럼 이상한 검색어면 내가 수동으로 수정해서 다시 던져보게"
+it('블로그 소스 카드에 실제로 사용된 검색어와 검색된 블로그 목록을 보여준다', async () => {
+  vi.stubGlobal(
+    'fetch',
+    mockFetchByUrl({
+      candidates: [{ source: 'blog', status: 'not_found', priceText: null, ageText: null, sourceUrl: null }],
+      blogSearch: {
+        query: '가을 단풍 축제',
+        items: [{ title: '가을 단풍 축제 다녀왔어요', link: 'https://blog.naver.com/a', bloggername: '나들이맘', postdate: '20260901' }],
+      },
+    })
+  );
+  render(<EventPriceCurationModal event={EVENT} onClose={() => {}} />);
+
+  expect(await screen.findByDisplayValue('가을 단풍 축제')).toBeInTheDocument();
+  expect(screen.getByText(/가을 단풍 축제 다녀왔어요/)).toBeInTheDocument();
+  expect(screen.getByText(/나들이맘/)).toBeInTheDocument();
+});
+
+it('검색어를 수정하고 "다시 검색"을 누르면 그 검색어로 다시 요청해 결과를 갱신한다', async () => {
+  const fetchMock = mockFetchByUrl({
+    candidates: [{ source: 'blog', status: 'not_found', priceText: null, ageText: null, sourceUrl: null }],
+    blogSearch: { query: '이상한 검색어', items: [] },
+    blogSearchByQuery: {
+      '올바른 검색어': {
+        candidates: [{ source: 'blog', status: 'found', priceText: '요금 무료', ageText: null, sourceUrl: 'https://blog.naver.com/b' }],
+        items: [{ title: '요금은 무료입니다', link: 'https://blog.naver.com/b', bloggername: '방문객', postdate: '20260905' }],
+      },
+    },
+  });
+  vi.stubGlobal('fetch', fetchMock);
+  render(<EventPriceCurationModal event={EVENT} onClose={() => {}} />);
+
+  const input = await screen.findByDisplayValue('이상한 검색어');
+  fireEvent.change(input, { target: { value: '올바른 검색어' } });
+  fireEvent.click(screen.getByText('🔄 다시 검색'));
+
+  expect(await screen.findByText(/요금은 무료입니다/)).toBeInTheDocument();
+  expect(screen.getByText(/요금 무료/)).toBeInTheDocument();
+  const researchCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('blog_query='));
+  expect(researchCall?.[0]).toContain(encodeURIComponent('올바른 검색어'));
 });
 
 // [연령별 가격 구간 파싱](2026-09-15 사용자 보완 지시): "아동 5,000원이면 몇 세부터
