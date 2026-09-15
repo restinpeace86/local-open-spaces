@@ -34,6 +34,18 @@ describe('parsePriceFromText', () => {
     expect(parsePriceFromText('관람료는 성인 10,000원, 미취학 아동은 무료')).toBe('성인 10,000원');
   });
 
+  // [실측 버그 수정](2026-09-16 사용자 보고, "트레저헌터 in 진안") —
+  // src/lib/admin/parse-price-from-text.ts와 동일 수정.
+  it('텍스트 뒤쪽에 무관한 "라벨: 무료" 문구가 있어도 앞쪽의 실제 금액을 우선한다', () => {
+    const text = [
+      '참가 패스 요금',
+      '얼리버드 2,000원 / 사전등록 4,000원 / 현장구매 5,000원',
+      '2) 무료 야간 특별 미션: 나이트헌터',
+      '참가비: 무료',
+    ].join('\n');
+    expect(parsePriceFromText(text)).toBe('얼리버드 2,000원 사전등록 4,000원');
+  });
+
   it('HTML 태그가 섞여 있어도 태그를 제거한 뒤 파싱한다', () => {
     expect(parsePriceFromText('<p>이용료: <b>20,000원</b></p>')).toBe('이용료 20,000원');
   });
