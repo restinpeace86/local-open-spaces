@@ -160,6 +160,53 @@ export type Database = {
         }
         Relationships: []
       }
+      event_price_verifications: {
+        Row: {
+          admin_note: string | null
+          candidates: Json
+          confirmed_at: string | null
+          created_at: string
+          event_id: string
+          final_age_text: string | null
+          final_price_text: string | null
+          final_price_type: string | null
+          id: string
+          updated_at: string
+        }
+        Insert: {
+          admin_note?: string | null
+          candidates?: Json
+          confirmed_at?: string | null
+          created_at?: string
+          event_id: string
+          final_age_text?: string | null
+          final_price_text?: string | null
+          final_price_type?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Update: {
+          admin_note?: string | null
+          candidates?: Json
+          confirmed_at?: string | null
+          created_at?: string
+          event_id?: string
+          final_age_text?: string | null
+          final_price_text?: string | null
+          final_price_type?: string | null
+          id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_price_verifications_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: true
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_tickets: {
         Row: {
           booking_url: string

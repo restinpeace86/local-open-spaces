@@ -6,6 +6,7 @@ import { MigrateToEventModal } from '@/components/admin/migrate-to-event-modal';
 import { ServiceCategory } from '@/lib/admin/service-category';
 import { BlogCurationModal } from '@/components/admin/blog-curation-modal';
 import { EventBlogCurationModal } from '@/components/admin/event-blog-curation-modal';
+import { EventPriceCurationModal } from '@/components/admin/event-price-curation-modal';
 import { SpotPicker, SpotOption } from '@/components/community/spot-picker';
 import { SpotCurationQuickModal } from '@/components/admin/spot-curation-quick-modal';
 import { SpotDedupQuickModal } from '@/components/admin/spot-dedup-quick-modal';
@@ -531,6 +532,10 @@ export function RawDataModal({
   const [isBlogCurationModalOpen, setIsBlogCurationModalOpen] = useState(false);
   // [이벤트픽 관리자 블로그 큐레이션](2026-09-11 사용자 지시, todo.md 개선사항7-2)
   const [isEventBlogCurationModalOpen, setIsEventBlogCurationModalOpen] = useState(false);
+  // [이벤트/체험 다중 소스 가격 수집 및 관리자 검증 UI](2026-09-15 사용자 지시,
+  // implementation/todo.md 개선사항6): "블로그 큐레이션 버튼과 동일 레벨로 가격
+  // 큐레이션 버튼이 존재하여야 함".
+  const [isEventPriceCurationModalOpen, setIsEventPriceCurationModalOpen] = useState(false);
   // [open_spaces 상세에서 스팟 큐레이션 바로 열기](2026-09-08 사용자 지시)
   const [isSpotCurationModalOpen, setIsSpotCurationModalOpen] = useState(false);
   // [open_spaces 상세에서 중복 스팟 검토](2026-09-09 사용자 지시)
@@ -672,6 +677,19 @@ export function RawDataModal({
               className="mt-3 w-full rounded-xl border border-amber-200 bg-amber-50/60 px-3 py-2.5 text-xs font-semibold text-amber-800 hover:bg-amber-100"
             >
               🔍 블로그 큐레이션 (방문 후기/추천 블로그 등록)
+            </button>
+          )}
+
+          {/* [이벤트/체험 다중 소스 가격 수집 및 관리자 검증 UI](2026-09-15 사용자
+              지시, todo.md 개선사항6): "블로그 큐레이션버튼과 동일 레벨로 가격
+              큐레이션 버튼이 존재하여야 함". */}
+          {table === 'events' && (
+            <button
+              type="button"
+              onClick={() => setIsEventPriceCurationModalOpen(true)}
+              className="mt-2 w-full rounded-xl border border-emerald-200 bg-emerald-50/60 px-3 py-2.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100"
+            >
+              💰 가격 큐레이션 (다중 소스 검증 및 최종 확정)
             </button>
           )}
 
@@ -910,6 +928,13 @@ export function RawDataModal({
           }}
           onClose={() => setIsEventBlogCurationModalOpen(false)}
           onOperatingScheduleUpdated={onOperatingScheduleUpdated}
+        />
+      )}
+
+      {isEventPriceCurationModalOpen && table === 'events' && (
+        <EventPriceCurationModal
+          event={{ id: (row as AdminEventRow).id, title: (row as AdminEventRow).title }}
+          onClose={() => setIsEventPriceCurationModalOpen(false)}
         />
       )}
 
