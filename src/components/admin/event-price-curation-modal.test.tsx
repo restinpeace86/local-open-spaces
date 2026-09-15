@@ -59,6 +59,48 @@ it('모달을 열면 4개 소스 후보를 카드로 보여준다', async () => 
   expect(screen.getByText('수집된 블로그 글 확인하기 ↗')).toBeInTheDocument();
 });
 
+// [연령별 가격 구간 파싱](2026-09-15 사용자 보완 지시): "아동 5,000원이면 몇 세부터
+// 몇 세까지가 아동인건지.. 가격이 연령별 구분되어있다면 이 연령기준도 같이 있어야
+// 한다" — 유저 화면 노출이 아니라 관리자가 최종 확정할 때 라벨(연령/대상)-금액
+// 매칭을 바로 볼 수 있게 카드에 구조화해 보여준다.
+it('가격이 연령별로 나뉘어 있으면 라벨-금액 구간을 카드에 구조화해 보여준다', async () => {
+  vi.stubGlobal(
+    'fetch',
+    mockFetchByUrl({
+      candidates: [
+        {
+          source: 'description',
+          status: 'found',
+          priceText: '성인 15,000원 / 36개월 미만 무료 / 아동 5,000원',
+          ageText: null,
+          priceTiers: [
+            { label: '성인', priceWon: 15000, isFree: false },
+            { label: '36개월 미만', priceWon: 0, isFree: true },
+            { label: '아동', priceWon: 5000, isFree: false },
+          ],
+        },
+      ],
+    })
+  );
+  render(<EventPriceCurationModal event={EVENT} onClose={() => {}} />);
+
+  expect(await screen.findByText(/성인: 15,000원/)).toBeInTheDocument();
+  expect(screen.getByText(/36개월 미만: 무료/)).toBeInTheDocument();
+  expect(screen.getByText(/아동: 5,000원/)).toBeInTheDocument();
+});
+
+it('priceTiers가 없는 후보(과거 스냅샷 등)도 에러 없이 렌더링된다', async () => {
+  vi.stubGlobal(
+    'fetch',
+    mockFetchByUrl({
+      candidates: [{ source: 'description', status: 'found', priceText: '10,000원', ageText: null }],
+    })
+  );
+  render(<EventPriceCurationModal event={EVENT} onClose={() => {}} />);
+
+  expect(await screen.findByText(/10,000원/)).toBeInTheDocument();
+});
+
 it('기존에 확정된 값이 있으면 최종 입력 폼에 미리 채워진다', async () => {
   vi.stubGlobal(
     'fetch',

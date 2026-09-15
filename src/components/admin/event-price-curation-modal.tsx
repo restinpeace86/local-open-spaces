@@ -41,6 +41,19 @@ function CandidateCard({ candidate, onOpenExcerpt }: { candidate: PriceCandidate
           💰 <span className="font-medium">{candidate.priceText}</span>
         </p>
       )}
+      {/* [연령별 가격 구간 파싱](2026-09-15 사용자 보완 지시): "성인 15,000원 / 36개월
+          미만 무료 / 아동 5,000원"처럼 가격이 연령별로 나뉘어 있으면, 유저 화면 노출
+          목적이 아니라 최종 확정 시 "아동 5,000원이 몇 세부터 몇 세까지인지" 관리자가
+          바로 알 수 있도록 라벨(연령/대상)과 금액을 짝지어 보여준다. */}
+      {candidate.priceTiers && candidate.priceTiers.length > 0 && (
+        <ul className="flex flex-col gap-0.5 pl-1">
+          {candidate.priceTiers.map((tier, i) => (
+            <li key={`${tier.label}-${i}`} className="text-xs text-gray-700">
+              · {tier.label}: {tier.isFree ? '무료' : `${tier.priceWon.toLocaleString()}원`}
+            </li>
+          ))}
+        </ul>
+      )}
       {candidate.ageText && <p className="text-xs text-gray-500">👶 연령 힌트: {candidate.ageText}</p>}
       {candidate.errorMessage && <p className="text-xs text-red-500">오류: {candidate.errorMessage}</p>}
       {candidate.source === 'raw_field' && candidate.rawFieldName && (

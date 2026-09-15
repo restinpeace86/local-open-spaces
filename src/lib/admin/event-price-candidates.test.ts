@@ -6,6 +6,7 @@ import {
   buildRawFieldCandidate,
   extractAgeText,
   extractGenericPageText,
+  parsePriceAgeTiers,
 } from './event-price-candidates';
 
 describe('extractAgeText', () => {
@@ -21,6 +22,74 @@ describe('extractAgeText', () => {
   it('빈 문자열/null이면 null이다', () => {
     expect(extractAgeText('')).toBeNull();
     expect(extractAgeText(null)).toBeNull();
+  });
+});
+
+// [연령별 가격 구간 파싱](2026-09-15 사용자 보완 지시): "성인 15000원 36개월 미만
+// 무료 아동 5000원 이런 금액기준이 있다면.. 연령에 대하여서도 파싱되어야 한다" —
+// 가격이 연령별로 나뉘어 있으면 각 구간의 라벨(연령/대상)과 금액을 짝지어 남긴다.
+describe('parsePriceAgeTiers', () => {
+  it('"/"로 구분된 성인/아동 요금을 각각 라벨+금액으로 분리한다', () => {
+    const result = parsePriceAgeTiers('성인 15,000원 / 아동 5,000원');
+    expect(result).toEqual([
+      { label: '성인', priceWon: 15000, isFree: false },
+      { label: '아동', priceWon: 5000, isFree: false },
+    ]);
+  });
+
+  it('무료 구간의 라벨(연령 기준)도 함께 보존한다 — "36개월 미만 무료"', () => {
+    const result = parsePriceAgeTiers('성인 15,000원 / 36개월 미만 무료 / 아동 5,000원');
+    expect(result).toEqual([
+      { label: '성인', priceWon: 15000, isFree: false },
+      { label: '36개월 미만', priceWon: 0, isFree: true },
+      { label: '아동', priceWon: 5000, isFree: false },
+    ]);
+  });
+
+  it('줄바꿈으로 구분된 형식도 동일하게 파싱한다', () => {
+    const result = parsePriceAgeTiers('성인 10,000원\n미취학 아동 무료');
+    expect(result).toEqual([
+      { label: '성인', priceWon: 10000, isFree: false },
+      { label: '미취학 아동', priceWon: 0, isFree: true },
+    ]);
+  });
+
+  it('구분자 없이 한 줄로 이어 붙은 형식도 라벨+금액을 잡아낸다', () => {
+    const result = parsePriceAgeTiers('성인15,000원 아동5,000원');
+    expect(result).toEqual([
+      { label: '성인', priceWon: 15000, isFree: false },
+      { label: '아동', priceWon: 5000, isFree: false },
+    ]);
+  });
+
+  it('구분자 없이 이어 붙은 무료 구간은 명시적 연령 숫자가 있을 때만 인정한다(오탐지 방지)', () => {
+    // "무료 주차 가능"처럼 나이와 무관한 "무료" 언급까지 구간으로 오인하지 않는다.
+    const result = parsePriceAgeTiers('입장료10,000원 무료 주차 가능 7세 미만 무료');
+    expect(result).toContainEqual({ label: '7세 미만', priceWon: 0, isFree: true });
+    expect(result.find((t) => t.label.includes('주차'))).toBeUndefined();
+  });
+
+  it('연령/대상 라벨이 전혀 없으면(순수 서술문) 빈 배열이다', () => {
+    expect(parsePriceAgeTiers('아름다운 공원에서 즐기는 가을 축제입니다.')).toEqual([]);
+  });
+
+  it('첫 구간 맨 앞의 "요금:"류 섹션 제목은 걷어내고 실제 대상 라벨만 남긴다', () => {
+    const result = parsePriceAgeTiers('■ 이용료: 성인 15,000원 / 아동 5,000원');
+    expect(result).toEqual([
+      { label: '성인', priceWon: 15000, isFree: false },
+      { label: '아동', priceWon: 5000, isFree: false },
+    ]);
+  });
+
+  it('같은 라벨이 중복되면 처음 것만 남긴다', () => {
+    const result = parsePriceAgeTiers('성인 15,000원 / 성인 10,000원(조기예매)');
+    expect(result).toHaveLength(1);
+    expect(result[0]).toEqual({ label: '성인', priceWon: 15000, isFree: false });
+  });
+
+  it('빈 문자열/null이면 빈 배열이다', () => {
+    expect(parsePriceAgeTiers('')).toEqual([]);
+    expect(parsePriceAgeTiers(null)).toEqual([]);
   });
 });
 
@@ -62,6 +131,15 @@ describe('buildDescriptionCandidate (소스2: 원천 설명)', () => {
   it('설명은 있지만 가격/연령 신호가 전혀 없으면 not_found다', () => {
     const result = buildDescriptionCandidate('아름다운 공원에서 즐기는 가을 축제입니다.');
     expect(result.status).toBe('not_found');
+  });
+
+  it('연령별로 나뉜 가격이면 priceTiers에 라벨별 금액을 함께 담는다', () => {
+    const result = buildDescriptionCandidate('요금: 성인 15,000원 / 36개월 미만 무료 / 아동 5,000원');
+    expect(result.priceTiers).toEqual([
+      { label: '성인', priceWon: 15000, isFree: false },
+      { label: '36개월 미만', priceWon: 0, isFree: true },
+      { label: '아동', priceWon: 5000, isFree: false },
+    ]);
   });
 });
 
