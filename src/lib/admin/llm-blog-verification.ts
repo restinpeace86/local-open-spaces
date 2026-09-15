@@ -76,6 +76,24 @@ ${collectedSnippets || '(수집된 블로그 스니펫 없음)'}
 }`;
 }
 
+// [수집 0건 시 LLM 호출 생략](2026-09-16 사용자 지시: "0건이면 LLM 으로 안던지고
+// 그냥 0건이다라고 나와야하는거 아니야?"): 수집된 블로그 스니펫이 애초에 0건이면
+// 분석할 근거 자체가 없어 결과는 항상 "불일치/데이터 없음"으로 결정적으로 정해진다
+// — 이 경우 굳이 네트워크 호출(지연·비용·타임아웃 위험)까지 감수하며 LLM에 물어볼
+// 필요가 없다(제2장 제5조 "AI는 보조 역할" — 판단할 데이터가 없을 땐 AI도 판단할
+// 게 없다). 호출부(API 라우트)가 이 함수로 즉시 결정적 결과를 만들어 반환한다.
+export function buildNoSnippetsResult(storeName: string): LlmVerificationResult {
+  return {
+    store_name: storeName,
+    is_valid_match: false,
+    has_high_chair: false,
+    has_baby_tableware: false,
+    space_type: 'indoor',
+    confidence: 'low',
+    evidence_summary: '수집된 블로그 스니펫이 없어(0건) 분석하지 않았습니다.',
+  };
+}
+
 // Gemini에 responseMimeType: 'application/json'을 요청해도 방어적으로 마크다운 코드
 // 블록(```json ... ```)이 섞여 오는 경우를 대비해 벗겨낸다. 필수 필드가 없거나 타입이
 // 안 맞으면 null을 반환한다(추측으로 기본값을 채우지 않음 — 호출부가 "분석 실패"로

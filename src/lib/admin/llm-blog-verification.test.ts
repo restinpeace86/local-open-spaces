@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildQueryVariants, buildVerificationPrompt, parseLlmVerificationResponse } from './llm-blog-verification';
+import { buildNoSnippetsResult, buildQueryVariants, buildVerificationPrompt, parseLlmVerificationResponse } from './llm-blog-verification';
 
 describe('buildQueryVariants', () => {
   it('요청 원문의 3개 조합(아기의자/아기식기/테라스 마당)을 그대로 생성한다', () => {
@@ -26,6 +26,23 @@ describe('buildVerificationPrompt', () => {
     const prompt = buildVerificationPrompt('행복식당', null, []);
     expect(prompt).toContain('수집된 블로그 스니펫 없음');
     expect(prompt).toContain('주소 정보 없음');
+  });
+});
+
+// [수집 0건 시 LLM 호출 생략](2026-09-16 사용자 지시: "0건이면 LLM 으로 안던지고
+// 그냥 0건이다라고 나와야하는거 아니야?"): 분석할 데이터가 없으면 결정적으로
+// "불일치"가 되므로 LLM 호출 없이 즉시 이 결과를 반환해야 한다.
+describe('buildNoSnippetsResult', () => {
+  it('LLM을 거치지 않고 결정적인 불일치/데이터 없음 결과를 만든다', () => {
+    expect(buildNoSnippetsResult('행복식당')).toEqual({
+      store_name: '행복식당',
+      is_valid_match: false,
+      has_high_chair: false,
+      has_baby_tableware: false,
+      space_type: 'indoor',
+      confidence: 'low',
+      evidence_summary: '수집된 블로그 스니펫이 없어(0건) 분석하지 않았습니다.',
+    });
   });
 });
 

@@ -1,7 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchWithTimeout } from '@/lib/http/fetch-with-timeout';
 import { cleanNaverText, isWithinRecentWindow } from '@/lib/admin/naver-blog-search';
-import { buildQueryVariants, buildVerificationPrompt, parseLlmVerificationResponse, BlogSnippetInput } from '@/lib/admin/llm-blog-verification';
+import {
+  buildNoSnippetsResult,
+  buildQueryVariants,
+  buildVerificationPrompt,
+  parseLlmVerificationResponse,
+  BlogSnippetInput,
+} from '@/lib/admin/llm-blog-verification';
 
 // [LLM 기반 블로그 큐레이션 매장 검증](2026-09-15 사용자 지시, implementation/todo.md
 // [개선사항 8]): 상호명 입력 → 3개 쿼리 조합(아기의자/아기식기/테라스 마당)×2개씩
@@ -50,12 +56,8 @@ export async function POST(request: NextRequest) {
 
     const naverClientId = process.env.NAVER_CLIENT_ID;
     const naverClientSecret = process.env.NAVER_CLIENT_SECRET;
-    const geminiApiKey = process.env.GEMINI_API_KEY;
     if (!naverClientId || !naverClientSecret) {
       return NextResponse.json({ error: 'NAVER_CLIENT_ID/NAVER_CLIENT_SECRET 환경변수가 설정되지 않았습니다.' }, { status: 500 });
-    }
-    if (!geminiApiKey) {
-      return NextResponse.json({ error: 'GEMINI_API_KEY 환경변수가 설정되지 않았습니다.' }, { status: 500 });
     }
 
     // [멀티 쿼리 병렬 수집](요청 원문 "A/B/C 3개 키워드 조합×2개씩=총 6개"): 3개
@@ -75,6 +77,18 @@ export async function POST(request: NextRequest) {
         bloggername: cleanNaverText(item.bloggername),
         postdate: item.postdate,
       }));
+
+    // [수집 0건 시 LLM 호출 생략](2026-09-16 사용자 지시): 분석할 근거가 아예 없으면
+    // 결과는 항상 결정적으로 "불일치/데이터 없음"이라 LLM에 물어볼 필요가 없다 —
+    // 불필요한 지연·비용·타임아웃 위험을 감수하지 않고 즉시 반환한다.
+    if (recentSnippets.length === 0) {
+      return NextResponse.json({ result: buildNoSnippetsResult(storeName), collectedSnippetCount: 0 });
+    }
+
+    const geminiApiKey = process.env.GEMINI_API_KEY;
+    if (!geminiApiKey) {
+      return NextResponse.json({ error: 'GEMINI_API_KEY 환경변수가 설정되지 않았습니다.' }, { status: 500 });
+    }
 
     const prompt = buildVerificationPrompt(storeName, body.store_address ?? null, recentSnippets);
 
