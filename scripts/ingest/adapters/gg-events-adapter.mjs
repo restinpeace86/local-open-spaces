@@ -93,7 +93,13 @@ function sleep(ms) {
 
 export class GgEventsAdapter extends BaseCollectorAdapter {
   constructor() {
-    super({ sourceKey: 'GG_EVENTS', targetTable: 'open_spaces', source: SOURCE });
+    // [관리자 화면 명칭 명확화](2026-09-15 사용자 지시, todo.md [개선사항 3]): "Monthly에
+    // GG_EVENTS로 된 소스가 있는데.. 왜 이벤트성 원천소스같은 이름으로 보이는데 monthly로
+    // 가져오고 있는지" — 이 어댑터는 시한성 이벤트가 아니라 상시 시설(공공 수영장/물놀이형
+    // 수경시설, open_spaces)을 수집한다. 오케스트레이션/로깅 전용 식별자(sourceKey)만 명확한
+    // 이름으로 바꾼다 — 이미 적재된 open_spaces.source_type='GG_EVENTS' 값은 완전히 별개의
+    // 데이터 컬럼이라 손대지 않는다(범위 밖 — 카테고리 폴백 로직/기존 데이터에 영향 없음).
+    super({ sourceKey: 'GG_SWIMMING_POOL', targetTable: 'open_spaces', source: SOURCE });
 
     this.apiKey = process.env.GG_DATA_API_KEY;
     if (!this.apiKey) {

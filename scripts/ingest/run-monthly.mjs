@@ -24,7 +24,8 @@
 // implementation/todo.md Task 2) 매회 전량 재수집(Full Ingest) 방식을 그대로 유지한다
 // (코드 변경 없음, 스케줄 주기만 이동).
 //
-// 순차 실행(레이트리밋/DB 커넥션 과부하 방지) 후 docs/pipeline-log.md에 배치 리포트를 남긴다.
+// 순차 실행(레이트리밋/DB 커넥션 과부하 방지) 후 pipeline_logs 테이블에 배치 리포트를
+// 남긴다([파이프라인 로그 DB화](2026-09-15), 기존 docs/pipeline-log.md 방식은 폐기).
 import { pathToFileURL } from 'url';
 import { loadEnv } from '../lib/load-env.mjs';
 import { getMissingEnvVars, formatMissingEnvVarsMessage } from './lib/env-precheck.mjs';
@@ -83,7 +84,9 @@ export const STEPS = [
   { label: 'CULTURE_FACILITY', run: ({ dryRun }) => runCulturalSpaces({ dryRun }) },
   { label: 'CULTURAL_FACILITY_SUMMARY', run: ({ dryRun }) => new CulturalFacilitySummaryAdapter().run({ dryRun }) },
   { label: 'LOCALDATA_AMUSEMENT', run: ({ dryRun }) => new AmusementParkAdapter().run({ dryRun }) },
-  { label: 'GG_EVENTS', run: ({ dryRun }) => new GgEventsAdapter().run({ dryRun }) },
+  // [명칭 명확화](2026-09-15): 구 명칭 'GG_EVENTS' — 실제로는 공공 수영장/물놀이형
+  // 수경시설(상시 시설) 수집기라 'GG_SWIMMING_POOL'로 변경(gg-events-adapter.mjs 참고).
+  { label: 'GG_SWIMMING_POOL', run: ({ dryRun }) => new GgEventsAdapter().run({ dryRun }) },
   { label: 'GG_KIDSCAFE', run: ({ dryRun }) => new GgKidscafeAdapter().run({ dryRun }) },
   { label: 'GO_CAMPING', run: ({ dryRun }) => new GoCampingAdapter().run({ dryRun }) },
   { label: 'NATIONAL_PARK_ECOTOUR', run: ({ dryRun }) => new NationalParkEcotourAdapter().run({ dryRun }) },
@@ -324,7 +327,7 @@ export async function runMonthlyBatch({ dryRun = false } = {}) {
     console.error(`❌ ${BATCH_NAME} 시작 불가: ${message}`);
     const precheckResult = { failed: true, sourceKey: 'ENV_PRECHECK', source: null, note: message };
     if (!dryRun) {
-      recordBatchRun({ batchName: BATCH_NAME, results: [precheckResult] });
+      await recordBatchRun({ batchName: BATCH_NAME, results: [precheckResult] });
     }
     return { results: [precheckResult], failedCount: 1 };
   }
@@ -391,13 +394,13 @@ export async function runMonthlyBatch({ dryRun = false } = {}) {
   }
 
   if (!dryRun) {
-    recordBatchRun({ batchName: BATCH_NAME, results });
+    await recordBatchRun({ batchName: BATCH_NAME, results });
   }
 
   const failedCount = results.filter((r) => r.failed).length;
   console.log(
     `\n▶▶▶ ${BATCH_NAME} 종료: ${results.length - failedCount}/${results.length}개 단계 성공${
-      failedCount > 0 ? ` (${failedCount}개 실패 — docs/pipeline-log.md 확인)` : ''
+      failedCount > 0 ? ` (${failedCount}개 실패 — 관리자 파이프라인 관리 탭 확인)` : ''
     }\n`
   );
 
@@ -414,7 +417,7 @@ export async function runSingleMonthlySource(sourceKey, { dryRun = false } = {})
   console.log(`▶▶▶ [Monthly 개별 재수집] ${sourceKey} (dry-run: ${dryRun})`);
   const result = await step.run({ dryRun });
   if (!dryRun) {
-    recordBatchRun({ batchName: `${BATCH_NAME} (개별 재수집: ${sourceKey})`, results: [result] });
+    await recordBatchRun({ batchName: `${BATCH_NAME} (개별 재수집: ${sourceKey})`, results: [result] });
   }
   return result;
 }

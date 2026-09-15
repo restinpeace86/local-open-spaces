@@ -1,5 +1,10 @@
 # ETL Data Ingestion & Pipeline Health Log
 
+> ⚠️ **[파이프라인 로그 DB화](2026-09-15, implementation/todo.md [개선사항 3])로 이 파일은
+> 더 이상 갱신되지 않습니다(폐기 — 과거 기록 보존용으로만 남겨둠).** 2026-09-15 이후의
+> 실행 로그는 `pipeline_logs` 테이블(관리자 화면 `/admin/pipeline` [파이프라인 관리] 탭)에서
+> 확인하세요. 상세: `implementation/2026-09-15-pipeline-logs-db-migration.md`.
+
 본 문서는 Daily Data Ingestion 파이프라인의 실행 결과 및 데이터 무결성 상태를 기록합니다.
 
 [긴급 아키텍처 개편(2026-08-25)]: RAW 레이어(`raw_ingest_data`) 도입에 맞춰 "총 수집 건수"

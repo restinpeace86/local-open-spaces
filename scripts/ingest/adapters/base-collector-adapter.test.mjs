@@ -18,11 +18,9 @@ vi.mock('../lib/supabase-admin.mjs', () => ({
 
 vi.mock('../lib/pipeline-log.mjs', () => ({
   countRawItems: (raw) => (Array.isArray(raw) ? raw.length : null),
-  recordPipelineRun: vi.fn(),
 }));
 
 const { BaseCollectorAdapter } = await import('./base-collector-adapter.mjs');
-const { recordPipelineRun } = await import('../lib/pipeline-log.mjs');
 
 class NoRawAdapter extends BaseCollectorAdapter {
   constructor() {
@@ -94,19 +92,17 @@ describe('BaseCollectorAdapter.run() — RAW 레이어 opt-in', () => {
     expect(upsertRowsSafeMergeMock).not.toHaveBeenCalled();
   });
 
-  it('RAW 적재 건수를 recordPipelineRun에 rawArchivedCount로 전달한다', async () => {
+  it('RAW 적재 건수를 반환값에 rawArchivedCount로 담는다(batch-log.mjs가 이 값을 pipeline_logs에 기록)', async () => {
     const adapter = new RawOptInAdapter();
-    await adapter.run();
+    const result = await adapter.run();
 
     // upsertRowsSafeMergeMock은 실제 입력과 무관하게 항상 { count: 1 }을 반환하도록 스텁돼
     // 있다(위 모듈 상단 정의) — 최종 count는 그 스텁값을 그대로 반영한다.
-    expect(recordPipelineRun).toHaveBeenCalledWith(
-      expect.objectContaining({ sourceKey: 'RAW_OPT_IN', rawArchivedCount: 2, count: 1 })
-    );
+    expect(result).toMatchObject({ sourceKey: 'RAW_OPT_IN', rawArchivedCount: 2, count: 1 });
   });
 
-  // [배치 자동화 및 로깅 체계 확정](2026-08-25): run-daily.mjs/run-monthly.mjs 배치 오케스트레이터가
-  // docs/pipeline-log.md의 배치 리포트 표를 만들 때 이 반환값(rawCount/rawArchivedCount/
+  // [파이프라인 로그 DB화](2026-09-15): run-daily.mjs/run-monthly.mjs 배치 오케스트레이터가
+  // pipeline_logs 테이블에 배치 리포트를 기록할 때 이 반환값(rawCount/rawArchivedCount/
   // safeMergeCount/errorCount)을 그대로 쓴다 — 반환 형태 자체를 직접 검증한다.
   it('성공 시 배치 리포트에 필요한 rawCount/rawArchivedCount/safeMergeCount/errorCount를 함께 반환한다', async () => {
     upsertRowsSafeMergeMock.mockResolvedValueOnce({ count: 2, duplicateWithinBatch: 1, mergedWithExisting: 3 });
@@ -254,7 +250,7 @@ describe("BaseCollectorAdapter — targetTable: 'multi' (Decision 017 다중 테
     });
   });
 
-  it('recordPipelineRun에 테이블별 건수/중복·병합 건수/범위제외/에러 상세를 detail로 전달한다', async () => {
+  it('반환값에 테이블별 건수/범위제외/에러 상세를 담는다(batch-log.mjs가 meta_data로 기록)', async () => {
     upsertRowsSafeMergeMock.mockImplementation((_client, table) =>
       Promise.resolve(
         table === 'open_spaces'
@@ -263,23 +259,16 @@ describe("BaseCollectorAdapter — targetTable: 'multi' (Decision 017 다중 테
       )
     );
     const adapter = new MultiTableAdapter();
-    await adapter.run();
+    const result = await adapter.run();
 
-    expect(recordPipelineRun).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sourceKey: 'MULTI_SOURCE',
-        count: 2,
-        status: 'OK',
-        detail: {
-          perTable: {
-            open_spaces: { fetched: 1, inserted: 1, duplicateWithinBatch: 2, mergedWithExisting: 5 },
-            events: { fetched: 1, inserted: 1, duplicateWithinBatch: 3, mergedWithExisting: 10 },
-          },
-          excludedCount: 1,
-          errorCounts: { DATE_PARSE_FAIL: 1 },
-        },
-      })
-    );
+    expect(result).toMatchObject({
+      sourceKey: 'MULTI_SOURCE',
+      count: 2,
+      hasPartialFailure: false,
+      perTable: { open_spaces: 1, events: 1 },
+      excludedCount: 1,
+      errorCounts: { DATE_PARSE_FAIL: 1 },
+    });
   });
 
   it('성공 시 배치 리포트에 필요한 safeMergeCount/errorCount를 두 테이블 합산으로 반환한다', async () => {
@@ -377,20 +366,18 @@ describe("BaseCollectorAdapter — targetTable: 'multi' (Decision 017 다중 테
     await expect(adapter.run()).resolves.toBeDefined();
   });
 
-  it('테이블별 부분 실패 시 recordPipelineRun에 FAILED 상태와 실패 사유를 전달한다', async () => {
+  it('테이블별 부분 실패 시 반환값에 hasPartialFailure:true와 실패 사유를 담는다(batch-log.mjs가 FAILED로 기록)', async () => {
     upsertRowsSafeMergeMock.mockImplementation((_client, table) => {
       if (table === 'open_spaces') return Promise.reject(new Error('boom'));
       return Promise.resolve({ count: 1, duplicateWithinBatch: 0, mergedWithExisting: 0 });
     });
     const adapter = new MultiTableAdapter();
-    await adapter.run();
+    const result = await adapter.run();
 
-    expect(recordPipelineRun).toHaveBeenCalledWith(
-      expect.objectContaining({
-        sourceKey: 'MULTI_SOURCE',
-        status: 'FAILED',
-        note: expect.stringContaining('open_spaces'),
-      })
-    );
+    expect(result).toMatchObject({
+      sourceKey: 'MULTI_SOURCE',
+      hasPartialFailure: true,
+      note: expect.stringContaining('open_spaces'),
+    });
   });
 });

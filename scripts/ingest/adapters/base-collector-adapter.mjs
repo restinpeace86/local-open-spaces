@@ -4,7 +4,7 @@ import {
   upsertRawIngestData,
   fetchRawIngestData,
 } from '../lib/supabase-admin.mjs';
-import { countRawItems, recordPipelineRun } from '../lib/pipeline-log.mjs';
+import { countRawItems } from '../lib/pipeline-log.mjs';
 import { withRetry } from '../lib/retry.mjs';
 
 // 모든 소스 어댑터가 상속받는 추상 베이스 클래스.
@@ -122,7 +122,6 @@ export class BaseCollectorAdapter {
 
       if (rows.length === 0) {
         console.log('  upsert할 유효 행이 없어 종료합니다.');
-        recordPipelineRun({ sourceKey: this.sourceKey, rawCount, rawArchivedCount, count: 0, status: 'OK', note: '유효 행 0건' });
         return {
           sourceKey: this.sourceKey,
           targetTable: this.targetTable,
@@ -133,6 +132,7 @@ export class BaseCollectorAdapter {
           rawArchivedCount,
           safeMergeCount: 0,
           errorCount: typeof rawCount === 'number' ? rawCount : 0,
+          note: '유효 행 0건',
         };
       }
 
@@ -148,10 +148,8 @@ export class BaseCollectorAdapter {
         rows
       );
       console.log(`✅ [${this.sourceKey}] Supabase ${this.targetTable} upsert 완료: ${count}건`);
-      recordPipelineRun({ sourceKey: this.sourceKey, rawCount, rawArchivedCount, count, status: 'OK' });
       // [배치 자동화 및 로깅 체계 확정](2026-08-25): errorCount는 "수신했지만 DB에 적재되지
-      // 않은 건수"(유효성 검증 드롭분)다 — recordPipelineRun 내부의 동일 계산식과 일치시켜
-      // 배치 리포트와 개별 소스 로그 행이 서로 다른 숫자를 보여주지 않도록 한다.
+      // 않은 건수"(유효성 검증 드롭분)다.
       const errorCount = typeof rawCount === 'number' ? Math.max(0, rawCount - count) : 0;
       return {
         sourceKey: this.sourceKey,
@@ -165,9 +163,6 @@ export class BaseCollectorAdapter {
         errorCount,
       };
     } catch (err) {
-      if (!dryRun) {
-        recordPipelineRun({ sourceKey: this.sourceKey, rawCount: null, count: 0, status: 'FAILED', note: err.message });
-      }
       throw err;
     }
   }
@@ -250,33 +245,6 @@ export class BaseCollectorAdapter {
         `events ${perTableResult.events?.count ?? 0}건${failureNote ? ` (${failureNote})` : ''}`
     );
 
-    recordPipelineRun({
-      sourceKey: this.sourceKey,
-      rawCount,
-      rawArchivedCount,
-      count: totalCount,
-      status: failedTables.length > 0 ? 'FAILED' : 'OK',
-      note: failureNote,
-      detail: {
-        perTable: {
-          open_spaces: {
-            fetched: spaceRows.length,
-            inserted: perTableResult.open_spaces?.count ?? 0,
-            duplicateWithinBatch: perTableResult.open_spaces?.duplicateWithinBatch ?? 0,
-            mergedWithExisting: perTableResult.open_spaces?.mergedWithExisting ?? 0,
-          },
-          events: {
-            fetched: eventRows.length,
-            inserted: perTableResult.events?.count ?? 0,
-            duplicateWithinBatch: perTableResult.events?.duplicateWithinBatch ?? 0,
-            mergedWithExisting: perTableResult.events?.mergedWithExisting ?? 0,
-          },
-        },
-        excludedCount,
-        errorCounts,
-      },
-    });
-
     const safeMergeCount =
       (perTableResult.open_spaces?.duplicateWithinBatch ?? 0) +
       (perTableResult.open_spaces?.mergedWithExisting ?? 0) +
@@ -307,6 +275,12 @@ export class BaseCollectorAdapter {
       errorCounts,
       excludedCount,
       note: failureNote,
+      // [파이프라인 로그 DB화](2026-09-15) batch-log.mjs가 이 필드로 status를 FAILED로
+      // 기록한다 — 부분 실패(예: open_spaces upsert만 실패)도 failed:true와 동일하게
+      // 실패로 취급해야 하지만, 이 함수는 그래도 성공한 나머지 테이블 건수(count)를 계속
+      // 반환해야 하므로 failed:true 자체는 쓸 수 없다(무중단 원칙 — 실패 사실은 숨기지
+      // 않되 정상 처리된 부분까지 폐기하지 않는다).
+      hasPartialFailure: failedTables.length > 0,
     };
   }
 

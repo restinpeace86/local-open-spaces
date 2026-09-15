@@ -12,31 +12,6 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
-  graphql_public: {
-    Tables: {
-      [_ in never]: never
-    }
-    Views: {
-      [_ in never]: never
-    }
-    Functions: {
-      graphql: {
-        Args: {
-          extensions?: Json
-          operationName?: string
-          query?: string
-          variables?: Json
-        }
-        Returns: Json
-      }
-    }
-    Enums: {
-      [_ in never]: never
-    }
-    CompositeTypes: {
-      [_ in never]: never
-    }
-  }
   public: {
     Tables: {
       air_quality_week_forecasts: {
@@ -599,6 +574,42 @@ export type Database = {
           },
         ]
       }
+      pipeline_logs: {
+        Row: {
+          agent_name: string
+          description: string | null
+          error_message: string | null
+          executed_at: string
+          id: number
+          meta_data: Json | null
+          period: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          agent_name: string
+          description?: string | null
+          error_message?: string | null
+          executed_at?: string
+          id?: never
+          meta_data?: Json | null
+          period?: string | null
+          status: string
+          updated_at?: string
+        }
+        Update: {
+          agent_name?: string
+          description?: string | null
+          error_message?: string | null
+          executed_at?: string
+          id?: never
+          meta_data?: Json | null
+          period?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           ai_chat_free_uses_used: number
@@ -1032,6 +1043,16 @@ export type Database = {
       }
     }
     Views: {
+      events_filter_options_cache: {
+        Row: {
+          event_types: string[] | null
+          id: boolean | null
+          min_class_names: string[] | null
+          sources: string[] | null
+          svc_stat_nms: string[] | null
+        }
+        Relationships: []
+      }
       geography_columns: {
         Row: {
           coord_dimension: number | null
@@ -1618,6 +1639,7 @@ export type Database = {
       }
       postgis_version: { Args: never; Returns: string }
       postgis_wagyu_version: { Args: never; Returns: string }
+      refresh_events_filter_options_cache: { Args: never; Returns: undefined }
       refresh_sigungu_options_cache: { Args: never; Returns: undefined }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
@@ -2349,9 +2371,6 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
-  graphql_public: {
-    Enums: {},
-  },
   public: {
     Enums: {},
   },

@@ -15,8 +15,9 @@
 //   단계라 gg-culture-events 바로 다음에 실행해야 의미가 있다.
 //
 // 순차 실행(레이트리밋/DB 커넥션 과부하 방지 — [전체 파이프라인 일괄 가동] 작업에서 동시
-// 실행 시 문제를 겪은 바 있어 그 교훈을 그대로 따른다) 후 docs/pipeline-log.md에 배치
-// 리포트를 남긴다.
+// 실행 시 문제를 겪은 바 있어 그 교훈을 그대로 따른다) 후 pipeline_logs 테이블에 배치
+// 리포트를 남긴다([파이프라인 로그 DB화](2026-09-15), 기존 docs/pipeline-log.md 방식은
+// 폐기 — batch-log.mjs 참고).
 import { pathToFileURL } from 'url';
 import { loadEnv } from '../lib/load-env.mjs';
 import { getMissingEnvVars, formatMissingEnvVarsMessage } from './lib/env-precheck.mjs';
@@ -568,7 +569,7 @@ export async function runDailyBatch({ dryRun = false } = {}) {
     console.error(`❌ ${BATCH_NAME} 시작 불가: ${message}`);
     const precheckResult = { failed: true, sourceKey: 'ENV_PRECHECK', source: null, note: message };
     if (!dryRun) {
-      recordBatchRun({ batchName: BATCH_NAME, results: [precheckResult] });
+      await recordBatchRun({ batchName: BATCH_NAME, results: [precheckResult] });
     }
     return { results: [precheckResult], failedCount: 1 };
   }
@@ -603,12 +604,19 @@ export async function runDailyBatch({ dryRun = false } = {}) {
       results.push({ failed: true, sourceKey: 'GG_CULTURE_LOCATION_ENRICHMENT', source: 'gg_public', note: err.message });
     }
   } else {
-    console.log('\n⏭️  [GG_CULTURE_LOCATION_ENRICHMENT] GG_CULTURE_EVENTS 실패로 건너뜀');
+    // [관찰성 개선](2026-09-15 사용자 지시, todo.md [개선사항 3]): "GG_CULTURE_EVENTS
+    // 실패로 건너뜀"만 있으면 관리자가 GG_CULTURE_EVENTS 자체의 실패 사유를 별도 행에서
+    // 다시 찾아야 했다 — 원인 요약을 이 스킵 사유에 바로 포함한다.
+    const upstreamReason = cultureEventsResult
+      ? (cultureEventsResult.note ?? '(사유 미기록)')
+      : '실행되지 않음(STEPS 목록에 없거나 그 이전 단계에서 중단)';
+    const skipNote = `GG_CULTURE_EVENTS 실패로 건너뜀 (원인: ${upstreamReason})`;
+    console.log(`\n⏭️  [GG_CULTURE_LOCATION_ENRICHMENT] ${skipNote}`);
     results.push({
       failed: true,
       sourceKey: 'GG_CULTURE_LOCATION_ENRICHMENT',
       source: 'gg_public',
-      note: 'GG_CULTURE_EVENTS 실패로 건너뜀',
+      note: skipNote,
     });
   }
 
@@ -709,13 +717,13 @@ export async function runDailyBatch({ dryRun = false } = {}) {
   }
 
   if (!dryRun) {
-    recordBatchRun({ batchName: BATCH_NAME, results });
+    await recordBatchRun({ batchName: BATCH_NAME, results });
   }
 
   const failedCount = results.filter((r) => r.failed).length;
   console.log(
     `\n▶▶▶ ${BATCH_NAME} 종료: ${results.length - failedCount}/${results.length}개 단계 성공${
-      failedCount > 0 ? ` (${failedCount}개 실패 — docs/pipeline-log.md 확인)` : ''
+      failedCount > 0 ? ` (${failedCount}개 실패 — 관리자 파이프라인 관리 탭 확인)` : ''
     }\n`
   );
 
@@ -734,7 +742,7 @@ export async function runSingleDailySource(sourceKey, { dryRun = false } = {}) {
   console.log(`▶▶▶ [Daily 개별 재수집] ${sourceKey} (dry-run: ${dryRun})`);
   const result = await step.run({ dryRun });
   if (!dryRun) {
-    recordBatchRun({ batchName: `${BATCH_NAME} (개별 재수집: ${sourceKey})`, results: [result] });
+    await recordBatchRun({ batchName: `${BATCH_NAME} (개별 재수집: ${sourceKey})`, results: [result] });
   }
   return result;
 }

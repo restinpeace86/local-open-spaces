@@ -280,9 +280,6 @@ describe('AdminDataGridClient — 모바일 레이아웃/스크롤 회귀 방지
         if (url.includes('/api/admin/data-grid/summary')) {
           return Promise.resolve({ ok: true, json: () => Promise.resolve({ open_spaces_created_today: 1, events_created_today: 2 }) } as Response);
         }
-        if (url.includes('/api/admin/ingest/rerun')) {
-          return Promise.resolve({ ok: true, json: () => Promise.resolve({ daily: [], monthly: [] }) } as Response);
-        }
         return Promise.resolve({ ok: true, json: () => Promise.resolve({ rows: [], total: 0 }) } as Response);
       })
     );
@@ -290,12 +287,14 @@ describe('AdminDataGridClient — 모바일 레이아웃/스크롤 회귀 방지
     render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
 
     expect(screen.queryByText(/오늘 신규 반영/)).not.toBeInTheDocument();
-    expect(screen.queryByText('🔁 개별 소스 수동 재수집')).not.toBeInTheDocument();
+    // [파이프라인 로그 DB화](2026-09-15): 개별 소스 수동 재수집 UI는 /admin/pipeline로
+    // 이전됐고, 여기는 그 진입 링크만 남는다.
+    expect(screen.queryByText(/파이프라인 관리/)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByText('▾ 오늘 반영 현황 / 재수집 도구 보기'));
 
     expect(await screen.findByText(/오늘 신규 반영/)).toBeInTheDocument();
-    expect(screen.getByText('🔁 개별 소스 수동 재수집')).toBeInTheDocument();
+    expect(screen.getByText(/파이프라인 관리/)).toBeInTheDocument();
   });
 });
 

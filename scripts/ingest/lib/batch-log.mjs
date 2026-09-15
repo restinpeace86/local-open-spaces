@@ -1,28 +1,26 @@
-import fs from 'fs';
-import path from 'path';
+import { createAdminClient } from './supabase-admin.mjs';
+import { getAgentMeta } from './pipeline-agent-registry.mjs';
 
-const LOG_PATH = path.resolve(process.cwd(), 'docs/pipeline-log.md');
-
-// [배치 자동화 및 로깅 체계 확정](2026-08-25): 기존 pipeline-log.mjs의 recordPipelineRun()은
-// "소스 1개 실행 1행"을 표 최상단에 끼워 넣는 형식이라(Decision 012부터 이어짐), 여러 소스를
-// 한 번에 묶어 실행하는 배치(run-daily.mjs/run-monthly.mjs) 단위의 리포트에는 맞지 않는다.
-// 사용자가 지정한 새 포맷("## [타임스탬프] [배치명] Ingestion Log" 헤더 + 소스별 표 + 검증
-// 문구)은 완전히 별개의 로깅 단위라 별도 모듈로 분리했다 — 기존 recordPipelineRun()은 개별
-// 어댑터의 run() 내부에서 계속 그대로 호출되므로(변경 없음) 이 모듈은 그 위에 배치 단위
-// 요약을 "추가로" 남기는 것이지 대체하는 것이 아니다.
-function formatKstTimestamp(date = new Date()) {
-  const kst = new Date(date.getTime() + 9 * 60 * 60 * 1000);
-  const y = kst.getUTCFullYear();
-  const m = String(kst.getUTCMonth() + 1).padStart(2, '0');
-  const d = String(kst.getUTCDate()).padStart(2, '0');
-  const hh = String(kst.getUTCHours()).padStart(2, '0');
-  const mm = String(kst.getUTCMinutes()).padStart(2, '0');
-  const ss = String(kst.getUTCSeconds()).padStart(2, '0');
-  return `${y}-${m}-${d} ${hh}:${mm}:${ss}`;
-}
-
-// targetTable: 'multi'(예: SeoulYeyakAdapter)는 result.perTable.{events,open_spaces}에 이미
-// 테이블별 건수가 나뉘어 있다. 단일 테이블 소스는 result.count 전부가 그 테이블 몫이다.
+// [파이프라인 로그 DB화](2026-09-15 사용자 지시, implementation/todo.md [개선사항 3]):
+// "기존에 마크다운 파일(pipeline-log.md)에 기록하던 파이프라인 실행 로그 방식을 폐기하고,
+// 파이프라인 실행 결과를 데이터베이스에 구조화된 데이터로 직접 적재" — 기존
+// docs/pipeline-log.md 파일에 표를 append하던 로직을 걷어내고 pipeline_logs 테이블에
+// 소스(에이전트)당 1행씩 insert한다.
+//
+// [기존 이중 로깅 통합] 원래는 개별 어댑터의 run() 내부(BaseCollectorAdapter →
+// pipeline-log.mjs의 recordPipelineRun)와 배치 오케스트레이터(이 파일)가 각각 별도
+// 시점에 마크다운에 기록했다(전자: 상세 <details> 블록, 후자: 배치 요약 표). DB로
+// 옮기면서 두 기록이 같은 실행을 가리키는 중복 행을 만들지 않도록, 배치 오케스트레이터가
+// 이미 모든 소스(원본 수집 4~16개 + 후처리 단계 전부)의 최종 result를 한 곳에 모아 받고
+// 있다는 점(run-daily.mjs/run-monthly.mjs가 STEPS 실행 결과를 전부 results 배열에 push)에
+// 착안해 이 함수 하나만 DB에 기록하는 단일 창구로 삼았다(recordPipelineRun은 이제 아무것도
+// 쓰지 않는다 — pipeline-log.mjs 참고). "상세 <details>" 블록이 담던 테이블별
+// 세부 수치(perTable/errorCounts/excludedCount)는 meta_data JSON에 그대로 보존된다.
+//
+// [검증 문구(수신 vs 적재+에러+제외) 미보존] 마크다운 버전은 배치 전체 합계를 텍스트
+// 한 줄로 남겼지만, 이는 여러 행의 파생값이라 DB에는 원본 수치만 저장하고 집계는 관리자
+// 화면(조회 시점)에서 계산한다 — 저장 시점 문구를 고정하면 나중에 집계 로직을 고쳐도
+// 과거 로그의 문구가 갱신되지 않는 문제를 피할 수 있다.
 function splitTableCounts(result) {
   if (result.targetTable === 'multi') {
     return { events: result.perTable?.events ?? 0, openSpaces: result.perTable?.open_spaces ?? 0 };
@@ -33,71 +31,73 @@ function splitTableCounts(result) {
   return { events: 0, openSpaces: result.count ?? 0 };
 }
 
-// results: 각 소스의 run()/run({dryRun}) 반환값을 그대로 배열로 넘긴다. 실행 자체가 예외를
-// 던진 소스는 { failed: true, source, sourceKey, note } 형태로 넣어야 한다 — 실패한 소스도
-// 표에서 빠지지 않고 "❌ 실행 실패"로 남아야 배치 전체 상태가 투명해진다(제5장 제11조
-// 무중단 원칙: 배치는 한 소스 실패로 중단되지 않고, 실패 사실은 숨기지 않는다).
-export function recordBatchRun({ batchName, results }) {
-  if (!fs.existsSync(LOG_PATH)) return;
+function derivePeriod(batchName) {
+  if (batchName.includes('Daily')) return 'daily';
+  if (batchName.includes('Monthly')) return 'monthly';
+  return null;
+}
 
-  const timestamp = formatKstTimestamp();
-  const tableRows = [];
+function buildRow({ batchName, period, result }) {
+  const agentName = result.sourceKey ?? result.source ?? '(알 수 없음)';
+  const meta = getAgentMeta(agentName);
 
-  let totalRaw = 0;
-  let totalLoaded = 0;
-  let totalError = 0;
-  let totalExcluded = 0;
-  let hasUnknownRaw = false;
-
-  for (const r of results) {
-    const label = r.source ?? r.sourceKey ?? '(알 수 없음)';
-
-    if (r.failed) {
-      tableRows.push(`| ${label} | - | 0 | 0 | 0 | - | ❌ 실행 실패: ${r.note ?? '(사유 미기록)'} |`);
-      hasUnknownRaw = true;
-      continue;
-    }
-
-    const { events, openSpaces } = splitTableCounts(r);
-    const rawCell = typeof r.rawCount === 'number' ? r.rawCount : '-';
-
-    // excludeFromVerification: 신규 수집이 아니라 이미 적재된 행을 보강하는 후처리 단계
-    // (예: enrich-gg-culture-event-locations — 좌표 정밀도만 CITY_APPROX/UNKNOWN→EXACT로
-    // 승격, 신규 row가 아님)는 표에는 남기되 "전체 수신 vs 적재" 드롭 검증 합계에는 넣지
-    // 않는다 — 같은 행을 다른 소스(gg-culture-events)가 이미 집계했는데 여기서 또 더하면
-    // 검증 수치가 왜곡된다.
-    if (!r.excludeFromVerification) {
-      if (typeof r.rawCount === 'number') totalRaw += r.rawCount;
-      else hasUnknownRaw = true;
-      totalLoaded += events + openSpaces;
-      totalError += r.errorCount ?? 0;
-      totalExcluded += r.excludedCount ?? 0;
-    }
-
-    tableRows.push(
-      `| ${label} | ${rawCell} | ${events} | ${openSpaces} | ${r.safeMergeCount ?? 0} | ${r.errorCount ?? 0} | ${r.note ?? ''} |`
-    );
+  if (result.failed) {
+    return {
+      agent_name: agentName,
+      status: 'FAILED',
+      error_message: result.note ?? '(사유 미기록)',
+      meta_data: { batchName, source: result.source ?? null },
+      description: meta.description,
+      period,
+    };
   }
 
-  const accounted = totalLoaded + totalError + totalExcluded;
-  const unexplainedDrop = totalRaw - accounted;
-  const verificationLine = hasUnknownRaw
-    ? `**검증**: 전체 RAW 수신 ${totalRaw}건(일부 소스 실패/미확인 — 완전한 대조 불가) vs DB 적재 ${totalLoaded}건 (+에러 ${totalError}건 +범위제외 ${totalExcluded}건)`
-    : unexplainedDrop === 0
-      ? `**검증**: 전체 RAW 수신 ${totalRaw}건 vs DB 적재 ${totalLoaded}건 (+에러 ${totalError}건 +범위제외 ${totalExcluded}건) → **드롭 0건 확인 ✅**`
-      : `**검증**: 전체 RAW 수신 ${totalRaw}건 vs DB 적재 ${totalLoaded}건 (+에러 ${totalError}건 +범위제외 ${totalExcluded}건) → **드롭 ${unexplainedDrop}건 발견 ⚠️** (원인 미상 — 개별 소스 행 확인 필요)`;
+  const { events, openSpaces } = splitTableCounts(result);
+  // [SEOUL_YEYAK 등 targetTable:'multi' 부분 실패] open_spaces/events 중 한쪽 테이블
+  // upsert만 실패해도 failed:true는 아니지만(무중단 원칙 — 성공한 다른 테이블 건수는
+  // 계속 보고해야 함) 실패 사실 자체는 status에 반영해야 한다.
+  const isPartialFailure = result.hasPartialFailure === true;
+  return {
+    agent_name: agentName,
+    status: isPartialFailure ? 'FAILED' : 'OK',
+    error_message: isPartialFailure ? (result.note ?? '테이블별 부분 실패') : null,
+    meta_data: {
+      batchName,
+      source: result.source ?? null,
+      rawCount: result.rawCount ?? null,
+      eventsCount: events,
+      openSpacesCount: openSpaces,
+      safeMergeCount: result.safeMergeCount ?? 0,
+      errorCount: result.errorCount ?? 0,
+      excludedCount: result.excludedCount ?? 0,
+      excludeFromVerification: result.excludeFromVerification ?? false,
+      perTable: result.perTable ?? null,
+      errorCounts: result.errorCounts ?? null,
+      note: result.note ?? null,
+    },
+    description: meta.description,
+    period,
+  };
+}
 
-  const block = [
-    '',
-    `## [${timestamp}] [${batchName}] Ingestion Log`,
-    '',
-    '| API 출처 식별자 (`source`) | RAW 수신 건수 | events 적재 건수 | open_spaces 적재 건수 | Safe Merge 건수 | 에러 건수 | 비고 |',
-    '| :--- | ---: | ---: | ---: | ---: | ---: | :--- |',
-    ...tableRows,
-    '',
-    verificationLine,
-    '',
-  ].join('\n');
+// results: 각 소스의 run()/run({dryRun}) 반환값을 그대로 배열로 넘긴다. 실행 자체가 예외를
+// 던진 소스는 { failed: true, source, sourceKey, note } 형태로 넣어야 한다 — 실패한 소스도
+// 빠지지 않고 FAILED 행으로 남아야 배치 전체 상태가 투명해진다(제5장 제11조 무중단 원칙:
+// 배치는 한 소스 실패로 중단되지 않고, 실패 사실은 숨기지 않는다).
+export async function recordBatchRun({ batchName, results }) {
+  if (!results || results.length === 0) return;
 
-  fs.appendFileSync(LOG_PATH, block);
+  const period = derivePeriod(batchName);
+  const rows = results.map((result) => buildRow({ batchName, period, result }));
+
+  try {
+    const client = createAdminClient();
+    const { error } = await client.from('pipeline_logs').insert(rows);
+    if (error) {
+      console.error(`[batch-log] pipeline_logs insert 실패(배치 자체는 계속 진행): ${error.message}`);
+    }
+  } catch (err) {
+    // 로깅 실패가 배치 자체를 중단시켜서는 안 된다(제5장 제11조).
+    console.error(`[batch-log] pipeline_logs insert 예외(배치 자체는 계속 진행): ${err.message}`);
+  }
 }
