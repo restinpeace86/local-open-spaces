@@ -41,6 +41,7 @@ import { run as runSeoulCultureEvents } from './seoul-culture-events.mjs';
 import { run as runTourApiFestival } from './tour-api-festival.mjs';
 import { applyCategoryRules } from './lib/category-rules.mjs';
 import { deactivateExpiredEvents } from './lib/deactivate-expired-events.mjs';
+import { rehostEventThumbnails } from './lib/rehost-event-thumbnails.mjs';
 
 loadEnv();
 
@@ -474,6 +475,45 @@ async function runRefreshEventsFilterOptionsCache({ dryRun }) {
   };
 }
 
+// [이벤트픽 성능 개선](2026-09-15 사용자 지시, implementation/todo.md [개선사항 1]):
+// events.thumbnail_url이 원본 API의 외부 URL을 그대로 가리키고 있어(리사이징 없음),
+// 목록 화면이 필요 이상으로 큰 이미지를 그대로 내려받고 있었다. 하루 100건씩(내부
+// 상수, rehost-event-thumbnails.mjs 참고) 다운로드→300~400px 리사이징→우리
+// Storage(event-thumbnails 버킷) 재호스팅을 진행한다 — 전체 백로그(수만 건)는
+// 매일 조금씩 처리되며, 이미 재호스팅된 행은 자동으로 다음 대상에서 빠진다
+// (멱등적). 새로 수집되는 이벤트도 이 단계를 거치면서 점진적으로 규격화된다.
+async function runRehostEventThumbnails({ dryRun }) {
+  if (dryRun) {
+    return {
+      sourceKey: 'REHOST_EVENT_THUMBNAILS',
+      source: null,
+      targetTable: 'events',
+      rawCount: 0,
+      count: 0,
+      upserted: false,
+      safeMergeCount: 0,
+      errorCount: 0,
+      excludeFromVerification: true,
+      note: 'dry-run: 실제 다운로드/재호스팅은 실행하지 않음',
+    };
+  }
+
+  const client = createAdminClient();
+  const { processed, succeeded, failed, skipped } = await rehostEventThumbnails(client);
+  return {
+    sourceKey: 'REHOST_EVENT_THUMBNAILS',
+    source: null,
+    targetTable: 'events',
+    rawCount: processed,
+    count: succeeded,
+    upserted: succeeded > 0,
+    safeMergeCount: 0,
+    errorCount: failed,
+    excludeFromVerification: true,
+    note: `썸네일 재호스팅 완료(신규 적재 아닌 유지보수 후처리) — 대상 ${processed}건 중 성공 ${succeeded}건, 실패 ${failed}건, 건너뜀(비이미지 응답 등) ${skipped}건`,
+  };
+}
+
 // [open_spaces 중복 데이터 정제](2026-08-28): 서로 다른 두 개 이상의 어댑터(source_type)가
 // 각자 원본 API에서 같은 실제 장소를 카탈로그에 등재해두면(예: "선화랑"이 KOR_TOUR_API_V4와
 // seoul_public_culture 양쪽에 존재), 각 어댑터는 서로 다른 external_id를 매기므로
@@ -658,6 +698,14 @@ export async function runDailyBatch({ dryRun = false } = {}) {
   } catch (err) {
     console.error(`❌ [REFRESH_EVENTS_FILTER_OPTIONS_CACHE] 실패: ${err.message}`);
     results.push({ failed: true, sourceKey: 'REFRESH_EVENTS_FILTER_OPTIONS_CACHE', source: null, note: err.message });
+  }
+
+  console.log('\n=== [REHOST_EVENT_THUMBNAILS] ===');
+  try {
+    results.push(await runRehostEventThumbnails({ dryRun }));
+  } catch (err) {
+    console.error(`❌ [REHOST_EVENT_THUMBNAILS] 실패: ${err.message}`);
+    results.push({ failed: true, sourceKey: 'REHOST_EVENT_THUMBNAILS', source: null, note: err.message });
   }
 
   if (!dryRun) {

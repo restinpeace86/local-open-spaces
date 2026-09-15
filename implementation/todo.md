@@ -13,7 +13,15 @@
 
 ---
 
-[개선사항 1] [Performance Optimization & Data Pipeline Task] 이벤트 픽 메인 화면 성능 저하 원인 분석 및 썸네일 최적화
+[x] [개선사항 1] [Performance Optimization & Data Pipeline Task] 이벤트 픽 메인 화면 성능 저하 원인 분석 및 썸네일 최적화
+> **완료 (2026-09-15)**: thumbnail_url 규격화(TourAPI firstimage2 우선 사용
+> 버그 수정), (is_active, end_date) 복합 인덱스 추가, 이벤트 썸네일 리사이징+
+> 재호스팅 배치 파이프라인(신규, 하루 100건씩 처리) 신규 구축. 실측 중
+> "원본 서버가 비표준 image/jpg를 내려줘 업로드가 전부 실패하던" 버그를 발견해
+> 함께 수정. "전체보기" 페이지네이션의 메모리 내 정렬 구조 및 next/image
+> 전면 전환은 별도 대규모 작업이 필요해 이번 범위에서 의도적으로 보류
+> (사유는 implementation 기록 참고). 상세:
+> implementation/2026-09-15-event-thumbnail-optimization.md
 
 현재 우리 서비스의 **메인 '이벤트 픽' 화면**에서 이벤트 목록을 불러올 때 로딩이 다소 느려지는 현상이 있습니다. 이미지 용량 문제뿐만 아니라 전반적인 성능 저하 원인을 진단하고, 원천데이터(공공데이터 등)의 썸네일 처리 로직을 포함하여 다음과 같이 개선 작업을 진행하고자 합니다.
 

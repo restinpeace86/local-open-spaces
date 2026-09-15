@@ -73,4 +73,30 @@ describe('tour-api-festival mapToEventRow (가격 정보 파싱 고도화)', () 
     expect(fetchWithTimeout).not.toHaveBeenCalled();
     expect(row.source_url).toBeNull();
   });
+
+  // [이벤트픽 성능 개선](2026-09-15, implementation/todo.md [개선사항 1]): firstimage(원본
+  // 크기)를 그대로 썸네일로 쓰고 있어 목록 화면에서 불필요하게 큰 이미지를 내려받고
+  // 있었다 — 실제 썸네일 규격 필드(firstimage2)를 우선 쓰도록 고쳤다.
+  it('firstimage2(실제 썸네일)가 있으면 그것을 thumbnail_url로 쓴다', async () => {
+    fetchWithTimeout.mockResolvedValue(detailCommon2Response());
+    const row = await mapToEventRow(
+      { ...BASE_ITEM, firstimage2: 'https://tong.visitkorea.or.kr/cms/resource/35/4100435_image2_1_thumb.jpg' },
+      { dryRun: true }
+    );
+
+    expect(row.thumbnail_url).toBe('https://tong.visitkorea.or.kr/cms/resource/35/4100435_image2_1_thumb.jpg');
+  });
+
+  it('firstimage2가 없으면 firstimage(원본)로 폴백한다', async () => {
+    const row = await mapToEventRow(BASE_ITEM, { dryRun: true });
+
+    expect(row.thumbnail_url).toBe('https://tong.visitkorea.or.kr/cms/resource/35/4100435_image2_1.jpg');
+  });
+
+  it('firstimage2/firstimage 둘 다 없으면 thumbnail_url은 null이다', async () => {
+    const { firstimage: _firstimage, ...withoutImage } = BASE_ITEM;
+    const row = await mapToEventRow(withoutImage, { dryRun: true });
+
+    expect(row.thumbnail_url).toBeNull();
+  });
 });

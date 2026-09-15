@@ -189,7 +189,13 @@ export async function mapToEventRow(item, { dryRun = false } = {}) {
     start_date: startDate,
     end_date: endDate,
     location: toPointWKT(lng, lat),
-    thumbnail_url: item.firstimage || null,
+    // [이벤트픽 성능 개선](2026-09-15, implementation/todo.md [개선사항 1]): TourAPI
+    // 원본 응답에는 firstimage(원본 크기)와 firstimage2(실제 썸네일 규격) 필드가 함께
+    // 내려오는데(어댑터 상단 주석 참고), 지금까지 원본 크기 필드를 그대로 썼다 — 목록
+    // 화면에서 불필요하게 큰 이미지를 내려받게 되는 원인이었다. 진짜 썸네일 필드를
+    // 우선 사용하고, 드물게 비어 있으면 원본 이미지로 폴백한다(원천 썸네일 우선 사용
+    // 원칙, 없을 때만 대체).
+    thumbnail_url: item.firstimage2 || item.firstimage || null,
     is_active: true,
     booking_status: bookingStatus,
     // Task 9-1-1: TourAPI searchFestival2에는 별도 장소명 필드가 없어(실측 확인) 주소(addr1)를
