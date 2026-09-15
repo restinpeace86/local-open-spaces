@@ -23,6 +23,17 @@ describe('parsePriceFromText', () => {
     expect(parsePriceFromText('사업자등록번호 123-45-67890')).toBeNull();
   });
 
+  // [실측 버그 수정](2026-09-16 사용자 지적, "2026 국립극장 쏙쏙들이페스티벌") —
+  // src/lib/admin/parse-price-from-text.ts와 동일 수정.
+  it('가격 라벨 뒤에 숫자 없이 "무료"만 있어도 유효한 가격으로 인정한다', () => {
+    expect(parsePriceFromText('요금: 무료 (현장 선착순 입장권 배부)')).toBe('요금 무료');
+    expect(parsePriceFromText('다양한 공연예술 프로그램의 관람료는 전액 무료입니다.')).toBe('관람료 무료');
+  });
+
+  it('라벨과 "무료" 사이에 이미 실제 금액이 껴 있으면 그 금액을 우선한다', () => {
+    expect(parsePriceFromText('관람료는 성인 10,000원, 미취학 아동은 무료')).toBe('성인 10,000원');
+  });
+
   it('HTML 태그가 섞여 있어도 태그를 제거한 뒤 파싱한다', () => {
     expect(parsePriceFromText('<p>이용료: <b>20,000원</b></p>')).toBe('이용료 20,000원');
   });
