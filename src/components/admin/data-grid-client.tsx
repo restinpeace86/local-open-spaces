@@ -17,6 +17,7 @@ import { MomPickPostsPanel } from '@/components/admin/mom-pick-posts-panel';
 import { MomPickUnmappedSpotsPanel } from '@/components/admin/mom-pick-unmapped-spots-panel';
 import { SpotDedupPanel } from '@/components/admin/spot-dedup-panel';
 import { CategoryMappingPanel } from '@/components/admin/category-mapping-panel';
+import { MyRealTripSearchPanel } from '@/components/admin/myrealtrip-search-panel';
 import { ServiceCategory } from '@/lib/admin/service-category';
 
 // [관리자 화면(/admin/data-grid) 기능 고도화 및 범용 제휴 상품 테이블 개편](2026-08-30
@@ -52,7 +53,8 @@ export type AdminTable =
   | 'mom_pick_posts'
   | 'mom_pick_unmapped_spots'
   | 'spot_dedup'
-  | 'category_mapping';
+  | 'category_mapping'
+  | 'myrealtrip_search';
 
 export type AdminOpenSpaceRow = {
   id: string;
@@ -194,6 +196,7 @@ type FilterOptions = {
   mom_pick_unmapped_spots: Record<string, never>;
   spot_dedup: Record<string, never>;
   category_mapping: Record<string, never>;
+  myrealtrip_search: Record<string, never>;
 };
 
 type TriState = 'all' | 'true' | 'false';
@@ -224,6 +227,10 @@ const TAB_LABEL: Record<AdminTable, string> = {
   mom_pick_unmapped_spots: '🚩 노출 중분류 필요',
   spot_dedup: '🔗 중복 스팟 검수 및 매핑',
   category_mapping: '🗂️ 노출 중분류 매핑',
+  // [마이리얼트립 공식 파트너 API 연동](2026-09-16 사용자 지시): "일단 관리자용에
+  // 구현해보자.. 탭 하나 파거나" — 기존 큐레이션/제휴 상품 탭과 목적이 달라(탐색
+  // vs 관리) 별도 탭으로 분리했다(제5장 제4조, myrealtrip-search-panel.tsx 주석 참고).
+  myrealtrip_search: '🔍 마이리얼트립 상품 검색',
 };
 
 // [타임존 버그 수정](2026-09-15 사용자 지시, todo.md [개선사항 4]): 기존
@@ -763,6 +770,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     mom_pick_unmapped_spots: false,
     spot_dedup: false,
     category_mapping: false,
+    myrealtrip_search: false,
   });
 
   // [노출 중분류 개별 행 수정](2026-09-05 사용자 지시) 참고: open_spaces 행을 열 때
@@ -1125,6 +1133,8 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
         <SpotDedupPanel />
       ) : tab === 'category_mapping' ? (
         <CategoryMappingPanel categoryMinOptions={filterOptions.open_spaces.categoryMins} />
+      ) : tab === 'myrealtrip_search' ? (
+        <MyRealTripSearchPanel />
       ) : (
       <>
       {/* [관리자 화면 모바일 필터 영역 축소](2026-09-06 사용자 지시, 2차 수정): "중분류나

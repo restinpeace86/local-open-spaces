@@ -157,3 +157,53 @@ describe('CuratedItemFormModal — 연동 장소(Spot)', () => {
     });
   });
 });
+
+// [마이리얼트립 검색 결과에서 등록](2026-09-16 사용자 지시): "검색어 입력 → 결과
+// 카드에서 선택 → 자동입력" — prefill은 initial(수정 모드)과 달리 신규 등록(POST)
+// 상태에서 값만 미리 채우는 것이라, id가 없어도 PATCH를 시도하면 안 된다.
+describe('CuratedItemFormModal — prefill(마이리얼트립 검색 결과 등록, 2026-09-16)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('prefill 값으로 입력창이 채워진 채로 열린다', () => {
+    render(
+      <CuratedItemFormModal
+        prefill={{ title: '[교토] 기온 게이샤 지구 야간 워킹 투어', image_url: 'https://example.com/img.jpg', booking_url: 'https://experiences.myrealtrip.com/products/5905493' }}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />
+    );
+
+    expect(screen.getByDisplayValue('[교토] 기온 게이샤 지구 야간 워킹 투어')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('https://example.com/img.jpg')).toBeInTheDocument();
+    expect(screen.getByDisplayValue('https://experiences.myrealtrip.com/products/5905493')).toBeInTheDocument();
+    // prefill은 신규 등록이지 수정이 아니므로 모달 제목도 등록 모드 그대로다.
+    expect(screen.getByText('+ 신규 상품 등록')).toBeInTheDocument();
+  });
+
+  it('prefill로 채워진 상태에서 저장하면 PATCH가 아니라 POST로 등록된다', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/api/admin/curated-items') && init?.method === 'POST') {
+        const body = JSON.parse(init.body as string);
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ item: { id: 'c1', ...body, created_at: '2026-09-16' } }) } as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <CuratedItemFormModal
+        prefill={{ title: '오사카 투어', image_url: 'https://example.com/img.jpg', booking_url: 'https://experiences.myrealtrip.com/products/5905493' }}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText('등록하기'));
+
+    await waitFor(() => {
+      const postCall = fetchMock.mock.calls.find((c) => (c[1] as RequestInit)?.method === 'POST');
+      expect(postCall).toBeDefined();
+      expect(fetchMock.mock.calls.some((c) => (c[1] as RequestInit)?.method === 'PATCH')).toBe(false);
+    });
+  });
+});

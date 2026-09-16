@@ -104,6 +104,7 @@ const EMPTY_FILTER_OPTIONS = {
   mom_pick_unmapped_spots: {},
   spot_dedup: {},
   category_mapping: {},
+  myrealtrip_search: {},
 };
 
 describe('AdminDataGridClient — curated_items 탭 통합', () => {

@@ -122,6 +122,9 @@ export default async function AdminDataGridPage() {
         // 이미 위 open_spaces.categoryMins로 내려가 있어 data-grid-client.tsx가 그대로
         // 재사용한다 — 별도 조회 없음).
         category_mapping: {},
+        // [마이리얼트립 공식 파트너 API 연동](2026-09-16): MyRealTripSearchPanel도
+        // 동일하게 자기완결적이라 빈 객체만 넘긴다.
+        myrealtrip_search: {},
       }}
     />
   );

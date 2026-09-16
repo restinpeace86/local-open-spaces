@@ -34,20 +34,27 @@ export type CuratedItemFormValue = {
 
 export function CuratedItemFormModal({
   initial,
+  prefill,
   onClose,
   onSaved,
 }: {
   initial?: CuratedItemFormValue;
+  // [마이리얼트립 검색 결과에서 등록](2026-09-16 사용자 지시): "검색어 입력 →
+  // 결과 카드에서 선택 → 자동입력" 흐름에서 쓴다. `initial`(수정 모드, id가 있는
+  // 기존 행)과 달리 이건 "신규 등록인데 값만 미리 채워 넣기"라 isEdit 판정에는
+  // 영향을 주지 않는다 — id가 없는 신규 행이므로 그대로 두면 PATCH를 시도해 버려
+  // initial과 절대 같은 의미로 취급하면 안 된다.
+  prefill?: Partial<Pick<CuratedItemFormValue, 'title' | 'image_url' | 'booking_url' | 'category'>>;
   onClose: () => void;
   onSaved: (item: CuratedItemFormValue) => void;
 }) {
   const isEdit = Boolean(initial);
   // [드래그 시 팝업 닫힘 버그 수정](2026-09-05 사용자 지시) 참고: use-backdrop-dismiss.ts
   const backdropDismiss = useBackdropDismiss(onClose);
-  const [title, setTitle] = useState(initial?.title ?? '');
-  const [imageUrl, setImageUrl] = useState(initial?.image_url ?? '');
-  const [bookingUrl, setBookingUrl] = useState(initial?.booking_url ?? '');
-  const [category, setCategory] = useState(initial?.category ?? 'ticket');
+  const [title, setTitle] = useState(initial?.title ?? prefill?.title ?? '');
+  const [imageUrl, setImageUrl] = useState(initial?.image_url ?? prefill?.image_url ?? '');
+  const [bookingUrl, setBookingUrl] = useState(initial?.booking_url ?? prefill?.booking_url ?? '');
+  const [category, setCategory] = useState(initial?.category ?? prefill?.category ?? 'ticket');
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
   const [operationStart, setOperationStart] = useState(initial?.operation_start_date ?? '');
   const [operationEnd, setOperationEnd] = useState(initial?.operation_end_date ?? '');
