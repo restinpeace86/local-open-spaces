@@ -69,3 +69,58 @@ export function isEventOperatingOn(schedule: OperatingSchedule, date: Date): boo
   }
   return true;
 }
+
+// [실제 운영일 하이라이트 캘린더](2026-09-16 사용자 지시, implementation/todo.md
+// [개선사항 2]): "정기 휴무 요일 규칙"만으로는 "이 요일은 원래 운영일이지만 올해
+// 이 날(예: 설날 당일)만은 특별히 쉰다"는 단발성 예외를 표현할 수 없다 —
+// event_operating_exceptions 테이블에 저장된 날짜 목록(YYYY-MM-DD)을 함께 받아,
+// 요일 규칙보다 항상 우선(무조건 휴무)해서 판정한다.
+export function toDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+// startDate/endDate: 'YYYY-MM-DD'(이벤트 원본 기간). exceptionDates: 예외로 쉬는
+// 날짜(YYYY-MM-DD) 집합. 기간 밖의 날짜는 애초에 "그 이벤트가 존재하지 않는 날"이라
+// 항상 false다(추측 금지 — 기간 밖까지 운영한다고 가정하지 않음).
+export function isEventOpenOnDate(
+  schedule: OperatingSchedule,
+  exceptionDates: ReadonlySet<string>,
+  startDate: string,
+  endDate: string,
+  date: Date
+): boolean {
+  const dateKey = toDateKey(date);
+  if (dateKey < startDate || dateKey > endDate) return false;
+  if (exceptionDates.has(dateKey)) return false;
+  return isEventOperatingOn(schedule, date);
+}
+
+// [YYYY-MM-DD]~[YYYY-MM-DD] 기간 전체를 하루씩 순회하며 실제로 여는 날짜만 뽑는다.
+// 유저 화면 캘린더가 "포인트 색상으로 하이라이트"할 날짜 배열을 그대로 이 함수
+// 결과로 만든다 — 요일 계산은 로컬 타임존 기준(new Date(y,m,d) 생성자)이라 서버가
+// 어느 타임존에서 실행되든 달력상의 "그 날짜"가 흔들리지 않는다.
+export function computeOperatingDates(params: {
+  schedule: OperatingSchedule;
+  exceptionDates: ReadonlySet<string> | readonly string[];
+  startDate: string;
+  endDate: string;
+}): string[] {
+  const { schedule, startDate, endDate } = params;
+  const exceptions = params.exceptionDates instanceof Set ? params.exceptionDates : new Set(params.exceptionDates);
+  const [startY, startM, startD] = startDate.split('-').map(Number);
+  const [endY, endM, endD] = endDate.split('-').map(Number);
+  const cursor = new Date(startY, startM - 1, startD);
+  const end = new Date(endY, endM - 1, endD);
+  const openDates: string[] = [];
+
+  while (cursor <= end) {
+    if (isEventOpenOnDate(schedule, exceptions, startDate, endDate, cursor)) {
+      openDates.push(toDateKey(cursor));
+    }
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return openDates;
+}

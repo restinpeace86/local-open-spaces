@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isEventOperatingOn } from './event-operating-schedule';
+import { computeOperatingDates, isEventOpenOnDate, isEventOperatingOn } from './event-operating-schedule';
 
 // [관리자 이벤트 상세 팝업 내 '운영 요일 / 반복 규칙' 설정 추가](2026-09-12 사용자 지시)
 describe('isEventOperatingOn', () => {
@@ -91,5 +91,57 @@ describe('isEventOperatingOn', () => {
       const withExclusion = { operating_nth_weekdays: ['2-SAT', '4-SAT'], excluded_weekdays: ['SAT'] };
       expect(isEventOperatingOn(withExclusion, new Date('2026-09-12T00:00:00'))).toBe(false);
     });
+  });
+});
+
+// [실제 운영일 하이라이트 캘린더](2026-09-16 사용자 지시, implementation/todo.md
+// [개선사항 2])
+describe('isEventOpenOnDate', () => {
+  const schedule = { excluded_weekdays: ['MON'] };
+  const startDate = '2026-09-01';
+  const endDate = '2026-09-30';
+
+  it('기간 안이고 정기 휴무 요일이 아니면 연다', () => {
+    expect(isEventOpenOnDate(schedule, new Set(), startDate, endDate, new Date('2026-09-15T00:00:00'))).toBe(true);
+  });
+
+  it('기간 밖이면 요일 규칙과 무관하게 닫는다', () => {
+    expect(isEventOpenOnDate(schedule, new Set(), startDate, endDate, new Date('2026-10-05T00:00:00'))).toBe(false);
+    expect(isEventOpenOnDate(schedule, new Set(), startDate, endDate, new Date('2026-08-25T00:00:00'))).toBe(false);
+  });
+
+  it('정기 휴무 요일(월요일)이면 닫는다', () => {
+    expect(isEventOpenOnDate(schedule, new Set(), startDate, endDate, new Date('2026-09-14T00:00:00'))).toBe(false);
+  });
+
+  // [사용자 요구사항 원문] "관리자가 연간 예외 공휴일 등을 수동으로 관리" — 원래
+  // 운영일(화요일)이라도 예외 날짜로 지정되면 그날만 닫는다.
+  it('원래 운영일이어도 예외 날짜로 지정되면 그 날만 닫는다', () => {
+    const exceptionDates = new Set(['2026-09-15']);
+    expect(isEventOpenOnDate(schedule, exceptionDates, startDate, endDate, new Date('2026-09-15T00:00:00'))).toBe(false);
+    expect(isEventOpenOnDate(schedule, exceptionDates, startDate, endDate, new Date('2026-09-16T00:00:00'))).toBe(true);
+  });
+});
+
+describe('computeOperatingDates', () => {
+  it('기간 전체에서 정기 휴무 요일과 예외 날짜를 제외한 실제 운영일만 반환한다', () => {
+    // 2026-09-01(화)~2026-09-07(월), 월요일 정기 휴무 + 9/3(목) 예외 휴무.
+    const dates = computeOperatingDates({
+      schedule: { excluded_weekdays: ['MON'] },
+      exceptionDates: ['2026-09-03'],
+      startDate: '2026-09-01',
+      endDate: '2026-09-07',
+    });
+    expect(dates).toEqual(['2026-09-01', '2026-09-02', '2026-09-04', '2026-09-05', '2026-09-06']);
+  });
+
+  it('규칙이 전혀 없으면 기간 전체가 운영일이다', () => {
+    const dates = computeOperatingDates({
+      schedule: {},
+      exceptionDates: [],
+      startDate: '2026-09-01',
+      endDate: '2026-09-03',
+    });
+    expect(dates).toEqual(['2026-09-01', '2026-09-02', '2026-09-03']);
   });
 });

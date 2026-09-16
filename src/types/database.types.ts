@@ -12,6 +12,31 @@ export type Database = {
   __InternalSupabase: {
     PostgrestVersion: "14.5"
   }
+  graphql_public: {
+    Tables: {
+      [_ in never]: never
+    }
+    Views: {
+      [_ in never]: never
+    }
+    Functions: {
+      graphql: {
+        Args: {
+          extensions?: Json
+          operationName?: string
+          query?: string
+          variables?: Json
+        }
+        Returns: Json
+      }
+    }
+    Enums: {
+      [_ in never]: never
+    }
+    CompositeTypes: {
+      [_ in never]: never
+    }
+  }
   public: {
     Tables: {
       air_quality_week_forecasts: {
@@ -159,6 +184,38 @@ export type Database = {
           title?: string
         }
         Relationships: []
+      }
+      event_operating_exceptions: {
+        Row: {
+          created_at: string
+          event_id: string
+          exception_date: string
+          id: string
+          note: string | null
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          exception_date: string
+          id?: string
+          note?: string | null
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          exception_date?: string
+          id?: string
+          note?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_operating_exceptions_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       event_price_verifications: {
         Row: {
@@ -687,6 +744,24 @@ export type Database = {
           id?: string
           nickname?: string | null
           updated_at?: string
+        }
+        Relationships: []
+      }
+      public_holidays: {
+        Row: {
+          created_at: string
+          holiday_date: string
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          holiday_date: string
+          name: string
+        }
+        Update: {
+          created_at?: string
+          holiday_date?: string
+          name?: string
         }
         Relationships: []
       }
@@ -2477,6 +2552,9 @@ export type CompositeTypes<
     : never
 
 export const Constants = {
+  graphql_public: {
+    Enums: {},
+  },
   public: {
     Enums: {},
   },

@@ -10,6 +10,7 @@ import {
   PRICE_HINT_KEYWORDS,
 } from '@/lib/admin/curation-badges';
 import { OperatingScheduleEditor, OperatingScheduleUpdatedHandler } from '@/components/admin/operating-schedule-editor';
+import { OperatingExceptionsEditor } from '@/components/admin/operating-exceptions-editor';
 
 // [이벤트픽 관리자 블로그 큐레이션](2026-09-11 사용자 지시, implementation/todo.md
 // 개선사항7-2): "관리자 화면 Events 탭 개별 이벤트 항목의 상세 팝업 내부에 블로그
@@ -201,6 +202,16 @@ export function EventBlogCurationModal({
             }}
             onUpdated={onOperatingScheduleUpdated}
           />
+        )}
+
+        {/* [실제 운영일 하이라이트 캘린더](2026-09-16 사용자 지시, todo.md [개선사항 2]):
+            정기 요일 규칙만으로 표현할 수 없는 단발성 예외(예: 올해 설날 당일만
+            휴무)를 관리한다 — 위 OperatingScheduleEditor와 같은 조건(운영 요일 편집을
+            지원하는 호출부인지)으로 함께 묶는다: 이 조건이 없는 호출부는 event에
+            start_date/end_date가 없을 수 있어(타입상으로는 필수지만 라우트별로 느슨한
+            테스트 픽스처가 있음) 같은 위치·같은 이유로 게이팅한다. */}
+        {onOperatingScheduleUpdated && (
+          <OperatingExceptionsEditor eventId={event.id} startDate={event.start_date} endDate={event.end_date} />
         )}
 
         {form.saveError && <p className="text-xs text-red-600">{form.saveError}</p>}

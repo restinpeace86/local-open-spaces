@@ -9,6 +9,7 @@ import { formatDistance, formatDateRange, formatDateTime, formatReservationPerio
 import { MiniMap } from '@/components/map/mini-map';
 import { MapPreviewModal } from '@/components/map/map-preview-modal';
 import { ReservationRequestModal } from '@/components/map/reservation-request-modal';
+import { EventOperatingCalendarSheet } from '@/components/map/event-operating-calendar-sheet';
 import { BookmarkButton } from '@/components/community/bookmark-button';
 import { KIDS_RESTAURANT_CATEGORY_MIN } from '@/lib/spaces/spot-category-groups';
 
@@ -138,6 +139,8 @@ export function DetailModal({
 }) {
   const [copied, setCopied] = useState(false);
   const [isMapPreviewOpen, setIsMapPreviewOpen] = useState(false);
+  // [실제 운영일 하이라이트 캘린더](2026-09-16 사용자 지시, todo.md [개선사항 2])
+  const [isOperatingCalendarOpen, setIsOperatingCalendarOpen] = useState(false);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
   // [개선사항10](2026-09-11 사용자 지시, implementation/todo.md): Event↔Spot 양방향
@@ -546,7 +549,22 @@ export function DetailModal({
                 {period && (
                   <div className="flex items-start justify-between gap-2">
                     <dt className="text-gray-500 shrink-0">행사 기간</dt>
-                    <dd className="text-right text-gray-900">{period}</dd>
+                    <dd className="text-right text-gray-900">
+                      {period}
+                      {/* [실제 운영일 하이라이트 캘린더](2026-09-16 사용자 지시, todo.md
+                          [개선사항 2]): "기간만 글자로 보는 게 아니라.. 캘린더를 눌러서
+                          달력 UI로 직관적으로 확인" — item.start_date/end_date가 실제로
+                          있을 때만(스팟은 기간 자체가 없어 이 버튼도 없음) 노출한다. */}
+                      {item.start_date && item.end_date && (
+                        <button
+                          type="button"
+                          onClick={() => setIsOperatingCalendarOpen(true)}
+                          className="ml-1.5 text-xs text-blue-600 hover:underline"
+                        >
+                          📅 달력으로 보기
+                        </button>
+                      )}
+                    </dd>
                   </div>
                 )}
 
@@ -1078,6 +1096,10 @@ export function DetailModal({
           spotName={item.name}
           onClose={() => setIsReservationModalOpen(false)}
         />
+      )}
+
+      {isOperatingCalendarOpen && (
+        <EventOperatingCalendarSheet eventId={item.id} onClose={() => setIsOperatingCalendarOpen(false)} />
       )}
 
       {/* [개선사항10](2026-09-11 사용자 지시): Event↔Spot 양방향 연동 — 연결된
