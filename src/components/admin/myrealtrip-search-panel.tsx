@@ -236,8 +236,26 @@ export function MyRealTripSearchPanel() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [city]);
 
+  // [실측 버그 수정](2026-09-16 사용자 지적: "도시를 서울로 한 상태에서 검색해도
+  // 서울하고 무관한 상품들이 많이 나오는데?") — 공식 검색 API(/v1/products/tna/
+  // search)에는 애초에 city 파라미터 자체가 없다(categories API에만 있음). 화면의
+  // "도시" 입력칸이 검색 요청에 전혀 반영되지 않아, 카테고리로만 걸러진 인천/대전/
+  // 심지어 해외(도쿄) 상품까지 섞여 나오는 것을 실측으로 재현 확인했다 — 도시를
+  // keyword 앞에 합쳐서 보내야 그 지역 상품 위주로 좁혀진다(완전한 위치 필터는
+  // 아니고 어디까지나 텍스트 검색 보정이라, 여전히 약간의 오차는 있을 수 있음을
+  // 실측으로 함께 확인했다).
+  function buildEffectiveKeyword(): string {
+    const trimmedCity = city.trim();
+    const trimmedKeyword = keyword.trim();
+    if (!trimmedCity) return trimmedKeyword;
+    if (!trimmedKeyword) return trimmedCity;
+    // 관리자가 키워드에 이미 도시명을 직접 포함해 입력한 경우 중복으로 붙이지 않는다.
+    return trimmedKeyword.includes(trimmedCity) ? trimmedKeyword : `${trimmedCity} ${trimmedKeyword}`;
+  }
+
   async function handleSearch(page = 1) {
-    if (!keyword.trim() || isSearching) return;
+    const effectiveKeyword = buildEffectiveKeyword();
+    if (!effectiveKeyword || isSearching) return;
     setIsSearching(true);
     setSearchError(null);
     try {
@@ -245,7 +263,7 @@ export function MyRealTripSearchPanel() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          keyword: keyword.trim(),
+          keyword: effectiveKeyword,
           category: selectedCategory || undefined,
           minPrice: minPrice ? Number(minPrice) : undefined,
           maxPrice: maxPrice ? Number(maxPrice) : undefined,
@@ -272,6 +290,12 @@ export function MyRealTripSearchPanel() {
         <h2 className="text-sm font-bold text-gray-900">🔍 마이리얼트립 상품 검색 (공식 파트너 API)</h2>
         <p className="text-xs text-gray-500">
           도시·카테고리·키워드로 자유롭게 탐색하며 아이/가족 대상 상품이 실제로 어느 카테고리에 있는지 확인해 보세요. 카드를 누르면 상세 정보를 보고 제휴 등록까지 이어집니다.
+        </p>
+        {/* [실측 버그 수정](2026-09-16 사용자 지적): 공식 검색 API에 city 파라미터가
+            없어 "도시"가 검색어 앞에 자동으로 합쳐져야만 그 지역 위주로 좁혀진다 —
+            텍스트 검색 보정일 뿐 완전한 위치 필터는 아니라는 것을 정직하게 안내한다. */}
+        <p className="text-[11px] text-gray-400">
+          ℹ️ "도시"는 검색어 앞에 자동으로 합쳐져 함께 검색됩니다(예: 서울 + 키즈 체험 → "서울 키즈 체험"). 완전한 위치 필터는 아니라 무관한 지역 상품이 일부 섞일 수 있습니다.
         </p>
 
         <div className="flex flex-wrap items-center gap-1.5">
@@ -333,7 +357,7 @@ export function MyRealTripSearchPanel() {
           <button
             type="button"
             onClick={() => handleSearch(1)}
-            disabled={isSearching || !keyword.trim()}
+            disabled={isSearching || !buildEffectiveKeyword()}
             className="rounded-lg bg-gray-900 text-white text-sm font-semibold px-3 py-1.5 disabled:opacity-40"
           >
             {isSearching ? '검색 중...' : '검색'}

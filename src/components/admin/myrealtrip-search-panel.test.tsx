@@ -109,6 +109,39 @@ it('도시를 바꾸면 그 도시의 카테고리를 다시 불러온다', asyn
   });
 });
 
+// [실측 버그 수정](2026-09-16 사용자 지적: "도시를 서울로 한 상태에서 검색해도
+// 서울하고 무관한 상품들이 많이 나오는데?") — 공식 검색 API에는 city 파라미터가
+// 없어 도시가 검색어에 합쳐지지 않으면 전혀 반영되지 않는다(실측으로 인천/대전/
+// 해외 상품까지 섞여 나오는 것을 확인).
+it('검색 시 도시를 키워드 앞에 자동으로 합쳐서 보낸다', async () => {
+  const fetchMock = mockFetch({ searchItems: [] });
+  vi.stubGlobal('fetch', fetchMock);
+  render(<MyRealTripSearchPanel />); // 기본 도시: 서울
+
+  fireEvent.change(screen.getByPlaceholderText('검색 키워드 (예: 서울 키즈 체험)'), { target: { value: '키즈 체험' } });
+  fireEvent.click(screen.getByText('검색'));
+
+  await waitFor(() => {
+    const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/myrealtrip/search'));
+    expect(call).toBeDefined();
+    expect(JSON.parse((call![1] as RequestInit).body as string).keyword).toBe('서울 키즈 체험');
+  });
+});
+
+it('키워드에 이미 도시명이 포함돼 있으면 중복으로 합치지 않는다', async () => {
+  const fetchMock = mockFetch({ searchItems: [] });
+  vi.stubGlobal('fetch', fetchMock);
+  render(<MyRealTripSearchPanel />);
+
+  fireEvent.change(screen.getByPlaceholderText('검색 키워드 (예: 서울 키즈 체험)'), { target: { value: '서울 키즈 체험' } });
+  fireEvent.click(screen.getByText('검색'));
+
+  await waitFor(() => {
+    const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/myrealtrip/search'));
+    expect(JSON.parse((call![1] as RequestInit).body as string).keyword).toBe('서울 키즈 체험');
+  });
+});
+
 it('키워드를 입력하고 검색하면 결과 카드를 보여준다', async () => {
   vi.stubGlobal('fetch', mockFetch({ searchItems: [buildSearchItem()] }));
   render(<MyRealTripSearchPanel />);
