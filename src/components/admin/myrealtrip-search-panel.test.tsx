@@ -85,6 +85,12 @@ function mockFetch(handlers: {
     if (url.includes('/api/admin/service-categories')) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [] }) } as Response);
     }
+    if (url.includes('/api/admin/data-grid/space-link')) {
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ space: { id: 'spot-9', name: '숲속 키즈카페', standard_name: null, service_category_id: null } }),
+      } as Response);
+    }
     return Promise.reject(new Error(`unexpected fetch: ${url}, init: ${JSON.stringify(init)}`));
   });
 }
@@ -310,5 +316,35 @@ describe('마이리얼트립 상품 → 우리 스팟 연결 (소거법, 2026-09
     fireEvent.click(screen.getByText('이 스팟과 연결 (마이링크 자동 생성)'));
 
     expect(await screen.findByText('연결에 실패했습니다.')).toBeInTheDocument();
+  });
+
+  // [스팟 연결 후 등록 시 중복 작업 제거](2026-09-16 사용자 보고): "마이리얼트립
+  // 에서 들어가면 내스팟과 연결있는데 그거하고나서 등록버튼 누르고 제휴마케팅
+  // 만들기 들어가면 스팟연결안되어있어서 거기서 다시하고.. 그래서 2번하는걸로
+  // 되나?" — "우리 스팟과 연결"로 이미 연결한 상품을 그 뒤에 "제휴 상품으로
+  // 등록"하면, 등록 폼에서 스팟을 또 검색하지 않아도 이미 연동된 상태여야 한다.
+  it('스팟을 연결한 뒤 "제휴 상품으로 등록"을 누르면 등록 폼에 그 스팟이 이미 연동돼 있다', async () => {
+    const fetchMock = mockFetch({
+      searchItems: [buildSearchItem()],
+      spotSearchResults: [{ id: 'spot-9', name: '숲속 키즈카페', address: '경기 성남시' }],
+      mylink: 'https://myrealt.rip/qamObf',
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await search();
+
+    fireEvent.click(screen.getByText('[키즈] 국립중앙박물관 초등 도슨트 투어'));
+    fireEvent.click(await screen.findByText('🔗 우리 스팟과 연결'));
+    fireEvent.change(screen.getByPlaceholderText(/장소명 3글자 이상/), { target: { value: '숲속 키즈카페' } });
+    fireEvent.mouseDown(await screen.findByText('숲속 키즈카페'));
+    fireEvent.click(screen.getByText('이 스팟과 연결 (마이링크 자동 생성)'));
+    await screen.findByText('✅ 숲속 키즈카페에 연결됨');
+
+    fireEvent.click(screen.getByText('🔗 제휴 상품으로 등록'));
+    await screen.findByDisplayValue('https://myrealt.rip/qamObf');
+
+    // 등록 폼(CuratedItemFormModal) 안에서 스팟을 다시 검색하지 않아도 이미
+    // "숲속 키즈카페"가 선택된 상태(변경 버튼 존재, 검색창은 없음)여야 한다.
+    expect(screen.getByText('변경')).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/장소명 3글자 이상/)).not.toBeInTheDocument();
   });
 });

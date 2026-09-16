@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useBackdropDismiss } from '@/lib/admin/use-backdrop-dismiss';
 import { SpotPicker, SpotOption } from '@/components/community/spot-picker';
 import { SpotServiceCategoryCheck } from '@/components/admin/spot-service-category-check';
@@ -44,7 +44,14 @@ export function CuratedItemFormModal({
   // 기존 행)과 달리 이건 "신규 등록인데 값만 미리 채워 넣기"라 isEdit 판정에는
   // 영향을 주지 않는다 — id가 없는 신규 행이므로 그대로 두면 PATCH를 시도해 버려
   // initial과 절대 같은 의미로 취급하면 안 된다.
-  prefill?: Partial<Pick<CuratedItemFormValue, 'title' | 'image_url' | 'booking_url' | 'category'>>;
+  prefill?: Partial<Pick<CuratedItemFormValue, 'title' | 'image_url' | 'booking_url' | 'category'>> & {
+    // [스팟 연결 후 등록 시 중복 작업 제거](2026-09-16 사용자 보고: "마이리얼트립
+    // 에서 내 스팟과 연결있는데 그거하고나서.. 제휴마케팅만들기 들어가면 스팟
+    // 연결안되어있어서 거기서 다시하고.. 그래서 2번 하는걸로 되나?") — 마이리얼
+    // 트립 검색에서 이미 이 상품을 우리 스팟과 연결해 뒀다면, 그 스팟을 여기서도
+    // 다시 검색해 고르지 않아도 되게 그대로 넘겨받는다.
+    spot?: { id: string; name: string; address: string | null } | null;
+  };
   onClose: () => void;
   onSaved: (item: CuratedItemFormValue) => void;
 }) {
@@ -59,10 +66,22 @@ export function CuratedItemFormModal({
   const [operationStart, setOperationStart] = useState(initial?.operation_start_date ?? '');
   const [operationEnd, setOperationEnd] = useState(initial?.operation_end_date ?? '');
   const [spot, setSpot] = useState<SpotOption | null>(
-    initial?.spot ? { id: initial.spot.id, name: initial.spot.name, address: initial.spot.address } : null
+    initial?.spot
+      ? { id: initial.spot.id, name: initial.spot.name, address: initial.spot.address }
+      : prefill?.spot
+        ? { id: prefill.spot.id, name: prefill.spot.name, address: prefill.spot.address }
+        : null
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  // [중복 등록 버그 수정](2026-09-16 사용자 보고: "반응 늦어서 똑같은거 2번
+  // 입력한거에 대하여 큐레이션/제휴상품에 똑같은게 2개 들어가 있어") —
+  // isSubmitting은 React state라 다시 렌더링돼야 반영된다. 응답이 느릴 때
+  // 두 번 빠르게 클릭하면(또는 더블클릭) 두 번째 클릭의 핸들러가 아직 갱신
+  // 안 된 이전 isSubmitting=false를 그대로 읽어 통과해 버릴 수 있다(실측
+  // 재현 가능한 React 흔한 더블 서브밋 패턴) — 렌더링 주기와 무관하게 즉시
+  // 갱신되는 ref로 동기적으로 막는다.
+  const isSubmittingRef = useRef(false);
 
   // [노출 중분류 확인/입력](2026-09-13 사용자 지시): "큐레이션/제휴 상품 등록탭에서도
   // 장소 입력하면 해당 장소가 노출 중분류 없으면 관리자가 입력할수있도록.. events쪽의
@@ -81,7 +100,7 @@ export function CuratedItemFormModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (isSubmitting) return;
+    if (isSubmittingRef.current) return;
 
     if (!title.trim()) {
       setErrorMessage('상품명을 입력해 주세요.');
@@ -96,6 +115,7 @@ export function CuratedItemFormModal({
       return;
     }
 
+    isSubmittingRef.current = true;
     setIsSubmitting(true);
     setErrorMessage(null);
     try {
@@ -128,6 +148,7 @@ export function CuratedItemFormModal({
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : '저장에 실패했습니다.');
     } finally {
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
     }
   }

@@ -38,15 +38,22 @@ const SORT_LABELS: Record<MyRealTripSort, string> = {
 // 키즈카페 중에 마이리얼트립에 있는건 46개.. 46개에 대하여 우리쪽 연결하고 그
 // 연결한건 안나와서 내가 연결했다는걸 인지할수 있는것.. 소거법으로 가야하지
 // 않을까?" — 스팟(수백 개) 각각에서 검색하는 대신, 마이리얼트립 상품(훨씬 적음)
-// 목록을 기준으로 각각에 맞는 스팟을 찾아 연결하는 흐름. linkedSpotName이 있으면
+// 목록을 기준으로 각각에 맞는 스팟을 찾아 연결하는 흐름. linkedSpot이 있으면
 // "이미 처리 완료"로 표시해 관리자가 남은 미해결 항목만 훑어볼 수 있게 한다.
+// [스팟 연결 후 등록 시 중복 작업 제거](2026-09-16 후속 사용자 보고: "마이리얼
+// 트립에서 내 스팟과 연결있는데.. 제휴마케팅만들기 들어가면 스팟연결안되어
+// 있어서 거기서 다시하고.. 2번 하는걸로 되나?") — 이름뿐 아니라 id도 함께
+// 들고 있어야 "🔗 제휴 상품으로 등록" 폼을 열 때 그 스팟을 그대로 넘겨 다시
+// 검색하지 않아도 되게 할 수 있다.
+type LinkedSpotInfo = { spotId: string; spotName: string };
+
 function ResultCard({
   item,
-  linkedSpotName,
+  linkedSpot,
   onOpenDetail,
 }: {
   item: MyRealTripSearchItem;
-  linkedSpotName: string | undefined;
+  linkedSpot: LinkedSpotInfo | undefined;
   onOpenDetail: (item: MyRealTripSearchItem) => void;
 }) {
   return (
@@ -54,7 +61,7 @@ function ResultCard({
       type="button"
       onClick={() => onOpenDetail(item)}
       className={`text-left rounded-xl border overflow-hidden flex flex-col ${
-        linkedSpotName ? 'border-emerald-200 bg-emerald-50/40' : 'border-gray-200 hover:border-blue-300'
+        linkedSpot ? 'border-emerald-200 bg-emerald-50/40' : 'border-gray-200 hover:border-blue-300'
       }`}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -68,7 +75,7 @@ function ResultCard({
             ⭐ {item.reviewScore.toFixed(1)} ({item.reviewCount.toLocaleString()})
           </span>
         )}
-        {linkedSpotName && <span className="text-[11px] font-semibold text-emerald-700">✅ {linkedSpotName}에 연결됨</span>}
+        {linkedSpot && <span className="text-[11px] font-semibold text-emerald-700">✅ {linkedSpot.spotName}에 연결됨</span>}
       </div>
     </button>
   );
@@ -86,7 +93,7 @@ function ConnectToSpotModal({
 }: {
   item: MyRealTripSearchItem;
   onClose: () => void;
-  onConnected: (spotName: string) => void;
+  onConnected: (spot: LinkedSpotInfo) => void;
 }) {
   const [spot, setSpot] = useState<SpotOption | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
@@ -111,7 +118,7 @@ function ConnectToSpotModal({
       });
       const data = await res.json();
       if (!res.ok || !data.link) throw new Error(data.error ?? '연결에 실패했습니다.');
-      onConnected(spot.name);
+      onConnected({ spotId: spot.id, spotName: spot.name });
     } catch (err) {
       setError(err instanceof Error ? err.message : '연결에 실패했습니다.');
     } finally {
@@ -153,22 +160,24 @@ function ConnectToSpotModal({
 // 남겨 둔다 — 다만 그 경우 추적이 안 된다는 점을 명확히 경고한다.
 function MyRealTripProductDetailModal({
   item,
-  linkedSpotName,
+  linkedSpot,
   onClose,
   onSaved,
   onConnectedToSpot,
 }: {
   item: MyRealTripSearchItem;
-  linkedSpotName: string | undefined;
+  linkedSpot: LinkedSpotInfo | undefined;
   onClose: () => void;
   onSaved: () => void;
-  onConnectedToSpot: (gid: string, spotName: string) => void;
+  onConnectedToSpot: (gid: string, spot: LinkedSpotInfo) => void;
 }) {
   const [detail, setDetail] = useState<MyRealTripProductDetail | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [isGeneratingLink, setIsGeneratingLink] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
-  const [prefill, setPrefill] = useState<ReturnType<typeof mapSearchItemToCuratedItemPrefill> | null>(null);
+  const [prefill, setPrefill] = useState<
+    (ReturnType<typeof mapSearchItemToCuratedItemPrefill> & { spot?: { id: string; name: string; address: string | null } }) | null
+  >(null);
   const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
 
   useEffect(() => {
@@ -185,8 +194,15 @@ function MyRealTripProductDetailModal({
       .catch((err) => setDetailError(err instanceof Error ? err.message : '상품 상세 조회에 실패했습니다.'));
   }, [item.gid]);
 
+  // [스팟 연결 후 등록 시 중복 작업 제거](2026-09-16 사용자 보고) — 이미 이
+  // 상품을 우리 스팟과 연결해 뒀다면, 그 스팟을 등록 폼에도 그대로 넘겨 다시
+  // 검색하지 않아도 되게 한다(노출 중분류 확인도 spot.id만 있으면 폼이 알아서
+  // 이어서 보여준다 — curated-item-form-modal.tsx의 SpotServiceCategoryCheck).
   async function handleRegister(bookingUrl: string) {
-    setPrefill(mapSearchItemToCuratedItemPrefill(item, bookingUrl));
+    setPrefill({
+      ...mapSearchItemToCuratedItemPrefill(item, bookingUrl),
+      spot: linkedSpot ? { id: linkedSpot.spotId, name: linkedSpot.spotName, address: null } : undefined,
+    });
   }
 
   async function handleGenerateMylinkAndRegister() {
@@ -281,8 +297,8 @@ function MyRealTripProductDetailModal({
             다른 별개 기능이다 — 이 상품을 우리가 이미 갖고 있는 "스팟" 하나와
             연결해, 그 스팟 상세 화면에 "구매 둘러보기" 버튼이 뜨게 한다. */}
         <div className="mt-3 pt-3 border-t border-gray-100">
-          {linkedSpotName ? (
-            <p className="text-xs text-emerald-700 font-semibold">✅ 이미 "{linkedSpotName}" 스팟에 연결돼 있습니다.</p>
+          {linkedSpot ? (
+            <p className="text-xs text-emerald-700 font-semibold">✅ 이미 "{linkedSpot.spotName}" 스팟에 연결돼 있습니다.</p>
           ) : (
             <button
               type="button"
@@ -310,9 +326,9 @@ function MyRealTripProductDetailModal({
         <ConnectToSpotModal
           item={item}
           onClose={() => setIsConnectModalOpen(false)}
-          onConnected={(spotName) => {
+          onConnected={(spot) => {
             setIsConnectModalOpen(false);
-            onConnectedToSpot(item.gid, spotName);
+            onConnectedToSpot(item.gid, spot);
           }}
         />
       )}
@@ -338,9 +354,11 @@ export function MyRealTripSearchPanel() {
 
   const [detailItem, setDetailItem] = useState<MyRealTripSearchItem | null>(null);
   // [마이리얼트립 상품 → 우리 스팟 역방향 매칭](2026-09-16 사용자 지시): 현재
-  // 검색 결과에 표시된 gid들 중 이미 어떤 스팟과 연결된 것을 gid → 스팟명으로
-  // 들고 있다("소거법" — 연결된 항목은 카드에 표시만 하고 더 손댈 게 없다).
-  const [linkedByGid, setLinkedByGid] = useState<Record<string, string>>({});
+  // 검색 결과에 표시된 gid들 중 이미 어떤 스팟과 연결된 것을 gid → {스팟id,
+  // 스팟명}으로 들고 있다("소거법" — 연결된 항목은 카드에 표시만 하고 더 손댈
+  // 게 없다). id까지 들고 있어야 "제휴 상품으로 등록" 폼에도 그대로 넘겨 스팟을
+  // 또 검색하지 않아도 된다(2026-09-16 후속 사용자 보고 — 중복 작업 제거).
+  const [linkedByGid, setLinkedByGid] = useState<Record<string, LinkedSpotInfo>>({});
 
   // 도시가 바뀌면 그 도시의 카테고리 목록을 다시 불러온다(값이 도시마다 다름 —
   // 실측으로 서울/부산/제주 구성이 서로 다름을 확인했다, 절대 하드코딩하지 않음).
@@ -392,8 +410,8 @@ export function MyRealTripSearchPanel() {
       const res = await fetch(`/api/admin/spot-myrealtrip-link/by-gids?gids=${gids.map(encodeURIComponent).join(',')}`);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? '연결 상태 조회 실패');
-      const map: Record<string, string> = {};
-      for (const link of data.links ?? []) map[link.gid] = link.spot_name;
+      const map: Record<string, LinkedSpotInfo> = {};
+      for (const link of data.links ?? []) map[link.gid] = { spotId: link.spot_id, spotName: link.spot_name };
       setLinkedByGid(map);
     } catch {
       // 연결 상태 표시는 보조 정보라 실패해도 검색 결과 자체는 그대로 보여준다
@@ -532,7 +550,7 @@ export function MyRealTripSearchPanel() {
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {items.map((item) => (
-                <ResultCard key={item.gid} item={item} linkedSpotName={linkedByGid[item.gid]} onOpenDetail={setDetailItem} />
+                <ResultCard key={item.gid} item={item} linkedSpot={linkedByGid[item.gid]} onOpenDetail={setDetailItem} />
               ))}
             </div>
           </>
@@ -542,11 +560,11 @@ export function MyRealTripSearchPanel() {
       {detailItem && (
         <MyRealTripProductDetailModal
           item={detailItem}
-          linkedSpotName={linkedByGid[detailItem.gid]}
+          linkedSpot={linkedByGid[detailItem.gid]}
           onClose={() => setDetailItem(null)}
           onSaved={() => setDetailItem(null)}
-          onConnectedToSpot={(gid, spotName) => {
-            setLinkedByGid((prev) => ({ ...prev, [gid]: spotName }));
+          onConnectedToSpot={(gid, spot) => {
+            setLinkedByGid((prev) => ({ ...prev, [gid]: spot }));
           }}
         />
       )}

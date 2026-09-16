@@ -206,4 +206,84 @@ describe('CuratedItemFormModal — prefill(마이리얼트립 검색 결과 등�
       expect(fetchMock.mock.calls.some((c) => (c[1] as RequestInit)?.method === 'PATCH')).toBe(false);
     });
   });
+
+  // [스팟 연결 후 등록 시 중복 작업 제거](2026-09-16 사용자 보고): "마이리얼트립
+  // 에서 내 스팟과 연결있는데.. 제휴마케팅만들기 들어가면 스팟연결안되어있어서
+  // 거기서 다시하고.. 그래서 2번하는걸로 되나?" — prefill.spot이 있으면 스팟을
+  // 다시 검색하지 않아도 이미 선택된 상태로 열려야 한다.
+  it('prefill.spot이 있으면 장소를 다시 검색하지 않아도 이미 연동된 상태로 열린다', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      void init;
+      if (url.includes('/api/admin/service-categories')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: SERVICE_CATEGORIES }) } as Response);
+      }
+      if (url.includes('/api/admin/data-grid/space-link')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ space: { id: 'spot-9', name: '숲속 놀이터', standard_name: null, service_category_id: 'cat-1' } }),
+        } as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <CuratedItemFormModal
+        prefill={{
+          title: '숲속 키즈카페 입장권',
+          booking_url: 'https://experiences.myrealtrip.com/products/5905493',
+          spot: { id: 'spot-9', name: '숲속 놀이터', address: '경기 성남시' },
+        }}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />
+    );
+
+    // 스팟 검색창이 아니라 이미 선택된 스팟명이 바로 보여야 한다("변경" 버튼 존재).
+    expect(await screen.findByText('숲속 놀이터')).toBeInTheDocument();
+    expect(screen.getByText('변경')).toBeInTheDocument();
+    expect(screen.queryByPlaceholderText(/장소명 3글자 이상/)).not.toBeInTheDocument();
+
+    // 스팟이 이미 정해져 있으므로 노출 중분류 확인 UI도 곧바로 동작한다(spot.id 기준).
+    expect(await screen.findByText(/노출 중분류: 체험 > 생태학습/)).toBeInTheDocument();
+  });
+
+  // [중복 등록 버그 수정](2026-09-16 사용자 보고): "반응 늦어서 똑같은거 2번
+  // 입력한거에 대하여 큐레이션/제휴상품에 똑같은게 2개 들어가 있어" — 응답이
+  // 늦는 동안 "등록하기"를 빠르게 두 번 눌러도 POST는 한 번만 나가야 한다.
+  it('저장 버튼을 빠르게 두 번 눌러도 등록 요청은 한 번만 전송된다', async () => {
+    let resolvePost: (() => void) | undefined;
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/api/admin/curated-items') && init?.method === 'POST') {
+        return new Promise<Response>((resolve) => {
+          resolvePost = () =>
+            resolve({ ok: true, json: () => Promise.resolve({ item: { id: 'c1', created_at: '2026-09-16' } }) } as Response);
+        });
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(
+      <CuratedItemFormModal
+        prefill={{ title: '숲속 특가권', booking_url: 'https://x.com' }}
+        onClose={vi.fn()}
+        onSaved={vi.fn()}
+      />
+    );
+
+    const submitButton = screen.getByText('등록하기');
+    fireEvent.click(submitButton);
+    fireEvent.click(submitButton);
+    fireEvent.click(submitButton);
+
+    resolvePost?.();
+
+    await waitFor(() => {
+      const postCalls = fetchMock.mock.calls.filter(
+        (c) => String(c[0]).includes('/api/admin/curated-items') && (c[1] as RequestInit)?.method === 'POST'
+      );
+      expect(postCalls).toHaveLength(1);
+    });
+  });
 });
