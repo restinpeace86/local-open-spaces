@@ -21,11 +21,14 @@ function buildItem(overrides: Partial<MyRealTripSearchItem> = {}): MyRealTripSea
 }
 
 describe('mapSearchItemToCuratedItemPrefill', () => {
-  it('제목/이미지/제휴링크를 curated_items 등록 폼에 채울 값으로 매핑한다', () => {
-    expect(mapSearchItemToCuratedItemPrefill(buildItem())).toEqual({
+  // [마이링크 자동 생성](2026-09-16 후속 지시): booking_url은 호출부가 넘긴 값을
+  // 그대로 쓴다 — 원본 productUrl이 아니라 /v1/mylink로 변환한 추적 링크가
+  // 들어와야 클릭이 실제로 정산된다.
+  it('제목/이미지는 검색 결과에서, 제휴링크는 호출부가 넘긴 값(마이링크)을 그대로 매핑한다', () => {
+    expect(mapSearchItemToCuratedItemPrefill(buildItem(), 'https://myrealt.rip/qamObf')).toEqual({
       title: '[교토] 기온 게이샤 지구 야간 워킹 투어',
       image_url: 'https://example.com/img.jpg',
-      booking_url: 'https://experiences.myrealtrip.com/products/5905493',
+      booking_url: 'https://myrealt.rip/qamObf',
     });
   });
 });

@@ -33,12 +33,34 @@ export type MyRealTripSearchItem = {
 export const MYREALTRIP_SORT_OPTIONS = ['price_asc', 'price_desc', 'review_score_desc', 'selling_count_desc'] as const;
 export type MyRealTripSort = (typeof MYREALTRIP_SORT_OPTIONS)[number];
 
-// [큐레이션 등록 폼 사전 채움](2026-09-16 사용자 지시 후속): 검색 결과 카드에서
-// "＋ 큐레이션에 등록"을 누르면 curated-item-form-modal.tsx의 신규 등록 폼에
-// 그대로 채워 넣을 값. 가격/카테고리/리뷰는 curated_items 스키마에 대응 컬럼이
-// 없어(요구사항 범위 밖 — 제5장 제7조, 필요한 컬럼이 아직 정의되지 않음) 옮기지
-// 않는다 — 이미 존재하는 3개 필드(제목/이미지/제휴링크)만 채운다.
-export function mapSearchItemToCuratedItemPrefill(item: MyRealTripSearchItem): {
+// [상품 상세 확인 후 등록](2026-09-16 사용자 지시 후속): "상품리스트 보고..
+// 상품 상세 들어가서 해당 상품에 대하여 제휴상품으로 등록하는 흐름으로" — 검색
+// API(title/salePrice/imageUrl)만으로는 볼 수 없는 소개 문구/포함·불포함 사항을
+// 등록 전에 확인할 수 있게 한다. title은 실측상 항상 빈 문자열이라(스키마 특성,
+// 여러 상품으로 확인) 화면에 표시할 제목은 검색 결과의 itemName을 그대로 쓴다.
+export type MyRealTripProductDetail = {
+  gid: string;
+  title: string;
+  description: string;
+  reviewScore: number | null;
+  reviewCount: number | null;
+  included: string[];
+  excluded: string[];
+  itineraries: Array<{ title: string; description: string }>;
+};
+
+// [큐레이션 등록 폼 사전 채움](2026-09-16 사용자 지시 후속): 검색 결과에서 등록
+// 폼에 채워 넣을 값. bookingUrl은 호출부가 명시적으로 넘긴다 — [마이링크(제휴
+// 추적 링크) 자동 생성](2026-09-16 후속 지시: "그냥 productUrl 넣으면 추적 안
+// 됨") 이후로는 원본 productUrl이 아니라 /v1/mylink로 변환한 myrealt.rip
+// 단축 링크를 넘겨야 클릭이 실제로 추적/정산된다 — 이 함수 자체는 어느 URL이
+// 오든 상관없는 순수 매핑만 담당한다(마이링크 생성이라는 네트워크 호출은 API
+// 라우트가 맡음). 가격/카테고리/리뷰는 curated_items 스키마에 대응 컬럼이 없어
+// (요구사항 범위 밖 — 제5장 제7조) 옮기지 않는다.
+export function mapSearchItemToCuratedItemPrefill(
+  item: MyRealTripSearchItem,
+  bookingUrl: string
+): {
   title: string;
   image_url: string;
   booking_url: string;
@@ -46,6 +68,6 @@ export function mapSearchItemToCuratedItemPrefill(item: MyRealTripSearchItem): {
   return {
     title: item.itemName,
     image_url: item.imageUrl,
-    booking_url: item.productUrl,
+    booking_url: bookingUrl,
   };
 }
