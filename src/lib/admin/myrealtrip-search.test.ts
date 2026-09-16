@@ -31,18 +31,26 @@ describe('filterSearchItemsByAllKeywordTokens', () => {
     buildItem({ gid: '3', itemName: '[구미] 송정동 큐토피아 키즈카페' }),
   ];
 
-  it('검색어의 모든 토큰을 상품명에 포함하는 결과만 남긴다', () => {
+  it('검색어의 모든 토큰을 상품명에 포함하는 결과만 남기고 exactMatchFound=true다', () => {
     const result = filterSearchItemsByAllKeywordTokens(items, '오키드 키즈카페');
-    expect(result.map((i) => i.gid)).toEqual(['1']);
+    expect(result.items.map((i) => i.gid)).toEqual(['1']);
+    expect(result.exactMatchFound).toBe(true);
   });
 
-  it('정확히 일치하는 결과가 하나도 없으면 원본 목록을 그대로 반환한다(전부 숨기지 않음)', () => {
+  // [실측 후속 발견](2026-09-16, "법동키즈카페로 검색하면 다나오는데?"): "법동"이
+  // 마이리얼트립 검색 색인에 없는 지역명이라 AND 필터가 0건이 되는 게 정상이다 —
+  // 이때 exactMatchFound=false로 "필터가 고장난 게 아니라 진짜 일치하는 게
+  // 없다"는 걸 호출부가 구분할 수 있어야 한다.
+  it('정확히 일치하는 결과가 하나도 없으면 원본 목록을 반환하되 exactMatchFound=false다', () => {
     const result = filterSearchItemsByAllKeywordTokens(items, '전혀다른업체명');
-    expect(result).toEqual(items);
+    expect(result.items).toEqual(items);
+    expect(result.exactMatchFound).toBe(false);
   });
 
-  it('빈 검색어면 원본 목록을 그대로 반환한다', () => {
-    expect(filterSearchItemsByAllKeywordTokens(items, '  ')).toEqual(items);
+  it('빈 검색어면 원본 목록을 그대로 반환하고 exactMatchFound=true다', () => {
+    const result = filterSearchItemsByAllKeywordTokens(items, '  ');
+    expect(result.items).toEqual(items);
+    expect(result.exactMatchFound).toBe(true);
   });
 });
 

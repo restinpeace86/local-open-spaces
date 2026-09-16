@@ -68,14 +68,23 @@ export type MyRealTripProductDetail = {
 // 적용한다(일반 탐색 패널에는 적용하지 않는다 — 그쪽은 도시명이 상품명에
 // 문자 그대로 없어도 실제로 관련 있는 상품을 놓칠 위험이 있어 필터링을
 // 보류했던 것과 같은 이유로, 여기서는 반대로 "정확한 상호명 일치"가 목적이라
-// AND 필터가 오히려 정확도를 높인다). 전부 걸러져 0건이 되면(표현 차이로 토큰이
-// 그대로 안 맞을 수 있음) 원본 목록을 그대로 반환해 관리자가 직접 훑어볼 수
-// 있게 한다 — 아무것도 안 보여주는 것보다 낫다.
-export function filterSearchItemsByAllKeywordTokens(items: MyRealTripSearchItem[], keyword: string): MyRealTripSearchItem[] {
+// AND 필터가 오히려 정확도를 높인다).
+//
+// [실측 후속 발견](2026-09-16, "법동키즈카페로 검색하면 다나오는데?"): "법동"이
+// 마이리얼트립 검색 색인에 전혀 없는 지역명이면(실측: "법동키즈카페"와 그냥
+// "키즈카페"의 totalCount/결과가 완전히 동일 — "법동"이 결과에 아무 영향을
+// 주지 않음을 확인) AND 필터가 0건이 되는 게 정상이다 — 이 경우 원본 목록을
+// 그대로 반환하되(아무것도 안 보여주는 것보다 나음), "정확히 일치하는 게
+// 없어서 전체를 보여주는 중"이라는 사실을 호출부가 구분해 안내할 수 있도록
+// exactMatchFound 플래그를 함께 반환한다 — 필터가 고장난 것처럼 보이지 않게.
+export function filterSearchItemsByAllKeywordTokens(
+  items: MyRealTripSearchItem[],
+  keyword: string
+): { items: MyRealTripSearchItem[]; exactMatchFound: boolean } {
   const tokens = keyword.trim().split(/\s+/).filter(Boolean);
-  if (tokens.length === 0) return items;
+  if (tokens.length === 0) return { items, exactMatchFound: true };
   const strictMatches = items.filter((item) => tokens.every((token) => item.itemName.includes(token)));
-  return strictMatches.length > 0 ? strictMatches : items;
+  return strictMatches.length > 0 ? { items: strictMatches, exactMatchFound: true } : { items, exactMatchFound: false };
 }
 
 export function mapSearchItemToCuratedItemPrefill(

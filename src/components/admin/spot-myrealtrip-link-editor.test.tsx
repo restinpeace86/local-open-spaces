@@ -69,6 +69,31 @@ it('이미 승인된 매칭이 있으면 그 정보를 보여주고 검색 UI는
   expect(screen.queryByText('🔍 검색')).not.toBeInTheDocument();
 });
 
+// [실측 후속 발견](2026-09-16 사용자 지적: "법동키즈카페로 검색하면 다나오는데?") —
+// 검색어와 정확히 일치하는 상품이 하나도 없으면(예: 마이리얼트립 색인에 없는
+// 지역명) 원본 전체 목록으로 폴백하되, 필터가 고장난 게 아니라 "정확히 일치하는
+// 게 없다"는 걸 관리자가 알 수 있도록 경고 문구를 보여준다.
+it('정확히 일치하는 상품이 없으면 전체 목록을 보여주되 경고 문구를 함께 표시한다', async () => {
+  vi.stubGlobal(
+    'fetch',
+    mockFetch({
+      existingLink: null,
+      searchItems: [
+        buildSearchItem({ gid: '1', itemName: '[남양주] 플레이킹덤 키즈카페' }),
+        buildSearchItem({ gid: '2', itemName: '[구미] 송정동 큐토피아 키즈카페' }),
+      ],
+    })
+  );
+  render(<SpotMyRealTripLinkEditor spotId="spot-1" spotName="법동키즈카페" />);
+
+  await waitFor(() => expect(screen.queryByText('마이리얼트립 매칭 확인 중...')).not.toBeInTheDocument());
+  fireEvent.click(screen.getByText('🔍 검색'));
+
+  expect(await screen.findByText(/정확히 일치하는 상품을 찾지 못해/)).toBeInTheDocument();
+  expect(screen.getByText('[남양주] 플레이킹덤 키즈카페')).toBeInTheDocument();
+  expect(screen.getByText('[구미] 송정동 큐토피아 키즈카페')).toBeInTheDocument();
+});
+
 it('매칭이 없으면 스팟명으로 검색할 수 있고, 승인하면 마이링크가 생성돼 저장된다', async () => {
   const fetchMock = mockFetch({ existingLink: null, searchItems: [buildSearchItem()] });
   vi.stubGlobal('fetch', fetchMock);

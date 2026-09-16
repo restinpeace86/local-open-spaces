@@ -19,6 +19,10 @@ export function SpotMyRealTripLinkEditor({ spotId, spotName }: { spotId: string;
 
   const [keyword, setKeyword] = useState(spotName);
   const [results, setResults] = useState<MyRealTripSearchItem[] | null>(null);
+  // [실측 후속 발견](2026-09-16, "법동키즈카페로 검색하면 다나오는데?"): AND
+  // 필터가 0건이라 원본 목록으로 폴백한 것인지(정확히 일치하는 상품이 진짜
+  // 없는 것) 구분해 안내하기 위한 플래그.
+  const [exactMatchFound, setExactMatchFound] = useState(true);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
   const [approvingGid, setApprovingGid] = useState<string | null>(null);
@@ -55,9 +59,12 @@ export function SpotMyRealTripLinkEditor({ spotId, spotName }: { spotId: string;
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? '검색에 실패했습니다.');
-      setResults(filterSearchItemsByAllKeywordTokens(data.items ?? [], trimmedKeyword));
+      const filtered = filterSearchItemsByAllKeywordTokens(data.items ?? [], trimmedKeyword);
+      setResults(filtered.items);
+      setExactMatchFound(filtered.exactMatchFound);
     } catch (err) {
       setResults([]);
+      setExactMatchFound(true);
       setSearchError(err instanceof Error ? err.message : '검색에 실패했습니다.');
     } finally {
       setIsSearching(false);
@@ -157,6 +164,15 @@ export function SpotMyRealTripLinkEditor({ spotId, spotName }: { spotId: string;
           </div>
           {searchError && <p className="text-xs text-red-500 mb-1.5">{searchError}</p>}
           {results && results.length === 0 && !searchError && <p className="text-xs text-gray-400">검색 결과가 없습니다.</p>}
+          {/* [실측 후속 발견](2026-09-16, "법동키즈카페로 검색하면 다나오는데?"):
+              AND 필터가 0건이라 원본 목록으로 폴백했을 때, 필터가 고장난 것처럼
+              보이지 않도록 이유를 명확히 안내한다 — 마이리얼트립 검색 색인에 그
+              지역명/상호명이 아예 없어 정확한 매칭을 못 찾은 것일 수 있다. */}
+          {results && results.length > 0 && !exactMatchFound && (
+            <p className="text-xs text-amber-600 mb-1.5">
+              ⚠️ 검색어와 정확히 일치하는 상품을 찾지 못해 전체 검색 결과를 보여드립니다. 이 스팟과 일치하는 상품이 마이리얼트립에 없을 수 있습니다.
+            </p>
+          )}
           {results && results.length > 0 && (
             <ul className="flex flex-col gap-1.5 max-h-64 overflow-y-auto">
               {results.map((item) => (
