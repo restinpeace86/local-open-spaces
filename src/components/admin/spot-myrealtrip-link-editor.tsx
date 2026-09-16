@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { MyRealTripSearchItem } from '@/lib/admin/myrealtrip-search';
+import { filterSearchItemsByAllKeywordTokens, MyRealTripSearchItem } from '@/lib/admin/myrealtrip-search';
 
 // [스팟 상세 → 마이리얼트립 자동 매칭](2026-09-16 사용자 지시): "스팟픽에서
 // 우리의 키즈카페 장소 검색시 해당 장소 눌렀을때 내부적으로 마이리얼트립에서
@@ -39,18 +39,23 @@ export function SpotMyRealTripLinkEditor({ spotId, spotName }: { spotId: string;
   }, [spotId]);
 
   async function handleSearch() {
-    if (!keyword.trim() || isSearching) return;
+    const trimmedKeyword = keyword.trim();
+    if (!trimmedKeyword || isSearching) return;
     setIsSearching(true);
     setSearchError(null);
     try {
+      // [OR 검색 문제 수정](2026-09-16 사용자 지적): "검색조건이 &가 아니고 OR야"
+      // — 마이리얼트립 검색이 토큰 단위 OR라 무관한 동일 업종 결과가 섞여 나온다.
+      // 정확한 매칭이 뒤쪽 페이지로 밀릴 수 있어 한 번에 넉넉히(최대 50건)
+      // 받아온 뒤, 상호명에 검색어 토큰을 전부 포함하는 것만 우선 필터링한다.
       const res = await fetch('/api/admin/myrealtrip/search', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ keyword: keyword.trim(), page: 1, size: 10 }),
+        body: JSON.stringify({ keyword: trimmedKeyword, page: 1, size: 50 }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? '검색에 실패했습니다.');
-      setResults(data.items ?? []);
+      setResults(filterSearchItemsByAllKeywordTokens(data.items ?? [], trimmedKeyword));
     } catch (err) {
       setResults([]);
       setSearchError(err instanceof Error ? err.message : '검색에 실패했습니다.');
