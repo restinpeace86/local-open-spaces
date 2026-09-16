@@ -16,8 +16,31 @@ function mockFetch(handlers: {
   detailError?: string;
   mylink?: string;
   mylinkError?: string;
+  linkedByGid?: Record<string, string>;
+  spotSearchResults?: Array<{ id: string; name: string; address: string | null }>;
+  connectOk?: boolean;
 }) {
   return vi.fn((url: string, init?: RequestInit) => {
+    if (url.includes('/api/admin/spot-myrealtrip-link/by-gids')) {
+      const links = Object.entries(handlers.linkedByGid ?? {}).map(([gid, spot_name]) => ({ gid, spot_id: 'spot-x', spot_name }));
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ links }) } as Response);
+    }
+    if (url.includes('/api/admin/spot-myrealtrip-link') && init?.method === 'POST') {
+      const body = JSON.parse(init.body as string);
+      if (handlers.connectOk === false) {
+        return Promise.resolve({ ok: false, json: () => Promise.resolve({ error: '연결에 실패했습니다.' }) } as Response);
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({ link: { gid: body.gid, item_name: body.item_name, mylink: 'https://myrealt.rip/qnew' } }),
+      } as Response);
+    }
+    if (url.includes('/api/spots/search-external')) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [] }) } as Response);
+    }
+    if (url.includes('/api/spots/search')) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: handlers.spotSearchResults ?? [] }) } as Response);
+    }
     if (url.includes('/api/admin/myrealtrip/categories')) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ categories: handlers.categories ?? [] }) } as Response);
     }
@@ -220,5 +243,72 @@ describe('상품 상세 → 제휴 등록', () => {
 
     expect(await screen.findByText('상품 상세 조회에 실패했습니다.')).toBeInTheDocument();
     expect(screen.getByText('🔗 제휴 상품으로 등록')).toBeInTheDocument();
+  });
+});
+
+// [마이리얼트립 상품 → 우리 스팟 역방향 매칭](2026-09-16 사용자 지시): "몇백개의
+// 키즈카페 중에 마이리얼트립에 있는건 46개.. 46개에 대하여 우리쪽 연결하고 그
+// 연결한건 안나와서 내가 연결했다는걸 인지할수 있는것.. 소거법으로 가야하지
+// 않을까?" 단위 테스트.
+describe('마이리얼트립 상품 → 우리 스팟 연결 (소거법, 2026-09-16)', () => {
+  async function search() {
+    render(<MyRealTripSearchPanel />);
+    fireEvent.change(screen.getByPlaceholderText('검색 키워드 (예: 서울 키즈 체험)'), { target: { value: '서울 키즈' } });
+    fireEvent.click(screen.getByText('검색'));
+    await screen.findByText('[키즈] 국립중앙박물관 초등 도슨트 투어');
+  }
+
+  it('이미 연결된 상품은 카드에 "✅ {스팟명}에 연결됨"으로 표시된다', async () => {
+    vi.stubGlobal('fetch', mockFetch({ searchItems: [buildSearchItem()], linkedByGid: { '5905493': '숲속 키즈카페' } }));
+    await search();
+
+    expect(await screen.findByText('✅ 숲속 키즈카페에 연결됨')).toBeInTheDocument();
+    expect(screen.getByText(/연결됨 1건/)).toBeInTheDocument();
+  });
+
+  it('연결 안 된 상품은 상세에서 "우리 스팟과 연결" 버튼으로 우리 스팟을 검색해 연결할 수 있다', async () => {
+    const fetchMock = mockFetch({
+      searchItems: [buildSearchItem()],
+      spotSearchResults: [{ id: 'spot-9', name: '숲속 키즈카페', address: '경기 성남시' }],
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    await search();
+
+    fireEvent.click(screen.getByText('[키즈] 국립중앙박물관 초등 도슨트 투어'));
+    fireEvent.click(await screen.findByText('🔗 우리 스팟과 연결'));
+
+    fireEvent.change(screen.getByPlaceholderText(/장소명 3글자 이상/), { target: { value: '숲속 키즈카페' } });
+    fireEvent.mouseDown(await screen.findByText('숲속 키즈카페'));
+    fireEvent.click(screen.getByText('이 스팟과 연결 (마이링크 자동 생성)'));
+
+    await waitFor(() => {
+      const postCall = fetchMock.mock.calls.find(
+        (c) => (c[0] as string).includes('/api/admin/spot-myrealtrip-link') && (c[1] as RequestInit)?.method === 'POST'
+      );
+      expect(postCall).toBeDefined();
+      expect(JSON.parse((postCall![1] as RequestInit).body as string)).toMatchObject({ spot_id: 'spot-9', gid: '5905493' });
+    });
+    // 연결 성공 후 소거(연결됨으로 표시)됐는지 확인한다.
+    expect(await screen.findByText('✅ 숲속 키즈카페에 연결됨')).toBeInTheDocument();
+  });
+
+  it('연결에 실패하면 에러 메시지를 보여준다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      mockFetch({
+        searchItems: [buildSearchItem()],
+        spotSearchResults: [{ id: 'spot-9', name: '숲속 키즈카페', address: null }],
+        connectOk: false,
+      })
+    );
+    await search();
+
+    fireEvent.click(screen.getByText('[키즈] 국립중앙박물관 초등 도슨트 투어'));
+    fireEvent.click(await screen.findByText('🔗 우리 스팟과 연결'));
+    fireEvent.change(screen.getByPlaceholderText(/장소명 3글자 이상/), { target: { value: '숲속 키즈카페' } });
+    fireEvent.mouseDown(await screen.findByText('숲속 키즈카페'));
+    fireEvent.click(screen.getByText('이 스팟과 연결 (마이링크 자동 생성)'));
+
+    expect(await screen.findByText('연결에 실패했습니다.')).toBeInTheDocument();
   });
 });

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { CuratedItemFormModal } from '@/components/admin/curated-item-form-modal';
+import { SpotPicker, SpotOption } from '@/components/community/spot-picker';
 import {
   mapSearchItemToCuratedItemPrefill,
   MyRealTripCategory,
@@ -33,12 +34,28 @@ const SORT_LABELS: Record<MyRealTripSort, string> = {
   selling_count_desc: '판매량순',
 };
 
-function ResultCard({ item, onOpenDetail }: { item: MyRealTripSearchItem; onOpenDetail: (item: MyRealTripSearchItem) => void }) {
+// [마이리얼트립 상품 → 우리 스팟 역방향 매칭](2026-09-16 사용자 지시): "몇백개의
+// 키즈카페 중에 마이리얼트립에 있는건 46개.. 46개에 대하여 우리쪽 연결하고 그
+// 연결한건 안나와서 내가 연결했다는걸 인지할수 있는것.. 소거법으로 가야하지
+// 않을까?" — 스팟(수백 개) 각각에서 검색하는 대신, 마이리얼트립 상품(훨씬 적음)
+// 목록을 기준으로 각각에 맞는 스팟을 찾아 연결하는 흐름. linkedSpotName이 있으면
+// "이미 처리 완료"로 표시해 관리자가 남은 미해결 항목만 훑어볼 수 있게 한다.
+function ResultCard({
+  item,
+  linkedSpotName,
+  onOpenDetail,
+}: {
+  item: MyRealTripSearchItem;
+  linkedSpotName: string | undefined;
+  onOpenDetail: (item: MyRealTripSearchItem) => void;
+}) {
   return (
     <button
       type="button"
       onClick={() => onOpenDetail(item)}
-      className="text-left rounded-xl border border-gray-200 overflow-hidden flex flex-col hover:border-blue-300"
+      className={`text-left rounded-xl border overflow-hidden flex flex-col ${
+        linkedSpotName ? 'border-emerald-200 bg-emerald-50/40' : 'border-gray-200 hover:border-blue-300'
+      }`}
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src={item.imageUrl} alt={item.itemName} className="w-full h-28 object-cover bg-gray-100" />
@@ -51,8 +68,81 @@ function ResultCard({ item, onOpenDetail }: { item: MyRealTripSearchItem; onOpen
             ⭐ {item.reviewScore.toFixed(1)} ({item.reviewCount.toLocaleString()})
           </span>
         )}
+        {linkedSpotName && <span className="text-[11px] font-semibold text-emerald-700">✅ {linkedSpotName}에 연결됨</span>}
       </div>
     </button>
+  );
+}
+
+// [마이리얼트립 상품 → 우리 스팟 역방향 매칭](2026-09-16 사용자 지시) — 이 상품에
+// 해당하는 우리 스팟을 검색해서 골라 연결한다(기존 SpotPicker 재사용, 제5장
+// 제4조). 연결 시점에 마이링크를 생성해 함께 저장한다(spot-myrealtrip-link
+// POST가 이미 이 일을 한다 — 스팟 상세에서 승인하는 경로와 완전히 동일한
+// 엔드포인트, 호출 방향만 반대).
+function ConnectToSpotModal({
+  item,
+  onClose,
+  onConnected,
+}: {
+  item: MyRealTripSearchItem;
+  onClose: () => void;
+  onConnected: (spotName: string) => void;
+}) {
+  const [spot, setSpot] = useState<SpotOption | null>(null);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleConnect() {
+    if (!spot || isConnecting) return;
+    setIsConnecting(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/admin/spot-myrealtrip-link', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          spot_id: spot.id,
+          gid: item.gid,
+          item_name: item.itemName,
+          image_url: item.imageUrl,
+          price_display: item.priceDisplay,
+          product_url: item.productUrl,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.link) throw new Error(data.error ?? '연결에 실패했습니다.');
+      onConnected(spot.name);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : '연결에 실패했습니다.');
+    } finally {
+      setIsConnecting(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-[80] flex items-end md:items-center justify-center" onClick={onClose}>
+      <div className="w-full md:w-[420px] bg-white rounded-t-2xl md:rounded-2xl shadow-xl p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-bold text-gray-900">우리 스팟과 연결</h2>
+          <button type="button" onClick={onClose} aria-label="닫기" className="text-gray-400 hover:text-gray-600">
+            ✕
+          </button>
+        </div>
+        <p className="text-xs text-gray-500 mb-2">
+          "{item.itemName}"에 해당하는 우리 스팟을 검색해서 골라주세요.
+        </p>
+        <SpotPicker selected={spot} onSelect={setSpot} />
+        {error && <p className="text-xs text-red-500 mt-2">{error}</p>}
+        <button
+          type="button"
+          onClick={handleConnect}
+          disabled={!spot || isConnecting}
+          className="mt-3 w-full rounded-xl bg-blue-600 text-white text-sm font-semibold py-2.5 disabled:opacity-50"
+        >
+          {isConnecting ? '연결 중...' : '이 스팟과 연결 (마이링크 자동 생성)'}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -63,18 +153,23 @@ function ResultCard({ item, onOpenDetail }: { item: MyRealTripSearchItem; onOpen
 // 남겨 둔다 — 다만 그 경우 추적이 안 된다는 점을 명확히 경고한다.
 function MyRealTripProductDetailModal({
   item,
+  linkedSpotName,
   onClose,
   onSaved,
+  onConnectedToSpot,
 }: {
   item: MyRealTripSearchItem;
+  linkedSpotName: string | undefined;
   onClose: () => void;
   onSaved: () => void;
+  onConnectedToSpot: (gid: string, spotName: string) => void;
 }) {
   const [detail, setDetail] = useState<MyRealTripProductDetail | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [isGeneratingLink, setIsGeneratingLink] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
   const [prefill, setPrefill] = useState<ReturnType<typeof mapSearchItemToCuratedItemPrefill> | null>(null);
+  const [isConnectModalOpen, setIsConnectModalOpen] = useState(false);
 
   useEffect(() => {
     fetch('/api/admin/myrealtrip/detail', {
@@ -180,6 +275,24 @@ function MyRealTripProductDetailModal({
             </button>
           </div>
         )}
+
+        {/* [마이리얼트립 상품 → 우리 스팟 역방향 매칭](2026-09-16 사용자 지시):
+            "제휴 상품으로 등록"(curated_items — 별도 마케팅 목록)과는 목적이
+            다른 별개 기능이다 — 이 상품을 우리가 이미 갖고 있는 "스팟" 하나와
+            연결해, 그 스팟 상세 화면에 "구매 둘러보기" 버튼이 뜨게 한다. */}
+        <div className="mt-3 pt-3 border-t border-gray-100">
+          {linkedSpotName ? (
+            <p className="text-xs text-emerald-700 font-semibold">✅ 이미 "{linkedSpotName}" 스팟에 연결돼 있습니다.</p>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsConnectModalOpen(true)}
+              className="w-full rounded-xl border border-gray-300 text-gray-700 text-sm font-medium py-2.5 hover:bg-gray-50"
+            >
+              🔗 우리 스팟과 연결
+            </button>
+          )}
+        </div>
       </div>
 
       {prefill && (
@@ -189,6 +302,17 @@ function MyRealTripProductDetailModal({
           onSaved={() => {
             setPrefill(null);
             onSaved();
+          }}
+        />
+      )}
+
+      {isConnectModalOpen && (
+        <ConnectToSpotModal
+          item={item}
+          onClose={() => setIsConnectModalOpen(false)}
+          onConnected={(spotName) => {
+            setIsConnectModalOpen(false);
+            onConnectedToSpot(item.gid, spotName);
           }}
         />
       )}
@@ -213,6 +337,10 @@ export function MyRealTripSearchPanel() {
   const [searchError, setSearchError] = useState<string | null>(null);
 
   const [detailItem, setDetailItem] = useState<MyRealTripSearchItem | null>(null);
+  // [마이리얼트립 상품 → 우리 스팟 역방향 매칭](2026-09-16 사용자 지시): 현재
+  // 검색 결과에 표시된 gid들 중 이미 어떤 스팟과 연결된 것을 gid → 스팟명으로
+  // 들고 있다("소거법" — 연결된 항목은 카드에 표시만 하고 더 손댈 게 없다).
+  const [linkedByGid, setLinkedByGid] = useState<Record<string, string>>({});
 
   // 도시가 바뀌면 그 도시의 카테고리 목록을 다시 불러온다(값이 도시마다 다름 —
   // 실측으로 서울/부산/제주 구성이 서로 다름을 확인했다, 절대 하드코딩하지 않음).
@@ -253,6 +381,27 @@ export function MyRealTripSearchPanel() {
     return trimmedKeyword.includes(trimmedCity) ? trimmedKeyword : `${trimmedCity} ${trimmedKeyword}`;
   }
 
+  // [마이리얼트립 상품 → 우리 스팟 역방향 매칭](2026-09-16 사용자 지시): 검색
+  // 결과가 새로 나올 때마다 이 gid들 중 이미 연결된 게 있는지 한 번에 확인한다.
+  async function fetchLinkedStatus(gids: string[]) {
+    if (gids.length === 0) {
+      setLinkedByGid({});
+      return;
+    }
+    try {
+      const res = await fetch(`/api/admin/spot-myrealtrip-link/by-gids?gids=${gids.map(encodeURIComponent).join(',')}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? '연결 상태 조회 실패');
+      const map: Record<string, string> = {};
+      for (const link of data.links ?? []) map[link.gid] = link.spot_name;
+      setLinkedByGid(map);
+    } catch {
+      // 연결 상태 표시는 보조 정보라 실패해도 검색 결과 자체는 그대로 보여준다
+      // (제5장 제11조).
+      setLinkedByGid({});
+    }
+  }
+
   async function handleSearch(page = 1) {
     const effectiveKeyword = buildEffectiveKeyword();
     if (!effectiveKeyword || isSearching) return;
@@ -274,8 +423,10 @@ export function MyRealTripSearchPanel() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? '상품 검색에 실패했습니다.');
-      setItems(data.items ?? []);
+      const newItems: MyRealTripSearchItem[] = data.items ?? [];
+      setItems(newItems);
       setTotalCount(data.totalCount ?? 0);
+      fetchLinkedStatus(newItems.map((i) => i.gid));
     } catch (err) {
       setItems([]);
       setSearchError(err instanceof Error ? err.message : '상품 검색에 실패했습니다.');
@@ -372,10 +523,16 @@ export function MyRealTripSearchPanel() {
 
         {items && items.length > 0 && (
           <>
-            <p className="text-xs text-gray-400 mb-2">총 {totalCount.toLocaleString()}건 중 {items.length}건 표시</p>
+            <p className="text-xs text-gray-400 mb-2">
+              총 {totalCount.toLocaleString()}건 중 {items.length}건 표시
+              {/* [소거법 진행 상황](2026-09-16 사용자 지시) — 이번 화면에 보이는
+                  것 중 이미 연결된 개수를 함께 보여줘 "몇 개 남았는지" 가늠할 수
+                  있게 한다. */}
+              {Object.keys(linkedByGid).length > 0 && ` (연결됨 ${Object.keys(linkedByGid).length}건)`}
+            </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {items.map((item) => (
-                <ResultCard key={item.gid} item={item} onOpenDetail={setDetailItem} />
+                <ResultCard key={item.gid} item={item} linkedSpotName={linkedByGid[item.gid]} onOpenDetail={setDetailItem} />
               ))}
             </div>
           </>
@@ -383,7 +540,15 @@ export function MyRealTripSearchPanel() {
       </div>
 
       {detailItem && (
-        <MyRealTripProductDetailModal item={detailItem} onClose={() => setDetailItem(null)} onSaved={() => setDetailItem(null)} />
+        <MyRealTripProductDetailModal
+          item={detailItem}
+          linkedSpotName={linkedByGid[detailItem.gid]}
+          onClose={() => setDetailItem(null)}
+          onSaved={() => setDetailItem(null)}
+          onConnectedToSpot={(gid, spotName) => {
+            setLinkedByGid((prev) => ({ ...prev, [gid]: spotName }));
+          }}
+        />
       )}
     </div>
   );
