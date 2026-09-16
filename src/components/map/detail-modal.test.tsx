@@ -1085,3 +1085,65 @@ describe('DetailModal Event↔Spot 양방향 링킹 (개선사항10, 2026-09-11)
     expect(screen.queryByText('🎪 진행 중인 이벤트')).not.toBeInTheDocument();
   });
 });
+
+// [스팟 상세 → 마이리얼트립 자동 매칭](2026-09-16 사용자 지시): "동적 버튼을
+// 통하여 티켓 구매 둘러보기.. 관리자가 승인을 한 번 거치기" — 유저 화면은
+// 관리자가 이미 승인해 둔 결과만 조회한다(실시간 검색 없음).
+describe('DetailModal — 마이리얼트립 매칭 버튼(2026-09-16)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('관리자가 승인해 둔 매칭이 있으면 "구매 둘러보기" 버튼이 뜨고, 마이링크로 연결된다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/spots/myrealtrip-link')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ link: { item_name: '숲속 키즈카페', mylink: 'https://myrealt.rip/qamObf' } }),
+          } as Response);
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+      })
+    );
+    render(<DetailModal item={makeSpaceItem()} onClose={() => {}} />);
+
+    const link = await screen.findByText(/숲속 키즈카페 구매 둘러보기/);
+    expect(link.closest('a')).toHaveAttribute('href', 'https://myrealt.rip/qamObf');
+    expect(link.closest('a')).toHaveAttribute('target', '_blank');
+  });
+
+  it('승인된 매칭이 없으면 버튼 자체가 뜨지 않는다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/spots/myrealtrip-link')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ link: null }) } as Response);
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+      })
+    );
+    render(<DetailModal item={makeSpaceItem()} onClose={() => {}} />);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByText(/구매 둘러보기/)).not.toBeInTheDocument();
+  });
+
+  it('이벤트 상세에는 이 버튼이 뜨지 않는다(스팟 전용)', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/api/spots/myrealtrip-link')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ link: { item_name: '숲속 키즈카페', mylink: 'https://myrealt.rip/qamObf' } }),
+        } as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT', start_date: '2026-09-01', end_date: '2026-09-30' })} onClose={() => {}} />);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fetchMock.mock.calls.some((c) => (c[0] as string).includes('/api/spots/myrealtrip-link'))).toBe(false);
+  });
+});

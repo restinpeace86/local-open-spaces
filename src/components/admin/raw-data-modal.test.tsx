@@ -104,7 +104,15 @@ describe('RawDataModal — 원천 링크 페이지 크롤링/조회 (2026-09-16)
   it('크롤링에 실패하면 에러 메시지를 보여준다', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(() => Promise.resolve({ ok: false, json: () => Promise.resolve({ error: 'HTTP 403' }) } as Response))
+      vi.fn((url: string) => {
+        // [스팟 상세 → 마이리얼트립 자동 매칭](2026-09-16) SpotMyRealTripLinkEditor가
+        // open_spaces 행마다 마운트 시 자동으로 조회하는 별개 호출 — 이 테스트의
+        // 관심사가 아니므로 항상 "매칭 없음"으로 조용히 처리한다.
+        if (url.includes('/api/admin/spot-myrealtrip-link')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ link: null }) } as Response);
+        }
+        return Promise.resolve({ ok: false, json: () => Promise.resolve({ error: 'HTTP 403' }) } as Response);
+      })
     );
     render(<RawDataModal table="open_spaces" row={buildRow()} categoryMinOptions={[]} onClose={vi.fn()} />);
 
@@ -195,7 +203,10 @@ describe('RawDataModal — 노출 중분류(ServiceCategoryEditor)', () => {
       '/api/admin/open-spaces/bulk-category-mapping',
       expect.objectContaining({ method: 'POST' })
     );
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    // [스팟 상세 → 마이리얼트립 자동 매칭](2026-09-16) SpotMyRealTripLinkEditor가
+    // 마운트 시 별도로 fetch를 호출해 calls[0]가 그 호출일 수 있다 — URL로 특정한다.
+    const mappingCall = fetchMock.mock.calls.find((c) => c[0] === '/api/admin/open-spaces/bulk-category-mapping');
+    const body = JSON.parse((mappingCall![1] as RequestInit).body as string);
     expect(body).toEqual({ ids: ['row-1'], service_category_id: 'svc-1' });
   });
 
@@ -220,7 +231,9 @@ describe('RawDataModal — 노출 중분류(ServiceCategoryEditor)', () => {
     fireEvent.click(screen.getByText('저장'));
 
     await waitFor(() => {
-      const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+      const mappingCall = fetchMock.mock.calls.find((c) => c[0] === '/api/admin/open-spaces/bulk-category-mapping');
+      expect(mappingCall).toBeDefined();
+      const body = JSON.parse((mappingCall![1] as RequestInit).body as string);
       expect(body).toEqual({ ids: ['row-1'], service_category_id: null });
     });
   });

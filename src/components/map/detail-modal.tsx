@@ -141,6 +141,10 @@ export function DetailModal({
   const [isMapPreviewOpen, setIsMapPreviewOpen] = useState(false);
   // [실제 운영일 하이라이트 캘린더](2026-09-16 사용자 지시, todo.md [개선사항 2])
   const [isOperatingCalendarOpen, setIsOperatingCalendarOpen] = useState(false);
+  // [스팟 상세 → 마이리얼트립 자동 매칭](2026-09-16 사용자 지시): "동적 버튼을
+  // 통하여 티켓 구매 둘러보기" — 관리자가 승인해 둔 매칭이 있을 때만 뜬다(실시간
+  // 검색/생성 없이 저장된 결과만 조회, 아래 useEffect 참고).
+  const [myrealtripLink, setMyrealtripLink] = useState<{ item_name: string; mylink: string } | null>(null);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
   const [isReservationModalOpen, setIsReservationModalOpen] = useState(false);
   // [개선사항10](2026-09-11 사용자 지시, implementation/todo.md): Event↔Spot 양방향
@@ -300,6 +304,32 @@ export function DetailModal({
       })
       .catch(() => {
         if (!cancelled) setLinkedEvents([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [item.id, isEvent]);
+
+  // [스팟 상세 → 마이리얼트립 자동 매칭](2026-09-16 사용자 지시): "스팟픽에서
+  // 우리의 키즈카페 장소 검색시 해당 장소 눌렀을때 내부적으로 마이리얼트립에서
+  // 해당 상호명으로 검색하고 있으면.. 동적 버튼을 통하여 티켓 구매 둘러보기" —
+  // 완전 자동 대신 "관리자 승인 한 번 거치기"로 확정했다(사용자 확인) — 이
+  // 조회는 실시간 검색이 아니라 관리자가 이미 승인해 둔 결과만 읽는 것이라
+  // 안전하다. 스팟(이벤트가 아닌 항목)에만 해당한다.
+  useEffect(() => {
+    if (isEvent) {
+      setMyrealtripLink(null);
+      return;
+    }
+    let cancelled = false;
+    setMyrealtripLink(null);
+    fetch(`/api/spots/myrealtrip-link?spot_id=${encodeURIComponent(item.id)}`)
+      .then((res) => res.json())
+      .then((data: { link?: { item_name: string; mylink: string } | null }) => {
+        if (!cancelled) setMyrealtripLink(data.link ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setMyrealtripLink(null);
       });
     return () => {
       cancelled = true;
@@ -1076,6 +1106,20 @@ export function DetailModal({
                 <p className="flex-1 text-center text-sm text-gray-400 py-2.5">{secondaryAction.label}</p>
               )}
             </div>
+
+            {/* [스팟 상세 → 마이리얼트립 자동 매칭](2026-09-16 사용자 지시): 관리자가
+                승인해 둔 매칭이 있을 때만 뜨는 동적 버튼 — 클릭하면 관리자가 승인
+                시점에 미리 생성해 둔 마이링크(추적 링크)로 바로 이동한다. */}
+            {myrealtripLink && (
+              <a
+                href={myrealtripLink.mylink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="mt-2 block text-center rounded-lg border border-blue-200 bg-blue-50 text-blue-700 text-sm font-medium py-2.5 hover:bg-blue-100"
+              >
+                🎟️ {myrealtripLink.item_name} 구매 둘러보기 ↗
+              </a>
+            )}
           </div>
         </div>
       )}

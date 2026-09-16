@@ -16,6 +16,7 @@ import { cleanupMessyText, looksLikeMessyText } from '@/lib/admin/cleanup-messy-
 import { EVENTS_ALLOWED_CATEGORY_MINS } from '@/lib/admin/category-min-groups';
 import { OperatingScheduleUpdatedHandler } from '@/components/admin/operating-schedule-editor';
 import { SpotServiceCategoryCheck } from '@/components/admin/spot-service-category-check';
+import { SpotMyRealTripLinkEditor } from '@/components/admin/spot-myrealtrip-link-editor';
 
 // [개편] 행 클릭 시 해당 행의 전체 원천 컬럼(구조화된 값) + raw_data/raw_payload 원문 JSON을
 // 함께 보여주는 Read-Only 뷰어. 3개 탭(open_spaces/events/raw_ingest_data) 행 형태가 서로
@@ -783,6 +784,11 @@ export function RawDataModal({
                 🚚 이벤트픽으로 이동
               </button>
             </div>
+          )}
+
+          {/* [스팟 상세 → 마이리얼트립 자동 매칭](2026-09-16 사용자 지시) */}
+          {table === 'open_spaces' && (
+            <SpotMyRealTripLinkEditor spotId={(row as AdminOpenSpaceRow).id} spotName={(row as AdminOpenSpaceRow).name} />
           )}
 
           {/* [open_spaces 삭제 기능](2026-09-06 사용자 지시): "내가 불필요하다고

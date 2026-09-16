@@ -1074,6 +1074,53 @@ export type Database = {
         }
         Relationships: []
       }
+      spot_myrealtrip_links: {
+        Row: {
+          approved_at: string
+          created_at: string
+          gid: string
+          id: string
+          image_url: string | null
+          item_name: string
+          mylink: string
+          price_display: string | null
+          product_url: string
+          spot_id: string
+        }
+        Insert: {
+          approved_at?: string
+          created_at?: string
+          gid: string
+          id?: string
+          image_url?: string | null
+          item_name: string
+          mylink: string
+          price_display?: string | null
+          product_url: string
+          spot_id: string
+        }
+        Update: {
+          approved_at?: string
+          created_at?: string
+          gid?: string
+          id?: string
+          image_url?: string | null
+          item_name?: string
+          mylink?: string
+          price_display?: string | null
+          product_url?: string
+          spot_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "spot_myrealtrip_links_spot_id_fkey"
+            columns: ["spot_id"]
+            isOneToOne: true
+            referencedRelation: "open_spaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       spot_weather_caches: {
         Row: {
           humidity: number | null
