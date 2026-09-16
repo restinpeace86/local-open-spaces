@@ -98,38 +98,18 @@ describe('CuratedItemsPanel', () => {
     expect(getCalls).toHaveLength(1);
   });
 
-  it('[+ 신규 상품 등록] 클릭 시 빈 등록 폼이 뜨고, 제출하면 목록 맨 앞에 추가된다', async () => {
-    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
-      if (init?.method === 'POST') {
-        return Promise.resolve({
-          ok: true,
-          json: () =>
-            Promise.resolve({
-              item: makeItem({ id: 'new-item', title: '신규 등록 상품' }),
-            }),
-        } as Response);
-      }
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [], total: 0 }) } as Response);
-    });
-    vi.stubGlobal('fetch', fetchMock);
-
+  // [검색 진입점을 마이리얼트립 탭으로 전환](2026-09-16 사용자 지시): "기존
+  // 큐레이션/제휴 상품 탭은 폐기하고 마이리얼트립 상품 검색을 사용하자.. 등록/
+  // 관리 기능은 그대로 남기고, 검색만 마이리얼트립으로 전환" — 빈 폼에 URL을
+  // 직접 타이핑하던 "+ 신규 상품 등록" 버튼을 제거하고 안내 문구로 대체했다.
+  // 위 테스트가 검증하던 "빈 폼 등록" 시나리오는 이제 마이리얼트립 검색 패널
+  // 쪽(myrealtrip-search-panel.test.tsx)의 등록 흐름 테스트가 대신 커버한다.
+  it('"+ 신규 상품 등록" 버튼 대신 마이리얼트립 검색 탭으로 안내하는 문구를 보여준다', () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [], total: 0 }) } as Response)));
     render(<CuratedItemsPanel />);
-    // [관리자 페이지 성능 최적화](2026-08-30 사용자 지시): 마운트 시 자동 조회하지 않으므로
-    // 이제 명시적으로 조회하기를 눌러야 fetch가 나간다.
-    fireEvent.click(screen.getByText('📥 불러오기'));
-    await screen.findByText('조건에 맞는 상품이 없습니다.');
 
-    fireEvent.click(screen.getByText('+ 신규 상품 등록'));
-    expect(await screen.findByText('+ 신규 상품 등록', { selector: 'h2' })).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText('상품명'), { target: { value: '신규 등록 상품' } });
-    fireEvent.change(screen.getByLabelText('제휴 링크(booking_url)'), {
-      target: { value: 'https://example.com/new' },
-    });
-    fireEvent.click(screen.getByText('등록하기'));
-
-    await waitFor(() => expect(screen.queryByText('등록하기')).not.toBeInTheDocument());
-    expect(await screen.findByText('신규 등록 상품')).toBeInTheDocument();
+    expect(screen.queryByText('+ 신규 상품 등록')).not.toBeInTheDocument();
+    expect(screen.getByText(/마이리얼트립 상품 검색.*탭에서/)).toBeInTheDocument();
   });
 
   it('[수정] 클릭 시 기존 값이 채워진 폼이 뜬다', async () => {

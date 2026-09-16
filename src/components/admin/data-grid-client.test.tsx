@@ -150,10 +150,12 @@ describe('AdminDataGridClient — curated_items 탭 통합', () => {
 
     fireEvent.click(screen.getByText('🏷️ 큐레이션/제휴 상품'));
 
-    // CuratedItemsPanel 전용 UI(검색 placeholder/등록 버튼)가 보이고, open_spaces 탭
-    // 전용 필터(제목/시설명 검색 placeholder)는 더 이상 보이지 않아야 한다.
+    // CuratedItemsPanel 전용 UI(검색 placeholder)가 보이고, open_spaces 탭 전용
+    // 필터(제목/시설명 검색 placeholder)는 더 이상 보이지 않아야 한다. [검색
+    // 진입점을 마이리얼트립 탭으로 전환](2026-09-16 사용자 지시)으로 "+ 신규
+    // 상품 등록" 버튼은 제거되고 안내 문구로 대체됐다.
     expect(await screen.findByPlaceholderText('상품명 키워드 검색')).toBeInTheDocument();
-    expect(screen.getByText('+ 신규 상품 등록')).toBeInTheDocument();
+    expect(screen.queryByText('+ 신규 상품 등록')).not.toBeInTheDocument();
     expect(screen.queryByPlaceholderText('제목/시설명, 주소 키워드 검색')).not.toBeInTheDocument();
   });
 });

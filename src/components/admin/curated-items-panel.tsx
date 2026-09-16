@@ -168,14 +168,19 @@ export function CuratedItemsPanel() {
       <div className="shrink-0 p-4 border-b border-gray-100 flex flex-col gap-3">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-sm font-bold text-gray-900">🏷️ 큐레이션/제휴 상품 (curated_items)</h2>
-          <button
-            type="button"
-            onClick={() => setModalMode('create')}
-            className="text-xs font-semibold text-white bg-blue-600 rounded-full px-3 py-1.5 hover:bg-blue-700"
-          >
-            + 신규 상품 등록
-          </button>
         </div>
+        {/* [검색 진입점을 마이리얼트립 탭으로 전환](2026-09-16 사용자 지시): "기존
+            큐레이션/제휴 상품 탭은 폐기하고 마이리얼트립 상품 검색을 사용하자..
+            등록/관리 기능은 그대로 남기고, 검색만 마이리얼트립으로 전환" — 목록
+            보기/수정/삭제/노출 on-off는 이 패널에 그대로 두고, 빈 폼에 URL을
+            직접 타이핑하던 "+ 신규 상품 등록" 진입점만 제거한다. 신규 등록은
+            "🔍 마이리얼트립 상품 검색" 탭에서 검색→상세→마이링크 자동 생성으로
+            들어가는 것이 유일한 경로가 된다(안내 문구로 이동 경로만 알려줌 —
+            탭 전환 자체는 최상위 AdminDataGridClient가 관리해 이 자기완결
+            패널에서 직접 제어하지 않는다, 제5장 제4조). */}
+        <p className="text-xs text-gray-400 -mt-1">
+          ℹ️ 신규 상품 등록은 "🔍 마이리얼트립 상품 검색" 탭에서 검색 → 상세보기 → 제휴 상품으로 등록해 주세요. (여기서는 이미 등록된 상품의 조회/수정/삭제/노출 on-off만 가능)
+        </p>
 
         <input
           type="text"
