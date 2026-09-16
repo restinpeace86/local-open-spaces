@@ -65,6 +65,55 @@ describe('RawDataModal URL/이미지 렌더링', () => {
   });
 });
 
+// [원천 링크 페이지 크롤링/조회](2026-09-16 사용자 지시, implementation/todo.md
+// [개선사항 3]): "raw_data 내부에 크롤링할 수 있는 URL 필드가 실제로 존재하는
+// 경우에만 버튼이 활성화" — open_spaces는 info_url, events는 source_url(어댑터가
+// raw_data의 ORG_LINK/HMPG_ADDR/SVCURL 등을 이미 정규화해 둔 컬럼)을 쓴다.
+describe('RawDataModal — 원천 링크 페이지 크롤링/조회 (2026-09-16)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('info_url이 있으면 크롤링 버튼이 보인다(open_spaces)', () => {
+    render(<RawDataModal table="open_spaces" row={buildRow()} categoryMinOptions={[]} onClose={vi.fn()} />);
+    expect(screen.getByText('🌐 원천 링크 페이지 크롤링/조회')).toBeInTheDocument();
+  });
+
+  it('info_url이 없으면 크롤링 버튼이 보이지 않는다(open_spaces)', () => {
+    render(<RawDataModal table="open_spaces" row={buildRow({ info_url: null })} categoryMinOptions={[]} onClose={vi.fn()} />);
+    expect(screen.queryByText('🌐 원천 링크 페이지 크롤링/조회')).not.toBeInTheDocument();
+  });
+
+  it('버튼을 누르면 크롤링 결과를 보여준다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/admin/scrape-source-url')) {
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ text: '크롤링된 본문 내용입니다.' }) } as Response);
+        }
+        return Promise.reject(new Error(`unexpected fetch: ${url}`));
+      })
+    );
+    render(<RawDataModal table="open_spaces" row={buildRow()} categoryMinOptions={[]} onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByText('🌐 원천 링크 페이지 크롤링/조회'));
+
+    expect(await screen.findByText('크롤링된 본문 내용입니다.')).toBeInTheDocument();
+  });
+
+  it('크롤링에 실패하면 에러 메시지를 보여준다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() => Promise.resolve({ ok: false, json: () => Promise.resolve({ error: 'HTTP 403' }) } as Response))
+    );
+    render(<RawDataModal table="open_spaces" row={buildRow()} categoryMinOptions={[]} onClose={vi.fn()} />);
+
+    fireEvent.click(screen.getByText('🌐 원천 링크 페이지 크롤링/조회'));
+
+    expect(await screen.findByText('HTTP 403')).toBeInTheDocument();
+  });
+});
+
 // [노출 중분류 개별 행 수정](2026-09-05 사용자 지시): "노출 중분류 변경할 수 있도록
 // 해줘 open_spaces쪽에서" — 상세 모달에서 개별 행의 service_category_id를 직접
 // 수정할 수 있는지 검증한다.

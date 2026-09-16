@@ -190,7 +190,18 @@
 - 위 로직을 연동하여 실제 운영일을 시각적으로 보여주는 React 캘린더 컴포넌트 (TailwindCSS 활용)
 
 
-[개선사항 3] 당신은 Next.js App Router, TypeScript, Supabase, 그리고 웹 크롤링(Playwright/Cheerio) 구현에 능숙한 시니어 풀스택 엔지니어입니다.
+[x] [개선사항 3] 당신은 Next.js App Router, TypeScript, Supabase, 그리고 웹 크롤링(Playwright/Cheerio) 구현에 능숙한 시니어 풀스택 엔지니어입니다.
+> **완료 (2026-09-16)**: raw_data의 ORG_LINK/HMPG_ADDR/SVCURL 등은 각 인제스트
+> 어댑터가 이미 소스별 우선순위로 정규화해 events.source_url/open_spaces.info_url
+> 컬럼에 저장해 두고 있어(실측 확인, 예: tour-api-festival은 homepage가 HTML로
+> 감싸여 오는 것까지 별도 추출) 이 정규화 컬럼을 그대로 크롤링 대상으로 썼다
+> (raw_data를 admin UI에서 재파싱하면 소스별 예외를 놓칠 위험). 가격 큐레이션
+> 소스3(공식 홈페이지 크롤링)가 이미 쓰던 extractGenericPageText를 재사용해
+> POST /api/admin/scrape-source-url 신규, raw-data-modal.tsx에 "🌐 원천 링크
+> 페이지 크롤링/조회" 버튼(sourceUrl 있을 때만 조건부) + 결과 뷰어 모달 추가.
+> [개선사항 1](제휴 상품 크롤링)과 달리 대상이 공공기관 사이트라 정책 충돌
+> 없음. 실제 이벤트로 재현 검증 완료. 상세:
+> implementation/2026-09-16-source-url-crawl-viewer.md
 
 현재 우리 프로젝트의 관리자용 상세 팝업(Modal) 화면에서, 이벤트/상시공간의 원천 데이터(`raw_data` JSON)에 포함된 공식 외부 URL주소 컬럼 (`ORG_LINK`, `HMPG_ADDR`, `SVCURL` 등)을 활용해 **해당 페이지의 상세 내용을 크롤링하여 보여주는 기능**을 추가하려고 합니다.
 

@@ -44,10 +44,10 @@ function looksLikeHtml(value: unknown): value is string {
   return typeof value === 'string' && /<[a-z][^>]*>/i.test(value);
 }
 
-function getModalContent(table: AdminTable, row: AdminRow): { title: string; subtitle: string; raw: unknown } {
+function getModalContent(table: AdminTable, row: AdminRow): { title: string; subtitle: string; raw: unknown; sourceUrl: string | null } {
   if (table === 'raw_ingest_data') {
     const r = row as AdminRawIngestRow;
-    return { title: r.source_id, subtitle: `${r.source} · ${new Date(r.fetched_at).toLocaleString('ko-KR')}`, raw: r.raw_payload };
+    return { title: r.source_id, subtitle: `${r.source} · ${new Date(r.fetched_at).toLocaleString('ko-KR')}`, raw: r.raw_payload, sourceUrl: null };
   }
   if (table === 'events') {
     const r = row as AdminEventRow;
@@ -59,10 +59,14 @@ function getModalContent(table: AdminTable, row: AdminRow): { title: string; sub
         r.is_active === false ? ' · 비활성' : ''
       }`,
       raw: r.raw_data,
+      // [원천 링크 페이지 크롤링/조회](2026-09-16 사용자 지시, todo.md [개선사항 3]):
+      // source_url은 어댑터가 raw_data의 ORG_LINK/HMPG_ADDR/SVCURL 등을 이미
+      // 정규화해 둔 컬럼이다(EVENTS_COLUMNS 주석 참고) — 크롤링 버튼의 대상.
+      sourceUrl: r.source_url,
     };
   }
   const r = row as AdminOpenSpaceRow;
-  return { title: r.name, subtitle: `${r.source_type} · ${r.external_id}`, raw: r.raw_data };
+  return { title: r.name, subtitle: `${r.source_type} · ${r.external_id}`, raw: r.raw_data, sourceUrl: r.info_url };
 }
 
 // [카테고리 정제 & 어드민 확장](2026-08-26): 상세 모달에서 category_min을 직접 선택해
@@ -520,7 +524,7 @@ export function RawDataModal({
   // 삭제 성공 시 부모가 목록에서 이 행을 제거하고 상세 모달을 닫는다.
   onDeleted?: (id: string) => void;
 }) {
-  const { title, subtitle, raw } = getModalContent(table, row);
+  const { title, subtitle, raw, sourceUrl } = getModalContent(table, row);
   // [관리자화면 프론트엔드 렌더링 지연 진단](2026-09-12 사용자 지시): open_spaces/
   // events는 이제 목록 조회에 raw_data를 안 실어 raw_data === undefined인 채로 이
   // 모달이 먼저 뜬다 — data-grid-client.tsx가 열자마자 /api/admin/data-grid/raw-data로
@@ -551,6 +555,10 @@ export function RawDataModal({
   // [원문 JSON 필드 정돈해서 보기](2026-09-12 사용자 지시) — HTML은 아니지만
   // \r\n·&nbsp; 등이 섞여 원문 그대로는 알아보기 힘든 필드를 정돈해서 열었는지 저장.
   const [cleanedTextPreviewField, setCleanedTextPreviewField] = useState<{ key: string; value: string } | null>(null);
+  // [원천 링크 페이지 크롤링/조회](2026-09-16 사용자 지시, todo.md [개선사항 3]) —
+  // isScrapedPreviewOpen이 true여야만 크롤링이 트리거된다(버튼을 눌러야 함, 상세
+  // 팝업을 열 때마다 자동으로 외부 사이트를 긁지 않음).
+  const [isScrapedPreviewOpen, setIsScrapedPreviewOpen] = useState(false);
   // [드래그 시 팝업 닫힘 버그 수정](2026-09-05 사용자 지시) 참고: use-backdrop-dismiss.ts
   const backdropDismiss = useBackdropDismiss(onClose);
 
@@ -871,6 +879,23 @@ export function RawDataModal({
             </div>
           )}
 
+          {/* [원천 링크 페이지 크롤링/조회](2026-09-16 사용자 지시, todo.md
+              [개선사항 3]): "[DTLCONT 정돈해서 보기] 버튼과 정확히 동일한 위치(또는
+              바로 옆)에 배치.. raw_data 내부에 크롤링할 수 있는 URL 필드가 실제로
+              존재하는 경우에만 버튼이 활성화" — sourceUrl은 이미 정규화된 컬럼이라
+              (getModalContent 주석 참고) null이면 이 버튼 자체가 안 뜬다. */}
+          {sourceUrl && (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              <button
+                type="button"
+                onClick={() => setIsScrapedPreviewOpen(true)}
+                className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] font-medium text-sky-700 hover:bg-sky-100"
+              >
+                🌐 원천 링크 페이지 크롤링/조회
+              </button>
+            </div>
+          )}
+
           <pre className="mt-1.5 rounded-lg bg-gray-900 text-gray-100 text-xs p-3 overflow-x-auto whitespace-pre-wrap break-words">
             {isRawDataLoading ? '불러오는 중...' : prettyJson}
           </pre>
@@ -879,6 +904,10 @@ export function RawDataModal({
 
       {htmlPreviewField && (
         <HtmlFieldPreviewModal field={htmlPreviewField} onClose={() => setHtmlPreviewField(null)} />
+      )}
+
+      {isScrapedPreviewOpen && sourceUrl && (
+        <ScrapedSourcePreviewModal url={sourceUrl} onClose={() => setIsScrapedPreviewOpen(false)} />
       )}
 
       {cleanedTextPreviewField && (
@@ -1101,6 +1130,53 @@ function CleanedTextPreviewModal({ field, onClose }: { field: { key: string; val
         <div className="rounded-lg border border-gray-200 p-3 text-sm leading-relaxed text-gray-800 whitespace-pre-line">
           {cleanupMessyText(field.value)}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// [원천 링크 페이지 크롤링/조회](2026-09-16 사용자 지시, todo.md [개선사항 3]):
+// CleanedTextPreviewModal과 같은 톤이지만 이건 로컬에 이미 있는 값이 아니라
+// 외부 URL을 서버가 실시간으로 크롤링해 오는 것이라 로딩/에러 상태가 필요하다.
+function ScrapedSourcePreviewModal({ url, onClose }: { url: string; onClose: () => void }) {
+  const backdropDismiss = useBackdropDismiss(onClose);
+  const [text, setText] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch('/api/admin/scrape-source-url', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    })
+      .then(async (res) => {
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? '원천 링크 페이지 조회에 실패했습니다.');
+        setText(data.text ?? '');
+      })
+      .catch((err) => setErrorMessage(err instanceof Error ? err.message : '원천 링크 페이지 조회에 실패했습니다.'));
+  }, [url]);
+
+  return (
+    <div className="fixed inset-0 bg-black/50 z-[80] flex items-end md:items-center justify-center" {...backdropDismiss}>
+      <div
+        className="w-full md:w-[640px] max-h-[85vh] overflow-y-auto bg-white rounded-t-2xl md:rounded-2xl shadow-xl p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between mb-3">
+          <h2 className="text-sm font-bold text-gray-900">원천 링크 페이지 크롤링 결과</h2>
+          <button type="button" onClick={onClose} aria-label="닫기" className="text-gray-400 hover:text-gray-600">
+            ✕
+          </button>
+        </div>
+        <a href={url} target="_blank" rel="noopener noreferrer" className="block mb-2 text-xs text-blue-600 underline truncate">
+          {url} ↗
+        </a>
+        {errorMessage && <p className="text-xs text-red-500">{errorMessage}</p>}
+        {!errorMessage && text === null && <p className="text-xs text-gray-400">불러오는 중...</p>}
+        {text !== null && (
+          <div className="rounded-lg border border-gray-200 p-3 text-sm leading-relaxed text-gray-800 whitespace-pre-line">{text}</div>
+        )}
       </div>
     </div>
   );

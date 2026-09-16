@@ -121,6 +121,10 @@ export type AdminEventRow = {
   target_age_group: string | null;
   booking_status: string | null;
   is_active: boolean | null;
+  // [원천 링크 페이지 크롤링/조회](2026-09-16 사용자 지시, todo.md [개선사항 3]):
+  // raw_data의 ORG_LINK/HMPG_ADDR/SVCURL 등을 이미 정규화해 둔 컬럼(어댑터별
+  // 계산 로직은 route.ts EVENTS_COLUMNS 주석 참고) — 크롤링 버튼의 대상 URL.
+  source_url: string | null;
   // [관리자화면 프론트엔드 렌더링 지연 진단](2026-09-12 사용자 지시): "데이터를
   // 가져오는게 크게 없는데?" — 실측 결과 raw_data가 events 목록 페이로드의
   // 60~66%를 차지하는데 그리드 행은 이 중 3개 문자열 필드(max_class/min_class/

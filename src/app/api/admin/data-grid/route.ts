@@ -174,8 +174,16 @@ const OPEN_SPACES_COLUMNS_WITH_RAW_DATA = `${OPEN_SPACES_COLUMNS}, raw_data`;
 // 실제로 표시하는 3개 필드만 PostgREST 표현식 별칭(alias:column->>path)으로 뽑는다
 // — SQL WHERE 필터(raw_data->>'MINCLASSNM' 등)는 SELECT 목록과 무관하게 계속 그대로
 // 작동한다(아래 쿼리 빌더의 .filter() 호출 참고).
+// [원천 링크 페이지 크롤링/조회](2026-09-16 사용자 지시, todo.md [개선사항 3]):
+// source_url 추가 — raw_data의 ORG_LINK/HMPG_ADDR/SVCURL/HMPG_URL/homepage 등
+// 소스마다 제각각인 원본 필드명을 이 컬럼 하나로 이미 정규화해 두고 있다(각
+// 인제스트 어댑터가 그 소스에 맞는 우선순위로 직접 계산, 예: tour-api-festival은
+// homepage 필드가 `<a href="...">` HTML로 감싸여 와서 별도 추출 로직이 필요함) —
+// raw_data를 다시 뒤져 이 규칙을 admin UI에서 중복 구현하면 소스별 예외를 놓쳐
+// 어긋난 URL을 만들 위험이 있어(제5장 제4조 기존 구조 우선), 이미 검증된 이 컬럼을
+// 그대로 크롤링 대상으로 쓴다.
 const EVENTS_COLUMNS =
-  "id, external_id, source, title, event_type, category_maj, category_min, category_min_source, target_audience, target_audience_source, venue_name, sigungu_name, start_date, end_date, location, location_precision, is_reservation_required, reservation_url, reservation_start_date, reservation_end_date, is_free, thumbnail_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, is_active, created_at, updated_at, space_id, operating_weekdays, excluded_weekdays, operating_nth_weekdays, max_class:raw_data->>MAXCLASSNM, min_class:raw_data->>MINCLASSNM, svc_stat:raw_data->>SVCSTATNM";
+  "id, external_id, source, title, event_type, category_maj, category_min, category_min_source, target_audience, target_audience_source, venue_name, sigungu_name, start_date, end_date, location, location_precision, is_reservation_required, reservation_url, reservation_start_date, reservation_end_date, is_free, thumbnail_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, is_active, created_at, updated_at, space_id, operating_weekdays, excluded_weekdays, operating_nth_weekdays, source_url, max_class:raw_data->>MAXCLASSNM, min_class:raw_data->>MINCLASSNM, svc_stat:raw_data->>SVCSTATNM";
 
 const RAW_INGEST_COLUMNS = 'source, source_id, fetched_at, raw_payload';
 

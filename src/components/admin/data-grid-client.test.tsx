@@ -64,6 +64,7 @@ function buildEventRow(overrides: Partial<AdminEventRow> = {}): AdminEventRow {
     target_age_group: null,
     booking_status: null,
     is_active: true,
+    source_url: null,
     raw_data: {},
     created_at: null,
     ...overrides,
