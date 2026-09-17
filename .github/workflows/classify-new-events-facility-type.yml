@@ -1,0 +1,49 @@
+name: Classify New Events Facility Type (Daily)
+
+# [실내/야외 분류 LLM 파이프라인 — 매일 신규분](2026-09-17 사용자 지시): "매일 새로
+# 들어오는거에 대하여 돌수 있도록 배치로 만들어줄수 있나? 일단 오늘 신규 반영된
+# 건들에 한해서" — 그날(KST) 새로 생성된 events 행 중 is_active=true AND
+# target_audience IN (INFANT/KIDS_PRE/KIDS_SCHOOL/FAMILY)에 해당하는 것만 매일
+# Gemini로 실내/야외(facility_type)를 판단해 저장한다. 과거 누적 708건을 한 번에
+# 처리하는 백필(scripts/classify-events-facility-type.mjs)과는 별개로, 이 배치는
+# 앞으로 매일 새로 들어오는 건만 담당한다.
+#
+# [스케줄] 일일 수집 배치(ingest-daily.yml, KST 02:47 시작, 완료까지 최대 수십 분
+# 소요 가능 — 실패 시 15분 대기 후 1회 재시도까지 포함하면 더 길어질 수 있음)가 이
+# 행들의 target_audience까지 채운 뒤에 돌아야 한다. 기존 배치들(daily 02:47/monthly
+# 03:52/mom-pick-grade 04:23/weather 매 3시간 :47분)과 겹치지 않는 KST 04:05
+# (UTC 19:05, 전일)로 분산했다 — 정각을 피한 비정규 분(cron 정각 트리거 회피 원칙,
+# ingest-daily.yml과 동일한 근거).
+#
+# [Gemini 할당량 공유 주의](2026-09-17 실측): 이 워크플로는 ingest-daily.yml의
+# 카테고리 분류(scripts/ingest/lib/ai-tagging.mjs)와 같은 GEMINI_API_KEY, 같은
+# 무료 티어 일일 500회/모델 한도를 공유한다. 신규 유입분만 대상이라 건수가 적을
+# 것으로 예상되지만, 스크립트 자체에 분당/일일 한도 대응(순차 실행 + 백오프 +
+# 연속 실패 시 조기 중단)이 이미 포함돼 있다.
+permissions:
+  contents: read
+
+on:
+  schedule:
+    - cron: '05 19 * * *'
+  workflow_dispatch:
+
+jobs:
+  classify-new-events-facility-type:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Classify today's newly-added events (실내/야외 LLM 분류)
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: node scripts/ingest/classify-new-events-facility-type.mjs
