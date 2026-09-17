@@ -45,6 +45,74 @@ describe('CuratedItemsPanel', () => {
     expect(screen.getByText('상시')).toBeInTheDocument();
   });
 
+  // [운영 기간 표시 버그 수정](2026-09-17 사용자 보고: "운영 종료일 9월 30일로
+  // 설정하고 등록해도 다시 열어보면 설정 안 한 것처럼 보여?") — 실측 확인 결과 값은
+  // 정상 저장돼 있었지만, 시작일 없이 종료일만 있을 때 목록 칸이 "~ ~ 2026-09-30"처럼
+  // 물결표가 겹쳐 보여 마치 아무것도 설정 안 된 것처럼 보였다.
+  it('종료일만 설정된 상품은 "~ 2026-09-30"처럼 한쪽만 보여준다(겹친 물결표 버그 수정)', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              items: [makeItem({ operation_start_date: null, operation_end_date: '2026-09-30' })],
+              total: 1,
+            }),
+        } as Response)
+      )
+    );
+
+    render(<CuratedItemsPanel />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+
+    expect(await screen.findByText('~ 2026-09-30')).toBeInTheDocument();
+    expect(screen.queryByText('~ ~ 2026-09-30')).not.toBeInTheDocument();
+  });
+
+  it('시작일만 설정된 상품은 "2026-09-01 ~"처럼 한쪽만 보여준다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              items: [makeItem({ operation_start_date: '2026-09-01', operation_end_date: null })],
+              total: 1,
+            }),
+        } as Response)
+      )
+    );
+
+    render(<CuratedItemsPanel />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+
+    expect(await screen.findByText('2026-09-01 ~')).toBeInTheDocument();
+  });
+
+  it('둘 다 설정된 상품은 "start ~ end"로 보여준다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              items: [makeItem({ operation_start_date: '2026-09-01', operation_end_date: '2026-09-30' })],
+              total: 1,
+            }),
+        } as Response)
+      )
+    );
+
+    render(<CuratedItemsPanel />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+
+    expect(await screen.findByText('2026-09-01 ~ 2026-09-30')).toBeInTheDocument();
+  });
+
   it('상품이 없으면 안내 문구를 보여준다', async () => {
     vi.stubGlobal(
       'fetch',

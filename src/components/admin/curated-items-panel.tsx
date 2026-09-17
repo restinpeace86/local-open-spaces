@@ -312,9 +312,19 @@ export function CuratedItemsPanel() {
                   <td className="py-2 pr-3 font-medium text-gray-900 max-w-[240px] truncate">{row.title}</td>
                   <td className="py-2 pr-3 text-gray-600 whitespace-nowrap">{CATEGORY_LABEL[row.category] ?? row.category}</td>
                   <td className="py-2 pr-3 text-gray-600 whitespace-nowrap text-xs">
-                    {row.operation_start_date || row.operation_end_date
-                      ? `${row.operation_start_date ?? '~'} ~ ${row.operation_end_date ?? '~'}`
-                      : '상시'}
+                    {/* [운영 기간 표시 버그 수정](2026-09-17 사용자 보고: "운영 종료일
+                        9월 30일로 설정하고 등록해도 다시 열어보면 설정 안 한 것처럼
+                        보여") — 실제로는 정상 저장돼 있었지만(수정 폼 재확인 시 값이
+                        그대로 있음), 시작일 없이 종료일만 있으면 이 목록 칸이 "~ ~
+                        2026-09-30"처럼 물결표가 두 번 겹쳐 마치 아무것도 안 정해진
+                        것처럼 보였다 — 한쪽만 있을 땐 그 한쪽만 보여준다. */}
+                    {row.operation_start_date && row.operation_end_date
+                      ? `${row.operation_start_date} ~ ${row.operation_end_date}`
+                      : row.operation_start_date
+                        ? `${row.operation_start_date} ~`
+                        : row.operation_end_date
+                          ? `~ ${row.operation_end_date}`
+                          : '상시'}
                   </td>
                   <td className="py-2 pr-3 text-gray-400 whitespace-nowrap text-xs">
                     {new Date(row.created_at).toLocaleDateString('ko-KR')}
