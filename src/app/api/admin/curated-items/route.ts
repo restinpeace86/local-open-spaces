@@ -132,6 +132,7 @@ export async function POST(request: NextRequest) {
         spot_id: spotId,
         price_display: typeof body.price_display === 'string' && body.price_display.trim() ? body.price_display.trim() : null,
         description: typeof body.description === 'string' && body.description.trim() ? body.description.trim() : null,
+        myrealtrip_gid: typeof body.myrealtrip_gid === 'string' && body.myrealtrip_gid.trim() ? body.myrealtrip_gid.trim() : null,
       })
       .select(SPOT_ID_SELECT)
       .single();

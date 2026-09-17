@@ -108,6 +108,7 @@ export type Database = {
           id: string
           image_url: string | null
           is_active: boolean
+          myrealtrip_gid: string | null
           operation_end_date: string | null
           operation_start_date: string | null
           price_display: string | null
@@ -122,6 +123,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           is_active?: boolean
+          myrealtrip_gid?: string | null
           operation_end_date?: string | null
           operation_start_date?: string | null
           price_display?: string | null
@@ -136,6 +138,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           is_active?: boolean
+          myrealtrip_gid?: string | null
           operation_end_date?: string | null
           operation_start_date?: string | null
           price_display?: string | null

@@ -46,14 +46,22 @@ const SORT_LABELS: Record<MyRealTripSort, string> = {
 // 들고 있어야 "🔗 제휴 상품으로 등록" 폼을 열 때 그 스팟을 그대로 넘겨 다시
 // 검색하지 않아도 되게 할 수 있다.
 type LinkedSpotInfo = { spotId: string; spotName: string };
+// [마이리얼트립 중복 등록 방지](2026-09-17 사용자 보고: "[여주] 루덴시아 테마파크
+// 9월 특가 이거 2개 보이는데? 중복입력된거 아니야?") — 실측 확인 결과 시간차를
+// 두고(같은 날 00:36과 07:27) 같은 상품을 두 번 "제휴 상품으로 등록"해서 생긴
+// 중복이었다. linkedSpot(스팟 연결)과 별개로 "이미 curated_items로 등록됐는지"도
+// gid 기준으로 추적해, 검색 화면에서 바로 알아볼 수 있게 한다.
+type CuratedRegistrationInfo = { curatedItemId: string; title: string };
 
 function ResultCard({
   item,
   linkedSpot,
+  curated,
   onOpenDetail,
 }: {
   item: MyRealTripSearchItem;
   linkedSpot: LinkedSpotInfo | undefined;
+  curated: CuratedRegistrationInfo | undefined;
   onOpenDetail: (item: MyRealTripSearchItem) => void;
 }) {
   return (
@@ -76,6 +84,7 @@ function ResultCard({
           </span>
         )}
         {linkedSpot && <span className="text-[11px] font-semibold text-emerald-700">✅ {linkedSpot.spotName}에 연결됨</span>}
+        {curated && <span className="text-[11px] font-semibold text-amber-700">🏷️ 이미 제휴 상품으로 등록됨</span>}
       </div>
     </button>
   );
@@ -161,15 +170,19 @@ function ConnectToSpotModal({
 function MyRealTripProductDetailModal({
   item,
   linkedSpot,
+  curated,
   onClose,
   onSaved,
   onConnectedToSpot,
+  onRegistered,
 }: {
   item: MyRealTripSearchItem;
   linkedSpot: LinkedSpotInfo | undefined;
+  curated: CuratedRegistrationInfo | undefined;
   onClose: () => void;
   onSaved: () => void;
   onConnectedToSpot: (gid: string, spot: LinkedSpotInfo) => void;
+  onRegistered: (gid: string, info: CuratedRegistrationInfo) => void;
 }) {
   const [detail, setDetail] = useState<MyRealTripProductDetail | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
@@ -207,6 +220,13 @@ function MyRealTripProductDetailModal({
 
   async function handleGenerateMylinkAndRegister() {
     if (isGeneratingLink) return;
+    // [마이리얼트립 중복 등록 방지](2026-09-17 사용자 보고: "루덴시아 테마파크 9월
+    // 특가 이거 2개 보이는데? 중복입력된거 아니야?") — 실측 확인 결과 같은 상품을
+    // 시간차를 두고 두 번 등록해 생긴 중복이었다. 마이링크 생성 API를 호출하기 전에
+    // 먼저 확인해, 불필요한 API 호출(분당 한도 있음)도 함께 아낀다.
+    if (curated && !window.confirm(`이미 "${curated.title}"(으)로 등록된 상품입니다. 그래도 다시 등록하시겠습니까?`)) {
+      return;
+    }
     setIsGeneratingLink(true);
     setLinkError(null);
     try {
@@ -279,6 +299,11 @@ function MyRealTripProductDetailModal({
         >
           {isGeneratingLink ? '마이링크(추적 링크) 생성 중...' : '🔗 제휴 상품으로 등록'}
         </button>
+        {curated && (
+          <p className="mt-1.5 text-xs text-amber-700 font-semibold">
+            🏷️ 이미 "{curated.title}"(으)로 제휴 상품에 등록돼 있습니다.
+          </p>
+        )}
         {linkError && (
           <div className="mt-2 flex flex-col gap-1.5">
             <p className="text-xs text-red-500">{linkError}</p>
@@ -315,8 +340,11 @@ function MyRealTripProductDetailModal({
         <CuratedItemFormModal
           prefill={prefill}
           onClose={() => setPrefill(null)}
-          onSaved={() => {
+          onSaved={(savedItem) => {
             setPrefill(null);
+            if (savedItem.myrealtrip_gid) {
+              onRegistered(savedItem.myrealtrip_gid, { curatedItemId: savedItem.id, title: savedItem.title });
+            }
             onSaved();
           }}
         />
@@ -359,6 +387,10 @@ export function MyRealTripSearchPanel() {
   // 게 없다). id까지 들고 있어야 "제휴 상품으로 등록" 폼에도 그대로 넘겨 스팟을
   // 또 검색하지 않아도 된다(2026-09-16 후속 사용자 보고 — 중복 작업 제거).
   const [linkedByGid, setLinkedByGid] = useState<Record<string, LinkedSpotInfo>>({});
+  // [마이리얼트립 중복 등록 방지](2026-09-17 사용자 보고: "루덴시아 테마파크 9월
+  // 특가 이거 2개 보이는데? 중복입력된거 아니야?") — linkedByGid(스팟 연결)와는
+  // 별개로, "이미 curated_items로 등록됐는지"도 gid 기준으로 추적한다.
+  const [curatedByGid, setCuratedByGid] = useState<Record<string, CuratedRegistrationInfo>>({});
 
   // 도시가 바뀌면 그 도시의 카테고리 목록을 다시 불러온다(값이 도시마다 다름 —
   // 실측으로 서울/부산/제주 구성이 서로 다름을 확인했다, 절대 하드코딩하지 않음).
@@ -420,6 +452,27 @@ export function MyRealTripSearchPanel() {
     }
   }
 
+  // [마이리얼트립 중복 등록 방지](2026-09-17 사용자 보고) — 검색 결과가 새로 나올
+  // 때마다 이 gid들 중 이미 curated_items로 등록된 게 있는지 한 번에 확인한다.
+  async function fetchCuratedStatus(gids: string[]) {
+    if (gids.length === 0) {
+      setCuratedByGid({});
+      return;
+    }
+    try {
+      const res = await fetch(`/api/admin/curated-items/by-gids?gids=${gids.map(encodeURIComponent).join(',')}`);
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? '등록 상태 조회 실패');
+      const map: Record<string, CuratedRegistrationInfo> = {};
+      for (const registered of data.items ?? []) map[registered.gid] = { curatedItemId: registered.id, title: registered.title };
+      setCuratedByGid(map);
+    } catch {
+      // 등록 상태 표시는 보조 정보라 실패해도 검색 결과 자체는 그대로 보여준다
+      // (제5장 제11조).
+      setCuratedByGid({});
+    }
+  }
+
   async function handleSearch(page = 1) {
     const effectiveKeyword = buildEffectiveKeyword();
     if (!effectiveKeyword || isSearching) return;
@@ -445,6 +498,7 @@ export function MyRealTripSearchPanel() {
       setItems(newItems);
       setTotalCount(data.totalCount ?? 0);
       fetchLinkedStatus(newItems.map((i) => i.gid));
+      fetchCuratedStatus(newItems.map((i) => i.gid));
     } catch (err) {
       setItems([]);
       setSearchError(err instanceof Error ? err.message : '상품 검색에 실패했습니다.');
@@ -550,7 +604,13 @@ export function MyRealTripSearchPanel() {
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
               {items.map((item) => (
-                <ResultCard key={item.gid} item={item} linkedSpot={linkedByGid[item.gid]} onOpenDetail={setDetailItem} />
+                <ResultCard
+                  key={item.gid}
+                  item={item}
+                  linkedSpot={linkedByGid[item.gid]}
+                  curated={curatedByGid[item.gid]}
+                  onOpenDetail={setDetailItem}
+                />
               ))}
             </div>
           </>
@@ -561,10 +621,14 @@ export function MyRealTripSearchPanel() {
         <MyRealTripProductDetailModal
           item={detailItem}
           linkedSpot={linkedByGid[detailItem.gid]}
+          curated={curatedByGid[detailItem.gid]}
           onClose={() => setDetailItem(null)}
           onSaved={() => setDetailItem(null)}
           onConnectedToSpot={(gid, spot) => {
             setLinkedByGid((prev) => ({ ...prev, [gid]: spot }));
+          }}
+          onRegistered={(gid, info) => {
+            setCuratedByGid((prev) => ({ ...prev, [gid]: info }));
           }}
         />
       )}

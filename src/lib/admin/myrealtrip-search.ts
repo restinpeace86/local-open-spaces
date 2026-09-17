@@ -103,6 +103,7 @@ export function mapSearchItemToCuratedItemPrefill(
   booking_url: string;
   price_display: string;
   description: string | null;
+  myrealtrip_gid: string;
 } {
   return {
     title: item.itemName,
@@ -110,5 +111,10 @@ export function mapSearchItemToCuratedItemPrefill(
     booking_url: bookingUrl,
     price_display: item.priceDisplay,
     description: description ?? null,
+    // [마이리얼트립 중복 등록 방지](2026-09-17 사용자 보고: "루덴시아 테마파크 9월
+    // 특가 이거 2개 보이는데? 중복입력된거 아니야?") — 같은 상품을 시간차를 두고
+    // 다시 등록해도 admin이 알 방법이 없었다. gid를 curated_items에 함께 저장해
+    // 등록 전 조회로 중복을 미리 알려줄 수 있게 한다.
+    myrealtrip_gid: item.gid,
   };
 }

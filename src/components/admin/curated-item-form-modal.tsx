@@ -36,6 +36,11 @@ export type CuratedItemFormValue = {
   // spot_id는 1:1 매핑 저장값, spot은 폼 편집 프리필/목록 표기용 조인 결과.
   spot_id?: string | null;
   spot?: { id: string; name: string; address: string | null } | null;
+  // [마이리얼트립 중복 등록 방지](2026-09-17 사용자 보고: "루덴시아 테마파크 9월
+  // 특가 이거 2개 보이는데? 중복입력된거 아니야?") — 마이리얼트립 검색에서 등록된
+  // 상품인지, 어떤 상품인지 추적하기 위한 값. 사용자가 폼에서 직접 입력/수정하지
+  // 않고 prefill로만 들어와 그대로 저장된다(coupang 등 수동 등록 상품은 null).
+  myrealtrip_gid?: string | null;
 };
 
 export function CuratedItemFormModal({
@@ -50,7 +55,9 @@ export function CuratedItemFormModal({
   // 기존 행)과 달리 이건 "신규 등록인데 값만 미리 채워 넣기"라 isEdit 판정에는
   // 영향을 주지 않는다 — id가 없는 신규 행이므로 그대로 두면 PATCH를 시도해 버려
   // initial과 절대 같은 의미로 취급하면 안 된다.
-  prefill?: Partial<Pick<CuratedItemFormValue, 'title' | 'image_url' | 'booking_url' | 'category' | 'price_display' | 'description'>> & {
+  prefill?: Partial<
+    Pick<CuratedItemFormValue, 'title' | 'image_url' | 'booking_url' | 'category' | 'price_display' | 'description' | 'myrealtrip_gid'>
+  > & {
     // [스팟 연결 후 등록 시 중복 작업 제거](2026-09-16 사용자 보고: "마이리얼트립
     // 에서 내 스팟과 연결있는데 그거하고나서.. 제휴마케팅만들기 들어가면 스팟
     // 연결안되어있어서 거기서 다시하고.. 그래서 2번 하는걸로 되나?") — 마이리얼
@@ -80,6 +87,9 @@ export function CuratedItemFormModal({
         ? { id: prefill.spot.id, name: prefill.spot.name, address: prefill.spot.address }
         : null
   );
+  // [마이리얼트립 중복 등록 방지](2026-09-17 사용자 보고) — 사용자가 편집할 수 없는
+  // 값이라 state로 만들지 않고 그대로 저장에만 실어 보낸다.
+  const myrealtripGid = initial?.myrealtrip_gid ?? prefill?.myrealtrip_gid ?? null;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   // [중복 등록 버그 수정](2026-09-16 사용자 보고: "반응 늦어서 똑같은거 2번
@@ -138,6 +148,7 @@ export function CuratedItemFormModal({
         spot_id: spot?.id ?? null,
         price_display: priceDisplay.trim() || null,
         description: description.trim() || null,
+        myrealtrip_gid: myrealtripGid,
       };
       const res = isEdit
         ? await fetch('/api/admin/curated-items', {
