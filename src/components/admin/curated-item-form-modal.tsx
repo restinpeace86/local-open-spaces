@@ -5,6 +5,7 @@ import { useBackdropDismiss } from '@/lib/admin/use-backdrop-dismiss';
 import { SpotPicker, SpotOption } from '@/components/community/spot-picker';
 import { SpotServiceCategoryCheck } from '@/components/admin/spot-service-category-check';
 import { ServiceCategory } from '@/lib/admin/service-category';
+import { FacilityClassificationResult } from '@/lib/admin/llm-facility-classification';
 
 // [관리자 화면(/admin/data-grid) 기능 고도화 및 범용 제휴 상품 테이블 개편](2026-08-30
 // 사용자 지시) 요구사항 2: "[+ 신규 상품 등록]"/각 행의 "[수정]"이 여는 팝업 폼. 신규
@@ -41,6 +42,9 @@ export type CuratedItemFormValue = {
   // 상품인지, 어떤 상품인지 추적하기 위한 값. 사용자가 폼에서 직접 입력/수정하지
   // 않고 prefill로만 들어와 그대로 저장된다(coupang 등 수동 등록 상품은 null).
   myrealtrip_gid?: string | null;
+  // [실내/야외 분류 LLM 파이프라인](2026-09-17 사용자 지시): 관리자가 이 폼에서
+  // "🤖 LLM로 실내/야외 자동 분류"를 눌러 채우거나 직접 고를 수 있다.
+  facility_type?: string | null;
 };
 
 export function CuratedItemFormModal({
@@ -77,6 +81,10 @@ export function CuratedItemFormModal({
   const [category, setCategory] = useState(initial?.category ?? prefill?.category ?? 'ticket');
   const [priceDisplay, setPriceDisplay] = useState(initial?.price_display ?? prefill?.price_display ?? '');
   const [description, setDescription] = useState(initial?.description ?? prefill?.description ?? '');
+  const [facilityType, setFacilityType] = useState(initial?.facility_type ?? '');
+  const [isClassifying, setIsClassifying] = useState(false);
+  const [classifyError, setClassifyError] = useState<string | null>(null);
+  const [classifySuggestion, setClassifySuggestion] = useState<FacilityClassificationResult | null>(null);
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
   const [operationStart, setOperationStart] = useState(initial?.operation_start_date ?? '');
   const [operationEnd, setOperationEnd] = useState(initial?.operation_end_date ?? '');
@@ -116,6 +124,37 @@ export function CuratedItemFormModal({
       });
   }, []);
 
+  // [실내/야외 분류 LLM 파이프라인](2026-09-17 사용자 지시): 지금 폼에 입력된
+  // 제목/설명을 그대로 넘겨 분류를 받는다 — events 쪽 FacilityTypeEditor와 동일한
+  // 매핑(INDOOR→실내, OUTDOOR→야외, BOTH→복합)을 쓴다. UNKNOWN은 자동으로 채우지
+  // 않고 이유만 보여준다(제3장 제5조 추측 금지).
+  async function handleClassify() {
+    if (!title.trim()) {
+      setClassifyError('상품명을 먼저 입력해 주세요.');
+      return;
+    }
+    setIsClassifying(true);
+    setClassifyError(null);
+    setClassifySuggestion(null);
+    try {
+      const res = await fetch('/api/admin/classify-facility-environment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: title.trim(), description: description.trim() || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'LLM 분류 실패');
+      const result = data.result as FacilityClassificationResult;
+      setClassifySuggestion(result);
+      const mapped: Record<string, string> = { INDOOR: '실내', OUTDOOR: '야외', BOTH: '복합' };
+      if (mapped[result.classification]) setFacilityType(mapped[result.classification]);
+    } catch (err) {
+      setClassifyError(err instanceof Error ? err.message : 'LLM 분류 실패');
+    } finally {
+      setIsClassifying(false);
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (isSubmittingRef.current) return;
@@ -149,6 +188,7 @@ export function CuratedItemFormModal({
         price_display: priceDisplay.trim() || null,
         description: description.trim() || null,
         myrealtrip_gid: myrealtripGid,
+        facility_type: facilityType || null,
       };
       const res = isEdit
         ? await fetch('/api/admin/curated-items', {
@@ -243,6 +283,40 @@ export function CuratedItemFormModal({
               className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </label>
+
+          {/* [실내/야외 분류 LLM 파이프라인](2026-09-17 사용자 지시): "공공데이터 및
+              외부 제휴 API에서 수집된 데이터를 분석하여 환경 속성을 자동으로 분류" —
+              제목/설명을 그대로 LLM에 넘겨 판정을 받고, INDOOR/OUTDOOR/BOTH는 select에
+              바로 채운다(UNKNOWN은 채울 값이 없어 이유만 안내). */}
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-gray-700">실내/야외</span>
+            <div className="flex items-center gap-2">
+              <select
+                value={facilityType}
+                onChange={(e) => setFacilityType(e.target.value)}
+                className="rounded-lg border border-gray-300 px-3 py-2 text-sm flex-1"
+              >
+                <option value="">(미지정)</option>
+                <option value="실내">실내</option>
+                <option value="야외">야외</option>
+                <option value="복합">복합</option>
+              </select>
+              <button
+                type="button"
+                onClick={handleClassify}
+                disabled={isClassifying}
+                className="shrink-0 rounded-lg border border-indigo-200 bg-indigo-50/60 px-3 py-2 text-xs font-semibold text-indigo-700 disabled:opacity-40 hover:bg-indigo-100"
+              >
+                {isClassifying ? '분류 중...' : '🤖 LLM 자동 분류'}
+              </button>
+            </div>
+            {classifyError && <p className="text-xs text-red-600">{classifyError}</p>}
+            {classifySuggestion && (
+              <p className="text-xs text-indigo-700">
+                제안: {classifySuggestion.classification} (신뢰도: {classifySuggestion.confidence}) — {classifySuggestion.reason}
+              </p>
+            )}
+          </div>
 
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-gray-700">카테고리</span>

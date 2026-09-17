@@ -133,6 +133,7 @@ export async function POST(request: NextRequest) {
         price_display: typeof body.price_display === 'string' && body.price_display.trim() ? body.price_display.trim() : null,
         description: typeof body.description === 'string' && body.description.trim() ? body.description.trim() : null,
         myrealtrip_gid: typeof body.myrealtrip_gid === 'string' && body.myrealtrip_gid.trim() ? body.myrealtrip_gid.trim() : null,
+        facility_type: typeof body.facility_type === 'string' && body.facility_type.trim() ? body.facility_type.trim() : null,
       })
       .select(SPOT_ID_SELECT)
       .single();
@@ -169,6 +170,7 @@ export async function PATCH(request: NextRequest) {
       spot_id: string | null;
       price_display: string | null;
       description: string | null;
+      facility_type: string | null;
     }> = {};
     if (typeof body.title === 'string') {
       if (!body.title.trim()) return NextResponse.json({ error: '상품명을 입력해 주세요.' }, { status: 400 });
@@ -210,6 +212,9 @@ export async function PATCH(request: NextRequest) {
     }
     if ('description' in body) {
       updates.description = typeof body.description === 'string' && body.description.trim() ? body.description.trim() : null;
+    }
+    if ('facility_type' in body) {
+      updates.facility_type = typeof body.facility_type === 'string' && body.facility_type.trim() ? body.facility_type.trim() : null;
     }
 
     if (Object.keys(updates).length === 0) {

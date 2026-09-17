@@ -182,8 +182,12 @@ const OPEN_SPACES_COLUMNS_WITH_RAW_DATA = `${OPEN_SPACES_COLUMNS}, raw_data`;
 // raw_data를 다시 뒤져 이 규칙을 admin UI에서 중복 구현하면 소스별 예외를 놓쳐
 // 어긋난 URL을 만들 위험이 있어(제5장 제4조 기존 구조 우선), 이미 검증된 이 컬럼을
 // 그대로 크롤링 대상으로 쓴다.
+// [실내/야외 분류 LLM 파이프라인](2026-09-17 사용자 지시): 상세 팝업의
+// FacilityTypeEditor가 LLM에 넘길 설명 텍스트가 필요해 description을 추가한다 —
+// 이미 존재하는 컬럼(공개 홈 피드 API가 써 왔음)을 그리드가 select하지 않고
+// 있었을 뿐이다.
 const EVENTS_COLUMNS =
-  "id, external_id, source, title, event_type, category_maj, category_min, category_min_source, target_audience, target_audience_source, venue_name, sigungu_name, start_date, end_date, location, location_precision, is_reservation_required, reservation_url, reservation_start_date, reservation_end_date, is_free, thumbnail_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, is_active, created_at, updated_at, space_id, operating_weekdays, excluded_weekdays, operating_nth_weekdays, source_url, max_class:raw_data->>MAXCLASSNM, min_class:raw_data->>MINCLASSNM, svc_stat:raw_data->>SVCSTATNM";
+  "id, external_id, source, title, description, event_type, category_maj, category_min, category_min_source, target_audience, target_audience_source, venue_name, sigungu_name, start_date, end_date, location, location_precision, is_reservation_required, reservation_url, reservation_start_date, reservation_end_date, is_free, thumbnail_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, is_active, created_at, updated_at, space_id, operating_weekdays, excluded_weekdays, operating_nth_weekdays, source_url, max_class:raw_data->>MAXCLASSNM, min_class:raw_data->>MINCLASSNM, svc_stat:raw_data->>SVCSTATNM";
 
 const RAW_INGEST_COLUMNS = 'source, source_id, fetched_at, raw_payload';
 

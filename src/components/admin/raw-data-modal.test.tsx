@@ -1041,3 +1041,130 @@ describe('RawDataModal — raw_data 지연 로딩 상태(2026-09-12)', () => {
     expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument();
   });
 });
+
+// [실내/야외 분류 LLM 파이프라인](2026-09-17 사용자 지시): "공공데이터 및 외부
+// 제휴 API에서 수집된 데이터를 분석하여 환경 속성을 자동으로 분류" — 이벤트 상세
+// 팝업의 FacilityTypeEditor: LLM 제안 → select 자동 반영 → 저장(PATCH)까지 검증.
+describe('RawDataModal — 실내/야외 자동 분류(FacilityTypeEditor, 2026-09-17)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function mockClassifyFetch(handlers: {
+    classification?: string;
+    confidence?: string;
+    reason?: string;
+    classifyError?: string;
+    saveOk?: boolean;
+  }) {
+    return vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/api/admin/classify-facility-environment')) {
+        if (handlers.classifyError) {
+          return Promise.resolve({ ok: false, json: () => Promise.resolve({ error: handlers.classifyError }) } as Response);
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              result: {
+                classification: handlers.classification ?? 'INDOOR',
+                confidence: handlers.confidence ?? 'high',
+                reason: handlers.reason ?? '실내 놀이시설로 명시됨',
+              },
+            }),
+        } as Response);
+      }
+      if (url.includes('/api/admin/data-grid/facility-type')) {
+        void init;
+        if (handlers.saveOk === false) {
+          return Promise.resolve({ ok: false, json: () => Promise.resolve({ error: '저장 실패' }) } as Response);
+        }
+        const body = JSON.parse(init!.body as string);
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ row: { id: body.id, facility_type: body.facility_type } }) } as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+    });
+  }
+
+  it('"LLM로 실내/야외 자동 분류"를 누르면 결과를 보여주고 select에 매핑된 값을 채운다', async () => {
+    vi.stubGlobal('fetch', mockClassifyFetch({ classification: 'OUTDOOR', confidence: 'medium', reason: '야외 목장 체험' }));
+    const row = { ...buildRow(), title: '동물 목장 체험', facility_type: '복합' };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        onClose={vi.fn()}
+        onFacilityTypeUpdated={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText('🤖 LLM로 실내/야외 자동 분류'));
+
+    expect(await screen.findByText(/야외\(OUTDOOR\)/)).toBeInTheDocument();
+    expect(screen.getByText(/야외 목장 체험/)).toBeInTheDocument();
+    expect(screen.getByDisplayValue('야외')).toBeInTheDocument();
+  });
+
+  it('UNKNOWN이면 select 값을 바꾸지 않고 이유만 보여준다', async () => {
+    vi.stubGlobal('fetch', mockClassifyFetch({ classification: 'UNKNOWN', confidence: 'low', reason: '설명이 너무 짧음' }));
+    const row = { ...buildRow(), title: '이름만 있는 상품', facility_type: '복합' };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        onClose={vi.fn()}
+        onFacilityTypeUpdated={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText('🤖 LLM로 실내/야외 자동 분류'));
+
+    expect(await screen.findByText(/판단 불가\(UNKNOWN\)/)).toBeInTheDocument();
+    expect(screen.getByDisplayValue('복합')).toBeInTheDocument();
+  });
+
+  it('분류 실패 시 에러 메시지를 보여준다', async () => {
+    vi.stubGlobal('fetch', mockClassifyFetch({ classifyError: 'LLM 분석 요청 실패 (HTTP 502)' }));
+    const row = { ...buildRow(), title: '아무 상품', facility_type: '복합' };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        onClose={vi.fn()}
+        onFacilityTypeUpdated={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText('🤖 LLM로 실내/야외 자동 분류'));
+
+    expect(await screen.findByText('LLM 분석 요청 실패 (HTTP 502)')).toBeInTheDocument();
+  });
+
+  it('저장을 누르면 facility-type을 PATCH하고 onFacilityTypeUpdated를 호출한다', async () => {
+    const fetchMock = mockClassifyFetch({});
+    vi.stubGlobal('fetch', fetchMock);
+    const onFacilityTypeUpdated = vi.fn();
+    const row = { ...buildRow(), id: 'row-1', title: '동물 목장 체험', facility_type: '복합' };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        onClose={vi.fn()}
+        onFacilityTypeUpdated={onFacilityTypeUpdated}
+      />
+    );
+
+    fireEvent.change(screen.getByDisplayValue('복합'), { target: { value: '실내' } });
+    fireEvent.click(screen.getByText('저장'));
+
+    await waitFor(() => expect(onFacilityTypeUpdated).toHaveBeenCalledWith('row-1', '실내'));
+    const patchCall = fetchMock.mock.calls.find(
+      (c) => (c[0] as string).includes('/api/admin/data-grid/facility-type') && (c[1] as RequestInit)?.method === 'PATCH'
+    );
+    expect(JSON.parse((patchCall![1] as RequestInit).body as string)).toEqual({ id: 'row-1', facility_type: '실내' });
+  });
+});

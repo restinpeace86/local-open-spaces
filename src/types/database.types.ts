@@ -105,6 +105,7 @@ export type Database = {
           category: string
           created_at: string
           description: string | null
+          facility_type: string | null
           id: string
           image_url: string | null
           is_active: boolean
@@ -120,6 +121,7 @@ export type Database = {
           category?: string
           created_at?: string
           description?: string | null
+          facility_type?: string | null
           id?: string
           image_url?: string | null
           is_active?: boolean
@@ -135,6 +137,7 @@ export type Database = {
           category?: string
           created_at?: string
           description?: string | null
+          facility_type?: string | null
           id?: string
           image_url?: string | null
           is_active?: boolean

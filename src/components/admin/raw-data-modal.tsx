@@ -17,6 +17,7 @@ import { EVENTS_ALLOWED_CATEGORY_MINS } from '@/lib/admin/category-min-groups';
 import { OperatingScheduleUpdatedHandler } from '@/components/admin/operating-schedule-editor';
 import { SpotServiceCategoryCheck } from '@/components/admin/spot-service-category-check';
 import { SpotMyRealTripLinkEditor } from '@/components/admin/spot-myrealtrip-link-editor';
+import { FacilityClassificationResult } from '@/lib/admin/llm-facility-classification';
 
 // [개편] 행 클릭 시 해당 행의 전체 원천 컬럼(구조화된 값) + raw_data/raw_payload 원문 JSON을
 // 함께 보여주는 Read-Only 뷰어. 3개 탭(open_spaces/events/raw_ingest_data) 행 형태가 서로
@@ -306,6 +307,125 @@ function TargetAudienceEditor({
   );
 }
 
+const FACILITY_TYPE_OPTIONS = ['실내', '야외', '복합'];
+// [실내/야외 분류 LLM 파이프라인](2026-09-17 사용자 지시): "공공데이터 및 외부
+// 제휴 API에서 수집된 아이와 함께 가기 좋은 나들이/체험 상품 데이터를 분석하여
+// 환경 속성을 자동으로 분류" — 제목+설명을 /api/admin/classify-facility-environment
+// 에 보내 INDOOR/OUTDOOR/BOTH/UNKNOWN 판정을 받아온다. 실측 확인(2026-09-17):
+// events.facility_type은 NOT NULL 기본값 '복합'이고 실제로 전체 28,948건 중
+// 22,118건이 이 기본값에 그대로 머물러 있다 — "판단 못 해서 기본값"과 "LLM이
+// 정말 복합 시설이라고 판단"을 구분하기 위해 이 기능을 만든다. INDOOR→실내,
+// OUTDOOR→야외, BOTH→복합으로 매핑해 select에 미리 채워주고, UNKNOWN(판단 불가)은
+// 저장할 대응값이 없어 select를 건드리지 않고 이유만 안내한다(추측으로 아무 값이나
+// 채우지 않음, 제3장 제5조).
+const CLASSIFICATION_TO_FACILITY_TYPE: Record<string, string> = { INDOOR: '실내', OUTDOOR: '야외', BOTH: '복합' };
+const CLASSIFICATION_LABEL: Record<string, string> = { INDOOR: '실내(INDOOR)', OUTDOOR: '야외(OUTDOOR)', BOTH: '복합(BOTH)', UNKNOWN: '판단 불가(UNKNOWN)' };
+
+function FacilityTypeEditor({
+  row,
+  onUpdated,
+}: {
+  row: AdminEventRow;
+  onUpdated: (id: string, nextFacilityType: string) => void;
+}) {
+  const [value, setValue] = useState(row.facility_type || '복합');
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isClassifying, setIsClassifying] = useState(false);
+  const [classifyError, setClassifyError] = useState<string | null>(null);
+  const [suggestion, setSuggestion] = useState<FacilityClassificationResult | null>(null);
+
+  const handleClassify = async () => {
+    setIsClassifying(true);
+    setClassifyError(null);
+    setSuggestion(null);
+    try {
+      const res = await fetch('/api/admin/classify-facility-environment', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: row.title, description: row.description ?? null }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? 'LLM 분류 실패');
+      const result = json.result as FacilityClassificationResult;
+      setSuggestion(result);
+      const mapped = CLASSIFICATION_TO_FACILITY_TYPE[result.classification];
+      if (mapped) setValue(mapped);
+    } catch (err) {
+      setClassifyError(err instanceof Error ? err.message : 'LLM 분류 실패');
+    } finally {
+      setIsClassifying(false);
+    }
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setErrorMessage(null);
+    try {
+      const res = await fetch('/api/admin/data-grid/facility-type', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: row.id, facility_type: value }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? '수동 수정 실패');
+      onUpdated(row.id, json.row.facility_type);
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : '수동 수정 실패');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 rounded-xl border border-gray-200 p-3">
+      <h3 className="text-xs font-semibold text-gray-500 mb-2">
+        실내/야외(facility_type) 수동 수정
+        <span className="ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
+          현재: {row.facility_type || '(없음)'}
+        </span>
+      </h3>
+      <button
+        type="button"
+        onClick={handleClassify}
+        disabled={isClassifying}
+        className="w-full rounded-lg border border-indigo-200 bg-indigo-50/60 px-3 py-1.5 text-xs font-semibold text-indigo-700 disabled:opacity-40 hover:bg-indigo-100"
+      >
+        {isClassifying ? '🤖 LLM 분류 중...' : '🤖 LLM로 실내/야외 자동 분류'}
+      </button>
+      {classifyError && <p className="mt-1.5 text-xs text-red-500">{classifyError}</p>}
+      {suggestion && (
+        <p className="mt-1.5 text-xs text-indigo-700">
+          제안: {CLASSIFICATION_LABEL[suggestion.classification]} (신뢰도: {suggestion.confidence}) — {suggestion.reason}
+          {suggestion.classification === 'UNKNOWN' && ' (자동으로 채울 값이 없어 아래 값은 그대로예요 — 직접 골라주세요)'}
+        </p>
+      )}
+      <div className="mt-2 flex items-center gap-2">
+        <select
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs flex-1"
+        >
+          {FACILITY_TYPE_OPTIONS.map((opt) => (
+            <option key={opt} value={opt}>
+              {opt}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={isSaving}
+          className="rounded-full bg-purple-600 text-white text-xs font-semibold px-3 py-1.5 disabled:opacity-40 hover:bg-purple-700"
+        >
+          {isSaving ? '저장 중...' : '저장'}
+        </button>
+      </div>
+      {errorMessage && <p className="mt-1.5 text-xs text-red-500">{errorMessage}</p>}
+    </div>
+  );
+}
+
 // [지오코딩 실패 행 수동 좌표 입력](2026-09-05 사용자 지시): "지오코딩하지 못하여 위경도
 // 좌표가 없는경우는 수동으로 위경도 좌표 돌릴수있도록.. events쪽에 구현해줘." — CategoryMinEditor/
 // TargetAudienceEditor와 동일 관례: 저장하면 location_precision이 항상 'EXACT'로 바뀐다
@@ -491,6 +611,7 @@ export function RawDataModal({
   onClose,
   onCategoryMinUpdated,
   onTargetAudienceUpdated,
+  onFacilityTypeUpdated,
   onOperatingScheduleUpdated,
   onLocationUpdated,
   onSpaceLinkUpdated,
@@ -509,6 +630,8 @@ export function RawDataModal({
   onClose: () => void;
   onCategoryMinUpdated?: (id: string, nextCategoryMin: string | null, nextSource: string | null) => void;
   onTargetAudienceUpdated?: (id: string, nextTargetAudience: string | null, nextSource: string | null) => void;
+  // [실내/야외 분류 LLM 파이프라인](2026-09-17 사용자 지시): events 탭 전용.
+  onFacilityTypeUpdated?: (id: string, nextFacilityType: string) => void;
   // [운영 요일/반복 규칙](2026-09-12 사용자 지시): events 탭 전용. 편집기 자체는
   // [블로그 큐레이션 모달로 이동](2026-09-12 사용자 지시)에 따라 EventBlogCurationModal
   // 안으로 옮겨졌고, 이 콜백은 그 모달에 그대로 전달돼 저장 결과를 이 화면의 행
@@ -668,6 +791,10 @@ export function RawDataModal({
               targetAudienceOptions={targetAudienceOptions}
               onUpdated={onTargetAudienceUpdated}
             />
+          )}
+
+          {table === 'events' && onFacilityTypeUpdated && (
+            <FacilityTypeEditor row={row as AdminEventRow} onUpdated={onFacilityTypeUpdated} />
           )}
 
           {table === 'events' && onLocationUpdated && <LocationEditor row={row as AdminEventRow} onUpdated={onLocationUpdated} />}

@@ -154,6 +154,11 @@ export type AdminEventRow = {
   // [매월 N번째 요일 패턴 추가](2026-09-12 사용자 지시): "매월 2번째 4번째 토요일"
   // 같은 패턴("2-SAT" 형식 토큰 배열) — operating_weekdays와 상호 배타적 대안.
   operating_nth_weekdays?: string[] | null;
+  // [실내/야외 분류 LLM 파이프라인](2026-09-17 사용자 지시): 상세 팝업의
+  // FacilityTypeEditor가 LLM에 넘길 상세 설명 텍스트. events 테이블에는 이미
+  // description 컬럼이 있지만(공개 홈 피드 API가 써 왔음, get-home-feed.ts) 이
+  // 관리자 그리드는 지금까지 select하지 않고 있었다.
+  description?: string | null;
 };
 
 export type AdminRawIngestRow = {
@@ -1797,6 +1802,10 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                 ? { ...prev, target_audience: nextTargetAudience, target_audience_source: nextSource }
                 : prev
             );
+          }}
+          onFacilityTypeUpdated={(id, nextFacilityType) => {
+            setRows((prev) => prev.map((row) => ('id' in row && row.id === id ? { ...row, facility_type: nextFacilityType } : row)));
+            setSelectedRow((prev) => (prev && 'id' in prev && prev.id === id ? { ...prev, facility_type: nextFacilityType } : prev));
           }}
           onOperatingScheduleUpdated={(id, nextOperatingWeekdays, nextExcludedWeekdays, nextOperatingNthWeekdays) => {
             setRows((prev) =>

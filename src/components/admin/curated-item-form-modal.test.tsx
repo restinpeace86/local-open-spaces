@@ -287,3 +287,90 @@ describe('CuratedItemFormModal — prefill(마이리얼트립 검색 결과 등�
     });
   });
 });
+
+// [실내/야외 분류 LLM 파이프라인](2026-09-17 사용자 지시): "공공데이터 및 외부
+// 제휴 API에서 수집된 데이터를 분석하여 환경 속성을 자동으로 분류" — 제휴 상품
+// 등록 폼에서 제목/설명을 그대로 넘겨 LLM 제안을 받고 select에 반영한다.
+describe('CuratedItemFormModal — 실내/야외 자동 분류(2026-09-17)', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  function stubClassifyFetch(handlers: { classification?: string; confidence?: string; reason?: string; error?: string }) {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/api/admin/classify-facility-environment')) {
+        if (handlers.error) {
+          return Promise.resolve({ ok: false, json: () => Promise.resolve({ error: handlers.error }) } as Response);
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              result: {
+                classification: handlers.classification ?? 'INDOOR',
+                confidence: handlers.confidence ?? 'high',
+                reason: handlers.reason ?? '실내 놀이시설로 명시됨',
+              },
+            }),
+        } as Response);
+      }
+      if (url.includes('/api/admin/curated-items') && init?.method === 'POST') {
+        const body = JSON.parse(init.body as string);
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ item: { id: 'c1', ...body, created_at: '2026-09-17' } }) } as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+
+  it('제목/설명을 넣고 "🤖 LLM 자동 분류"를 누르면 결과를 보여주고 select에 매핑된 값을 채운다', async () => {
+    stubClassifyFetch({ classification: 'INDOOR', confidence: 'high', reason: '실내 놀이시설로 명시됨' });
+    render(<CuratedItemFormModal onClose={vi.fn()} onSaved={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText('상품명'), { target: { value: '숲속 키즈카페 이용권' } });
+    fireEvent.change(screen.getByLabelText('상세 설명'), { target: { value: '실내 놀이 공간입니다' } });
+    fireEvent.click(screen.getByText('🤖 LLM 자동 분류'));
+
+    expect(await screen.findByText(/INDOOR/)).toBeInTheDocument();
+    expect(screen.getByText(/실내 놀이시설로 명시됨/)).toBeInTheDocument();
+    expect(screen.getByDisplayValue('실내')).toBeInTheDocument();
+  });
+
+  it('상품명을 입력하지 않으면 분류를 시도하지 않고 안내 문구를 보여준다', async () => {
+    const fetchMock = stubClassifyFetch({});
+    render(<CuratedItemFormModal onClose={vi.fn()} onSaved={vi.fn()} />);
+
+    fireEvent.click(screen.getByText('🤖 LLM 자동 분류'));
+
+    expect(await screen.findByText('상품명을 먼저 입력해 주세요.')).toBeInTheDocument();
+    expect(fetchMock.mock.calls.find((c) => String(c[0]).includes('/api/admin/classify-facility-environment'))).toBeUndefined();
+  });
+
+  it('분류 실패 시 에러 메시지를 보여준다', async () => {
+    stubClassifyFetch({ error: 'LLM 분석 요청 실패 (HTTP 502)' });
+    render(<CuratedItemFormModal onClose={vi.fn()} onSaved={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText('상품명'), { target: { value: '숲속 키즈카페 이용권' } });
+    fireEvent.click(screen.getByText('🤖 LLM 자동 분류'));
+
+    expect(await screen.findByText('LLM 분석 요청 실패 (HTTP 502)')).toBeInTheDocument();
+  });
+
+  it('등록 시 facility_type이 payload에 포함된다', async () => {
+    const fetchMock = stubClassifyFetch({ classification: 'OUTDOOR' });
+    render(<CuratedItemFormModal onClose={vi.fn()} onSaved={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText('상품명'), { target: { value: '동물 목장 체험' } });
+    fireEvent.change(screen.getByLabelText('제휴 링크(booking_url)'), { target: { value: 'https://x.com' } });
+    fireEvent.click(screen.getByText('🤖 LLM 자동 분류'));
+    await screen.findByDisplayValue('야외');
+
+    fireEvent.click(screen.getByText('등록하기'));
+
+    await waitFor(() => {
+      const postCall = fetchMock.mock.calls.find(
+        (c) => String(c[0]).includes('/api/admin/curated-items') && (c[1] as RequestInit)?.method === 'POST'
+      );
+      expect(JSON.parse((postCall![1] as RequestInit).body as string).facility_type).toBe('야외');
+    });
+  });
+});
