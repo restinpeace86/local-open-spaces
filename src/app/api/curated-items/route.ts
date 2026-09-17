@@ -22,9 +22,17 @@ export async function GET(request: NextRequest) {
     // 지났거나 아직 시작하지 않은 상품을 홈 화면에 그대로 보여주면 유저가 예약할 수
     // 없는 상품을 큐레이션으로 추천하는 셈이 된다. 상시 노출 상품(날짜 미설정, NULL)은
     // 기존처럼 계속 보인다.
+    // [재확인](2026-09-17, todo.md [개선사항 1] "start_date도 있을 경우는 start_date
+    // 지나야 노출 시작해야하는것도 같이 확인해"): 두 `.or()`는 각각 별도 AND 조건으로
+    // 적용된다 — (start가 null 이거나 오늘 이하) AND (end가 null 이거나 오늘 이상).
+    // start_date가 미래인 상품은 첫 번째 조건(null도 아니고 오늘 이하도 아님)에서
+    // 걸러져 정확히 아직 노출되지 않는다 — 이미 올바르게 구현돼 있음을 코드로 재확인.
+    // [제휴 상품 성격 이원화](2026-09-17 사용자 지시, todo.md [개선사항 1]): 프리뷰
+    // 카드에 "장소" 정보를 보여주려면 연동된 스팟의 이름/주소가 필요하다 — 관리자
+    // API(/api/admin/curated-items)가 이미 쓰는 것과 동일한 조인 패턴(제5장 제4조).
     const { data, error, count } = await admin
       .from('curated_items')
-      .select('*', { count: 'exact' })
+      .select('*, spot:open_spaces(id, name, address)', { count: 'exact' })
       .eq('is_active', true)
       .or(`operation_start_date.is.null,operation_start_date.lte.${today}`)
       .or(`operation_end_date.is.null,operation_end_date.gte.${today}`)

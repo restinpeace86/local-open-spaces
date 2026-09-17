@@ -7,6 +7,8 @@ import { HomeHeader } from '@/components/home/home-header';
 import { HeroCarousel } from '@/components/home/hero-carousel';
 import { ReservationOpenSlider, ReservationOpenSliderSkeleton } from '@/components/home/reservation-open-slider';
 import { BestPickSlider, BestPickSliderSkeleton, CuratedItem } from '@/components/home/best-pick-slider';
+import { CuratedItemDetailModal } from '@/components/home/curated-item-detail-modal';
+import { splitCuratedItemsByPeriod } from '@/lib/home/curated-items';
 import { EventBrowseSheet, EventBrowseSheetMode } from '@/components/home/event-browse-sheet';
 import { MajorCategoryGrid } from '@/components/home/major-category-grid';
 import { FeedCard } from '@/components/home/feed-card';
@@ -222,6 +224,10 @@ export function HomeView({
   // 이벤트픽 화면이 뜬다" — 목록에서 항목을 선택한 시점의 item.id를 들고 있다가, 상세
   // 카드를 닫아도 그대로 남겨둬 돌아간 목록에서 그 행을 강조 표시한다.
   const [focusedListItemId, setFocusedListItemId] = useState<string | null>(null);
+  // [제휴 상품 상세 뷰 도입](2026-09-17 사용자 지시, todo.md [개선사항 2]): 큐레이션
+  // 카드는 selectedItem(NearbyItem 전용 DetailModal)과 스키마가 달라 별도 state로
+  // 관리한다 — 카드 클릭 시 곧바로 외부 링크가 아니라 이 상세 모달을 먼저 연다.
+  const [selectedCuratedItem, setSelectedCuratedItem] = useState<CuratedItem | null>(null);
   // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시) 요구사항 3: "전체보기"가 페이지 이동 대신
   // 이 화면 위 바텀시트로 뜬다 — 어떤 종류의 전체보기를 열지만 상태로 들고 있으면 된다.
   const [browseSheetMode, setBrowseSheetMode] = useState<EventBrowseSheetMode | null>(null);
@@ -243,6 +249,11 @@ export function HomeView({
 
   const region = { sigunguName, lat: addressName ? center.lat : undefined, lng: addressName ? center.lng : undefined };
   const bestPicks = useBestPicksFeed();
+  // [제휴 상품 성격 이원화](2026-09-17 사용자 지시, todo.md [개선사항 1]): "이번 주말
+  // 실패 없는 베스트 나들이 픽"에 다 몰려 노출되던 걸 operation_end_date 유무로
+  // 나눠, 기간한정 특가는 기존 자리에 상단 배치, 상시 티켓은 피드 맨 하단 별도
+  // 섹션으로 분리한다.
+  const { limitedDeals, evergreenTickets } = bestPicks ? splitCuratedItemsByPeriod(bestPicks) : { limitedDeals: null, evergreenTickets: null };
   const {
     selectedTheme,
     items: themeSpotItems,
@@ -469,20 +480,23 @@ export function HomeView({
             {/* [홈 화면 큐레이션 섹션 추가 및 상단 탭 정리](2026-08-30 사용자 지시) 요구사항
                 2/3/4: "현재 이용 가능" 바로 아래, "예약 가능" 바로 위에 배치하는 에디터
                 추천 제휴 상품 큐레이션 — 세로 공간을 아끼기 위해 그리드가 아니라 가로
-                스크롤 슬라이드로 구현한다(BestPickSlider). 광고 느낌을 지우기 위해 할인율
-                뱃지 등은 넣지 않고 담백한 타이틀/서브 텍스트만 둔다. 다른 섹션과 동일한
-                가변 노출 원칙 — 로드 전(null)이면 스켈레톤, 로드 후 0건이면 섹션 자체를
-                숨긴다. */}
-            {(bestPicks === null || bestPicks.length > 0) && (
-              <section aria-label="베스트 나들이 픽">
+                스크롤 슬라이드로 구현한다(BestPickSlider). 다른 섹션과 동일한 가변 노출
+                원칙 — 로드 전(null)이면 스켈레톤, 로드 후 0건이면 섹션 자체를 숨긴다.
+                [제휴 상품 성격 이원화](2026-09-17 사용자 지시, todo.md [개선사항 1]):
+                "제휴상품등록한것들이 다 노출되던 기존 방식"을 갈아엎어, 이 자리(기존
+                "베스트 나들이 픽" 자리)에는 기간한정 특가(operation_end_date 있음)만
+                남기고 타이틀/부제도 그 성격에 맞게 바꾼다 — 상시 티켓은 아래 별도
+                섹션(🧸 언제 가도 좋은 상시 추천 픽)으로 옮긴다. */}
+            {(limitedDeals === null || limitedDeals.length > 0) && (
+              <section aria-label="엄선된 기간 한정 특가 픽">
                 <div className="px-4 mb-3">
-                  <h2 className="text-base font-bold text-gray-900">이번 주말 실패 없는 베스트 나들이 픽</h2>
-                  <p className="text-xs text-gray-400 mt-0.5">에디터가 직접 검증한 나들이 코스만 엄선했어요.</p>
+                  <h2 className="text-base font-bold text-gray-900">엄선된 기간 한정 특가 픽</h2>
+                  <p className="text-xs text-gray-400 mt-0.5">아이와 함께 가기 좋은 한정기간 추천 픽만 모았어요.</p>
                 </div>
-                {bestPicks === null ? (
-                  <BestPickSliderSkeleton />
+                {limitedDeals === null ? (
+                  <BestPickSliderSkeleton label="엄선된 기간 한정 특가 픽 불러오는 중" />
                 ) : (
-                  <BestPickSlider items={bestPicks} />
+                  <BestPickSlider items={limitedDeals} onSelect={setSelectedCuratedItem} />
                 )}
               </section>
             )}
@@ -512,6 +526,25 @@ export function HomeView({
                   <ReservationOpenSliderSkeleton label="놓치면 후회하는 인기 만점 예약 픽 불러오는 중" />
                 ) : (
                   <ReservationOpenSlider items={reservationOpenEvents} onSelect={setSelectedItem} />
+                )}
+              </section>
+            )}
+
+            {/* [제휴 상품 성격 이원화](2026-09-17 사용자 지시, todo.md [개선사항 1]): "상시
+                티켓/스테디셀러 상품"은 메인 피드 맨 하단에 별도로 분리 고정 노출한다 —
+                타임라인의 흐름(오늘/예약 임박 등 시한성 섹션들)을 해치지 않으면서, 언제든
+                든든하게 받쳐주는 스테디셀러 스토어 형태로 배치한다는 기획 의도. 다른
+                섹션과 동일한 가변 노출 원칙을 그대로 따른다. */}
+            {(evergreenTickets === null || evergreenTickets.length > 0) && (
+              <section aria-label="언제 가도 좋은 상시 추천 픽">
+                <div className="px-4 mb-3">
+                  <h2 className="text-base font-bold text-gray-900">🧸 언제 가도 좋은 상시 추천 픽</h2>
+                  <p className="text-xs text-gray-400 mt-0.5">마감 걱정 없이, 아이와 언제든 떠날 수 있는 스테디셀러 티켓이에요.</p>
+                </div>
+                {evergreenTickets === null ? (
+                  <BestPickSliderSkeleton label="언제 가도 좋은 상시 추천 픽 불러오는 중" />
+                ) : (
+                  <BestPickSlider items={evergreenTickets} onSelect={setSelectedCuratedItem} />
                 )}
               </section>
             )}
@@ -589,6 +622,9 @@ export function HomeView({
         />
       )}
       {selectedItem && <DetailModal item={selectedItem} onClose={() => setSelectedItem(null)} />}
+      {selectedCuratedItem && (
+        <CuratedItemDetailModal item={selectedCuratedItem} onClose={() => setSelectedCuratedItem(null)} />
+      )}
       {isOnboardingOpen && (
         <LocationOnboardingModal onConfirm={confirmLocation} onClose={closeOnboarding} />
       )}

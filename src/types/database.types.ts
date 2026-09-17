@@ -104,11 +104,13 @@ export type Database = {
           booking_url: string
           category: string
           created_at: string
+          description: string | null
           id: string
           image_url: string | null
           is_active: boolean
           operation_end_date: string | null
           operation_start_date: string | null
+          price_display: string | null
           spot_id: string | null
           title: string
         }
@@ -116,11 +118,13 @@ export type Database = {
           booking_url: string
           category?: string
           created_at?: string
+          description?: string | null
           id?: string
           image_url?: string | null
           is_active?: boolean
           operation_end_date?: string | null
           operation_start_date?: string | null
+          price_display?: string | null
           spot_id?: string | null
           title: string
         }
@@ -128,11 +132,13 @@ export type Database = {
           booking_url?: string
           category?: string
           created_at?: string
+          description?: string | null
           id?: string
           image_url?: string | null
           is_active?: boolean
           operation_end_date?: string | null
           operation_start_date?: string | null
+          price_display?: string | null
           spot_id?: string | null
           title?: string
         }

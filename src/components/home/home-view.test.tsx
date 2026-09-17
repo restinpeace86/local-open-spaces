@@ -274,13 +274,12 @@ describe('HomeView', () => {
     expect(screen.queryByText('🎁 무료·공공')).not.toBeInTheDocument();
   });
 
-  // [홈 화면 큐레이션 섹션 추가 및 상단 탭 정리](2026-08-30 사용자 지시) 요구사항 2/3/4/5:
-  // "이번 주말 실패 없는 베스트 나들이 픽" 가로 슬라이드 섹션 — 탭이 사라져 별도 클릭
-  // 없이 마운트만으로 curated_items를 페칭하고, 카드는 상세 모달 없이 곧바로 booking_url을
-  // 새 창으로 연다.
-  // [관리자 화면 기능 고도화 및 범용 제휴 상품 테이블 개편](2026-08-30 사용자 지시): 데이터
-  // 소스가 event_tickets → curated_items(`/api/curated-items`)로 바뀌었다.
-  describe('베스트 나들이 픽 섹션', () => {
+  // [제휴 상품 성격 이원화(기간한정 특가 vs 상시 티켓)](2026-09-17 사용자 지시,
+  // implementation/todo.md [개선사항 1][개선사항 2]): 기존 "이번 주말 실패 없는
+  // 베스트 나들이 픽" 단일 섹션이 operation_end_date 유무로 "엄선된 기간 한정 특가
+  // 픽"(상단, 기존 자리)과 "🧸 언제 가도 좋은 상시 추천 픽"(피드 맨 하단, 신규)으로
+  // 나뉘었고, 카드 클릭도 곧바로 외부 링크가 아니라 내부 상세 모달을 먼저 연다.
+  describe('제휴 상품 큐레이션 섹션(특가/상시 이원화)', () => {
     function stubFetchBestPicks(items: unknown[]) {
       const fetchMock = vi.fn((url: string) => {
         if (url.startsWith('/api/curated-items')) {
@@ -307,23 +306,40 @@ describe('HomeView', () => {
       };
     }
 
-    it('마운트되면 별도 클릭 없이 타이틀/서브 텍스트와 카드를 보여준다', async () => {
-      stubFetchBestPicks([makeCuratedItem()]);
+    it('기간한정 특가(operation_end_date 있음)는 "엄선된 기간 한정 특가 픽"에 뜬다', async () => {
+      stubFetchBestPicks([makeCuratedItem({ operation_end_date: '2026-10-31' })]);
       render(<HomeView initialHeroEvents={[]} />);
 
-      expect(await screen.findByText('이번 주말 실패 없는 베스트 나들이 픽')).toBeInTheDocument();
-      expect(screen.getByText('에디터가 직접 검증한 나들이 코스만 엄선했어요.')).toBeInTheDocument();
+      expect(await screen.findByText('엄선된 기간 한정 특가 픽')).toBeInTheDocument();
+      expect(screen.getByText('아이와 함께 가기 좋은 한정기간 추천 픽만 모았어요.')).toBeInTheDocument();
       expect(await screen.findByText('가을 단풍 나들이 축제 입장권')).toBeInTheDocument();
+      expect(screen.queryByText('🧸 언제 가도 좋은 상시 추천 픽')).not.toBeInTheDocument();
     });
 
-    it('카드를 클릭하면 상세 모달 없이 booking_url을 새 창(target=_blank)으로 곧바로 연다', async () => {
-      stubFetchBestPicks([makeCuratedItem()]);
+    it('상시 티켓(operation_end_date 없음)은 "🧸 언제 가도 좋은 상시 추천 픽"에 뜬다', async () => {
+      stubFetchBestPicks([makeCuratedItem({ operation_end_date: null })]);
       render(<HomeView initialHeroEvents={[]} />);
 
-      const link = (await screen.findByText('가을 단풍 나들이 축제 입장권')).closest('a');
-      expect(link).toHaveAttribute('href', 'https://example.com/tickets/autumn-festival');
-      expect(link).toHaveAttribute('target', '_blank');
-      expect(link).toHaveAttribute('rel', expect.stringContaining('noopener'));
+      expect(await screen.findByText('🧸 언제 가도 좋은 상시 추천 픽')).toBeInTheDocument();
+      expect(screen.getByText('마감 걱정 없이, 아이와 언제든 떠날 수 있는 스테디셀러 티켓이에요.')).toBeInTheDocument();
+      expect(await screen.findByText('가을 단풍 나들이 축제 입장권')).toBeInTheDocument();
+      expect(screen.queryByText('엄선된 기간 한정 특가 픽')).not.toBeInTheDocument();
+    });
+
+    it('카드를 클릭하면 곧바로 외부 링크로 나가지 않고 내부 상세 모달이 먼저 열린다', async () => {
+      stubFetchBestPicks([makeCuratedItem({ operation_end_date: '2026-10-31', price_display: '12,000원' })]);
+      render(<HomeView initialHeroEvents={[]} />);
+
+      const card = await screen.findByText('가을 단풍 나들이 축제 입장권');
+      expect(card.closest('a')).toBeNull();
+
+      fireEvent.click(card);
+
+      expect(await screen.findByText('예매하러 바로가기 ↗')).toBeInTheDocument();
+      expect(screen.getAllByText('12,000원').length).toBeGreaterThan(0);
+      const cta = screen.getByText('예매하러 바로가기 ↗');
+      expect(cta).toHaveAttribute('href', 'https://example.com/tickets/autumn-festival');
+      expect(cta).toHaveAttribute('target', '_blank');
     });
 
     // [큐레이션 카드 내부 '이미지 vs 텍스트' 영역 비율 고정](2026-08-30 사용자 지시):
@@ -331,35 +347,44 @@ describe('HomeView', () => {
     // 폭/높이를 고정하고, 카드 내부는 flex flex-col h-full로 이미지/텍스트 영역을 나눈다.
     it('제목 길이가 다르든 카드 바깥 래퍼의 크기(w-36 h-[220px])는 항상 동일하다', async () => {
       stubFetchBestPicks([
-        makeCuratedItem({ id: 't1', title: '짧은 제목' }),
-        makeCuratedItem({ id: 't2', title: '아주 아주 아주 아주 아주 긴 제목의 상품입니다' }),
+        makeCuratedItem({ id: 't1', title: '짧은 제목', operation_end_date: '2026-10-31' }),
+        makeCuratedItem({ id: 't2', title: '아주 아주 아주 아주 아주 긴 제목의 상품입니다', operation_end_date: '2026-10-31' }),
       ]);
       render(<HomeView initialHeroEvents={[]} />);
 
-      const short = (await screen.findByText('짧은 제목')).closest('a')!.parentElement!;
-      const long = screen.getByText('아주 아주 아주 아주 아주 긴 제목의 상품입니다').closest('a')!.parentElement!;
+      const short = (await screen.findByText('짧은 제목')).closest('button')!.parentElement!;
+      const long = screen.getByText('아주 아주 아주 아주 아주 긴 제목의 상품입니다').closest('button')!.parentElement!;
 
       expect(short).toHaveClass('w-36', 'h-[220px]');
       expect(long).toHaveClass('w-36', 'h-[220px]');
     });
 
-    it('베스트 픽이 0건이면 섹션 자체를 숨긴다', async () => {
+    it('두 섹션 다 0건이면 둘 다 숨긴다', async () => {
       stubFetchBestPicks([]);
       render(<HomeView initialHeroEvents={[]} />);
 
       await waitFor(() => {
-        expect(screen.queryByLabelText('베스트 나들이 픽')).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('엄선된 기간 한정 특가 픽')).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('언제 가도 좋은 상시 추천 픽')).not.toBeInTheDocument();
       });
     });
 
-    it('"지금 이 순간 함께하기 좋은 알찬 픽"과 "놓치면 후회하는 인기 만점 예약 픽" 섹션 사이에 위치한다', async () => {
+    it('"엄선된 기간 한정 특가 픽"은 "지금 이 순간 함께하기 좋은 알찬 픽"과 "놓치면 후회하는 인기 만점 예약 픽" 사이에, "상시 추천 픽"은 그보다 아래(맨 하단)에 위치한다', async () => {
       // "지금 이 순간 함께하기 좋은 알찬 픽"/"놓치면 후회하는 인기 만점 예약 픽" 섹션은 0건이면 숨겨지므로(가변 노출), 이 테스트에서는
       // 둘 다 실제로 렌더링되도록 /api/home/feed 응답에 최소 1건씩 채워 넣는다.
       vi.stubGlobal(
         'fetch',
         vi.fn((url: string) => {
           if (url.startsWith('/api/curated-items')) {
-            return Promise.resolve({ json: () => Promise.resolve({ items: [makeCuratedItem()] }) } as Response);
+            return Promise.resolve({
+              json: () =>
+                Promise.resolve({
+                  items: [
+                    makeCuratedItem({ id: 'deal-1', operation_end_date: '2026-10-31' }),
+                    makeCuratedItem({ id: 'evergreen-1', title: '상시 키즈카페 이용권', operation_end_date: null }),
+                  ],
+                }),
+            } as Response);
           }
           if (url.startsWith('/api/home/feed')) {
             return Promise.resolve({
@@ -376,17 +401,20 @@ describe('HomeView', () => {
       );
       const { container } = render(<HomeView initialHeroEvents={[]} />);
       await screen.findByText('가을 단풍 나들이 축제 입장권');
+      await screen.findByText('상시 키즈카페 이용권');
 
       const labels = Array.from(container.querySelectorAll('section[aria-label]')).map((el) =>
         el.getAttribute('aria-label')
       );
       const ongoingIndex = labels.indexOf('지금 이 순간 함께하기 좋은 알찬 픽');
-      const bestPickIndex = labels.indexOf('베스트 나들이 픽');
+      const dealsIndex = labels.indexOf('엄선된 기간 한정 특가 픽');
       const reservationIndex = labels.indexOf('놓치면 후회하는 인기 만점 예약 픽');
+      const evergreenIndex = labels.indexOf('언제 가도 좋은 상시 추천 픽');
 
       expect(ongoingIndex).toBeGreaterThanOrEqual(0);
-      expect(bestPickIndex).toBeGreaterThan(ongoingIndex);
-      expect(reservationIndex).toBeGreaterThan(bestPickIndex);
+      expect(dealsIndex).toBeGreaterThan(ongoingIndex);
+      expect(reservationIndex).toBeGreaterThan(dealsIndex);
+      expect(evergreenIndex).toBeGreaterThan(reservationIndex);
     });
 
     // [홈 화면 대분류 그리드 최상단 배치](2026-09-03 사용자 지시): "자연/캠핑, 공공
@@ -398,7 +426,7 @@ describe('HomeView', () => {
         'fetch',
         vi.fn((url: string) => {
           if (url.startsWith('/api/curated-items')) {
-            return Promise.resolve({ json: () => Promise.resolve({ items: [makeCuratedItem()] }) } as Response);
+            return Promise.resolve({ json: () => Promise.resolve({ items: [makeCuratedItem({ operation_end_date: '2026-10-31' })] }) } as Response);
           }
           if (url.startsWith('/api/home/feed')) {
             return Promise.resolve({
@@ -425,13 +453,13 @@ describe('HomeView', () => {
       const categoryGridIndex = labels.indexOf('카테고리별 행사');
       const heroIndex = labels.indexOf('오늘의 추천 행사');
       const ongoingIndex = labels.indexOf('지금 이 순간 함께하기 좋은 알찬 픽');
-      const bestPickIndex = labels.indexOf('베스트 나들이 픽');
+      const dealsIndex = labels.indexOf('엄선된 기간 한정 특가 픽');
       const reservationIndex = labels.indexOf('놓치면 후회하는 인기 만점 예약 픽');
 
       expect(categoryGridIndex).toBe(0);
       expect(heroIndex).toBeGreaterThan(categoryGridIndex);
       expect(ongoingIndex).toBeGreaterThan(categoryGridIndex);
-      expect(bestPickIndex).toBeGreaterThan(categoryGridIndex);
+      expect(dealsIndex).toBeGreaterThan(categoryGridIndex);
       expect(reservationIndex).toBeGreaterThan(categoryGridIndex);
     });
   });

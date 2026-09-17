@@ -3,13 +3,22 @@
 // [홈 화면 큐레이션 섹션 추가 및 상단 탭 정리](2026-08-30 사용자 지시): "이번 주말 실패
 // 없는 베스트 나들이 픽" 가로 슬라이드 섹션. "광고 느낌을 지우고 신뢰감 있는 큐레이션"
 // 컨셉이라 할인율 뱃지 등 세일즈성 장식은 넣지 않고 썸네일/타이틀만 담백하게 보여준다.
-// 카드를 누르면 상세 모달 없이 곧바로 booking_url을 새 창으로 연다(중간 단계 없음).
 //
 // [관리자 화면 기능 고도화 및 범용 제휴 상품 테이블 개편](2026-08-30 사용자 지시): 데이터
 // 소스가 event_tickets(축제/체험 전용, description/location_name/가격 필드 등 도메인
 // 특화 컬럼)에서 curated_items(쿠팡 등 임의의 제휴 상품까지 다루는 범용 테이블)로
 // 바뀌면서 location_name이 스키마에서 사라졌다 — 카드 하단은 이제 제목 한 줄(2줄
 // 클램프)만 보여준다(더 단순해져 이전 세션의 "비율 고정" 문제도 자연히 사라짐).
+//
+// [제휴 상품 성격 이원화 + 상세 뷰 도입](2026-09-17 사용자 지시, todo.md [개선사항 1]
+// [개선사항 2]): "이벤트픽 화면에서 제휴상품등록한것들이 다 노출되던 기존 방식"을
+// 개선하며 두 가지를 함께 바꾼다.
+// 1) price_display/description/spot 컬럼이 새로 생겨(2026-09-17 마이그레이션) 카드에
+//    가격/장소 정보를 보여줄 수 있게 됐다 — "다른 영역이랑 비슷한 구조"(EventCard의
+//    제목/장소/기간 텍스트 나열)를 참고해 제목 아래 가격/장소/기간을 순서대로 붙인다.
+// 2) 카드를 눌러도 곧바로 외부 링크로 나가지 않고, 내부 상세 뷰를 먼저 거치도록
+//    `<a>`를 `<button onClick={onSelect}>`로 바꾼다(실제 외부 이동은
+//    CuratedItemDetailModal의 CTA 버튼이 담당).
 export type CuratedItem = {
   id: string;
   title: string;
@@ -20,60 +29,81 @@ export type CuratedItem = {
   operation_start_date: string | null;
   operation_end_date: string | null;
   created_at: string;
+  price_display?: string | null;
+  description?: string | null;
+  spot?: { id: string; name: string; address: string | null } | null;
 };
 
-// [큐레이션 카드 내부 '이미지 vs 텍스트' 영역 비율 고정](2026-08-30 사용자 지시): 카드
-// 자체의 크기(폭/높이)는 바깥 래퍼(w-36 h-[220px], ReservationOpenSlider와 동일한
-// "래퍼가 고정 크기를 잡고 안쪽 카드는 h-full로 채우는" 기존 관례)에서 고정하고, 카드
-// 내부는 `flex flex-col h-full`로 세로 배치한다. 이미지 영역은 h-36(폭과 동일해 정사각에
-// 가까움)로 고정 높이를 주고 `w-full h-full object-cover`로 어떤 이미지든 비율이 깨지지
-// 않게 채운다. 텍스트 영역은 `flex-1 min-h-0 overflow-hidden`로 이미지가 차지하고 남은
-// 공간을 정확히 채우되 절대 카드 밖으로 넘치지 않는다.
+// [개선사항 2] "상품 성격에 따른 뱃지 필요한가? 제안할 것" — 카드 자체엔 지금까지
+// 뱃지가 하나도 없었고([개선사항 3]이 정리하려는 이벤트 카드의 접수중/실내야외 뱃지와는
+// 무관), 특가/상시 두 섹션으로 나뉘는 지금은 어느 카드가 어느 성격인지 한눈에 구분되는
+// 뱃지 하나 정도는 있는 게 낫다고 판단해 제안 겸 적용한다 — 섹션 타이틀과 중복되긴
+// 하지만, 나중에 두 섹션 카드가 한 목록에 섞여 노출될 가능성(찜 목록 등)을 대비해도
+// 카드 자체에 성격이 드러나 있는 편이 안전하다.
+function periodBadge(item: CuratedItem): string | null {
+  return item.operation_end_date ? '⏰ 기간한정' : '🧸 상시';
+}
+
+function formatPeriodLabel(start: string | null, end: string | null): string | null {
+  if (!start && !end) return null;
+  if (start && end) return start === end ? start : `${start} ~ ${end}`;
+  return end ? `~ ${end}` : `${start} ~`;
+}
+
 const CARD_WIDTH_CLASS = 'w-36';
 const CARD_HEIGHT_CLASS = 'h-[220px]';
 const IMAGE_HEIGHT_CLASS = 'h-36';
 
-export function BestPickSlider({ items }: { items: CuratedItem[] }) {
+export function BestPickSlider({ items, onSelect }: { items: CuratedItem[]; onSelect: (item: CuratedItem) => void }) {
   if (items.length === 0) return null;
 
   return (
     <div className="flex gap-3 overflow-x-auto px-4 pb-1 snap-x snap-mandatory">
-      {items.map((item) => (
-        <div
-          key={item.id}
-          className={`shrink-0 ${CARD_WIDTH_CLASS} ${CARD_HEIGHT_CLASS} snap-start [scroll-snap-stop:always]`}
-        >
-          <a
-            href={item.booking_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="h-full flex flex-col rounded-2xl border border-gray-200 bg-white overflow-hidden hover:shadow-md transition-shadow"
+      {items.map((item) => {
+        const period = formatPeriodLabel(item.operation_start_date, item.operation_end_date);
+        const locationLabel = item.spot?.address ?? item.spot?.name ?? null;
+        return (
+          <div
+            key={item.id}
+            className={`shrink-0 ${CARD_WIDTH_CLASS} ${CARD_HEIGHT_CLASS} snap-start [scroll-snap-stop:always]`}
           >
-            <div className={`relative w-full ${IMAGE_HEIGHT_CLASS} shrink-0 bg-gray-100`}>
-              {item.image_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={item.image_url} alt="" className="w-full h-full object-cover" loading="lazy" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-2xl bg-gray-50" aria-hidden>
-                  🧭
-                </div>
-              )}
-            </div>
-            <div className="flex-1 min-h-0 p-2.5 overflow-hidden flex flex-col justify-center">
-              <p className="text-xs font-medium text-gray-900 line-clamp-2">{item.title}</p>
-            </div>
-          </a>
-        </div>
-      ))}
+            <button
+              type="button"
+              onClick={() => onSelect(item)}
+              className="w-full h-full flex flex-col rounded-2xl border border-gray-200 bg-white overflow-hidden hover:shadow-md transition-shadow text-left"
+            >
+              <div className={`relative w-full ${IMAGE_HEIGHT_CLASS} shrink-0 bg-gray-100`}>
+                {item.image_url ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={item.image_url} alt="" className="w-full h-full object-cover" loading="lazy" />
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center text-2xl bg-gray-50" aria-hidden>
+                    🧭
+                  </div>
+                )}
+                <span className="absolute top-2 left-2 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-black/60 text-white">
+                  {periodBadge(item)}
+                </span>
+              </div>
+              <div className="flex-1 min-h-0 p-2.5 overflow-hidden flex flex-col justify-center gap-0.5">
+                <p className="text-xs font-medium text-gray-900 line-clamp-2">{item.title}</p>
+                {item.price_display && <p className="text-xs font-bold text-gray-900">{item.price_display}</p>}
+                {locationLabel && <p className="text-[11px] text-gray-400 line-clamp-1">{locationLabel}</p>}
+                {period && <p className="text-[11px] text-gray-400 line-clamp-1">{period}</p>}
+              </div>
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 const SKELETON_COUNT = 4;
 
-export function BestPickSliderSkeleton() {
+export function BestPickSliderSkeleton({ label = '베스트 나들이 픽 불러오는 중' }: { label?: string }) {
   return (
-    <div className="flex gap-3 overflow-x-auto px-4 pb-1" role="status" aria-label="베스트 나들이 픽 불러오는 중">
+    <div className="flex gap-3 overflow-x-auto px-4 pb-1" role="status" aria-label={label}>
       {Array.from({ length: SKELETON_COUNT }, (_, i) => (
         <div
           key={i}

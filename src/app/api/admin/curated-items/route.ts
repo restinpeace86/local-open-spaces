@@ -130,6 +130,8 @@ export async function POST(request: NextRequest) {
         operation_start_date: body.operation_start_date || null,
         operation_end_date: body.operation_end_date || null,
         spot_id: spotId,
+        price_display: typeof body.price_display === 'string' && body.price_display.trim() ? body.price_display.trim() : null,
+        description: typeof body.description === 'string' && body.description.trim() ? body.description.trim() : null,
       })
       .select(SPOT_ID_SELECT)
       .single();
@@ -164,6 +166,8 @@ export async function PATCH(request: NextRequest) {
       operation_start_date: string | null;
       operation_end_date: string | null;
       spot_id: string | null;
+      price_display: string | null;
+      description: string | null;
     }> = {};
     if (typeof body.title === 'string') {
       if (!body.title.trim()) return NextResponse.json({ error: '상품명을 입력해 주세요.' }, { status: 400 });
@@ -199,6 +203,12 @@ export async function PATCH(request: NextRequest) {
         return NextResponse.json({ error: 'spot_id 형식이 올바르지 않습니다.' }, { status: 400 });
       }
       updates.spot_id = spotId;
+    }
+    if ('price_display' in body) {
+      updates.price_display = typeof body.price_display === 'string' && body.price_display.trim() ? body.price_display.trim() : null;
+    }
+    if ('description' in body) {
+      updates.description = typeof body.description === 'string' && body.description.trim() ? body.description.trim() : null;
     }
 
     if (Object.keys(updates).length === 0) {

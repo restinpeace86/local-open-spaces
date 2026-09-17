@@ -55,8 +55,14 @@ export type MyRealTripProductDetail = {
 // 됨") 이후로는 원본 productUrl이 아니라 /v1/mylink로 변환한 myrealt.rip
 // 단축 링크를 넘겨야 클릭이 실제로 추적/정산된다 — 이 함수 자체는 어느 URL이
 // 오든 상관없는 순수 매핑만 담당한다(마이링크 생성이라는 네트워크 호출은 API
-// 라우트가 맡음). 가격/카테고리/리뷰는 curated_items 스키마에 대응 컬럼이 없어
-// (요구사항 범위 밖 — 제5장 제7조) 옮기지 않는다.
+// 라우트가 맡음).
+// [제휴 상품 성격 이원화](2026-09-17 사용자 지시, todo.md [개선사항 1][개선사항 2]):
+// 프리뷰 카드/상세 뷰에 가격·설명을 보여주려면 curated_items에도 그 값이 있어야
+// 한다(2026-09-17 price_display/description 컬럼 추가) — priceDisplay는 검색
+// 결과에 항상 있어 그대로 옮기고, description은 검색 결과의 짧은 카테고리
+// 문구가 아니라 상세 조회(detail)의 본문 HTML을 쓰는 게 맞아 호출부가 명시적으로
+// 넘긴다(상세를 아직 못 불러왔으면 null — 나중에 관리자가 폼에서 직접 채울 수
+// 있다).
 // [스팟 매칭 검색의 OR 검색 문제 수정](2026-09-16 사용자 지적: "검색조건이 &가
 // 아니고 OR야 오키드 키즈카페 할경우 이것만 나오는게 아니고 키즈카페 모두다
 // 나오는거같아") — 실측 확인 결과 마이리얼트립 검색 API는 키워드를 토큰
@@ -89,15 +95,20 @@ export function filterSearchItemsByAllKeywordTokens(
 
 export function mapSearchItemToCuratedItemPrefill(
   item: MyRealTripSearchItem,
-  bookingUrl: string
+  bookingUrl: string,
+  description?: string | null
 ): {
   title: string;
   image_url: string;
   booking_url: string;
+  price_display: string;
+  description: string | null;
 } {
   return {
     title: item.itemName,
     image_url: item.imageUrl,
     booking_url: bookingUrl,
+    price_display: item.priceDisplay,
+    description: description ?? null,
   };
 }

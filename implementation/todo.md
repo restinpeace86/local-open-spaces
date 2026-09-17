@@ -47,6 +47,17 @@
 ### [출력 요구]
 - 위 요구사항을 반영한 Supabase 데이터 조회/분기 로직 및 메인 피드 React 컴포넌트 뼈대 코드 (TailwindCSS 활용)
 
+> **[완료 (2026-09-17)]**: `curated_items`에 `price_display`/`description` 컬럼 추가
+> (마이그레이션 `scripts/migrations/2026-09-17-curated-items-price-description.sql`),
+> `operation_end_date` 유무로 특가/상시 분류하는 순수 함수(`splitCuratedItemsByPeriod`,
+> `src/lib/home/curated-items.ts`) 작성, 홈 화면 기존 자리에는 특가만("엄선된 기간
+> 한정 특가 픽"), 맨 하단에 상시 신규 섹션("🧸 언제 가도 좋은 상시 추천 픽") 추가.
+> `/api/curated-items`에 spot 조인을 더해 카드에 가격/장소/기간 텍스트 노출.
+> start_date 게이팅은 기존 `.or()` 로직이 이미 정확해 코드 변경 없이 재확인만 완료.
+> `npx tsc --noEmit`/`npm run test`(1856개 전체 통과)/`npm run build`/실제 개발
+> 서버 라이브 확인(Playwright) 모두 통과. 상세:
+> implementation/2026-09-17-curated-items-deals-vs-evergreen-split.md
+
 ---
 
 당신은 Next.js App Router, TypeScript, 그리고 TailwindCSS를 활용한 프론트엔드 개발에 능숙한 시니어 풀스택 엔지니어입니다.
@@ -79,6 +90,18 @@
 ### [출력 요구]
 - 위 요구사항을 만족하는 상세 뷰 컴포넌트(모달 또는 상세 페이지 형태 중 모바일 웹에서 직관적인 구조)의 TypeScript + TailwindCSS 코드를 작성해 주세요.
 
+> **[완료 (2026-09-17)]**: 신규 `CuratedItemDetailModal`
+> (`src/components/home/curated-item-detail-modal.tsx`) — 이미지+성격 뱃지(⏰
+> 기간한정/🧸 상시, "뱃지 필요한가 제안할 것"에 대한 제안 겸 적용), 타이틀+가격,
+> 퀵 인포 박스(📍 장소/⏰ 기간/👶 타겟 코멘트), 상세 설명(넓은 스크롤 영역, 관리자
+> 폼의 좁은 textarea와 달리 유저 열람 화면은 충분히 길게), 하단 고정 CTA("예매하러
+> 바로가기 ↗", target=_blank rel=noopener noreferrer). `BestPickSlider` 카드가
+> `<a target=_blank>` 직접 이동 대신 `onClick`으로 이 모달을 먼저 연다 — 실제
+> 외부 이동은 모달의 CTA에서만 발생. 타겟 포인트 코멘트는 상품별 신규 컬럼 없이
+> 기존 섹션 고정 부제 문구를 재사용(제5장 제7조, 범위 밖 확장 자제). 검증/근거는
+> 위 [개선사항 1] 완료 노트와 동일 커밋: implementation/2026-09-17-curated-items-
+> deals-vs-evergreen-split.md
+
 ---
 
 [개선사항 3] 다음은 메인 피드의 상품 프리뷰 카드(Preview Card) 이미지 위에 있는 뱃지들을 전면 정리하고 시각적으로 클린하게 만드는 UI 수정 요청입니다.
@@ -97,3 +120,28 @@
 
 ### [출력 요구]
 - 위 요구사항을 반영하여 불필요한 뱃지들이 모두 제거되고 왼쪽 상단 카테고리 뱃지만 깔끔하게 남은 프리뷰 카드 컴포넌트의 TailwindCSS 및 React 코드를 수정해 주세요.
+
+> **[스킵 (보류) — 2026-09-17]**: 이 작업이 가리키는 "메인 피드의 상품 프리뷰
+> 카드"는 실제로는 `curated_items` 카드(BestPickSlider, [개선사항 1][개선사항 2]의
+> 대상)가 아니라 `src/components/cards/event-card.tsx`(이벤트픽 메인 피드의 이벤트
+> 카드)다 — 지시문에 나열된 뱃지 문구("접수 중"/"오늘 마감"/"오늘 한정", 무료/유료,
+> 실내/야외)가 이 컴포넌트의 실제 뱃지 라벨과 정확히 일치하고, curated_items
+> 카드는 애초에 뱃지가 하나도 없었다(개선사항 1/2 작업 전까지).
+>
+> ① **상세 스킵 사유**: `project/decision-log.md`의 **Decision 012**("이벤트픽
+> 메인 슬라이드 카드의 라벨을 [⏰ 오늘 마감]과 [⚡ 오늘 한정] 2종 뱃지로 명확히
+> 구별 노출한다")와 **Decision 013**("야외 활동 여부는 [☀️ 야외]/[🏛️ 실내] 뱃지로
+> 상단 표기한다")이 이 작업이 제거하려는 바로 그 뱃지들의 노출을 명시적으로
+> 승인·요구하고 있다. 또한 event-card.tsx에는 이 뱃지 배치(상단좌/상단우/하단좌/
+> 하단우)를 정하기까지 여러 차례(2026-08-27~09-04) 사용자 지시로 다듬어 온
+> 이력이 코드 주석에 남아 있어, 단순 누락이 아니라 의도적으로 확정된 설계다.
+> 제5장 제3조(임의 판단 금지)·자율 하네스 규칙 2("Decision Log와 충돌 시 즉시
+> 스킵")에 따라 구현하지 않는다.
+>
+> ② **재개를 위해 선행되어야 할 작업**: 이 뱃지들을 정말 제거/정리하려는 의도가
+> 맞다면, 먼저 Decision 012/013을 개정(또는 대체)하는 새 Decision을
+> `project/decision-log.md`에 명시적으로 기록해야 한다 — 어떤 뱃지를 남기고
+> 어떤 걸 빼는지, 그 정보들(마감 임박/실내야외 등)을 목록 카드가 아닌 어디서
+> 대신 보여줄지(상세 모달 등)까지 포함해서. 그 Decision이 승인된 뒤에 이 작업을
+> 재개한다. (curated_items 카드 쪽 뱃지 정리는 이미 [개선사항 1]/[개선사항 2]에서
+> 함께 처리했다 — 그쪽은 Decision과 충돌하지 않아 스킵 대상이 아니다.)

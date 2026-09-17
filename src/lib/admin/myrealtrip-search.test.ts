@@ -58,11 +58,20 @@ describe('mapSearchItemToCuratedItemPrefill', () => {
   // [마이링크 자동 생성](2026-09-16 후속 지시): booking_url은 호출부가 넘긴 값을
   // 그대로 쓴다 — 원본 productUrl이 아니라 /v1/mylink로 변환한 추적 링크가
   // 들어와야 클릭이 실제로 정산된다.
-  it('제목/이미지는 검색 결과에서, 제휴링크는 호출부가 넘긴 값(마이링크)을 그대로 매핑한다', () => {
+  it('제목/이미지/가격은 검색 결과에서, 제휴링크는 호출부가 넘긴 값(마이링크)을 그대로 매핑한다', () => {
     expect(mapSearchItemToCuratedItemPrefill(buildItem(), 'https://myrealt.rip/qamObf')).toEqual({
       title: '[교토] 기온 게이샤 지구 야간 워킹 투어',
       image_url: 'https://example.com/img.jpg',
       booking_url: 'https://myrealt.rip/qamObf',
+      price_display: '36,153원',
+      description: null,
     });
+  });
+
+  // [제휴 상품 성격 이원화](2026-09-17 사용자 지시): description은 검색 결과의
+  // 짧은 카테고리 문구가 아니라 상세 조회 본문을 호출부가 명시적으로 넘긴다.
+  it('상세 조회 설명을 넘기면 description에 그대로 담긴다', () => {
+    const result = mapSearchItemToCuratedItemPrefill(buildItem(), 'https://myrealt.rip/qamObf', '<p>야간 투어 설명</p>');
+    expect(result.description).toBe('<p>야간 투어 설명</p>');
   });
 });

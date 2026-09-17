@@ -200,7 +200,7 @@ function MyRealTripProductDetailModal({
   // 이어서 보여준다 — curated-item-form-modal.tsx의 SpotServiceCategoryCheck).
   async function handleRegister(bookingUrl: string) {
     setPrefill({
-      ...mapSearchItemToCuratedItemPrefill(item, bookingUrl),
+      ...mapSearchItemToCuratedItemPrefill(item, bookingUrl, detail?.description ?? null),
       spot: linkedSpot ? { id: linkedSpot.spotId, name: linkedSpot.spotName, address: null } : undefined,
     });
   }

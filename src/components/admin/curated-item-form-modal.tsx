@@ -26,6 +26,12 @@ export type CuratedItemFormValue = {
   operation_start_date: string | null;
   operation_end_date: string | null;
   created_at: string;
+  // [제휴 상품 성격 이원화(기간한정 특가 vs 상시 티켓)](2026-09-17 사용자 지시,
+  // todo.md [개선사항 1][개선사항 2]): 프리뷰 카드/상세 뷰에 가격·설명을 보여주기
+  // 위한 컬럼. operation_end_date 유무로 특가/상시를 가르는 것과 별개로, 두 성격
+  // 모두 가격·설명은 똑같이 필요하다.
+  price_display?: string | null;
+  description?: string | null;
   // [제휴 상품 ↔ 스팟 연동](2026-09-10 사용자 지시, todo.md 개선사항6): 연동된 스팟.
   // spot_id는 1:1 매핑 저장값, spot은 폼 편집 프리필/목록 표기용 조인 결과.
   spot_id?: string | null;
@@ -44,7 +50,7 @@ export function CuratedItemFormModal({
   // 기존 행)과 달리 이건 "신규 등록인데 값만 미리 채워 넣기"라 isEdit 판정에는
   // 영향을 주지 않는다 — id가 없는 신규 행이므로 그대로 두면 PATCH를 시도해 버려
   // initial과 절대 같은 의미로 취급하면 안 된다.
-  prefill?: Partial<Pick<CuratedItemFormValue, 'title' | 'image_url' | 'booking_url' | 'category'>> & {
+  prefill?: Partial<Pick<CuratedItemFormValue, 'title' | 'image_url' | 'booking_url' | 'category' | 'price_display' | 'description'>> & {
     // [스팟 연결 후 등록 시 중복 작업 제거](2026-09-16 사용자 보고: "마이리얼트립
     // 에서 내 스팟과 연결있는데 그거하고나서.. 제휴마케팅만들기 들어가면 스팟
     // 연결안되어있어서 거기서 다시하고.. 그래서 2번 하는걸로 되나?") — 마이리얼
@@ -62,6 +68,8 @@ export function CuratedItemFormModal({
   const [imageUrl, setImageUrl] = useState(initial?.image_url ?? prefill?.image_url ?? '');
   const [bookingUrl, setBookingUrl] = useState(initial?.booking_url ?? prefill?.booking_url ?? '');
   const [category, setCategory] = useState(initial?.category ?? prefill?.category ?? 'ticket');
+  const [priceDisplay, setPriceDisplay] = useState(initial?.price_display ?? prefill?.price_display ?? '');
+  const [description, setDescription] = useState(initial?.description ?? prefill?.description ?? '');
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
   const [operationStart, setOperationStart] = useState(initial?.operation_start_date ?? '');
   const [operationEnd, setOperationEnd] = useState(initial?.operation_end_date ?? '');
@@ -128,6 +136,8 @@ export function CuratedItemFormModal({
         operation_start_date: operationStart || null,
         operation_end_date: operationEnd || null,
         spot_id: spot?.id ?? null,
+        price_display: priceDisplay.trim() || null,
+        description: description.trim() || null,
       };
       const res = isEdit
         ? await fetch('/api/admin/curated-items', {
@@ -197,6 +207,28 @@ export function CuratedItemFormModal({
               onChange={(e) => setBookingUrl(e.target.value)}
               required
               placeholder="https://..."
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-gray-700">가격 표시</span>
+            <input
+              type="text"
+              value={priceDisplay}
+              onChange={(e) => setPriceDisplay(e.target.value)}
+              placeholder="예: 34,900원"
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </label>
+
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-gray-700">상세 설명</span>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={4}
+              placeholder="상품 상세 설명(포함/불포함, 이용 안내 등)"
               className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </label>
