@@ -3,8 +3,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
-import { getParentalBadges } from '@/lib/spaces/parental-badges';
-import { getDateBannerBadge } from '@/lib/spaces/event-status';
 import { formatVenueLine } from '@/lib/spaces/format';
 
 const AUTOPLAY_INTERVAL_MS = 5000;
@@ -12,16 +10,19 @@ const AUTOPLAY_INTERVAL_MS = 5000;
 // docs/spec.md 2.2 ①: "메인 비주얼 카드 슬라이더 (Hero Carousel)"
 // 데이터 조건: 당일 진행 중인 행사/이벤트 중 추천 5~10개 동적 페칭
 // Task 9-1-1: 5초 간격 Auto-play + 터치/호버 시 일시정지.
-// Task 9-6-13(Decision 012)/9-6-9 후속: getTodayEvents가 이제 end_date=오늘인 행사만 내려주므로
-// (9-6-9), 옛 [⚡ 오늘 당일 입장]/[🔥 D-DAY 마감임박] 2분기는 항상 전자만 나오는 죽은 분기가
-// 됐다 — event-status.ts의 getDateBannerBadge(다일간 행사가 오늘 끝나는 "오늘 마감" vs 원래
-// 하루짜리인 "오늘 한정")로 교체해 EventCard(그리드 카드)와 동일한 배너 기준을 쓴다.
 // Task 9-1-8(2026-08-22 후속): snap-center만으로는 빠르게 스와이프할 때 두 장 이상 건너뛰기도
 // 해서, 카드마다 [scroll-snap-stop:always]를 추가해 한 번 드래그에 정확히 1장씩만 멈추게 한다.
 // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시): "오늘 전체보기"가 더 이상 별도 페이지로
 // 이동하지 않고 홈 화면 위 바텀시트(EventBrowseSheet)로 뜬다 — 페이지 경로 문자열(moreHref)
 // 대신 부모(HomeView)가 시트를 여는 콜백(onMoreClick)을 받아 호출한다. CTA 카드 노출 여부는
 // 여전히 hasMore(10개 초과)로만 판단한다.
+// [메인 피드 카드 뱃지를 상세/전체보기로 이동](2026-09-17 사용자 지시, Decision 025 —
+// Decision 012·013 개정): "메인 이벤트픽 화면에선 노출 안 할거야, 전체보기했을 때
+// 프리뷰카드나 프리뷰카드 눌렀을 때 상세카드 쪽에서만 보이도록 해줘" — 이 캐러셀도
+// 메인 이벤트픽 화면 최상단에 있는 카드라 오늘 마감/오늘 한정 배너, 무료/유료, 실내/야외
+// 뱃지를 전부 제거한다. 원래도 카테고리 뱃지가 없던 카드라 남는 건 이미지+제목+장소
+// 뿐이다. 제거된 정보는 EventListRow(전체보기)/DetailModal(상세)에서 확인 가능
+// (project/decision-log.md Decision 025).
 
 export function HeroCarousel({
   items,
@@ -93,14 +94,6 @@ export function HeroCarousel({
         const meta = getCategoryMeta(item.category);
         // Task 9-1-3: "[장소명] · [시/군/구]"로 통일 표시(거리 계산 제거).
         const venueLine = formatVenueLine(item.address, item.sigungu_name);
-        const dateBanner = getDateBannerBadge(item);
-        // Task 9-1-4: 4대 핵심 뱃지(가성비/실내외/아이동반/방문시점) 중 가성비·방문시점은 이미
-        // 위 썸네일 오버레이(오늘당일·D-DAY / 무료)로 노출되므로, 여기서는 중복 없이 나머지
-        // 실내외만 보완해 노출한다.
-        // [이벤트 카드 텍스트 영역 뱃지 정리](2026-09-04 사용자 지시): 아이동반(kids) 뱃지는
-        // parental-badges.ts의 getEventBadges에서 아예 만들지 않게 바꿨다 — 여기서
-        // 'kids'를 필터링해 봐야 항상 없으므로 그 조건을 제거한다(죽은 코드 정리).
-        const supplementBadges = getParentalBadges(item).filter((badge) => badge.key === 'facility_type');
 
         return (
           // Task 9-1-8: 모바일에서 카드 1장이 화면 좌우 여백(컨테이너 px-4=32px)만큼만 뺀 폭으로
@@ -141,52 +134,10 @@ export function HeroCarousel({
                   🖼️
                 </div>
               )}
-              {/* [개선사항2](2026-09-04 사용자 지시): "'오늘 한정'/'오늘 마감' 뱃지를 다시
-                  선명하게 노출"— 기존에는 작은 알약 뱃지가 무료/유료 뱃지와 같은 줄에
-                  끼어 있어 아주 작고 눈에 잘 안 띄었다. EventCard(카드 목록)가 이미 쓰는
-                  "이미지 상단 전체 폭 스트립 + z-10" 패턴을 그대로 재사용해(제5장 제4조
-                  기존 구조 우선) 이 카드가 왜 메인에 있는지 한눈에 보이게 한다. */}
-              {dateBanner && (
-                <div
-                  className={`absolute top-0 left-0 right-0 z-10 px-2 py-1 text-[11px] font-bold text-white text-center ${
-                    dateBanner.kind === 'today_only' ? 'bg-amber-500' : 'bg-rose-600'
-                  }`}
-                >
-                  {dateBanner.label}
-                </div>
-              )}
-              <div className={`absolute ${dateBanner ? 'top-8' : 'top-2'} left-2 flex gap-1`}>
-                {/* [메인 카드 유료/무료 뱃지 누락 수정](2026-08-27 사용자 지시): is_free===true일
-                    때만 "무료" 뱃지를 보여주고 is_free===false(유료)면 아무 뱃지도 없어 요금
-                    정보를 전혀 알 수 없었다 — EventCard(getParentalBadges)처럼 두 상태 모두
-                    표시한다. is_free===null(정보 없음)은 기존처럼 단정 표시하지 않고 숨긴다. */}
-                {item.is_free === true && (
-                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white">
-                    🎁 무료
-                  </span>
-                )}
-                {item.is_free === false && (
-                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-gray-700 text-white">
-                    💰 유료
-                  </span>
-                )}
-              </div>
             </div>
             <div className="p-3">
               <p className="text-sm font-semibold text-gray-900 line-clamp-2">{item.name}</p>
               {venueLine && <p className="text-xs text-gray-400 mt-1 line-clamp-1">{venueLine}</p>}
-              {supplementBadges.length > 0 && (
-                <div className="flex flex-wrap gap-1 mt-1.5">
-                  {supplementBadges.map((badge) => (
-                    <span
-                      key={badge.key}
-                      className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600"
-                    >
-                      {badge.label}
-                    </span>
-                  ))}
-                </div>
-              )}
             </div>
           </button>
         );

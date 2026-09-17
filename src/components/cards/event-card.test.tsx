@@ -68,13 +68,63 @@ describe('EventCard 표준 중분류 뱃지', () => {
   });
 });
 
-// [카드 뱃지 문구 정리](2026-08-27 사용자 지시)
-describe('EventCard 뱃지 문구', () => {
-  it('무료 뱃지는 "완전 무료"가 아니라 "무료"로 표시된다', () => {
-    render(<EventCard item={makeEventItem({ is_free: true })} onSelect={() => {}} />);
+// [메인 피드 카드 뱃지를 상세/전체보기로 이동](2026-09-17 사용자 지시, Decision 025 —
+// Decision 012·013 개정): "메인 이벤트픽 화면에선 노출 안 할거야, 전체보기했을 때
+// 프리뷰카드나 프리뷰카드 눌렀을 때 상세카드 쪽에서만 보이도록 해줘" — 예약 상태
+// (booking_status/getEventStatus), 오늘 마감/오늘 한정 배너, 무료/유료, 실내/야외
+// 뱃지는 이 카드에서 전부 제거하고 카테고리 뱃지만 남는다(정보 자체는
+// EventListRow/DetailModal에서 확인 가능, 삭제가 아니라 이동).
+describe('EventCard 메인 피드 뱃지 정리 (2026-09-17, Decision 025)', () => {
+  it('무료/유료 뱃지를 더 이상 보여주지 않는다', () => {
+    const free = render(<EventCard item={makeEventItem({ is_free: true })} onSelect={() => {}} />);
+    expect(screen.queryByText('🎁 무료')).not.toBeInTheDocument();
+    free.unmount();
 
-    expect(screen.getByText('🎁 무료')).toBeInTheDocument();
-    expect(screen.queryByText('🎁 완전 무료')).not.toBeInTheDocument();
+    render(<EventCard item={makeEventItem({ is_free: false })} onSelect={() => {}} />);
+    expect(screen.queryByText('💰 유료')).not.toBeInTheDocument();
+  });
+
+  it('실내/야외 뱃지를 더 이상 보여주지 않는다', () => {
+    render(<EventCard item={makeEventItem({ facility_type: '실내' })} onSelect={() => {}} />);
+    expect(screen.queryByText('실내')).not.toBeInTheDocument();
+  });
+
+  it('예약 상태(booking_status/getEventStatus) 뱃지를 더 이상 보여주지 않는다', () => {
+    render(
+      <EventCard
+        item={makeEventItem({ booking_status: '접수중', is_reservation_required: true, reservation_end_date: '2099-01-01' })}
+        onSelect={() => {}}
+      />
+    );
+    expect(screen.queryByText('📅 접수중')).not.toBeInTheDocument();
+    expect(screen.queryByText('접수중')).not.toBeInTheDocument();
+  });
+
+  it('오늘 마감/오늘 한정 배너를 더 이상 보여주지 않는다', () => {
+    const today = localTodayStr();
+    render(<EventCard item={makeEventItem({ start_date: today, end_date: today })} onSelect={() => {}} />);
+    expect(screen.queryByText('⚡ 오늘 한정')).not.toBeInTheDocument();
+    expect(screen.queryByText('⏰ 오늘 마감')).not.toBeInTheDocument();
+  });
+
+  it('이미지 영역에는 카테고리 뱃지 하나만 남는다', () => {
+    const today = localTodayStr();
+    const { container } = render(
+      <EventCard
+        item={makeEventItem({
+          is_free: true,
+          facility_type: '실내',
+          booking_status: '접수중',
+          start_date: today,
+          end_date: today,
+        })}
+        onSelect={() => {}}
+      />
+    );
+
+    const imageArea = container.querySelector('button')!.children[0];
+    expect(imageArea.querySelectorAll('span').length).toBe(1);
+    expect(imageArea).toHaveTextContent('도시농업');
   });
 });
 
@@ -164,25 +214,11 @@ describe('EventCard 이미지:텍스트 5:5 포션 (2026-09-03)', () => {
   });
 });
 
-// [카드 높이/뱃지 정리](2026-09-03 사용자 지시): "카드 세로 높이가 길고 뱃지가 중구난방" —
-// 예약 마감 경고와 status 오버레이가 같은 정보를 중복 표시하던 것을 제거하고, 예약 안내
-// 뱃지는 DetailModal에만 남기고, 무료/유료·실내/야외는 이미지 오버레이로 옮겨 텍스트
-// 영역의 줄 수(=카드 높이)를 줄였다.
-describe('EventCard 카드 높이/뱃지 정리 (2026-09-03)', () => {
-  it('예약 마감 임박이어도 텍스트 영역에 중복 경고 뱃지("🚨 오늘 예약 마감")를 더 이상 보여주지 않는다', () => {
-    render(
-      <EventCard
-        item={makeEventItem({ is_reservation_required: true, reservation_end_date: localTodayStr() })}
-        onSelect={() => {}}
-      />
-    );
-    // 이미지 오버레이(status.label)로는 여전히 "오늘 마감"이 보인다 — 정보 자체가
-    // 사라진 게 아니라 중복 표시만 없앴다.
-    expect(screen.getByText('오늘 마감')).toBeInTheDocument();
-    expect(screen.queryByText('🚨 오늘 예약 마감')).not.toBeInTheDocument();
-  });
-
-  it('예약 안내 뱃지("사전예약필요"/"예약불필요")는 더 이상 카드에 노출하지 않는다(DetailModal로 이동)', () => {
+// [예약 안내 뱃지 상세 전용화](2026-09-03 사용자 지시): "사전예약필요"/"예약불필요"
+// 안내는 DetailModal에만 남기고 목록 카드에는 애초에 노출하지 않는다 — 뱃지 위치
+// 이동(Decision 025)과는 별개 결정이라 그대로 유지한다.
+describe('EventCard 예약 안내 뱃지는 카드에 노출하지 않는다 (2026-09-03)', () => {
+  it('예약 안내 뱃지("사전예약필요"/"예약불필요")는 카드에 노출하지 않는다(DetailModal로 이동)', () => {
     const required = render(
       <EventCard item={makeEventItem({ is_reservation_required: true, reservation_url: null })} onSelect={() => {}} />
     );
@@ -191,135 +227,6 @@ describe('EventCard 카드 높이/뱃지 정리 (2026-09-03)', () => {
 
     render(<EventCard item={makeEventItem({ is_reservation_required: false, reservation_url: null })} onSelect={() => {}} />);
     expect(screen.queryByText(/예약불필요/)).not.toBeInTheDocument();
-  });
-
-  it('무료/유료 뱃지는 텍스트 영역이 아니라 이미지 영역 안에 렌더링된다', () => {
-    render(<EventCard item={makeEventItem({ is_free: true })} onSelect={() => {}} />);
-
-    const priceBadge = screen.getByText('🎁 무료');
-    const title = screen.getByText('도시농업 체험');
-    const imageArea = title.parentElement!.previousElementSibling!;
-    expect(imageArea).toContainElement(priceBadge);
-  });
-
-  it('실내/야외 뱃지는 텍스트 영역이 아니라 이미지 영역 안에 렌더링된다', () => {
-    render(<EventCard item={makeEventItem({ facility_type: '실내' })} onSelect={() => {}} />);
-
-    const facilityBadge = screen.getByText('실내');
-    const title = screen.getByText('도시농업 체험');
-    const imageArea = title.parentElement!.previousElementSibling!;
-    expect(imageArea).toContainElement(facilityBadge);
-  });
-
-  // [개선사항4](2026-09-04 사용자 지시) "카드 목록 뱃지 최종 원칙": booking_status 뱃지도
-  // 텍스트 영역이 아니라 상단 우측(예약 상태 자리)으로 합쳤다 — 키즈/어린이 뱃지와
-  // 함께 텍스트 영역에는 이제 아무 뱃지도 남지 않는다.
-  it('텍스트 영역에는 더 이상 어떤 뱃지도 없다(예약 상태는 상단 우측으로 통합, 키즈 뱃지는 제거됨)', () => {
-    render(<EventCard item={makeEventItem({ booking_status: '오늘방문', is_kids_friendly: true })} onSelect={() => {}} />);
-
-    const title = screen.getByText('도시농업 체험');
-    const textArea = title.parentElement!;
-    const imageArea = textArea.previousElementSibling!;
-    expect(imageArea).toContainElement(screen.getByText('⚡ 오늘 당일 입장 가능'));
-    expect(screen.queryByText('👶 키즈/어린이')).not.toBeInTheDocument();
-  });
-
-  // [개선사항4](2026-09-04 사용자 지시): booking_status가 있으면 그 문구가 상단 우측을
-  // 차지하고, getEventStatus의 일반 상태(예: "접수중")는 동시에 노출되지 않는다(중복
-  // 방지 — 실측 확인: is_reservation_required가 대부분 소스에서 신뢰할 수 없는 기본값이라
-  // booking_status 쪽이 더 구체적이고 자주 맞는 신호였다).
-  it('booking_status가 있으면 그 문구가 상단 우측을 차지하고 getEventStatus의 일반 상태는 동시에 뜨지 않는다', () => {
-    render(
-      <EventCard
-        item={makeEventItem({
-          booking_status: '접수중',
-          is_reservation_required: true,
-          reservation_end_date: '2099-01-01',
-        })}
-        onSelect={() => {}}
-      />
-    );
-
-    // booking_status 매핑 문구("📅 접수중")만 있어야 하고, getEventStatus의 동일 이름
-    // "접수중"이 별도로 중복 렌더링되지 않는다(둘 다 렌더되면 getByText가 여러 매치로 실패).
-    expect(screen.getByText('📅 접수중')).toBeInTheDocument();
-  });
-
-  it('booking_status가 없으면(null) getEventStatus의 상태를 상단 우측에 대신 보여준다', () => {
-    render(
-      <EventCard
-        item={makeEventItem({
-          booking_status: null,
-          is_reservation_required: true,
-          reservation_end_date: '2099-01-01',
-        })}
-        onSelect={() => {}}
-      />
-    );
-
-    expect(screen.getByText('접수중')).toBeInTheDocument();
-  });
-});
-
-// [카드 내 이미지/텍스트 영역 비율 불일치 수정](2026-08-30 사용자 지시): 오늘 마감/오늘
-// 한정 dateBanner가 이미지/텍스트 사이의 별도 flex 행으로 존재하면, 배너가 있는 카드는
-// "전체 높이 - 배너 높이"만 비율대로 나누고 배너 없는 카드는 전체 높이를 그 비율로 나눠
-// 같은 크기 래퍼 안에서도 카드마다 이미지/텍스트 크기가 달라졌다 — 배너를 이미지 영역
-// 위 절대 위치 오버레이로 옮겨 배너 유무와 무관하게 항상 동일한 분할(2026-09-03부터
-// 5:5)을 보장한다.
-describe('EventCard dateBanner가 있어도 이미지:텍스트 비율이 항상 동일하다 (2026-08-30)', () => {
-  it('오늘 마감/오늘 한정 배너는 별도 flex 행이 아니라 이미지 영역 위 오버레이로 렌더링된다', () => {
-    const today = localTodayStr();
-    const { container } = render(
-      <EventCard item={makeEventItem({ start_date: today, end_date: today })} onSelect={() => {}} />
-    );
-
-    const button = container.querySelector('button')!;
-    // 버튼의 최상위 자식은 이미지 영역/텍스트 영역 단 둘뿐이어야 한다 — 배너가 셋째
-    // 자식(별도 flex 행)으로 끼어들면 분할 비율이 배너 유무에 따라 달라진다. 이 픽스처는
-    // thumbnail_url이 없어(기본값) flex-[2]/flex-[8]이 적용된다.
-    expect(button.children.length).toBe(2);
-    expect(button.children[0]).toHaveClass('flex-[2]');
-    expect(button.children[1]).toHaveClass('flex-[8]');
-
-    const banner = screen.getByText('⚡ 오늘 한정');
-    expect(button.children[0]).toContainElement(banner);
-  });
-
-  it('배너 유무와 무관하게(썸네일 유무가 같다면) 이미지 영역 비율은 동일하다', () => {
-    const today = localTodayStr();
-    const withoutBanner = render(<EventCard item={makeEventItem()} onSelect={() => {}} />);
-    const imageAreaWithout = withoutBanner.container.querySelector('button')!.children[0];
-
-    withoutBanner.unmount();
-
-    const withBanner = render(
-      <EventCard item={makeEventItem({ start_date: today, end_date: today })} onSelect={() => {}} />
-    );
-    const imageAreaWith = withBanner.container.querySelector('button')!.children[0];
-
-    expect(imageAreaWithout.className).toBe(imageAreaWith.className);
-  });
-});
-
-// [개선사항1](2026-09-04 사용자 지시): open_spaces 연동 카드(캠핑장 등, start_date/
-// end_date가 둘 다 null)에 붙는 "상시" 태그가 실제 운영/예약 상황과 무관해 혼선을
-// 준다는 지적 — 이 라벨일 때만 상태 뱃지 자체를 숨기고, 다른 상태(접수중 등)는 그대로
-// 노출하는지 검증한다.
-describe('EventCard "상시" 태그 제거 (2026-09-04)', () => {
-  it('start_date/end_date가 둘 다 없으면(상시 상태) 상태 뱃지를 노출하지 않는다', () => {
-    render(<EventCard item={makeEventItem({ start_date: null, end_date: null })} onSelect={() => {}} />);
-    expect(screen.queryByText('상시')).not.toBeInTheDocument();
-  });
-
-  it('다른 상태(접수중)는 그대로 뱃지로 노출한다', () => {
-    render(
-      <EventCard
-        item={makeEventItem({ is_reservation_required: true, reservation_end_date: '2099-01-01' })}
-        onSelect={() => {}}
-      />
-    );
-    expect(screen.getByText('접수중')).toBeInTheDocument();
   });
 });
 

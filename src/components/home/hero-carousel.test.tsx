@@ -166,9 +166,11 @@ describe('HeroCarousel', () => {
   });
 });
 
-// Task 9-6-13(Decision 012): 다일간 행사가 오늘 끝나는 "오늘 마감"과 원래 하루짜리인 "오늘
-// 한정"을 뱃지로 구분 표시(event-status.ts의 getDateBannerBadge, EventCard와 동일 기준).
-describe('HeroCarousel 뱃지 구분 (Task 9-6-13)', () => {
+// [메인 피드 카드 뱃지를 상세/전체보기로 이동](2026-09-17 사용자 지시, Decision 025 —
+// Decision 012·013 개정): 오늘 마감/오늘 한정 배너, 무료/유료 뱃지를 이 캐러셀에서
+// 전부 제거했다 — 정보는 삭제가 아니라 EventListRow(전체보기)/DetailModal(상세)로
+// 이동했다(project/decision-log.md Decision 025).
+describe('HeroCarousel 메인 피드 뱃지 정리 (2026-09-17, Decision 025)', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-08-22T12:00:00+09:00'));
@@ -179,75 +181,31 @@ describe('HeroCarousel 뱃지 구분 (Task 9-6-13)', () => {
     vi.useRealTimers();
   });
 
-  it('오늘 단 하루만 진행되는 행사(start_date===end_date===오늘)는 "오늘 한정" 뱃지를 보여준다', () => {
-    const item = makeItem('1', '오늘 행사');
-    item.start_date = '2026-08-22';
-    item.end_date = '2026-08-22';
+  it('오늘 한정/오늘 마감 배너를 더 이상 보여주지 않는다', () => {
+    const oneDay = makeItem('1', '오늘 행사');
+    oneDay.start_date = '2026-08-22';
+    oneDay.end_date = '2026-08-22';
+    const { unmount } = render(<HeroCarousel items={[oneDay]} onSelect={() => {}} />);
+    expect(screen.queryByText('⚡ 오늘 한정')).not.toBeInTheDocument();
+    unmount();
 
-    render(<HeroCarousel items={[item]} onSelect={() => {}} />);
-
-    expect(screen.getByText('⚡ 오늘 한정')).toBeInTheDocument();
+    const multiDay = makeItem('2', '여러 날 행사');
+    multiDay.start_date = '2026-08-20';
+    multiDay.end_date = '2026-08-22';
+    render(<HeroCarousel items={[multiDay]} onSelect={() => {}} />);
     expect(screen.queryByText('⏰ 오늘 마감')).not.toBeInTheDocument();
   });
 
-  it('여러 날 진행되다 오늘이 종료일인 행사는 "오늘 마감" 뱃지를 보여준다', () => {
-    const item = makeItem('2', '여러 날 행사');
-    item.start_date = '2026-08-20';
-    item.end_date = '2026-08-22';
-
-    render(<HeroCarousel items={[item]} onSelect={() => {}} />);
-
-    expect(screen.getByText('⏰ 오늘 마감')).toBeInTheDocument();
-    expect(screen.queryByText('⚡ 오늘 한정')).not.toBeInTheDocument();
-  });
-
-  // [개선사항2](2026-09-04 사용자 지시): "오늘 한정/오늘 마감 뱃지를 다시 선명하게" —
-  // 무료/유료 뱃지와 한 줄에 끼어 있던 작은 알약 대신, EventCard와 동일하게 이미지
-  // 상단을 가로지르는 전체 폭 스트립(+ z-10)으로 노출되는지 검증한다.
-  it('"오늘 한정" 뱃지는 무료/유료 뱃지와 분리된 이미지 상단 전체 폭 스트립으로 노출된다', () => {
-    const item = makeItem('1', '오늘 행사');
-    item.start_date = '2026-08-22';
-    item.end_date = '2026-08-22';
-    item.is_free = true;
-
-    render(<HeroCarousel items={[item]} onSelect={() => {}} />);
-
-    const banner = screen.getByText('⚡ 오늘 한정');
-    expect(banner).toHaveClass('left-0', 'right-0', 'z-10');
-    // 무료 뱃지는 이 스트립과 같은 요소가 아니라 별도 컨테이너에 있어야 한다.
-    const freeBadge = screen.getByText('🎁 무료');
-    expect(banner.parentElement).not.toBe(freeBadge.parentElement);
-  });
-
-  // [메인 카드 유료/무료 뱃지 누락 수정](2026-08-27 사용자 지시): is_free===false(유료)일 때
-  // 아무 뱃지도 없어 요금 정보를 전혀 알 수 없었다.
-  it('is_free===true면 "🎁 무료" 뱃지를 보여준다', () => {
-    const item = makeItem('3', '무료 행사');
-    item.is_free = true;
-
-    render(<HeroCarousel items={[item]} onSelect={() => {}} />);
-
-    expect(screen.getByText('🎁 무료')).toBeInTheDocument();
-    expect(screen.queryByText('💰 유료')).not.toBeInTheDocument();
-  });
-
-  it('is_free===false면 "💰 유료" 뱃지를 보여준다', () => {
-    const item = makeItem('4', '유료 행사');
-    item.is_free = false;
-
-    render(<HeroCarousel items={[item]} onSelect={() => {}} />);
-
-    expect(screen.getByText('💰 유료')).toBeInTheDocument();
+  it('무료/유료 뱃지를 더 이상 보여주지 않는다', () => {
+    const free = makeItem('3', '무료 행사');
+    free.is_free = true;
+    const { unmount } = render(<HeroCarousel items={[free]} onSelect={() => {}} />);
     expect(screen.queryByText('🎁 무료')).not.toBeInTheDocument();
-  });
+    unmount();
 
-  it('is_free===null(정보 없음)이면 두 뱃지 다 숨긴다(단정 표시 방지)', () => {
-    const item = makeItem('5', '요금 정보 없음');
-    item.is_free = null;
-
-    render(<HeroCarousel items={[item]} onSelect={() => {}} />);
-
-    expect(screen.queryByText('🎁 무료')).not.toBeInTheDocument();
+    const paid = makeItem('4', '유료 행사');
+    paid.is_free = false;
+    render(<HeroCarousel items={[paid]} onSelect={() => {}} />);
     expect(screen.queryByText('💰 유료')).not.toBeInTheDocument();
   });
 });
@@ -305,9 +263,10 @@ describe('HeroCarousel Floating "오늘 전체보기" 버튼 (Task 9-4-2/9-6-7)'
   });
 });
 
-// Task 9-1-4: 4대 핵심 뱃지(가성비/실내외/아이동반/방문시점) 중 실내외·아이동반이 HeroCarousel에
-// 아예 노출되지 않던 것을 보완했는지 검증한다(가성비·방문시점은 기존 오버레이로 이미 노출됨).
-describe('HeroCarousel 4대 뱃지 보완 (Task 9-1-4)', () => {
+// [메인 피드 카드 뱃지를 상세/전체보기로 이동](2026-09-17 사용자 지시, Decision 025):
+// 실내외(facility_type) 뱃지도 카드 본문 보완 노출을 제거했다 — 아이동반(kids) 뱃지는
+// 애초에(2026-09-04) 어디에도 노출하지 않았다.
+describe('HeroCarousel 실내외/아이동반 뱃지 미노출', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     Element.prototype.scrollIntoView = vi.fn();
@@ -317,18 +276,16 @@ describe('HeroCarousel 4대 뱃지 보완 (Task 9-1-4)', () => {
     vi.useRealTimers();
   });
 
-  it('실내외(facility_type) 뱃지를 오버레이와 중복 없이 카드 본문에 보완 노출한다', () => {
+  it('실내외(facility_type) 뱃지를 더 이상 보여주지 않는다', () => {
     const item = makeItem('1', '실내 체험 행사');
     item.facility_type = '실내';
 
     render(<HeroCarousel items={[item]} onSelect={() => {}} />);
 
-    expect(screen.getByText('실내')).toBeInTheDocument();
+    expect(screen.queryByText('실내')).not.toBeInTheDocument();
   });
 
-  // [이벤트 카드 텍스트 영역 뱃지 정리](2026-09-04 사용자 지시): 아이동반(kids) 뱃지는
-  // 더 이상 어디에서도(오버레이/본문 보완 모두) 노출하지 않는다.
-  it('is_kids_friendly=true여도 아이동반 뱃지를 더 이상 보여주지 않는다', () => {
+  it('is_kids_friendly=true여도 아이동반 뱃지를 보여주지 않는다', () => {
     const item = makeItem('1', '실내 체험 행사');
     item.is_kids_friendly = true;
 

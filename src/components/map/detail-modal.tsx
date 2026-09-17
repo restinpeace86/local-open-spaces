@@ -4,7 +4,8 @@ import { useEffect, useState } from 'react';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
 import { getTargetAudienceLabel } from '@/lib/spaces/target-audience-meta';
-import { getReservationAvailabilityTag, getEventStatus, EventStatus } from '@/lib/spaces/event-status';
+import { getReservationAvailabilityTag, getEventStatus, getDateBannerBadge, EventStatus } from '@/lib/spaces/event-status';
+import { getParentalBadges } from '@/lib/spaces/parental-badges';
 import { formatDistance, formatDateRange, formatDateTime, formatReservationPeriod } from '@/lib/spaces/format';
 import { MiniMap } from '@/components/map/mini-map';
 import { MapPreviewModal } from '@/components/map/map-preview-modal';
@@ -353,6 +354,16 @@ export function DetailModal({
   // UI 자체는 여러 장을 받아도 그대로 동작하도록 배열로 다룬다.
   const eventImages = isEvent && item.thumbnail_url ? [item.thumbnail_url] : [];
   const eventStatus = isEvent ? getEventStatus(item) : null;
+  // [메인 피드 카드 뱃지를 상세로 이동](2026-09-17 사용자 지시, Decision 025 —
+  // Decision 012·013 개정): 메인 이벤트픽 피드 카드(EventCard/HeroCarousel)에서
+  // 오늘 마감/오늘 한정 배너, 무료/유료, 실내/야외 뱃지를 뺀 대신, 상세에서는 전부
+  // 보여줘야 정보 손실이 없다 — eventStatus(예약 마감 기준 상태)와 별개로 dateBanner
+  // (행사 자체의 시작/종료일 기준 "오늘 한정"/"오늘 마감")도 추가하고, 무료/유료·
+  // 실내/야외는 getParentalBadges에서 그 두 종류만 뽑아 뱃지 줄에 더한다.
+  const eventDateBanner = isEvent ? getDateBannerBadge(item) : null;
+  const eventExtraBadges = isEvent
+    ? getParentalBadges(item).filter((badge) => badge.key === 'is_free' || badge.key === 'facility_type')
+    : [];
   const eventReservationPeriod = isEvent
     ? formatReservationPeriod(item.reservation_start_date, item.reservation_end_date)
     : null;
@@ -532,7 +543,10 @@ export function DetailModal({
             <div className="p-5">
               {/* 2단: 뱃지 영역 — 카테고리(중분류) + 현재 진행 상태. getEventStatus의
                   '상시'는 실제 운영 상황과 무관하게 "날짜 정보가 아예 없다"는 뜻이라
-                  다른 카드들과 동일하게 숨긴다(event-card.tsx와 동일 관례). */}
+                  다른 카드들과 동일하게 숨긴다(event-card.tsx와 동일 관례).
+                  [메인 피드 카드 뱃지를 상세로 이동](2026-09-17, Decision 025): 오늘
+                  마감/오늘 한정 배너 + 무료/유료·실내/야외를 여기 추가해, 메인 피드
+                  카드에서 뺀 정보를 상세에서 전부 볼 수 있게 한다. */}
               <div className="flex items-center gap-2 flex-wrap">
                 <span
                   className="text-xs font-semibold px-2 py-0.5 rounded-full text-white"
@@ -545,6 +559,20 @@ export function DetailModal({
                     {eventStatus.label}
                   </span>
                 )}
+                {eventDateBanner && (
+                  <span
+                    className={`text-xs font-semibold px-2 py-0.5 rounded-full text-white ${
+                      eventDateBanner.kind === 'today_only' ? 'bg-amber-500' : 'bg-rose-600'
+                    }`}
+                  >
+                    {eventDateBanner.label}
+                  </span>
+                )}
+                {eventExtraBadges.map((badge) => (
+                  <span key={badge.key} className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                    {badge.label}
+                  </span>
+                ))}
                 {/* [카드 표준 중분류/연령대상 표시](2026-08-27 사용자 지시) 계승: 연령대상은
                     8단 구조가 명시한 필수 섹션은 아니지만 기존에 노출하던 유용한 정보라
                     임의로 없애지 않고(제5장 제3조) 뱃지 영역에 함께 둔다. */}

@@ -295,6 +295,52 @@ describe('DetailModal 표준 중분류 뱃지 및 연령대상 표시', () => {
   });
 });
 
+// [메인 피드 카드 뱃지를 상세로 이동](2026-09-17 사용자 지시, Decision 025 — Decision
+// 012·013 개정): "메인 이벤트픽 화면에선 노출 안 할거야... 프리뷰카드 눌렀을때
+// 상세카드쪽에서만... 보이도록" — EventCard/HeroCarousel에서 뺀 오늘 마감/오늘 한정
+// 배너, 무료/유료, 실내/야외 뱃지가 여기(2단 뱃지 영역)에 전부 보이는지 검증한다.
+describe('DetailModal 메인 피드에서 옮겨온 뱃지 (2026-09-17, Decision 025)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('오늘 하루짜리 행사는 "⚡ 오늘 한정" 뱃지를, 여러 날 행사가 오늘 끝나면 "⏰ 오늘 마감" 뱃지를 보여준다', () => {
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+    const { unmount } = render(
+      <DetailModal item={makeSpaceItem({ item_type: 'EVENT', start_date: todayStr, end_date: todayStr })} onClose={() => {}} />
+    );
+    expect(screen.getByText('⚡ 오늘 한정')).toBeInTheDocument();
+    unmount();
+
+    render(
+      <DetailModal
+        item={makeSpaceItem({ item_type: 'EVENT', start_date: '2020-01-01', end_date: todayStr })}
+        onClose={() => {}}
+      />
+    );
+    expect(screen.getByText('⏰ 오늘 마감')).toBeInTheDocument();
+  });
+
+  it('무료/유료 뱃지를 보여준다', () => {
+    const { unmount } = render(
+      <DetailModal item={makeSpaceItem({ item_type: 'EVENT', is_free: true })} onClose={() => {}} />
+    );
+    expect(screen.getByText('🎁 무료')).toBeInTheDocument();
+    unmount();
+
+    render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT', is_free: false })} onClose={() => {}} />);
+    expect(screen.getByText('💰 유료')).toBeInTheDocument();
+  });
+
+  it('실내/야외(facility_type) 뱃지를 보여준다', () => {
+    render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT', facility_type: '실내' })} onClose={() => {}} />);
+
+    expect(screen.getByText('실내')).toBeInTheDocument();
+  });
+});
+
 // [상세보기 설명 추가](2026-08-27 사용자 지시)
 describe('DetailModal 설명(description) 표시', () => {
   afterEach(() => {

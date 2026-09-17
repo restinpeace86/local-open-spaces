@@ -2,8 +2,6 @@
 
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
-import { getParentalBadges } from '@/lib/spaces/parental-badges';
-import { getEventStatus, getDateBannerBadge } from '@/lib/spaces/event-status';
 import { formatDateRange, formatDistance, formatVenueLine } from '@/lib/spaces/format';
 
 // spec/event/event-card.md 준용 신규 카드 (Task 9-1) — 기존에는 이벤트 전용 카드가 없었고
@@ -28,14 +26,14 @@ import { formatDateRange, formatDistance, formatVenueLine } from '@/lib/spaces/f
 // (h-64 등)와 무관하게 이미지 자체 비율로 높이가 정해졌다 — 이제 이미지/텍스트 두
 // 영역을 flex-[N]으로 명시해 카드의 고정 높이를 정확한 비율로 나눈다. 텍스트 영역에
 // min-h-0 + overflow-hidden을 준 것은 flex 아이템의 기본값(min-height:auto)이 내용물
-// 크기만큼은 줄어들지 않으려는 것을 막기 위함이다 — 이게 없으면 뱃지+제목+장소+날짜가
+// 크기만큼은 줄어들지 않으려는 것을 막기 위함이다 — 이게 없으면 제목+장소+날짜가
 // 많은 카드에서 텍스트 영역이 비율을 넘겨 버튼 전체 높이가 카드 높이보다 커져 버릴 수
-// 있다(사용자 확인: 이미지 위 뱃지/마감임박 배너는 그대로 오버레이 유지, 텍스트
-// 영역으로 옮기지 않음).
-// [비율 5:5로 조정](2026-09-03 사용자 지시): 원래 4:6이었으나, 무료/유료·실내야외
-// 뱃지를 이미지 오버레이로 옮기면서(바로 아래 "[카드 높이/뱃지 정리]" 참고) 텍스트
-// 영역에 필요한 공간이 줄어든 만큼, 상대적으로 커진 이미지 영역이 잘 활용되도록
-// flex-[4]/flex-[6] → flex-[5]/flex-[5]로 바꿨다.
+// 있다.
+// [비율 5:5로 조정](2026-09-03 사용자 지시): 원래 4:6이었으나, 당시 텍스트 영역에
+// 있던 뱃지들을 이미지 오버레이로 옮기면서 텍스트 영역에 필요한 공간이 줄어든 만큼,
+// 상대적으로 커진 이미지 영역이 잘 활용되도록 flex-[4]/flex-[6] → flex-[5]/flex-[5]로
+// 바꿨다(그 뱃지들 자체는 2026-09-17 Decision 025로 전부 제거됐지만, 비율 자체는
+// 여전히 적정해 그대로 둔다).
 // [카드 내 이미지/텍스트 영역 비율 불일치 수정 1차 시도](2026-08-30): dateBanner(오늘
 // 한정/오늘 마감, 당일 종료 이벤트에만 뜸)를 flex-col의 별도 행에서 이미지 영역 위
 // 절대 위치 오버레이로 옮겼다 — 이 자체는 유효한 개선이라 유지하지만, Playwright로
@@ -54,23 +52,14 @@ import { formatDateRange, formatDistance, formatVenueLine } from '@/lib/spaces/f
 // 영역에도 min-h-0을 추가해 flex-[4]/flex-[6] 비율이 이미지 내용물과 무관하게 항상
 // 정확히 지켜지도록 고쳤다(Playwright로 실제 브라우저 렌더링 높이를 재측정해 8장 카드
 // 전부 102px:154px로 고정됨을 확인 — 상세 검증 로그는 구현 기록 참고).
-// [카드 높이/뱃지 정리](2026-09-03 사용자 지시): "카드 세로 높이가 길고 뱃지가 중구난방"
-// — 실측으로 두 가지 원인을 찾았다.
-//   ① `showReservationAlert`("🚨 오늘 예약 마감")는 `status.label === '오늘 마감'`일
-//      때만 뜨는데, 바로 그 값이 이미지 위 오버레이(top-right)로도 항상 노출된다 —
-//      같은 정보를 문구만 바꿔 텍스트 영역에 한 번 더 보여주던 순수 중복이라 제거한다.
-//   ② `reservationTag`("📋 사전예약필요"/"✅ 예약불필요 · 현장방문")는 DetailModal에
-//      이미 동일한 정보가 표시되고 있어(detail-modal.tsx) 카드에서 빼도 정보 손실이
-//      없다 — 목록 카드는 "고를지 말지 판단할 핵심 정보"만, 나머지는 상세에서 보도록
-//      정리한다.
-// 남은 뱃지 중 무료/유료(is_free)와 실내/야외(facility_type)는 이미지 위 하단 좌/우
-// 오버레이로 옮긴다 — 텍스트 영역의 줄 수를 늘리지 않고(이미지 영역은 뱃지가 몇 개든
-// 높이가 그대로다) 정보는 그대로 유지한다.
-// [이벤트 카드 텍스트 영역 뱃지 정리](2026-09-04 사용자 지시): 키즈/어린이 뱃지도
-// parental-badges.ts에서 아예 제거해, 텍스트 영역에는 이제 접수 임박(booking_status)
-// 뱃지 하나만 남는다(0~1개).
-const IMAGE_OVERLAY_BADGE_KEYS = new Set(['is_free', 'facility_type']);
-
+// [메인 피드 카드 뱃지를 상세/전체보기로 이동](2026-09-17 사용자 지시, Decision 025 —
+// Decision 012·013 개정): "메인 이벤트픽 화면에선 노출 안 할거야, 전체보기했을 때
+// 프리뷰카드나 프리뷰카드 눌렀을 때 상세카드 쪽에서만 보이도록 해줘" — 접수 상태
+// (booking_status/getEventStatus), 오늘 마감/오늘 한정 배너, 무료/유료, 실내/야외
+// 뱃지를 이 메인 피드 카드에서 전부 제거하고 카테고리 뱃지만 남긴다. 제거된 정보는
+// 삭제가 아니라 이동이다 — "전체보기" 목록(EventListRow)은 이미 그대로 다 보여주고
+// 있고, 상세(DetailModal)에는 이번에 새로 추가했다(정보 손실 없음, 결정 이유는
+// project/decision-log.md Decision 025 참고).
 export function EventCard({
   item,
   onSelect,
@@ -79,26 +68,6 @@ export function EventCard({
   onSelect: (item: NearbyItem) => void;
 }) {
   const meta = getCategoryMeta(item.category);
-  const allBadges = getParentalBadges(item);
-  const imageBadges = allBadges.filter((badge) => IMAGE_OVERLAY_BADGE_KEYS.has(badge.key));
-  const priceBadge = imageBadges.find((badge) => badge.key === 'is_free');
-  const facilityBadge = imageBadges.find((badge) => badge.key === 'facility_type');
-  const status = getEventStatus(item);
-  // [개선사항4](2026-09-04 사용자 지시) "이벤트픽 카드 목록 뱃지 최종 원칙": 목록 카드는
-  // 딱 3곳(상단 좌측 중분류/상단 우측 예약 상태/하단 실내외·무료유료)만 노출해야 하는데,
-  // 지금까지는 "상단 우측"(getEventStatus)과 별개로 텍스트 영역에 booking_status 뱃지
-  // (⚡오늘 당일 입장 가능/⏳D-1 마감임박/📅접수중)가 4번째 자리로 하나 더 있었다 — 실측
-  // 확인 결과 이 둘은 서로 다른 계산식으로 나온 "예약 상태"를 각자 보여주는 사실상
-  // 중복이었다(그것도 서로 항상 일치하지 않을 수 있는 — is_reservation_required는
-  // 대부분의 소스에서 실제로 단언된 적 없는 기본값이라(개선사항1 참고) getEventStatus가
-  // '진행중'/'예정' 같은 일반적인 값만 내는 경우가 대부분이고, booking_status는 그와
-  // 별개로 "오늘방문" 같은 더 구체적인 신호를 이미 갖고 있었다). 하나로 합친다 —
-  // booking_status 기반 문구가 있으면 그걸 우선(더 자주, 더 구체적으로 맞음), 없으면
-  // getEventStatus로 대체하되 '상시'는 계속 숨긴다. 두 자리를 하나로 합쳤으니 텍스트
-  // 영역의 별도 뱃지 줄은 완전히 없앤다.
-  const bookingStatusBadge = allBadges.find((badge) => badge.key === 'booking_status');
-  const topRightBadgeLabel = bookingStatusBadge?.label ?? (status.label !== '상시' ? status.label : null);
-  const dateBanner = getDateBannerBadge(item);
   const period = formatDateRange(item.start_date, item.end_date);
   // Task 9-1-3: "[장소명] · [시/군/구]" (예: "율동공원 야외무대 · 성남시 분당구")
   const venueLine = formatVenueLine(item.address, item.sigungu_name);
@@ -109,9 +78,8 @@ export function EventCard({
   // thumbnail_url이 항상 null이라 이미지 영역에 아무 정보 없는 placeholder
   // 이모지(🖼️)만 뜨면서도 카드 높이의 절반을 그대로 차지해, 남은 절반(텍스트 영역)에
   // 제목+장소+거리+기간까지 다 넣기엔 좁아 잘렸다. 실제 이미지가 없을 때는 이미지
-  // 영역을 훨씬 작게(2:8) 줄이고 텍스트 영역에 더 많은 공간을 준다 — 중분류/무료·유료/
-  // 실내야외 뱃지는 여전히 이 축소된 이미지 영역 안에 오버레이로 남아(자리만 좁아질
-  // 뿐 내용은 그대로), 정보 손실은 없다.
+  // 영역을 훨씬 작게(2:8) 줄이고 텍스트 영역에 더 많은 공간을 준다 — 중분류 뱃지는
+  // 여전히 이 축소된 이미지 영역 안에 오버레이로 남는다.
   const hasThumbnail = Boolean(item.thumbnail_url);
 
   return (
@@ -121,15 +89,6 @@ export function EventCard({
       className="h-full text-left rounded-2xl border border-gray-200 bg-white overflow-hidden hover:shadow-md transition-shadow flex flex-col"
     >
       <div className={`relative min-h-0 bg-gray-100 ${hasThumbnail ? 'flex-[5]' : 'flex-[2]'}`}>
-        {dateBanner && (
-          <div
-            className={`absolute top-0 left-0 right-0 z-10 px-2 py-1 text-[11px] font-bold text-white text-center ${
-              dateBanner.kind === 'today_only' ? 'bg-amber-500' : 'bg-rose-600'
-            }`}
-          >
-            {dateBanner.label}
-          </div>
-        )}
         {item.thumbnail_url ? (
           // Task 9-3-1(2026-08-22): 이 카드는 항상 하단 피드(가성비 행복/무료·공공)에서만 쓰여
           // 뷰포트 아래에 있으므로 항상 지연 로드한다.
@@ -150,36 +109,11 @@ export function EventCard({
             색이 없어 상위 대분류 색으로 시각적 구분을 유지한다. category_min이 없으면(이론상
             이벤트픽 3대 조건상 발생하지 않지만 방어적으로) 기존 라벨로 폴백한다. */}
         <span
-          className={`absolute ${dateBanner ? 'top-8' : 'top-2'} left-2 text-[11px] font-semibold px-2 py-0.5 rounded-full text-white`}
+          className="absolute top-2 left-2 text-[11px] font-semibold px-2 py-0.5 rounded-full text-white"
           style={{ backgroundColor: meta.color }}
         >
           {item.category_min ?? meta.label}
         </span>
-        {/* [개선사항1](2026-09-04 사용자 지시): open_spaces 연동 카드(캠핑장 등)에 붙는
-            "상시" 태그는 실제 운영 상황/예약 필요 여부와 무관하게 "날짜 정보가 아예
-            없다"는 사정만으로 붙는 값이라(event-status.ts getEventStatus 주석 참고)
-            사용자에게 혼선을 준다는 지적 — topRightBadgeLabel 계산에서 이미 걸러진다.
-            [개선사항4](2026-09-04 사용자 지시): 이 자리 하나로 예약 상태를 통합했다
-            (booking_status 우선, 없으면 getEventStatus로 대체). */}
-        {topRightBadgeLabel && (
-          <span
-            className={`absolute ${dateBanner ? 'top-8' : 'top-2'} right-2 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-black/60 text-white`}
-          >
-            {topRightBadgeLabel}
-          </span>
-        )}
-        {/* [카드 높이/뱃지 정리](2026-09-03 사용자 지시): 무료/유료·실내/야외는 이미지
-            하단 좌/우 오버레이로 — 텍스트 영역 줄 수를 늘리지 않는다. */}
-        {priceBadge && (
-          <span className="absolute bottom-2 left-2 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-black/60 text-white">
-            {priceBadge.label}
-          </span>
-        )}
-        {facilityBadge && (
-          <span className="absolute bottom-2 right-2 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-black/60 text-white">
-            {facilityBadge.label}
-          </span>
-        )}
       </div>
 
       <div className={`p-3 min-h-0 overflow-hidden flex flex-col gap-1.5 ${hasThumbnail ? 'flex-[5]' : 'flex-[8]'}`}>
