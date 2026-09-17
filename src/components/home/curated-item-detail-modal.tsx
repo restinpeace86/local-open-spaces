@@ -17,8 +17,11 @@ import { useBackdropDismiss } from '@/lib/admin/use-backdrop-dismiss';
 // [상품 성격 뱃지 제안](todo.md [개선사항 2] "상품 성격에 따른 뱃지 필요한가? 제안할
 // 것"): BestPickSlider 카드와 동일한 기준(operation_end_date 유무)의 배지를 그대로
 // 재사용한다 — 카드에서 본 배지와 상세에서 다른 배지가 뜨면 혼란스럽다(일관성).
-function periodBadgeLabel(item: CuratedItem): string {
-  return item.operation_end_date ? '⏰ 기간한정' : '🧸 상시';
+// [상시 뱃지 제거](2026-09-17 사용자 지시: "아래 상시는 왜붙였어.. 굳이 상시
+// 노출하지마") — best-pick-slider.tsx와 동일하게, "상시" 성격은 이미 섹션
+// 타이틀이 말해주고 있어 뱃지로 또 보여주면 중복이다.
+function periodBadgeLabel(item: CuratedItem): string | null {
+  return item.operation_end_date ? '⏰ 기간한정' : null;
 }
 
 function formatPeriodLabel(start: string | null, end: string | null): string | null {
@@ -62,9 +65,11 @@ export function CuratedItemDetailModal({ item, onClose }: { item: CuratedItem; o
                 🧭
               </div>
             )}
-            <span className="absolute top-3 left-3 text-xs font-semibold px-2.5 py-1 rounded-full bg-black/60 text-white">
-              {periodBadgeLabel(item)}
-            </span>
+            {periodBadgeLabel(item) && (
+              <span className="absolute top-3 left-3 text-xs font-semibold px-2.5 py-1 rounded-full bg-black/60 text-white">
+                {periodBadgeLabel(item)}
+              </span>
+            )}
             <button
               type="button"
               onClick={onClose}

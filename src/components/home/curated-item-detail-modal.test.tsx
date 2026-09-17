@@ -45,10 +45,13 @@ describe('CuratedItemDetailModal', () => {
     expect(screen.getByText(/2026-10-01 ~ 2026-10-31/)).toBeInTheDocument();
   });
 
-  it('기간이 없으면 🧸 상시 뱃지를 보여준다', () => {
+  // [상시 뱃지 제거](2026-09-17 사용자 지시: "아래 상시는 왜붙였어.. 굳이 상시
+  // 노출하지마") — "상시" 성격은 섹션 타이틀이 이미 말해주고 있어 뱃지로 중복
+  // 노출하지 않는다.
+  it('기간이 없으면 뱃지 자체를 보여주지 않는다', () => {
     render(<CuratedItemDetailModal item={buildItem()} onClose={vi.fn()} />);
 
-    expect(screen.getByText('🧸 상시')).toBeInTheDocument();
+    expect(screen.queryByText('🧸 상시')).not.toBeInTheDocument();
   });
 
   it('하단 CTA는 새 창으로 booking_url을 연다', () => {

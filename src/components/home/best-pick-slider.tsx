@@ -37,11 +37,14 @@ export type CuratedItem = {
 // [개선사항 2] "상품 성격에 따른 뱃지 필요한가? 제안할 것" — 카드 자체엔 지금까지
 // 뱃지가 하나도 없었고([개선사항 3]이 정리하려는 이벤트 카드의 접수중/실내야외 뱃지와는
 // 무관), 특가/상시 두 섹션으로 나뉘는 지금은 어느 카드가 어느 성격인지 한눈에 구분되는
-// 뱃지 하나 정도는 있는 게 낫다고 판단해 제안 겸 적용한다 — 섹션 타이틀과 중복되긴
-// 하지만, 나중에 두 섹션 카드가 한 목록에 섞여 노출될 가능성(찜 목록 등)을 대비해도
-// 카드 자체에 성격이 드러나 있는 편이 안전하다.
+// 뱃지 하나 정도는 있는 게 낫다고 판단해 제안 겸 적용했었다.
+// [상시 뱃지 제거](2026-09-17 사용자 지시: "아래 상시는 왜붙였어.. 굳이 상시
+// 노출하지마") — "언제 가도 좋은 상시 추천 픽" 섹션 자체가 이미 "상시"라는 걸
+// 말해주고 있어 카드마다 또 "🧸 상시"를 붙이는 게 중복으로 거슬린다는 지적.
+// 기간한정 특가 뱃지(⏰)는 지시 대상이 아니라 그대로 둔다 — 급박함을 전달하는
+// 실질적 정보라 섹션 타이틀과 중복이 아니다.
 function periodBadge(item: CuratedItem): string | null {
-  return item.operation_end_date ? '⏰ 기간한정' : '🧸 상시';
+  return item.operation_end_date ? '⏰ 기간한정' : null;
 }
 
 function formatPeriodLabel(start: string | null, end: string | null): string | null {
@@ -81,9 +84,11 @@ export function BestPickSlider({ items, onSelect }: { items: CuratedItem[]; onSe
                     🧭
                   </div>
                 )}
-                <span className="absolute top-2 left-2 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-black/60 text-white">
-                  {periodBadge(item)}
-                </span>
+                {periodBadge(item) && (
+                  <span className="absolute top-2 left-2 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-black/60 text-white">
+                    {periodBadge(item)}
+                  </span>
+                )}
               </div>
               <div className="flex-1 min-h-0 p-2.5 overflow-hidden flex flex-col justify-center gap-0.5">
                 <p className="text-xs font-medium text-gray-900 line-clamp-2">{item.title}</p>
