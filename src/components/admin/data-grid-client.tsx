@@ -644,6 +644,23 @@ function TargetAudienceBadge({ targetAudience, source }: { targetAudience: strin
   );
 }
 
+// [실내/야외 분류 LLM 파이프라인](2026-09-17 사용자 지시): "관리자 화면에서 볼 수
+// 있게 해줘" — 목록에서 각 행의 현재 facility_type을 바로 확인할 수 있게 한다
+// (상세 팝업까지 열지 않아도 일괄 분류 결과를 훑어볼 수 있어야 함).
+const FACILITY_TYPE_BADGE_STYLE: Record<string, string> = {
+  실내: 'bg-indigo-100 text-indigo-700',
+  야외: 'bg-emerald-100 text-emerald-700',
+  복합: 'bg-gray-100 text-gray-600',
+};
+function FacilityTypeBadge({ facilityType }: { facilityType: string }) {
+  if (!facilityType) return <span className="text-xs text-gray-300">NULL</span>;
+  return (
+    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${FACILITY_TYPE_BADGE_STYLE[facilityType] ?? 'bg-gray-100 text-gray-600'}`}>
+      {facilityType}
+    </span>
+  );
+}
+
 export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOptions }) {
   const router = useRouter();
   const [tab, setTab] = useState<AdminTable>('open_spaces');
@@ -1562,6 +1579,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                 {tab === 'events' && <th className="py-2.5 pr-3">원천 대/중분류</th>}
                 {tab !== 'raw_ingest_data' && <th className="py-2.5 pr-3">표준 중분류</th>}
                 {tab === 'events' && <th className="py-2.5 pr-3">타겟 연령</th>}
+                {tab === 'events' && <th className="py-2.5 pr-3">실내/야외</th>}
                 <th className="py-2.5 pr-3">{tab === 'raw_ingest_data' ? '수집 시각' : '제목/명칭'}</th>
                 {tab === 'events' && <th className="py-2.5 pr-3">행사기간(start~end)</th>}
                 {/* "제목/명칭 컬럼과 장소/시설명 컬럼도 동일해.. 제목/명칭 컬럼만 남겨" —
@@ -1669,6 +1687,11 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                           targetAudience={(r as AdminEventRow).target_audience}
                           source={(r as AdminEventRow).target_audience_source}
                         />
+                      </td>
+                    )}
+                    {isEvent && (
+                      <td className="py-2 pr-3 whitespace-nowrap">
+                        <FacilityTypeBadge facilityType={(r as AdminEventRow).facility_type} />
                       </td>
                     )}
                     <td className="py-2 pr-3 font-medium text-gray-900 max-w-[220px] truncate">

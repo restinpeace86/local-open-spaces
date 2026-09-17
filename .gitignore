@@ -26,6 +26,10 @@
 # ingest pipeline logs
 /ingest.log
 
+# [실내/야외 분류 LLM 파이프라인 일괄 적용](2026-09-17) 재개용 진행 상황 —
+# 로컬 실행 상태일 뿐 커밋할 소스가 아니다(scripts/classify-events-facility-type.mjs 참고).
+/scripts/tmp/
+
 # misc
 .DS_Store
 *.pem
