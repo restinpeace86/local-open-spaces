@@ -140,7 +140,11 @@ export function CuratedItemFormModal({
       const res = await fetch('/api/admin/classify-facility-environment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: title.trim(), description: description.trim() || null }),
+        body: JSON.stringify({
+          title: title.trim(),
+          description: description.trim() || null,
+          venueName: spot?.name ?? null,
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'LLM 분류 실패');

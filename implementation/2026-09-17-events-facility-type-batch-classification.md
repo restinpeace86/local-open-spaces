@@ -125,3 +125,52 @@ is_active=false로 바뀐 것으로 추정). 재개 시 남은 약 217건만 처
 - 새 워크플로 YAML 문법을 `js-yaml`로 직접 파싱해 검증.
 - 리팩터링한 일회성 백필 스크립트를 `--limit=1`로 재실행해 "이전 실행에서 이미
   처리된 469건은 건너뜀" 로그로 진행 상황 복구가 정확히 반영됐는지 확인.
+
+### 실행 순서 보장 수정 + 전달 데이터 보강 (2026-09-18 2차)
+
+**사용자 지적 1**: "순서는 배치끝나고 테이블에저장된후 실행해야돼. 배치 돌면서
+실행하면 안되고" — 기존에 넣었던 KST 04:05 고정 cron은 "일일 수집 배치가 대략
+그 시간 전에는 끝나겠지"라는 추측에 불과했다(제3장 제5조 위반 소지). 일일 수집
+배치는 실패 시 15분 대기 후 1회 재시도까지 포함해 소요 시간이 날마다 달라질 수
+있어, 고정 시각 버퍼로는 순서를 보장할 수 없다.
+- **수정**: `.github/workflows/classify-new-events-facility-type.yml`의 트리거를
+  `schedule: cron` → `workflow_run`(대상: `ingest-daily.yml`의 정확한 `name:`
+  값 `"Daily Ingestion (Events Batch)"`, `types: [completed]`)으로 교체 — 이제
+  일일 수집 배치가 실제로 "완료"된 시점에만 실행된다. 완료가 실패(`conclusion !=
+  'success'`)로 끝난 날은 target_audience 등이 온전히 채워졌다는 보장이 없어
+  분류 배치도 함께 건너뛰도록 job 조건(`if:`)을 추가했다(`workflow_dispatch`
+  수동 실행은 조건과 무관하게 항상 허용).
+
+**사용자 질문**: "이게 실내/야외인지를 판단하는건? gemini에게 어떤 데이터를
+전달해주는거지?" — 확인 결과 기존에는 `title`+`description`만 전달했다. 실측
+쿼리로 확인한 대상 686건의 데이터 완전성:
+- `description`: 293건(43%)이 NULL/빈 문자열 (평균 길이 약 787자, 있을 때만).
+- `category_min`(표준 중분류): 676건(98.5%) 존재.
+- `venue_name`(장소명): 658건(95.9%) 존재.
+- description도 category_min도 둘 다 없는 건 6건뿐.
+- 샘플 확인 결과 category_min="공원탐방"+venue_name="서울숲 방문자센터"처럼
+  description이 없어도 실내/야외 판단에 실질적으로 도움되는 신호를 담고 있었다.
+
+**개선**: `buildFacilityClassificationPrompt`(TS/`.mjs` 두 사본 모두)에
+`extraContext?: { categoryMin, venueName }` 선택 인자를 추가 — 존재하는 값만
+프롬프트에 "[분석 대상]" 아래 추가로 포함시킨다(제3장 제5조 — 새로운 추정 규칙을
+만드는 게 아니라 이미 DB에 있는 필드를 그대로 전달). 연쇄 반영:
+- `classifyOne`(공용 `.mjs`)이 4번째 인자로 `extraContext`를 받아 그대로
+  전달하도록 시그니처 확장.
+- 두 배치 스크립트(`scripts/classify-events-facility-type.mjs`,
+  `scripts/ingest/classify-new-events-facility-type.mjs`)의 조회 select에
+  `category_min, venue_name` 추가, `classifyOne` 호출 시 함께 전달.
+- `/api/admin/classify-facility-environment` 라우트가 `categoryMin`/`venueName`
+  바디 필드를 받아 프롬프트 빌더에 전달.
+- 관리자 화면 두 호출부: `raw-data-modal.tsx`의 `FacilityTypeEditor`는
+  `row.category_min`/`row.venue_name`을 함께 전송. `curated-item-form-modal.tsx`는
+  curated_items에 category_min 상당 필드가 없어 연결된 스팟명(`spot?.name`)만
+  `venueName`으로 전송(스팟 미연결 시 기존과 동일하게 title/description만 전달).
+
+### 검증(2026-09-18 2차)
+- `npx tsc --noEmit` 통과.
+- `npm run test`(전체 163개 파일 1892개 테스트 — extraContext 관련 신규 케이스
+  3개 포함) 통과.
+- `npm run build` 통과.
+- 새 워크플로 YAML(`workflow_run`/`if:` 조건 포함)을 `js-yaml`로 파싱해 문법
+  확인.

@@ -40,7 +40,7 @@ const CONSECUTIVE_RATE_LIMIT_ABORT_THRESHOLD = 2;
 async function fetchTodayNewRows() {
   const { data, error } = await supabase
     .from('events')
-    .select('id, title, description, target_audience, facility_type, created_at')
+    .select('id, title, description, target_audience, facility_type, created_at, category_min, venue_name')
     .eq('is_active', true)
     .in('target_audience', TARGET_AUDIENCES)
     .gte('created_at', todayStartIsoKst())
@@ -66,7 +66,10 @@ async function run() {
   for (let i = 0; i < rows.length; i += 1) {
     const row = rows[i];
     try {
-      const result = await classifyOne(row.title, row.description, GEMINI_API_KEY);
+      const result = await classifyOne(row.title, row.description, GEMINI_API_KEY, {
+        categoryMin: row.category_min,
+        venueName: row.venue_name,
+      });
       consecutiveRateLimitFailures = 0;
       tally[result.classification] += 1;
       const mapped = CLASSIFICATION_TO_FACILITY_TYPE[result.classification];

@@ -20,6 +20,15 @@ describe('buildFacilityClassificationPrompt', () => {
     const prompt = buildFacilityClassificationPrompt('숲속 키즈카페', null);
     expect(prompt).toContain('(상세 설명 없음)');
   });
+
+  it('category_min/venue_name이 있으면 추가 컨텍스트로 함께 포함한다', () => {
+    const prompt = buildFacilityClassificationPrompt('서울숲 방문 프로그램', null, {
+      categoryMin: '공원탐방',
+      venueName: '서울숲 방문자센터',
+    });
+    expect(prompt).toContain('표준 분류(중분류): 공원탐방');
+    expect(prompt).toContain('장소명: 서울숲 방문자센터');
+  });
 });
 
 describe('parseFacilityClassificationResponse', () => {

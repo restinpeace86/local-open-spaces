@@ -343,7 +343,12 @@ function FacilityTypeEditor({
       const res = await fetch('/api/admin/classify-facility-environment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: row.title, description: row.description ?? null }),
+        body: JSON.stringify({
+          title: row.title,
+          description: row.description ?? null,
+          categoryMin: row.category_min ?? null,
+          venueName: row.venue_name ?? null,
+        }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? 'LLM 분류 실패');

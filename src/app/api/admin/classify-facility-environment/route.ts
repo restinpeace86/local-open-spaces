@@ -14,7 +14,12 @@ const GEMINI_TIMEOUT_MS = 20000;
 
 export async function POST(request: NextRequest) {
   try {
-    const body = (await request.json()) as { title?: string; description?: string | null };
+    const body = (await request.json()) as {
+      title?: string;
+      description?: string | null;
+      categoryMin?: string | null;
+      venueName?: string | null;
+    };
     const title = body.title?.trim();
     if (!title) {
       return NextResponse.json({ error: '제목(title)이 필요합니다.' }, { status: 400 });
@@ -25,7 +30,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'GEMINI_API_KEY 환경변수가 설정되지 않았습니다.' }, { status: 500 });
     }
 
-    const prompt = buildFacilityClassificationPrompt(title, body.description ?? null);
+    const prompt = buildFacilityClassificationPrompt(title, body.description ?? null, {
+      categoryMin: body.categoryMin ?? null,
+      venueName: body.venueName ?? null,
+    });
 
     const geminiRes = await fetchWithTimeout(
       `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${geminiApiKey}`,

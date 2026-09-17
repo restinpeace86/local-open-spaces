@@ -15,13 +15,36 @@ export type FacilityClassificationResult = {
 const CLASSIFICATION_VALUES: FacilityClassification[] = ['INDOOR', 'OUTDOOR', 'BOTH', 'UNKNOWN'];
 const CONFIDENCE_VALUES: FacilityClassificationConfidence[] = ['high', 'medium', 'low'];
 
+export type FacilityClassificationExtraContext = {
+  categoryMin?: string | null;
+  venueName?: string | null;
+};
+
+// [프롬프트 보강](2026-09-18 실측): 분류 대상 686건 중 293건(43%)이 description이
+// 비어있어 title만으로는 근거가 부족한 경우가 많다. 반면 category_min(표준
+// 중분류)은 98.5%, venue_name(장소명)은 95.9% 채워져 있고, 예를 들어
+// category_min="공원탐방"+venue_name="서울숲 방문자센터"처럼 실내/야외 판단에
+// 실질적으로 도움이 되는 신호를 담고 있다(제3장 제5조 추측 금지 — 이미 DB에
+// 있는 필드를 그대로 전달하는 것이지 새로운 추정 규칙을 만드는 게 아니다).
+// description 유무와 무관하게 존재하면 항상 함께 전달한다.
+function buildExtraContextLines(extraContext?: FacilityClassificationExtraContext): string {
+  const lines: string[] = [];
+  if (extraContext?.categoryMin?.trim()) lines.push(`- 표준 분류(중분류): ${extraContext.categoryMin.trim()}`);
+  if (extraContext?.venueName?.trim()) lines.push(`- 장소명: ${extraContext.venueName.trim()}`);
+  return lines.length > 0 ? `\n${lines.join('\n')}` : '';
+}
+
 // 요청 원문의 4가지 분류 정의를 그대로 프롬프트에 반영한다(임의로 기준을 바꾸지
 // 않음, 제3장 제5조 추측 금지).
-export function buildFacilityClassificationPrompt(title: string, description: string | null): string {
+export function buildFacilityClassificationPrompt(
+  title: string,
+  description: string | null,
+  extraContext?: FacilityClassificationExtraContext
+): string {
   return `당신은 아이와 함께 가기 좋은 나들이/체험 장소 데이터를 검수하는 전문 AI
-어시스턴트입니다. 주어진 상품(장소)의 제목과 상세 설명만 보고, 그 장소의 환경
-속성(실내/야외)을 아래 4가지 분류 기준에 따라 정확하게 판단하여 엄격한 JSON
-형식으로 반환하는 것이 당신의 역할입니다.
+어시스턴트입니다. 주어진 상품(장소)의 제목, 상세 설명, (있는 경우) 표준 분류와
+장소명을 보고, 그 장소의 환경 속성(실내/야외)을 아래 4가지 분류 기준에 따라
+정확하게 판단하여 엄격한 JSON 형식으로 반환하는 것이 당신의 역할입니다.
 
 ### 분류 카테고리 정의 (4가지)
 - INDOOR (실내 전용): 키즈카페, 블럭방, 실내 박물관, 미술관, 실내 공방, 쿠킹클래스 등 100% 실내
@@ -30,8 +53,8 @@ export function buildFacilityClassificationPrompt(title: string, description: st
 - UNKNOWN (판단 불가): 텍스트만으로는 유추하기 어려운 경우
 
 ### 판단 규칙
-1. classification (string): 위 4가지 중 하나 — 제목/설명에 근거가 부족하면
-   추측으로 단정하지 말고 UNKNOWN을 선택하세요.
+1. classification (string): 위 4가지 중 하나 — 근거가 부족하면 추측으로
+   단정하지 말고 UNKNOWN을 선택하세요.
 2. confidence (string): "high"/"medium"/"low" 중 텍스트의 명확성에 따라 선택.
 3. reason (string): 판단한 이유를 간결한 한글로 작성.
 
@@ -40,7 +63,7 @@ export function buildFacilityClassificationPrompt(title: string, description: st
 
 [분석 대상]
 - 제목: ${title}
-- 상세 설명: ${description?.trim() || '(상세 설명 없음)'}
+- 상세 설명: ${description?.trim() || '(상세 설명 없음)'}${buildExtraContextLines(extraContext)}
 
 아래 JSON 스키마 형식에 맞춰 정확한 데이터를 반환해 주세요:
 

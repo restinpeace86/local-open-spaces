@@ -70,7 +70,7 @@ async function fetchTargetRows() {
   while (true) {
     const { data, error } = await supabase
       .from('events')
-      .select('id, title, description, target_audience, facility_type')
+      .select('id, title, description, target_audience, facility_type, category_min, venue_name')
       .eq('is_active', true)
       .in('target_audience', TARGET_AUDIENCES)
       .order('id')
@@ -133,7 +133,10 @@ async function run() {
   await runWithConcurrency(rows, CONCURRENCY, async (row) => {
     if (aborted) return;
     try {
-      const result = await classifyOne(row.title, row.description, GEMINI_API_KEY);
+      const result = await classifyOne(row.title, row.description, GEMINI_API_KEY, {
+        categoryMin: row.category_min,
+        venueName: row.venue_name,
+      });
       consecutiveRateLimitFailures = 0;
       tally[result.classification] += 1;
       const mapped = CLASSIFICATION_TO_FACILITY_TYPE[result.classification];
