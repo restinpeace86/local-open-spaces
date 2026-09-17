@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { CuratedItemFormModal } from '@/components/admin/curated-item-form-modal';
+import { Pagination } from '@/components/admin/pagination';
 import { SpotPicker, SpotOption } from '@/components/community/spot-picker';
 import {
   mapSearchItemToCuratedItemPrefill,
@@ -27,6 +28,12 @@ import {
 // 카드에서 바로 등록했지만, 등록 전에 상세 설명/포함사항을 확인하고 싶다는
 // 요구로 카드 → 상세 모달 → (마이링크 생성) → 등록 폼 순서로 바꿨다.
 const DEFAULT_CITY = '서울';
+// [검색 결과 페이지네이션](2026-09-17 사용자 지적: "총 71건 중 20건 표시.. 나머지
+// 51건은 어떻게 볼 수 있어?") — handleSearch가 처음부터 page 파라미터를 받고 있었고
+// API도 페이지 단위로 응답하지만, 화면에 다음 페이지로 넘어갈 UI 자체가 없어 항상
+// 1페이지(최대 20건)만 보였다. 관리자 화면에서 이미 쓰고 있는 표준
+// Pagination(pagination.tsx)을 그대로 재사용한다(제5장 제4조).
+const SEARCH_PAGE_SIZE = 20;
 const SORT_LABELS: Record<MyRealTripSort, string> = {
   price_asc: '가격 낮은순',
   price_desc: '가격 높은순',
@@ -377,6 +384,7 @@ export function MyRealTripSearchPanel() {
 
   const [items, setItems] = useState<MyRealTripSearchItem[] | null>(null);
   const [totalCount, setTotalCount] = useState(0);
+  const [currentPage, setCurrentPage] = useState(1);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState<string | null>(null);
 
@@ -489,7 +497,7 @@ export function MyRealTripSearchPanel() {
           maxPrice: maxPrice ? Number(maxPrice) : undefined,
           sort: sort || undefined,
           page,
-          size: 20,
+          size: SEARCH_PAGE_SIZE,
         }),
       });
       const data = await res.json();
@@ -497,6 +505,7 @@ export function MyRealTripSearchPanel() {
       const newItems: MyRealTripSearchItem[] = data.items ?? [];
       setItems(newItems);
       setTotalCount(data.totalCount ?? 0);
+      setCurrentPage(page);
       fetchLinkedStatus(newItems.map((i) => i.gid));
       fetchCuratedStatus(newItems.map((i) => i.gid));
     } catch (err) {
@@ -613,6 +622,15 @@ export function MyRealTripSearchPanel() {
                 />
               ))}
             </div>
+            {totalCount > SEARCH_PAGE_SIZE && (
+              <div className="mt-3 flex justify-center">
+                <Pagination
+                  page={currentPage}
+                  totalPages={Math.max(1, Math.ceil(totalCount / SEARCH_PAGE_SIZE))}
+                  onChange={(nextPage) => handleSearch(nextPage)}
+                />
+              </div>
+            )}
           </>
         )}
       </div>

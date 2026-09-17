@@ -194,6 +194,51 @@ it('키워드를 입력하고 검색하면 결과 카드를 보여준다', async
   expect(screen.getByText('34,900원')).toBeInTheDocument();
 });
 
+// [검색 결과 페이지네이션](2026-09-17 사용자 지적: "총 71건 중 20건 표시.. 나머지
+// 51건은 어떻게 볼 수 있어?") — API/백엔드는 이미 page를 지원했지만 화면에 다음
+// 페이지로 넘어갈 UI가 없어 항상 1페이지(최대 20건)만 보였다.
+describe('검색 결과 페이지네이션 (2026-09-17)', () => {
+  it('전체 건수가 페이지 크기(20건)보다 많으면 페이지네이션을 보여준다', async () => {
+    vi.stubGlobal('fetch', mockFetch({ searchItems: [buildSearchItem()], searchTotalCount: 71 }));
+    render(<MyRealTripSearchPanel />);
+
+    fireEvent.change(screen.getByPlaceholderText('검색 키워드 (예: 서울 키즈 체험)'), { target: { value: '서울 키즈' } });
+    fireEvent.click(screen.getByText('검색'));
+
+    await screen.findByText(/총 71건 중 1건 표시/);
+    expect(screen.getByLabelText('다음 페이지')).toBeInTheDocument();
+  });
+
+  it('전체 건수가 페이지 크기 이하면 페이지네이션을 보여주지 않는다', async () => {
+    vi.stubGlobal('fetch', mockFetch({ searchItems: [buildSearchItem()], searchTotalCount: 1 }));
+    render(<MyRealTripSearchPanel />);
+
+    fireEvent.change(screen.getByPlaceholderText('검색 키워드 (예: 서울 키즈 체험)'), { target: { value: '서울 키즈' } });
+    fireEvent.click(screen.getByText('검색'));
+
+    await screen.findByText(/총 1건 중 1건 표시/);
+    expect(screen.queryByLabelText('다음 페이지')).not.toBeInTheDocument();
+  });
+
+  it('"다음 페이지"를 누르면 page=2로 다시 검색한다', async () => {
+    const fetchMock = mockFetch({ searchItems: [buildSearchItem()], searchTotalCount: 71 });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<MyRealTripSearchPanel />);
+
+    fireEvent.change(screen.getByPlaceholderText('검색 키워드 (예: 서울 키즈 체험)'), { target: { value: '서울 키즈' } });
+    fireEvent.click(screen.getByText('검색'));
+    await screen.findByText(/총 71건 중 1건 표시/);
+
+    fireEvent.click(screen.getByLabelText('다음 페이지'));
+
+    await waitFor(() => {
+      const calls = fetchMock.mock.calls.filter((c) => (c[0] as string).includes('/api/admin/myrealtrip/search'));
+      expect(calls).toHaveLength(2);
+      expect(JSON.parse((calls[1][1] as RequestInit).body as string).page).toBe(2);
+    });
+  });
+});
+
 it('검색 실패 시 에러 메시지를 보여준다', async () => {
   vi.stubGlobal('fetch', mockFetch({ searchError: '검색 키워드가 필요합니다.' }));
   render(<MyRealTripSearchPanel />);
