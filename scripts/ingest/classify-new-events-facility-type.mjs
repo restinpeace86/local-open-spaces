@@ -15,6 +15,7 @@ import { createClient } from '@supabase/supabase-js';
 import { loadEnv } from '../lib/load-env.mjs';
 import { classifyOne, sleep, REQUEST_INTERVAL_MS, CLASSIFICATION_TO_FACILITY_TYPE } from './lib/facility-classification.mjs';
 import { todayStartIsoKst } from './lib/kst-date-range.mjs';
+import { EVENTS_EXCLUDED_FACILITY_CLASSIFICATION_MINS } from './lib/category-min-groups.mjs';
 
 loadEnv();
 
@@ -37,6 +38,13 @@ const TARGET_AUDIENCES = ['INFANT', 'KIDS_PRE', 'KIDS_SCHOOL', 'FAMILY'];
 // (일회성 백필 스크립트와 동일한 안전장치).
 const CONSECUTIVE_RATE_LIMIT_ABORT_THRESHOLD = 2;
 
+// [실내/야외 LLM 분류 배치 제외 대상](2026-09-18 사용자 지시): 백필 스크립트
+// (scripts/classify-events-facility-type.mjs)와 동일한 이유로 체육시설/배움·교육/
+// 공공청사·행정 대분류는 제외한다 — NULL 3값 논리 함정을 피하기 위해 클라이언트 측 필터링.
+function isExcludedFromFacilityClassification(categoryMin) {
+  return categoryMin != null && EVENTS_EXCLUDED_FACILITY_CLASSIFICATION_MINS.includes(categoryMin);
+}
+
 async function fetchTodayNewRows() {
   const { data, error } = await supabase
     .from('events')
@@ -46,15 +54,18 @@ async function fetchTodayNewRows() {
     .gte('created_at', todayStartIsoKst())
     .order('id');
   if (error) throw new Error(`대상 조회 실패: ${error.message}`);
-  return data;
+  const filtered = data.filter((row) => !isExcludedFromFacilityClassification(row.category_min));
+  return { rows: filtered, excludedCount: data.length - filtered.length };
 }
 
 const DRY_RUN = process.argv.includes('--dry-run');
 
 async function run() {
   console.log(`📋 오늘(KST) 신규 반영분 조회 중 (created_at >= ${todayStartIsoKst()})...`);
-  const rows = await fetchTodayNewRows();
-  console.log(`✅ 대상 ${rows.length}건 확인.${DRY_RUN ? ' (--dry-run: DB 저장 생략)' : ''}`);
+  const { rows, excludedCount } = await fetchTodayNewRows();
+  console.log(
+    `✅ 대상 ${rows.length}건 확인(체육시설/배움교육/공공청사행정 대분류 ${excludedCount}건은 토큰 낭비 방지를 위해 제외).${DRY_RUN ? ' (--dry-run: DB 저장 생략)' : ''}`
+  );
   if (rows.length === 0) {
     console.log('오늘 신규로 조건에 맞는 건이 없습니다 — 종료합니다.');
     return;

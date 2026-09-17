@@ -210,6 +210,15 @@ export function buildEventRow({
   // 가격 크롤링 Fallback의 "원천 URL(source_url)" 근거이자, 존재 자체만으로도 유저에게
   // "자세히 보기" 링크로 유용하다.
   sourceUrl = null,
+  // [원천 필드 직접 반영](2026-09-18 사용자 지시): "USETGTINFO: 성인으로 되어있는거는
+  // 연령 ADULT로 자동으로 박아줘" — target_audience는 지금까지 어떤 어댑터도 이 함수에
+  // 넘기지 않고(별도 1회성 마이그레이션 scripts/migrations/2026-08-27-apply-target-
+  // audience-10tier.mjs만 채웠음) categoryMin/categoryMinSource와 동일한 "RAW 원천 필드
+  // 직접 태깅" 규약을 그대로 따른다. upsertRowsSafeMerge()가 컬럼 단위로 기존 값을
+  // 보존하므로(scripts/ingest/lib/supabase-admin.mjs) 이미 값이 채워진 행(수동 확정 포함)은
+  // 재수집으로 덮어쓰이지 않는다 — NULL이었던 행만 새로 채워진다.
+  targetAudience = null,
+  targetAudienceSource = null,
 }) {
   if (!externalId || !title || !startDate || !endDate) return null;
   if (locationPrecision === 'UNKNOWN') {
@@ -254,5 +263,7 @@ export function buildEventRow({
     category_min_source: categoryMinSource,
     price_text: priceText,
     source_url: sourceUrl,
+    target_audience: targetAudience,
+    target_audience_source: targetAudienceSource,
   };
 }

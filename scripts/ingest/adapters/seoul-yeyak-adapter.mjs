@@ -197,6 +197,18 @@ export class SeoulYeyakAdapter extends BaseCollectorAdapter {
         // 지나가지만, Decision 017 9항의 "공간형 시설은 좁은 키즈 판별/일반 UI 카테고리
         // 라벨 배제" 규칙은 유지해야 한다(둘 다 아래에서 참조).
         const isSpaceLikeMaxClass = item.MAXCLASSNM === '체육시설' || item.MAXCLASSNM === '공간시설';
+        // [원천 필드 직접 반영](2026-09-18 사용자 지시): "PAYATNM: 무료로 되어있는데
+        // 이건 가격이 무료로 되어있는거 아니야? 해당 항목들에 대하여서는 가격 무료로
+        // 박아줘" — PAYATNM은 유료/무료만 구분하는 구조화된 필드라 텍스트 마이닝
+        // (parsePriceFromText)보다 신뢰도가 높다. DTLCONT 본문에 "이용료: 무료"처럼
+        // 라벨과 함께 나오지 않으면 parsePriceFromText가 못 찾아 price_text가 계속
+        // null로 남던 문제를 해결한다. PAYATNM이 무료가 아니면 기존 텍스트 파싱 그대로.
+        const priceText = item.PAYATNM === '무료' ? '무료' : parsePriceFromText(item.DTLCONT);
+        // [원천 필드 직접 반영](2026-09-18 사용자 지시): "USETGTINFO: 성인으로 되어있는거는
+        // 연령 ADULT로 자동으로 박아줘" — 정확히 "성인" 단독 값일 때만 반영한다(다른 대상과
+        // 섞인 값은 기존 target-audience-taxonomy.mjs 후속 배치가 별도로 판정, 제3장 제5조
+        // 추측 금지 — 지정받지 않은 케이스까지 넓혀 처리하지 않는다).
+        const targetAudience = item.USETGTINFO === '성인' ? 'ADULT' : null;
 
         if (table === 'events') {
           const startDate = toDateOnly(item.SVCOPNBGNDT);
@@ -253,7 +265,10 @@ export class SeoulYeyakAdapter extends BaseCollectorAdapter {
             // 구조화된 가격 필드가 없어(PAYATNM은 유료/무료 구분뿐, 실측 확인) DTLCONT(상세
             // 안내문)에서 라벨+금액 패턴을 찾는다. reservation_url이 이미 SVCURL과 동등한
             // 값(reservationUrl, 위 참고)이라 source_url을 별도로 중복 저장하지 않는다.
-            priceText: parsePriceFromText(item.DTLCONT),
+            // (2026-09-18) PAYATNM이 명시적으로 무료면 그 구조화된 신호를 우선한다(위 참고).
+            priceText,
+            targetAudience,
+            targetAudienceSource: targetAudience ? 'RAW_FIELD' : null,
           });
           if (!row) {
             bumpError(errorCounts, 'SCHEMA_BUILD_FAIL');

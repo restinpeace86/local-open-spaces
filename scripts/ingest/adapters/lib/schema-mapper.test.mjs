@@ -59,4 +59,21 @@ describe('buildEventRow', () => {
   it('startDate/endDate가 없으면 여전히 드롭한다(events.start_date/end_date는 DB NOT NULL 제약)', () => {
     expect(buildEventRow({ externalId: 'A', title: '제목', locationPrecision: 'UNKNOWN' })).toBeNull();
   });
+
+  it('targetAudience/targetAudienceSource를 넘기면 target_audience/target_audience_source 컬럼에 그대로 담는다', () => {
+    const row = buildEventRow({
+      ...BASE,
+      locationPrecision: 'UNKNOWN',
+      targetAudience: 'ADULT',
+      targetAudienceSource: 'RAW_FIELD',
+    });
+    expect(row.target_audience).toBe('ADULT');
+    expect(row.target_audience_source).toBe('RAW_FIELD');
+  });
+
+  it('targetAudience를 넘기지 않으면 target_audience/target_audience_source는 null이다(기존 동작 유지)', () => {
+    const row = buildEventRow({ ...BASE, locationPrecision: 'UNKNOWN' });
+    expect(row.target_audience).toBeNull();
+    expect(row.target_audience_source).toBeNull();
+  });
 });

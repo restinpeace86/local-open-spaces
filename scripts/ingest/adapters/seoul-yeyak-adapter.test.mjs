@@ -189,17 +189,62 @@ describe('SeoulYeyakAdapter', () => {
     // [가격 정보 파싱 고도화](2026-09-11 사용자 지시, todo.md 개선사항7-1): 이 소스는
     // 구조화된 가격 필드가 없어(PAYATNM은 유료/무료뿐) DTLCONT(상세 안내문)에서
     // 라벨+금액 패턴을 찾는다.
-    it('DTLCONT에 라벨+금액이 있으면 events.price_text로 추출한다', () => {
+    it('유료 항목이고 DTLCONT에 라벨+금액이 있으면 events.price_text로 추출한다', () => {
       const adapter = new SeoulYeyakAdapter();
-      const item = { ...BASE_ITEM, MAXCLASSNM: '문화체험', DTLCONT: '이용료: 15,000원 (성인 기준)' };
+      const item = { ...BASE_ITEM, MAXCLASSNM: '문화체험', PAYATNM: '유료', DTLCONT: '이용료: 15,000원 (성인 기준)' };
       const [row] = adapter.transformSplit([item]).events;
       expect(row.price_text).toBe('이용료 15,000원');
     });
 
-    it('DTLCONT에 금액 정보가 없으면 events.price_text는 null이다', () => {
+    it('유료 항목인데 DTLCONT에 금액 정보가 없으면 events.price_text는 null이다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const [row] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '문화체험', PAYATNM: '유료' }]).events;
+      expect(row.price_text).toBeNull();
+    });
+
+    // [원천 필드 직접 반영](2026-09-18 사용자 지시): "PAYATNM: 무료로 되어있는데 이건
+    // 가격이 무료로 되어있는거 아니야? 해당 항목들에 대하여서는 가격 무료로 박아줘" —
+    // BASE_ITEM.PAYATNM은 '무료'이고 DTLCONT에는 라벨+금액 패턴이 없어(parsePriceFromText가
+    // 못 찾음) 이 구조화된 신호가 없었다면 price_text가 null로 남았을 케이스다.
+    it('PAYATNM이 무료면 DTLCONT에 별도 금액 정보가 없어도 price_text를 "무료"로 채운다', () => {
       const adapter = new SeoulYeyakAdapter();
       const [row] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '문화체험' }]).events;
-      expect(row.price_text).toBeNull();
+      expect(row.price_text).toBe('무료');
+    });
+
+    it('PAYATNM이 무료면 DTLCONT에 금액 패턴이 있어도 구조화된 PAYATNM을 우선한다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const [row] = adapter.transformSplit([
+        { ...BASE_ITEM, MAXCLASSNM: '문화체험', DTLCONT: '이용료: 15,000원' },
+      ]).events;
+      expect(row.price_text).toBe('무료');
+    });
+  });
+
+  // [원천 필드 직접 반영](2026-09-18 사용자 지시): "USETGTINFO: 성인으로 되어있는거는
+  // 연령 ADULT로 자동으로 박아줘".
+  describe('transformSplit — USETGTINFO 원천 필드 직접 반영(target_audience)', () => {
+    it('USETGTINFO가 정확히 "성인"이면 target_audience를 ADULT로, source를 RAW_FIELD로 채운다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const [row] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '문화체험', USETGTINFO: '성인' }]).events;
+      expect(row.target_audience).toBe('ADULT');
+      expect(row.target_audience_source).toBe('RAW_FIELD');
+    });
+
+    it('USETGTINFO가 "성인"을 포함하지만 정확히 일치하지 않으면(다른 대상과 혼재) 반영하지 않는다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const [row] = adapter.transformSplit([
+        { ...BASE_ITEM, MAXCLASSNM: '문화체험', USETGTINFO: '성인(비대면)' },
+      ]).events;
+      expect(row.target_audience).toBeNull();
+      expect(row.target_audience_source).toBeNull();
+    });
+
+    it('USETGTINFO가 "성인"이 아니면 target_audience를 건드리지 않는다(기본 BASE_ITEM=가족)', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const [row] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '문화체험' }]).events;
+      expect(row.target_audience).toBeNull();
+      expect(row.target_audience_source).toBeNull();
     });
   });
 

@@ -3,6 +3,7 @@ import {
   buildCategoryMinGroups,
   buildOpenSpacesCategoryMinGroups,
   buildEventsCategoryMinGroups,
+  EVENTS_EXCLUDED_FACILITY_CLASSIFICATION_MINS,
   type CategoryMinGroup,
 } from './category-min-groups';
 
@@ -125,5 +126,24 @@ describe('buildEventsCategoryMinGroups', () => {
     const result = buildEventsCategoryMinGroups(['교육체험']);
     expect(result.find((g) => g.major === '자연/체험')?.minors).toContain('교육체험');
     expect(result.find((g) => g.major === '배움/교육')).toBeUndefined();
+  });
+});
+
+// [실내/야외 LLM 분류 배치 제외 대상](2026-09-18 사용자 지시): "원천대분류가 체육시설,
+// 배움/교육, 공공청사/행정인건 제외시켜줘. 예를들어 공간시설/녹화장소나, 체육시설/파크골프장이나".
+describe('EVENTS_EXCLUDED_FACILITY_CLASSIFICATION_MINS', () => {
+  it('체육시설/배움·교육/공공청사·행정 3개 대분류의 중분류를 포함한다', () => {
+    expect(EVENTS_EXCLUDED_FACILITY_CLASSIFICATION_MINS).toContain('테니스장'); // 체육시설
+    expect(EVENTS_EXCLUDED_FACILITY_CLASSIFICATION_MINS).toContain('골프장'); // 체육시설
+    expect(EVENTS_EXCLUDED_FACILITY_CLASSIFICATION_MINS).toContain('교양/어학'); // 배움/교육
+    expect(EVENTS_EXCLUDED_FACILITY_CLASSIFICATION_MINS).toContain('녹화장소'); // 공공청사/행정
+    expect(EVENTS_EXCLUDED_FACILITY_CLASSIFICATION_MINS).toContain('회의실'); // 공공청사/행정
+  });
+
+  it('사용자가 지정하지 않은 대분류(문화/축제·자연/체험·키즈/육아·기타)의 중분류는 포함하지 않는다', () => {
+    expect(EVENTS_EXCLUDED_FACILITY_CLASSIFICATION_MINS).not.toContain('캠핑장'); // 자연/체험
+    expect(EVENTS_EXCLUDED_FACILITY_CLASSIFICATION_MINS).not.toContain('공공키즈카페'); // 키즈/육아
+    expect(EVENTS_EXCLUDED_FACILITY_CLASSIFICATION_MINS).not.toContain('지역축제/페스티벌'); // 문화/축제
+    expect(EVENTS_EXCLUDED_FACILITY_CLASSIFICATION_MINS).not.toContain('기타'); // 기타(사용자 미지정)
   });
 });

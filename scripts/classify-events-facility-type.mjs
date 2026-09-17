@@ -17,6 +17,7 @@ import { fileURLToPath } from 'url';
 import { createClient } from '@supabase/supabase-js';
 import { loadEnv } from './lib/load-env.mjs';
 import { classifyOne, sleep, REQUEST_INTERVAL_MS, CLASSIFICATION_TO_FACILITY_TYPE } from './ingest/lib/facility-classification.mjs';
+import { EVENTS_EXCLUDED_FACILITY_CLASSIFICATION_MINS } from './ingest/lib/category-min-groups.mjs';
 
 loadEnv();
 
@@ -62,6 +63,16 @@ const TARGET_AUDIENCES = ['INFANT', 'KIDS_PRE', 'KIDS_SCHOOL', 'FAMILY'];
 // 한도를 소진했다. 완전 순차 실행(동시 1개) + 요청 사이 고정 대기로 바꿨다.
 const CONCURRENCY = 1;
 
+// [실내/야외 LLM 분류 배치 제외 대상](2026-09-18 사용자 지시): "원천대분류가 체육시설,
+// 배움/교육, 공공청사/행정인건 제외시켜줘 ... 안쓰는것들이니깐 해봤자 토큰만 낭비돼." —
+// SQL의 `NOT IN`은 category_min이 NULL인 행까지 결과에서 빠지는 3값 논리 함정이 있어(NULL
+// NOT IN (...)은 NULL이라 WHERE 조건이 거짓 취급) 클라이언트 측에서 필터링한다. category_min이
+// NULL이거나 제외 목록에 없는 값이면(즉 아직 미분류거나 문화/축제·자연/체험·키즈/육아 등
+// 실제 쓰는 대분류면) 그대로 대상에 남긴다.
+function isExcludedFromFacilityClassification(categoryMin) {
+  return categoryMin != null && EVENTS_EXCLUDED_FACILITY_CLASSIFICATION_MINS.includes(categoryMin);
+}
+
 async function fetchTargetRows() {
   const pageSize = 500;
   let from = 0;
@@ -80,7 +91,8 @@ async function fetchTargetRows() {
     if (data.length < pageSize) break;
     from += pageSize;
   }
-  return rows;
+  const filtered = rows.filter((row) => !isExcludedFromFacilityClassification(row.category_min));
+  return { rows: filtered, excludedCount: rows.length - filtered.length };
 }
 
 // 동시 실행 수를 제한하는 아주 단순한 워커 풀(외부 의존성 추가 없이).
@@ -111,14 +123,16 @@ const CONSECUTIVE_RATE_LIMIT_ABORT_THRESHOLD = 2;
 
 async function run() {
   console.log('📋 대상 조회 중 (is_active=true AND target_audience IN INFANT/KIDS_PRE/KIDS_SCHOOL/FAMILY)...');
-  let rows = await fetchTargetRows();
+  const { rows: fetchedRows, excludedCount } = await fetchTargetRows();
+  let rows = fetchedRows;
 
   const progress = FORCE ? {} : loadProgress();
   const alreadyDoneCount = rows.filter((r) => progress[r.id]).length;
   if (!FORCE) rows = rows.filter((r) => !progress[r.id]);
   if (LIMIT) rows = rows.slice(0, LIMIT);
   console.log(
-    `✅ 대상 ${rows.length}건 확인(이전 실행에서 이미 처리된 ${alreadyDoneCount}건은 건너뜀).${DRY_RUN ? ' (--dry-run: DB 저장 생략)' : ''}`
+    `✅ 대상 ${rows.length}건 확인(이전 실행에서 이미 처리된 ${alreadyDoneCount}건은 건너뜀, ` +
+      `체육시설/배움교육/공공청사행정 대분류 ${excludedCount}건은 토큰 낭비 방지를 위해 제외).${DRY_RUN ? ' (--dry-run: DB 저장 생략)' : ''}`
   );
   if (rows.length === 0) {
     console.log('처리할 대상이 없습니다.');

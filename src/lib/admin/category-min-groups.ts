@@ -139,3 +139,17 @@ const EVENTS_ALLOWED_CATEGORY_MAJORS = ['문화/축제', '자연/체험', '키�
 export const EVENTS_ALLOWED_CATEGORY_MINS: string[] = EVENTS_GROUPS_STATIC.filter((g) =>
   EVENTS_ALLOWED_CATEGORY_MAJORS.includes(g.major)
 ).flatMap((g) => g.minors);
+
+// [실내/야외 LLM 분류 배치 제외 대상](2026-09-18 사용자 지시): "실내/실외 자동으로 배치로
+// 수행하는거 관련하여 events에서 원천대분류가 체육시설, 배움/교육, 공공청사/행정인건
+// 제외시켜줘. 예를들어 공간시설/녹화장소나, 체육시설/파크골프장이나.. 이것들은 안쓰는것들이니깐
+// 해봤자 토큰만 낭비돼." — 파크골프장 대관, 회의실/녹화장소 대관처럼 "나들이/체험" 성격이 아닌
+// 시설 대관·행정 슬롯 데이터는 실내/야외 판단 자체가 무의미하다. 위 EVENTS_ALLOWED_CATEGORY_MINS
+// (문화/축제·자연/체험·키즈/육아 3개 대분류)의 반대 목록을 새로 만들지 않고, 사용자가 명시적으로
+// 지정한 3개 대분류(체육시설/배움·교육/공공청사·행정)의 minors만 뽑는다(기타 대분류는 언급하지
+// 않아 제외 대상에 넣지 않음, 제3장 제5조 추측 금지).
+const EVENTS_EXCLUDED_FACILITY_CLASSIFICATION_MAJORS = ['체육시설', '배움/교육', '공공청사/행정'];
+
+export const EVENTS_EXCLUDED_FACILITY_CLASSIFICATION_MINS: string[] = EVENTS_GROUPS_STATIC.filter((g) =>
+  EVENTS_EXCLUDED_FACILITY_CLASSIFICATION_MAJORS.includes(g.major)
+).flatMap((g) => g.minors);
