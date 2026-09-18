@@ -945,6 +945,88 @@ describe('getCategoryMinFeed (대분류·중분류 드릴다운)', () => {
     expect(page2.map((item) => item.id)).toEqual(['e3', 'e4']);
     expect(page3.map((item) => item.id)).toEqual(['e5']);
   });
+
+  // [todo.md 개선사항 4 되돌림](2026-09-19 사용자 지시): "open_spaces에 있는 캠핑장/
+  // 체험휴양마을 등을 이벤트픽에도 보여주던 거 다시 안보이게 하자 — 진짜 이벤트-스팟
+  // 연결이 있을 때만" — 예전엔 '캠핑장'처럼 옛 SHARED_OPEN_SPACES_CATEGORY_MINS에 있던
+  // 중분류는 진짜 이벤트가 없어도 open_spaces 원본을 item_type='EVENT'로 바꿔치기해
+  // 보여줬다. 이제는 그 경로 자체가 삭제됐으므로, open_spaces에 아무리 많은 행이 있어도
+  // 진짜 events 행이 없으면 빈 배열이어야 한다(open_spaces 테이블은 아예 조회되지 않아야
+  // 하지만, 최소 요건으로 "결과에 섞여 나오지 않는다"를 검증한다).
+  it('과거 open_spaces 공유 대상이던 중분류도 이제 진짜 이벤트가 없으면 빈 배열이다', async () => {
+    const spaceRow = { id: 'space-1', name: '어딘가 캠핑장', category_min: '캠핑장', location: null };
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () =>
+        Promise.resolve({
+          from: (table: string) => (table === 'open_spaces' ? makeFilteringChainable([spaceRow]) : makeFilteringChainable([])),
+        }),
+    }));
+
+    const { getCategoryMinFeed } = await import('./get-home-feed');
+    const items = await getCategoryMinFeed('캠핑장', 20, { sigunguName: '성남시 분당구' });
+
+    expect(items).toEqual([]);
+  });
+});
+
+// [todo.md 개선사항 4 되돌림](2026-09-19 사용자 지시): getCategoryMinCounts가 더 이상
+// open_spaces 건수를 events 건수에 합산하지 않는지 검증한다 — 진짜 events 카운트가
+// 0이면 결과도 0이어야 한다(옛날처럼 open_spaces 건수로 부풀려지면 안 됨).
+describe('getCategoryMinCounts', () => {
+  afterEach(() => {
+    vi.doUnmock('@/lib/supabase/server');
+    vi.resetModules();
+  });
+
+  function makeCountThenable(counts: { events?: Record<string, number>; open_spaces?: Record<string, number> }) {
+    return (table: string) => {
+      let categoryMin: string | undefined;
+      const builder: Record<string, unknown> = {
+        select: () => builder,
+        eq: (column: string, value: unknown) => {
+          if (column === 'category_min') categoryMin = value as string;
+          return builder;
+        },
+        in: () => builder,
+        lte: () => builder,
+        gte: () => builder,
+        then: (resolve: (value: { count: number; error: null }) => void) => {
+          const tableCounts = table === 'open_spaces' ? counts.open_spaces : counts.events;
+          resolve({ count: categoryMin ? tableCounts?.[categoryMin] ?? 0 : 0, error: null });
+        },
+      };
+      return builder;
+    };
+  }
+
+  it('진짜 이벤트 카운트가 0이면 open_spaces에 수천 건이 있어도 0을 반환한다(개선사항4 되돌림)', async () => {
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () =>
+        Promise.resolve({
+          from: makeCountThenable({ events: { 캠핑장: 0 }, open_spaces: { 캠핑장: 3857 } }),
+        }),
+    }));
+
+    const { getCategoryMinCounts } = await import('./get-home-feed');
+    const counts = await getCategoryMinCounts(['캠핑장']);
+
+    expect(counts['캠핑장']).toBe(0);
+  });
+
+  it('진짜 이벤트 카운트는 그대로 반영한다', async () => {
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () =>
+        Promise.resolve({
+          from: makeCountThenable({ events: { 도시농업: 12 } }),
+        }),
+    }));
+
+    const { getCategoryMinCounts } = await import('./get-home-feed');
+    const counts = await getCategoryMinCounts(['도시농업']);
+
+    expect(counts['도시농업']).toBe(12);
+  });
 });
 
 // [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "Hero 카드 구역 - 위치 기반 정렬 순서")
