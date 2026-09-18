@@ -74,10 +74,34 @@ const AGE_ORDER = ['INFANT', 'KIDS_PRE', 'KIDS_SCHOOL', 'TEEN', 'YOUTH', 'ADULT'
 // 2.1절 공용 키워드 표(0순위+2단계) + 승인된 KIDS_SCHOOL("키즈") 확장. 순서 = 매칭 우선순위
 // (앞 태그부터 검사, 첫 매칭 채택) — "초등학생"이 KIDS_SCHOOL에서 먼저 잡혀야 TEEN의 "학생"
 // 문맥 매칭으로 잘못 새지 않는다.
+// [초등 학년 경계 재정의](2026-09-18 사용자 지시): "기존에 KIDS_SCHOOL이 초등학생을
+// 명시적으로 가리켰다면 이젠 초등학교 저학년만 가리키는 걸로 할까 해서" — "초등"/
+// "초등학생"을 KEYWORD_TAGS의 무조건 매칭 목록에서 빼고, 아래 명시적 학년 신호가 있을
+// 때만 판정한다(사용자 확인: 학년 미명시 다수는 "현재 우리 대상일 수도 있는 연령"이라
+// NULL로 남겨 관리자가 직접 수동 판단한다 — 추측 금지). "어린이"/"아동"/"키즈"는 학년
+// 개념이 없는 일반 아동 지칭이라 그대로 무조건 매칭을 유지한다.
+const ELEMENTARY_MENTION_PATTERN = /초등학생|초등/;
+// 사용자 확인: "명시적 단어만(고학년/4학년이상 등)" — "4~6학년"처럼 숫자 범위만 있고
+// 이 단어들이 없으면 신호로 인정하지 않는다(추측 금지).
+const ELEMENTARY_HIGH_GRADE_WORDS_PATTERN = /고학년|4\s*학년\s*이상/;
+const ELEMENTARY_LOW_GRADE_WORDS_PATTERN = /저학년/;
+
+// [실측 확인] 실제 원천 데이터(USETGTINFO 등)는 거의 항상 "초등학생(4-6학년 학급..)"
+// 처럼 학년 정보가 괄호 안에 있는데, tokenize()가 괄호 내용을 통째로 지운다 — 그래서
+// 이 함수는 tokenize() 이전의 "원본 문자열 전체"를 받아 판단해야 한다(resolveViaRawField
+// 참고). resolveViaText처럼 애초에 tokenize를 거치지 않는 경로에서는 원본 텍스트를
+// 그대로 넘기면 된다.
+function resolveElementaryGradeSignal(text, allowKidFamily) {
+  if (!ELEMENTARY_MENTION_PATTERN.test(text)) return null;
+  if (ELEMENTARY_HIGH_GRADE_WORDS_PATTERN.test(text)) return 'TEEN';
+  if (allowKidFamily && ELEMENTARY_LOW_GRADE_WORDS_PATTERN.test(text)) return 'KIDS_SCHOOL';
+  return null;
+}
+
 export const KEYWORD_TAGS = [
   { tag: 'INFANT', include: ['영아', '영유아', '신생아', '젖먹이'], kidFamily: true },
   { tag: 'KIDS_PRE', include: ['유아', '미취학', '유치원'], kidFamily: true },
-  { tag: 'KIDS_SCHOOL', include: ['어린이', '초등학생', '초등', '아동', '키즈'], kidFamily: true },
+  { tag: 'KIDS_SCHOOL', include: ['어린이', '아동', '키즈'], kidFamily: true },
   { tag: 'FAMILY', include: ['가족'], kidFamily: true },
   { tag: 'TEEN', include: ['청소년', '중학생', '고등학생', '중고생', '중고등'], kidFamily: false },
   { tag: 'YOUTH', include: ['청년'], kidFamily: false },
@@ -113,10 +137,25 @@ function hasNegativeOverride(text, keywords = NEGATIVE_OVERRIDE_KEYWORDS) {
 // 찾는다. allowKidFamily=false면 INFANT/KIDS_PRE/KIDS_SCHOOL/FAMILY는 건너뛴다(0단계 소거).
 export function matchTag(text, { allowKidFamily = true } = {}) {
   if (!text) return null;
+
+  // [초등 학년 경계 재정의](2026-09-18): 명시적 고학년/저학년 신호를 다른 무엇보다도
+  // 먼저 확인한다 — "초등학생, 가족" 같은 텍스트에서도 학년 신호가 있으면 그 신호를
+  // 우선한다(기존에도 KIDS_SCHOOL이 KEYWORD_TAGS에서 FAMILY보다 앞이라 우선순위 자체는
+  // 동일하게 유지).
+  const elementaryGradeTag = resolveElementaryGradeSignal(text, allowKidFamily);
+  if (elementaryGradeTag) return elementaryGradeTag;
+  const hasElementaryMention = ELEMENTARY_MENTION_PATTERN.test(text);
+
   for (const rule of KEYWORD_TAGS) {
     if (rule.kidFamily && !allowKidFamily) continue;
     if (rule.include.some((kw) => text.includes(kw))) return rule.tag;
   }
+
+  // 학년 미명시 초등 언급은 아래 "학생" 일반 폴백(TEEN)으로 새지 않도록 여기서 명시적으로
+  // 판정을 보류한다(제3장 제5조 추측 금지 — "초등학생"의 "학생"만 보고 TEEN으로 단정하지
+  // 않음). 다른 키워드(어린이/아동/키즈/가족 등)가 함께 있었다면 위 루프에서 이미 반환됐다.
+  if (hasElementaryMention) return null;
+
   if (text.includes('학생') && !TEEN_STUDENT_EXCLUDE.some((kw) => text.includes(kw))) return 'TEEN';
   return null;
 }
@@ -143,10 +182,22 @@ export function resolveViaRawField(rawData) {
     if (typeof value !== 'string' || !value.trim()) continue;
 
     const allowKidFamily = !hasNegativeOverride(value, RAW_FIELD_NEGATIVE_OVERRIDE_KEYWORDS);
+    // [초등 학년 경계 재정의](2026-09-18): tokenize()가 괄호 안 내용을 지워버리기
+    // 전에, 원본 값 전체에서 고학년/저학년 명시 신호부터 찾아 둔다(실측 확인: 실제
+    // 값은 "초등학생(4-6학년 학급..)"처럼 학년 정보가 거의 항상 괄호 안에 있다).
+    const elementaryGradeTag = resolveElementaryGradeSignal(value, allowKidFamily);
     const tokens = tokenize(value);
     if (tokens.length === 0) continue;
 
-    const resolvedTags = tokens.map((token) => matchTag(token, { allowKidFamily }));
+    const resolvedTags = tokens.map((token) => {
+      const tag = matchTag(token, { allowKidFamily });
+      // 토큰 자체(괄호 제거 후)는 "초등학생"만 남아 matchTag()가 더 이상 판정하지
+      // 못하지만, 원본 값에서 미리 찾아 둔 학년 신호가 있으면 이 토큰의 값으로
+      // 채택한다 — 신호가 없으면 그대로 null(UNRESOLVED_TOKEN)로 남아 이 필드
+      // 전체를 포기하고 CATEGORY/TEXT 단계로 넘어간다(수동 판단 대기).
+      if (tag === null && ELEMENTARY_MENTION_PATTERN.test(token)) return elementaryGradeTag;
+      return tag;
+    });
     if (resolvedTags.some((tag) => tag === null)) continue; // UNRESOLVED_TOKEN
     const distinctTags = new Set(resolvedTags);
     if (distinctTags.size === 1) {

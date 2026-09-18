@@ -11,8 +11,39 @@ import {
 } from './target-audience-taxonomy.mjs';
 
 describe('matchTag', () => {
-  it('우선순위 표 순서대로 첫 매칭을 채택한다(초등학생은 KIDS_SCHOOL, TEEN 학생 문맥으로 새지 않음)', () => {
-    expect(matchTag('초등학생 대상 체험')).toBe('KIDS_SCHOOL');
+  // [초등 학년 경계 재정의](2026-09-18 사용자 지시): "기존에 KIDS_SCHOOL이 초등학생을
+  // 명시적으로 가리켰다면 이젠 초등학교 저학년만 가리키는 걸로 할까 해서" — 학년이
+  // 명시되지 않은 "초등학생" 다수는 더 이상 자동으로 KIDS_SCHOOL로 단정하지 않고
+  // NULL로 남긴다(관리자 수동 판단 대기). TEEN의 "학생" 폴백으로도 새지 않아야 한다.
+  it('학년이 명시되지 않은 초등학생 언급은 더 이상 자동 분류하지 않는다(NULL — 수동 판단 대기)', () => {
+    expect(matchTag('초등학생 대상 체험')).toBeNull();
+    expect(matchTag('초등 방문 프로그램')).toBeNull();
+  });
+
+  it('명시적 고학년 신호("고학년"/"4학년이상")가 있으면 TEEN으로 매칭된다', () => {
+    expect(matchTag('초등학생(고학년) 대상 체험')).toBe('TEEN');
+    expect(matchTag('초등학교 4학년 이상 참가 가능')).toBe('TEEN');
+    expect(matchTag('초등 4학년이상')).toBe('TEEN');
+  });
+
+  it('명시적 저학년 신호("저학년")가 있으면 KIDS_SCHOOL로 매칭된다', () => {
+    expect(matchTag('초등 저학년 동반가족')).toBe('KIDS_SCHOOL');
+  });
+
+  it('숫자 학년 범위만 있고 명시적 단어가 없으면 신호로 인정하지 않는다(사용자 확인: "명시적 단어만")', () => {
+    expect(matchTag('초등학생(4-6학년 학급)')).toBeNull();
+    expect(matchTag('초등학생(1~3학년 대상)')).toBeNull();
+  });
+
+  it('allowKidFamily=false면 저학년 신호는 무시하지만 고학년(TEEN)은 그대로 매칭된다', () => {
+    expect(matchTag('초등 저학년 학부모 교육', { allowKidFamily: false })).toBeNull();
+    expect(matchTag('초등학교 고학년 학부모 교육', { allowKidFamily: false })).toBe('TEEN');
+  });
+
+  it('"어린이"/"아동"/"키즈"는 학년 개념이 없어 그대로 무조건 KIDS_SCHOOL로 매칭된다', () => {
+    expect(matchTag('어린이 체험 프로그램')).toBe('KIDS_SCHOOL');
+    expect(matchTag('아동 미술 교실')).toBe('KIDS_SCHOOL');
+    expect(matchTag('키즈 댄스 클래스')).toBe('KIDS_SCHOOL');
   });
 
   it('허용된 "학생" 문맥은 TEEN으로 매칭된다', () => {
@@ -72,6 +103,45 @@ describe('resolveViaRawField (0순위)', () => {
     // "성인(난임)"은 kidFamily 태그에서만 배제될 뿐, ADULT로는 정상 매칭된다(완전 제외가 아님).
     expect(resolveViaRawField({ USETGTINFO: '성인(난임)' })).toEqual({ tag: 'ADULT', viaField: 'USETGTINFO' });
   });
+
+  // [초등 학년 경계 재정의](2026-09-18 사용자 지시): 실제 원천 데이터(USETGTINFO)는
+  // 거의 항상 "초등학생(4-6학년 학급..)"처럼 학년 정보가 괄호 안에 있는데, tokenize()가
+  // 괄호 내용을 지워버린다 — 그래도 원본 값 전체에서 미리 찾아 둔 학년 신호를 반영해야
+  // 한다(실측 데이터 그대로: "초등학생(4-6학년 학급(반별신청), 돌봄단체)" 등).
+  describe('[초등 학년 경계 재정의] 괄호 안 학년 신호', () => {
+    it('괄호 안에 고학년 명시 신호가 있으면 TEEN으로 판정한다', () => {
+      expect(resolveViaRawField({ USETGTINFO: '초등학생(4-6학년 학급(반별신청), 돌봄단체)' })).toBeNull();
+      // 위 값은 실제로는 "고학년"/"4학년이상" 단어가 없고 숫자 범위만 있어(사용자 확인:
+      // 명시적 단어만 인정) UNRESOLVED_TOKEN → null이 맞다. 아래가 실제 TEEN이 되는 케이스.
+      expect(resolveViaRawField({ USETGTINFO: '초등학생(초등학교 고학년)' })).toEqual({
+        tag: 'TEEN',
+        viaField: 'USETGTINFO',
+      });
+      expect(resolveViaRawField({ USETGTINFO: '초등학생(초등학교 4학년 이상)' })).toEqual({
+        tag: 'TEEN',
+        viaField: 'USETGTINFO',
+      });
+    });
+
+    it('괄호 안에 저학년 명시 신호가 있으면 KIDS_SCHOOL로 판정한다', () => {
+      expect(resolveViaRawField({ USETGTINFO: '초등학생(초등 저학년 동반가족)' })).toEqual({
+        tag: 'KIDS_SCHOOL',
+        viaField: 'USETGTINFO',
+      });
+    });
+
+    it('학년 신호가 전혀 없는 초등학생 언급(출생연도 등)은 null(수동 판단 대기)이다', () => {
+      expect(resolveViaRawField({ USETGTINFO: '초등학생(2019년생~2014년생)' })).toBeNull();
+      expect(resolveViaRawField({ USETGTINFO: '초등학생' })).toBeNull();
+    });
+
+    it('다른 대상과 함께 있어도 초등학생 쪽 학년 신호가 없으면 전체가 UNRESOLVED_TOKEN이다', () => {
+      // 실측 데이터 그대로: " 성인(성인), 청소년(중,고등학생), 초등학생(2019년생~2014년생)"
+      expect(
+        resolveViaRawField({ USETGTINFO: '성인(성인), 청소년(중,고등학생), 초등학생(2019년생~2014년생)' })
+      ).toBeNull();
+    });
+  });
 });
 
 describe('resolveViaCategory (1단계 FACILITY/KIDS_PRE/YOUTH 판정)', () => {
@@ -109,6 +179,18 @@ describe('resolveViaText (2단계)', () => {
 
   it('"시민"/"주민"은 소거 대상에서 제외되어 다른 키워드와 함께 있으면 정상 매칭된다', () => {
     expect(resolveViaText('시민과 함께하는 가족 축제', null)).toEqual({ tag: 'FAMILY' });
+  });
+
+  // [초등 학년 경계 재정의](2026-09-18): resolveViaText는 tokenize()를 거치지 않아
+  // 괄호 안 텍스트도 그대로 스캔한다 — resolveViaRawField와 달리 별도 보완 없이도
+  // 명시적 학년 신호를 바로 인식한다.
+  it('title/description에 명시적 학년 신호가 있으면 그대로 인식한다(괄호 보존)', () => {
+    expect(resolveViaText('초등학교 고학년 대상 캠프', null)).toEqual({ tag: 'TEEN' });
+    expect(resolveViaText('초등 저학년 체험', null)).toEqual({ tag: 'KIDS_SCHOOL' });
+  });
+
+  it('학년이 명시되지 않은 초등학생 언급은 null이다(수동 판단 대기)', () => {
+    expect(resolveViaText('초등학생과 함께하는 체험', null)).toBeNull();
   });
 });
 

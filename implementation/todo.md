@@ -67,6 +67,12 @@ ADULT, SENIOR, YOUTH 등"이라고 언급 — 이미 있는 target_audience 값 
   2. 정말 별도 컬럼이 필요하다면, 기존 target_audience와 무엇이 다른지(왜
      하나로 합칠 수 없는지)를 새 Decision으로 기록한 뒤 진행합니다.
 
+**[x] 1항 부분 반영 완료 (2026-09-18)** — 사용자가 "기존 걸 가리키는 것"이라고
+확인해 위 재개 조건 1번대로 진행했다. TEEN/KIDS_SCHOOL 경계만 `target-audience-
+taxonomy.mjs`의 기존 규칙에 대한 수정 제안으로 재정리해 반영(OTHER 규칙 변경은
+이번에 다루지 않음 — 사용자가 요청한 범위가 초등 경계로 좁혀짐). 상세는
+`implementation/2026-09-18-elementary-grade-boundary-target-audience.md` 참고.
+
 ---
 
 [개선사항 2] 당신은 PostgreSQL/Supabase 및 대용량 데이터 처리 백엔드 배치 시스템에 정통한 시니어 엔지니어입니다.
