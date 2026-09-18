@@ -38,6 +38,35 @@
 ### [출력 요구]
 - 위 규칙들을 반영하여 데이터를 정제하고 일괄 처리하는 스크립트(Python 또는 Node.js)와, DB 상에서 UPSERT 이후 실행될 후행 배치 잡의 구조 및 SQL/코드 로직을 작성해 주세요.
 
+**[스킵 (보류)]** 2026-09-18 harness 자동 점검 결과 기존 모듈과 구조적으로 충돌해 스킵합니다.
+
+① **상세 스킵 사유**: 이 항목이 신설하려는 `연령카테고리` 컬럼은 이미 존재하는
+`events.target_audience`/`target_audience_source` 체계(2026-08-27
+`scripts/migrations/2026-08-27-apply-target-audience-10tier.mjs`가 최초 반영한
+10단계 분류: INFANT/KIDS_PRE/KIDS_SCHOOL/FAMILY/TEEN/YOUTH/ADULT/SENIOR/ALL/
+FACILITY/OTHER, `scripts/ingest/lib/target-audience-taxonomy.mjs`에 전체 규칙
+정의)와 목적·값 어휘가 사실상 동일합니다(이 항목 자체도 3절에서 "OTHER, TEEN,
+ADULT, SENIOR, YOUTH 등"이라고 언급 — 이미 있는 target_audience 값 그대로임).
+그런데 이 항목이 새로 지정한 규칙은 기존 규칙과 다음 지점에서 충돌합니다:
+  - TEEN 정의가 다름: 기존은 "중고등"/"중고생" 키워드 기준인데, 이 항목은
+    "초등학교고학년"/"초등학교4학년이상"까지 TEEN으로 넓힘 — 기존
+    `KEYWORD_TAGS`의 KIDS_SCHOOL("초등"이 포함된 값)과 정면으로 겹쳐, 같은
+    텍스트("초등학교 4학년 이상")가 어느 컬럼이냐에 따라 KIDS_SCHOOL과 TEEN으로
+    서로 다르게 분류되는 모순이 생깁니다.
+  - "단체"가 OTHER로 빠지는데, 기존 체계는 "단체"를 배제 키워드로 다루지 않고
+    본문 그대로 스캔합니다.
+  - 별도 컬럼을 새로 만들면 관리자 화면(FacilityTypeEditor 등)·공개 화면
+    (get-home-feed.ts)이 어느 컬럼을 신뢰해야 하는지 이원화되어 제5장 제4조
+    (기존 구조 우선, 불필요한 중복 금지)에 위배됩니다.
+
+② **재개 선행 작업**: 다음 중 하나가 확정돼야 재개할 수 있습니다.
+  1. "연령카테고리"가 신규 컬럼이 아니라 기존 `target_audience`를 가리키는
+     것이라면, 이 항목의 TEEN/OTHER 규칙을 `target-audience-taxonomy.mjs`의
+     기존 규칙에 대한 "수정 제안"으로 다시 정리해 기존 KIDS_SCHOOL/TEEN 경계와
+     충돌하지 않는지 먼저 검토해야 합니다.
+  2. 정말 별도 컬럼이 필요하다면, 기존 target_audience와 무엇이 다른지(왜
+     하나로 합칠 수 없는지)를 새 Decision으로 기록한 뒤 진행합니다.
+
 ---
 
 [개선사항 2] 당신은 PostgreSQL/Supabase 및 대용량 데이터 처리 백엔드 배치 시스템에 정통한 시니어 엔지니어입니다.
@@ -99,6 +128,38 @@
 ### [출력 요구]
 - `src/lib/admin/category-min-groups.ts` 및 `scripts/ingest/lib/category-min-groups.mjs` 파일 수정/추가 코드.
 - 연령 조건 및 시설 대관 카테고리 스킵 조건이 완벽히 반영된 **배치 2 메인 실행 함수 및 SQL 쿼리 로직**.
+
+**[스킵 (보류)]** 2026-09-18 harness 자동 점검 결과 기존 모듈과 구조적으로 충돌해 스킵합니다.
+
+① **상세 스킵 사유**:
+  1. **배치 2 자체는 이미 존재합니다** — `scripts/ingest/classify-new-events-facility-type.mjs`
+     (일일 신규분)와 `scripts/classify-events-facility-type.mjs`(과거 누적분 백필)가
+     정확히 이 항목이 요구하는 title+description→Gemini→INDOOR/OUTDOOR/BOTH/UNKNOWN
+     JSON 파싱→DB 반영 로직을 이미 수행 중입니다. 다만 컬럼명이 이 항목이 말하는
+     `environment_type`이 아니라 `events.facility_type`(값도 실내/야외/복합 한글)이라,
+     이 항목을 문자 그대로 새로 만들면 중복 컬럼이 생깁니다(제5장 제4조).
+  2. **선행 배치 순서(1이 끝난 직후 실행)는 [개선사항 1]이 스킵되어 전제 자체가
+     성립하지 않습니다** — [개선사항 1]의 스킵 사유를 참고하세요.
+  3. **조건 B(연령카테고리 채워지면 스킵)도 [개선사항 1] 스킵과 함께 보류**됩니다.
+  4. **조건 A는 그대로 반영하면 기존 설계 의도와 정면으로 충돌합니다** —
+     `facility_type`은 DB 기본값이 `'복합'`이라(NOT NULL DEFAULT '복합'), "이미
+     INDOOR/OUTDOOR/BOTH로 채워져 빈값이 아니면 스킵"을 문자 그대로 적용하면
+     **아직 한 번도 LLM으로 판단하지 않은 신규 행도 기본값 '복합' 때문에 곧바로
+     "이미 분류됨"으로 오인해 전부 건너뛰게 됩니다** — 이 배치 시스템 자체가
+     "76%(22,118/28,948건)가 진짜 판단이 아니라 기본값 '복합'에 방치된 문제"를
+     풀기 위해 만들어졌다는 전제(2026-09-17 최초 구현 기록)와 정면으로 모순됩니다.
+     (조건 C는 이미 오늘 세션에서 구현 완료 — 이 항목도 스스로 "이미 구현되었음"
+     이라고 표시함.)
+
+② **재개 선행 작업**:
+  1. [개선사항 1]이 재개 조건을 충족해 `target_audience`(또는 그 후속) 규칙이
+     확정되면, 이 항목의 조건 B를 그 확정된 컬럼/값 기준으로 다시 정리합니다.
+  2. 조건 A를 "facility_type이 기본값 '복합'이 아니라 LLM이 실제로 반환한 값인지"
+     구분할 수 있는 신호(예: 별도 `facility_type_source` 컬럼, 또는 진행 상황 기록)
+     없이는 반영할 수 없습니다 — 필요하면 그런 구분 컬럼을 새로 추가할지 사용자
+     확인이 필요합니다.
+  3. `environment_type`이라는 이름을 계속 쓸 것인지, 기존 `facility_type`을 그대로
+     쓸 것인지 확인이 필요합니다(이름이 다르면 중복 컬럼 생성 승인이 필요).
 
 ---
 
