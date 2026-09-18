@@ -80,6 +80,28 @@ export function buildSigunguName(areanm) {
   return SEOUL_GU_NAMES.includes(areanm) ? `서울시 ${areanm}` : areanm;
 }
 
+// [원천 필드 직접 반영 — 연령 카테고리 규칙](2026-09-19 사용자 지시, todo.md 개선사항 1
+// 최종 확정): "613건 리스트에 대하여 내가 직접 명시하고 작성한 것들 외에는 아무것도
+// 넣지 않는다" — 사용자가 명시한 규칙(성인 정확 일치→ADULT, 단체/여성/장애인→OTHER,
+// 고학년/4학년이상→TEEN) 딱 이 4가지만 어댑터 레벨에서 직접 판정한다. KIDS_SCHOOL/
+// INFANT/FAMILY/KIDS_PRE 등은 전혀 건드리지 않는다(명시적으로 지정한 적 없음).
+//
+// [설계 히스토리] 처음엔 이 규칙을 공용 target-audience-taxonomy.mjs(모든 이벤트에
+// 광범위하게 쓰이는 키워드 매칭 엔진)에 반영했다가, "초등"을 KIDS_SCHOOL 무조건
+// 매칭에서 빼면서 그 자리를 대신 기존의 다른 무관한 규칙(가족→FAMILY, 유아→KIDS_PRE,
+// 청년→YOUTH 등)이 채우는 부작용이 생겨(사용자 지적으로 발견) 전부 되돌렸다. ADULT
+// 규칙과 완전히 동일하게 이 어댑터에서만 좁게 직접 판정하는 것이 맞다(공용 엔진은
+// 전혀 건드리지 않음 — 부작용 없음).
+export function classifyTargetAudienceFromUseTgtInfo(useTgtInfo) {
+  if (typeof useTgtInfo !== 'string' || !useTgtInfo.trim()) return null;
+  if (useTgtInfo === '성인') return 'ADULT';
+  if (/단체|여성|장애인/.test(useTgtInfo)) return 'OTHER';
+  // 사용자 확인: "명시적 단어만(고학년/4학년이상 등)" — "4~6학년"처럼 숫자 범위만
+  // 있고 이 단어들이 없으면 신호로 인정하지 않는다(추측 금지).
+  if (/고학년|4\s*학년\s*이상/.test(useTgtInfo)) return 'TEEN';
+  return null;
+}
+
 export class SeoulYeyakAdapter extends BaseCollectorAdapter {
   constructor() {
     super({ sourceKey: 'SEOUL_YEYAK', targetTable: 'multi', source: SOURCE });
@@ -200,11 +222,8 @@ export class SeoulYeyakAdapter extends BaseCollectorAdapter {
         // 라벨과 함께 나오지 않으면 parsePriceFromText가 못 찾아 price_text가 계속
         // null로 남던 문제를 해결한다. PAYATNM이 무료가 아니면 기존 텍스트 파싱 그대로.
         const priceText = item.PAYATNM === '무료' ? '무료' : parsePriceFromText(item.DTLCONT);
-        // [원천 필드 직접 반영](2026-09-18 사용자 지시): "USETGTINFO: 성인으로 되어있는거는
-        // 연령 ADULT로 자동으로 박아줘" — 정확히 "성인" 단독 값일 때만 반영한다(다른 대상과
-        // 섞인 값은 기존 target-audience-taxonomy.mjs 후속 배치가 별도로 판정, 제3장 제5조
-        // 추측 금지 — 지정받지 않은 케이스까지 넓혀 처리하지 않는다).
-        const targetAudience = item.USETGTINFO === '성인' ? 'ADULT' : null;
+        // [원천 필드 직접 반영](2026-09-18/19 사용자 지시) — 위 classifyTargetAudienceFromUseTgtInfo 참고.
+        const targetAudience = classifyTargetAudienceFromUseTgtInfo(item.USETGTINFO);
 
         if (table === 'events') {
           const startDate = toDateOnly(item.SVCOPNBGNDT);

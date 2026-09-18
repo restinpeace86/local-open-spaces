@@ -1,96 +1,85 @@
-# [target_audience 초등 학년 경계 재정의 — KIDS_SCHOOL/TEEN 규칙 수정]
+# [target_audience — OTHER/TEEN 원천 필드 직접 반영] (수정 이력 포함)
 
 ## 구현 대상
-`implementation/todo.md` [개선사항 1]의 후속 — 사용자가 "연령카테고리"는 신규
-컬럼이 아니라 기존 `events.target_audience`를 가리키는 것이라고 확인했고, 그
-TEEN/KIDS_SCHOOL 판정 규칙을 `scripts/ingest/lib/target-audience-taxonomy.mjs`의
-기존 규칙에 대한 "수정 제안"으로 다시 정리해 달라고 요청했다.
-
-사용자 지시 원문: "기존에 KIDS_SCHOOL이 초등학생을 명시적으로 가리켰다면 이젠
-초등학교 저학년만 가리키는 걸로 할까 해서."
+`implementation/todo.md` [개선사항 1]의 후속 — 613개 USETGTINFO 값에 대해 사용자가
+직접 명시한 규칙만 반영한다: **OTHER**(단체/여성/장애인 키워드), **TEEN**(고학년/
+4학년이상 명시 키워드). 그 외에는 아무것도 넣지 않는다.
 
 ## 구현 일시
-2026-09-18
+2026-09-18 ~ 2026-09-19(1차 구현의 방향 오류를 사용자 지적으로 발견해 되돌리고
+재구현)
 
-## 확인된 규칙 (질문을 통해 확정, 추측하지 않음)
-1. **학년이 명시되지 않은 "초등학생"(원본 데이터 대다수)**: 더 이상 KIDS_SCHOOL로
-   자동 분류하지 않는다. NULL로 남긴다 — 사용자 원문: "현재 우리 대상일 수도
-   있는 연령에 대하여서는 내가 직접 판단하려고 수동판단하기 위하여 분류하지
-   않았어."
-2. **"고학년" 신호로 인정할 범위**: 명시적 단어만("고학년", "4학년이상" 등).
-   "4~6학년" 같은 숫자 범위만 있고 이 단어가 없으면 신호로 인정하지 않는다.
+## ⚠️ 1차 구현의 방향 오류 (되돌림)
+처음에는 이 규칙을 `scripts/ingest/lib/target-audience-taxonomy.mjs`(모든 이벤트에
+광범위하게 쓰이는 공용 키워드 매칭 엔진)에 반영했다 — KIDS_SCHOOL의 `include`에서
+"초등"/"초등학생"을 빼고 명시적 고학년/저학년 신호로만 판정하도록 고쳤다.
 
-## 변경 사항: `scripts/ingest/lib/target-audience-taxonomy.mjs`
+**사용자 지적(2026-09-19)**: "613건에 연령대로 나온거 관련하여 내가 직접적으로
+명시하고 작성한 것들 외에 아무것도 안작성한거는 아무것도 넣지 않는걸로? 현재 나는
+kids_school이라던가 infant, family, kids_pre 관련 아무것도 작성한게 없는데? 저렇게
+들어가는건 없어야해."
 
-### KEYWORD_TAGS
-KIDS_SCHOOL의 `include`에서 `'초등학생'`/`'초등'`을 제거했다(`'어린이'`/`'아동'`/
-`'키즈'`만 남김 — 이 셋은 학년 개념이 없는 일반 아동 지칭이라 그대로 무조건
-매칭 유지).
+**문제**: "초등"을 KIDS_SCHOOL의 무조건 매칭에서 빼자, 같은 텍스트에 함께 있던
+**기존의 다른 무관한 규칙**(가족→FAMILY, 유아→KIDS_PRE, 청년→YOUTH, 제한없음→ALL
+등, 전부 2026-08-27부터 있던 기존 코드)이 대신 매칭돼 KIDS_PRE/FAMILY/YOUTH/ALL
+같은 **사용자가 지정한 적 없는 값**이 46건 중 일부에 들어갔다(FAMILY 1건, KIDS_PRE
+2건, YOUTH 1건, ALL 2건, TEEN 4건, NULL 31건, ADULT 5건). 공용 엔진을 건드리면
+사용자가 명시하지 않은 다른 규칙의 부작용을 피할 수 없다는 걸 이번에 배웠다 —
+2026-09-18 오전 "USETGTINFO=성인→ADULT"는 이 공용 엔진을 건드리지 않고 어댑터
+레벨에서 딱 그 값만 좁게 썼는데, 이번엔 그 원칙을 지키지 않았다.
 
-### 신규: `resolveElementaryGradeSignal(text, allowKidFamily)`
-"초등"/"초등학생" 언급이 있을 때만 동작하는 전용 판정 함수:
-- 고학년 명시 신호(`/고학년|4\s*학년\s*이상/`) → TEEN.
-- 저학년 명시 신호(`/저학년/`, `allowKidFamily`일 때만) → KIDS_SCHOOL.
-- 둘 다 없으면 null(판정 보류).
+### 되돌리기
+1. `scripts/ingest/lib/target-audience-taxonomy.mjs`/`.test.mjs`를 커밋 `7472c5f`
+   시점(수정 전)으로 되돌렸다(`git checkout 7472c5f -- <두 파일>`).
+2. 라이브 DB에 반영했던 46건을 정확히 식별해 복구했다 — 개별 행의 이전
+   `target_audience_source`를 따로 저장해두지 않아, `updated_at` 타임스탬프로
+   정확한 46건(2026-09-18T14:55:36~42, 6초 이내 일괄 업데이트 클러스터, 다른
+   배치와 명확히 구분됨)을 특정한 뒤, **되돌린(원래) 코드**로
+   `resolveTargetAudienceForRow`를 재실행해 그 결과를 그대로 반영했다(강제로
+   KIDS_SCHOOL로 되돌린 게 아니라 "원래 로직이 지금 데이터로 뭐라고 판단하는지"를
+   그대로 신뢰) — 46건 중 42건은 KIDS_SCHOOL로 복구됐고, 4건("[한성백제박물관]
+   초등 4~6학년..." 계열)은 설명문에 "강사"라는 기존 NEGATIVE_OVERRIDE_KEYWORDS
+   단어가 있어 원래 로직으로도 TEEN(3건)/NULL(1건)이 나왔다 — 이는 버그가 아니라
+   2026-08-27 이후 description이 갱신되며 생긴 자연스러운 데이터 드리프트임을
+   직접 확인했다. 복구 후 `is_active=true AND target_audience='KIDS_SCHOOL'`
+   건수가 정확히 145건(149 - 4)으로 일치함을 확인했다.
 
-### `matchTag()`
-KEYWORD_TAGS 루프보다 먼저 `resolveElementaryGradeSignal`을 확인한다. 신호가
-없는 초등 언급은 루프를 통과한 뒤에도(다른 키워드 매칭 없었다면) 명시적으로 null을
-반환해, 함수 끝의 일반 "학생" 폴백(TEEN)이 "초등학생"의 "학생" 부분만 보고 잘못
-TEEN으로 단정하지 않도록 막았다.
+## ✅ 최종 구현 (올바른 방향)
+공용 엔진은 전혀 건드리지 않고, `scripts/ingest/adapters/seoul-yeyak-adapter.mjs`에
+어제(2026-09-18) 만든 "USETGTINFO=성인→ADULT" 직접 판정과 **완전히 동일한 패턴**으로
+`classifyTargetAudienceFromUseTgtInfo()` 함수를 확장했다:
 
-### `resolveViaRawField()` — 실측으로 발견한 함정 수정
-실제 원천 데이터(USETGTINFO 등)는 거의 항상 `"초등학생(4-6학년 학급..)"`처럼 학년
-정보가 **괄호 안**에 있는데, 기존 `tokenize()`가 매칭 전에 괄호 내용을 통째로
-지운다 — 그대로 두면 고학년/저학년 단어가 괄호 안에 있어도 절대 인식되지 않는다.
-`tokenize()` 호출 전에 **원본 값 전체**에서 `resolveElementaryGradeSignal`을 먼저
-실행해 두고, 토큰 매칭 결과가 null이면서 그 토큰이 "초등" 언급이면 이 사전 확인
-결과로 대체하도록 고쳤다.
+```js
+function classifyTargetAudienceFromUseTgtInfo(useTgtInfo) {
+  if (typeof useTgtInfo !== 'string' || !useTgtInfo.trim()) return null;
+  if (useTgtInfo === '성인') return 'ADULT';
+  if (/단체|여성|장애인/.test(useTgtInfo)) return 'OTHER';
+  if (/고학년|4\s*학년\s*이상/.test(useTgtInfo)) return 'TEEN';
+  return null;
+}
+```
 
-## 실측 라이브 데이터 검증 (적용 전 dry-run 필수 확인)
-`resolveTargetAudienceForRow`를 `is_active=true`인 전체 이벤트(3,328건)에 대해
-dry-run으로 돌려본 결과, 예상 밖으로 **이 규칙 변경과 무관한 대규모 배치 밀림
-현상**을 함께 발견했다 — `applyTargetAudienceTaxonomy`가 2026-08-27 이후 한 번도
-재실행되지 않아, 그 사이 새로 들어온 이벤트 다수가 미분류(NULL/OTHER) 상태로
-쌓여 있었다(전체 재실행 시 NULL→ALL 913건, OTHER→ALL 173건 등 1,400건+ 변경
-예상). 이 규칙 변경 자체(현재 KIDS_SCHOOL인 행)의 영향만 좁히면 46건이었다.
+KIDS_SCHOOL/INFANT/FAMILY/KIDS_PRE 등은 이 함수가 절대 반환하지 않는다 — 사용자가
+명시한 4가지(ADULT/OTHER/TEEN/그 외 null)만 존재한다. "저학년→KIDS_SCHOOL" 규칙도
+사용자가 최종적으로 "지우기(OTHER/TEEN 2개만)"를 선택해 넣지 않았다.
 
-사용자에게 "초등 경계 46건만 좁게 적용" vs "백로그 포함 전체 재실행" vs "아직
-적용 안 함" 중 선택을 물었고, **46건만 좁게 적용**을 선택받았다.
-
-## 실제 반영 (프로덕션 DB)
-`is_active=true AND target_audience='KIDS_SCHOOL'`인 149건만 조회해(전체
-3,328건이 아니라) `resolveTargetAudienceForRow`를 재적용, MANUAL 46건은
-그대로 보존하고 변경분만 UPDATE했다. `--dry-run`으로 먼저 확인 후 실행:
-
-| 변경 | 건수 |
-|---|---:|
-| KIDS_SCHOOL → NULL(학년 미명시, 수동 판단 대기) | 31건 |
-| KIDS_SCHOOL → ADULT | 5건 |
-| KIDS_SCHOOL → TEEN(명시적 고학년 신호) | 4건 |
-| KIDS_SCHOOL → KIDS_PRE | 2건 |
-| KIDS_SCHOOL → ALL | 2건 |
-| KIDS_SCHOOL → YOUTH | 1건 |
-| KIDS_SCHOOL → FAMILY | 1건 |
-| **합계** | **46건** |
-
-2026-08-27 이후 밀린 나머지 백로그(1,400건+, 이번 규칙 변경과 무관)는 이번
-범위에서 다루지 않았다 — 필요하면 별도로 지시받아 처리한다.
+## 기존 적재분 백필
+`scripts/migrations/2026-09-19-seoul-yeyak-other-teen-backfill.mjs` — `source=
+'seoul_public_reservation' AND target_audience IS NULL`인 행(3,088건)을 스캔해
+`classifyTargetAudienceFromUseTgtInfo`가 OTHER/TEEN을 반환하는 것만 반영:
+- OTHER: 127건
+- TEEN: 4건
 
 ## 검증
-- `npx tsc --noEmit`/`npm run test`(전체 166개 파일 1947개 테스트 — 신규 케이스
-  11개: matchTag 고학년/저학년/숫자범위무시/allowKidFamily 조합 6개,
-  resolveViaRawField 괄호 안 학년 신호 4개, resolveViaText 학년 신호 인식 2개
-  등)/`npm run build` 모두 통과.
-- 실제 프로덕션 DB에 `--dry-run` 먼저 실행해 예상 건수(46건) 확인 후 반영,
-  반영 결과가 dry-run과 정확히 일치함을 확인했다.
+- `npx tsc --noEmit`/`npm run test`(전체 166개 파일 1944개 테스트 —
+  target-audience-taxonomy.mjs는 원래 34개 테스트로 완전히 복원, seoul-yeyak-adapter
+  신규 케이스 11개: OTHER/TEEN 판정 4개 + classifyTargetAudienceFromUseTgtInfo
+  단위 테스트 5개 + KIDS_SCHOOL 등 미판정 확인 2개)/`npm run build` 모두 통과.
+- 백필 스크립트를 `--dry-run` 먼저 실행해 예상 건수(OTHER 127/TEEN 4) 확인 후 반영.
 
-## 특이 사항
-- OTHER 판정 규칙("단체"/"여성"/"장애인" 키워드 관련, [개선사항 1] 원문 3절)은
-  이번 범위에서 다루지 않았다 — 사용자가 이번 대화에서 확정한 것은 TEEN/
-  KIDS_SCHOOL의 초등 학년 경계뿐이다.
-- 2026-08-27 이후 `applyTargetAudienceTaxonomy`가 정기적으로 재실행되지 않아
-  신규 이벤트가 계속 미분류로 쌓이는 구조적 공백이 있다는 사실을 이번 dry-run
-  으로 재확인했다(2026-09-18 세션 앞부분에서 USETGTINFO=성인 케이스로 이미
-  한 번 발견한 것과 같은 근본 원인) — 필요하면 이 배치를 정기 자동화할지 별도로
-  확인 후 진행한다.
+## 특이 사항 / 교훈
+공용으로 널리 쓰이는 키워드 매칭 엔진(target-audience-taxonomy.mjs)을 수정할 때는
+"내가 지운 규칙 자리를 다른 기존 규칙이 대신 채우지 않는지"를 항상 확인해야 한다.
+좁게 지정된 요구사항(특정 소스의 특정 필드에 대한 특정 규칙)은 그 소스의 어댑터
+레벨에서 직접 판정하는 것이 안전하다(제5장 제4조와도 부합 — 기존 공용 구조를
+"재사용"하는 것과 "그 구조 자체를 변형해 부작용을 감수하는 것"은 다르다).

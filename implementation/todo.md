@@ -67,10 +67,13 @@ ADULT, SENIOR, YOUTH 등"이라고 언급 — 이미 있는 target_audience 값 
   2. 정말 별도 컬럼이 필요하다면, 기존 target_audience와 무엇이 다른지(왜
      하나로 합칠 수 없는지)를 새 Decision으로 기록한 뒤 진행합니다.
 
-**[x] 1항 부분 반영 완료 (2026-09-18)** — 사용자가 "기존 걸 가리키는 것"이라고
-확인해 위 재개 조건 1번대로 진행했다. TEEN/KIDS_SCHOOL 경계만 `target-audience-
-taxonomy.mjs`의 기존 규칙에 대한 수정 제안으로 재정리해 반영(OTHER 규칙 변경은
-이번에 다루지 않음 — 사용자가 요청한 범위가 초등 경계로 좁혀짐). 상세는
+**[x] 1항 최종 반영 완료 (2026-09-18~19, 방향 수정 포함)** — 1차로 `target-
+audience-taxonomy.mjs`(공용 엔진)에 반영했다가, "kids_school/infant/family/
+kids_pre는 아무것도 작성한 게 없는데 저렇게 들어가는 건 없어야 한다"는 사용자
+지적으로 부작용(공용 엔진 안의 무관한 다른 규칙이 대신 매칭됨)을 발견해 전부
+되돌리고, ADULT 규칙과 동일하게 `seoul-yeyak-adapter.mjs` 레벨에서 OTHER(단체/
+여성/장애인)/TEEN(고학년/4학년이상) 딱 이 2가지만 직접 판정하도록 재구현했다.
+KIDS_SCHOOL/INFANT/FAMILY/KIDS_PRE는 전혀 건드리지 않는다. 상세는
 `implementation/2026-09-18-elementary-grade-boundary-target-audience.md` 참고.
 
 ---

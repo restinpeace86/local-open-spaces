@@ -8,7 +8,7 @@
 // 원인별 집계를 검증한다.
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { SeoulYeyakAdapter, buildSigunguName } = await import('./seoul-yeyak-adapter.mjs');
+const { SeoulYeyakAdapter, buildSigunguName, classifyTargetAudienceFromUseTgtInfo } = await import('./seoul-yeyak-adapter.mjs');
 
 function jsonResponse(body) {
   return { ok: true, text: async () => JSON.stringify(body) };
@@ -245,6 +245,71 @@ describe('SeoulYeyakAdapter', () => {
       const [row] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '문화체험' }]).events;
       expect(row.target_audience).toBeNull();
       expect(row.target_audience_source).toBeNull();
+    });
+
+    // [원천 필드 직접 반영 — 연령 카테고리 확장](2026-09-19 사용자 지시, todo.md 개선사항 1
+    // 최종 확정): "613건 리스트에 대해 내가 직접 명시한 것만 — OTHER(단체/여성/장애인),
+    // TEEN(고학년/4학년이상) — 그 외에는 아무것도 넣지 않는다."
+    it('USETGTINFO에 단체/여성/장애인 키워드가 있으면 OTHER로 채운다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const [row1] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '문화체험', USETGTINFO: '유아단체' }]).events;
+      expect(row1.target_audience).toBe('OTHER');
+      const [row2] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '문화체험', USETGTINFO: '여성(여성)' }]).events;
+      expect(row2.target_audience).toBe('OTHER');
+      const [row3] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '문화체험', USETGTINFO: '장애인' }]).events;
+      expect(row3.target_audience).toBe('OTHER');
+    });
+
+    it('USETGTINFO에 고학년/4학년이상 명시 신호가 있으면 TEEN으로 채운다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const [row1] = adapter.transformSplit([
+        { ...BASE_ITEM, MAXCLASSNM: '문화체험', USETGTINFO: '초등학생(초등학교 고학년)' },
+      ]).events;
+      expect(row1.target_audience).toBe('TEEN');
+      const [row2] = adapter.transformSplit([
+        { ...BASE_ITEM, MAXCLASSNM: '문화체험', USETGTINFO: '초등학교 4학년 이상' },
+      ]).events;
+      expect(row2.target_audience).toBe('TEEN');
+    });
+
+    it('숫자 학년 범위만 있고 명시적 단어가 없으면 TEEN으로 채우지 않는다(추측 금지)', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const [row] = adapter.transformSplit([
+        { ...BASE_ITEM, MAXCLASSNM: '문화체험', USETGTINFO: '초등학생(4-6학년 학급)' },
+      ]).events;
+      expect(row.target_audience).toBeNull();
+    });
+
+    it('KIDS_SCHOOL/INFANT/FAMILY/KIDS_PRE 등은 이 어댑터가 전혀 판정하지 않는다(명시적으로 지정한 적 없음)', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const [row] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '문화체험', USETGTINFO: '유아' }]).events;
+      expect(row.target_audience).toBeNull();
+    });
+  });
+
+  describe('classifyTargetAudienceFromUseTgtInfo', () => {
+    it('정확히 "성인"이면 ADULT다', () => {
+      expect(classifyTargetAudienceFromUseTgtInfo('성인')).toBe('ADULT');
+    });
+
+    it('단체/여성/장애인 키워드가 있으면 OTHER다', () => {
+      expect(classifyTargetAudienceFromUseTgtInfo('유아단체')).toBe('OTHER');
+      expect(classifyTargetAudienceFromUseTgtInfo('여성(여성)')).toBe('OTHER');
+      expect(classifyTargetAudienceFromUseTgtInfo('장애인')).toBe('OTHER');
+    });
+
+    it('고학년/4학년이상 명시 신호가 있으면 TEEN이다(숫자 범위만으로는 안 됨)', () => {
+      expect(classifyTargetAudienceFromUseTgtInfo('초등학교 고학년')).toBe('TEEN');
+      expect(classifyTargetAudienceFromUseTgtInfo('초등학교4학년이상')).toBe('TEEN');
+      expect(classifyTargetAudienceFromUseTgtInfo('4~6학년')).toBeNull();
+    });
+
+    it('그 외(빈값 포함)는 전부 null이다', () => {
+      expect(classifyTargetAudienceFromUseTgtInfo('유아')).toBeNull();
+      expect(classifyTargetAudienceFromUseTgtInfo('가족')).toBeNull();
+      expect(classifyTargetAudienceFromUseTgtInfo('')).toBeNull();
+      expect(classifyTargetAudienceFromUseTgtInfo(null)).toBeNull();
+      expect(classifyTargetAudienceFromUseTgtInfo(undefined)).toBeNull();
     });
   });
 
