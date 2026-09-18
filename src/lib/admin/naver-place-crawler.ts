@@ -199,6 +199,33 @@ function extractMenuItems(state: Record<string, unknown>): NaverPlaceMenuItem[] 
   return items.filter((item) => item.name);
 }
 
+// [실측 확인 — 네이버 자체 메뉴 미등록 업체](2026-09-19, 사용자가 실제로 URL을 넣어보고
+// "메뉴가 안돼"라고 지적해 라이브 페이지를 다시 받아 확인): 업체가 네이버에 직접 메뉴를
+// 등록하지 않고 배달의민족 메뉴만 연동한 경우(실측 사례: "딸부자 닭갈비 닭도리탕",
+// placeId 1107293125) `PlaceMenuItem:*` 엔티티가 아예 0개이고, 대신
+// `placeDetail.baemin.menuGroups[].menus[]`(엔티티 키 `PlaceDetail_BaeminMenu:*`)에
+// 배달 메뉴 데이터(name/price/images)가 들어있다 — 이 경로를 놓치면 메뉴가 통째로
+// 비어버린다. Apollo 정규화 캐시는 같은 id의 엔티티를 한 번만 저장하므로(여러 메뉴
+// 그룹이 같은 항목을 중복 참조해도) 접두어로 평탄 스캔해도 자연히 중복 없이 모인다
+// (기존 PlaceMenuItem 스캔과 동일한 방식).
+function extractBaeminMenuItems(state: Record<string, unknown>): NaverPlaceMenuItem[] {
+  const items: NaverPlaceMenuItem[] = [];
+  for (const [key, value] of Object.entries(state)) {
+    if (!key.startsWith('PlaceDetail_BaeminMenu:')) continue;
+    const item = denormalizeApolloValue(state, value) as Record<string, unknown>;
+    const numeric = item.price != null ? Number(item.price) : NaN;
+    const hasPrice = Number.isFinite(numeric) && numeric > 0;
+    const images = item.images as string[] | null;
+    items.push({
+      name: String(item.name ?? ''),
+      price: hasPrice ? numeric : null,
+      priceDisplayText: hasPrice ? `${numeric.toLocaleString('ko-KR')}원` : null,
+      thumbnailUrl: Array.isArray(images) && images[0] ? images[0] : null,
+    });
+  }
+  return items.filter((item) => item.name);
+}
+
 // [실측 스키마 정정](2026-09-18): placeDetail.topPhotos는 배열이 아니라
 // `{ total, items: [...] }` 형태다(실제 라이브 페이지로 직접 확인 — 처음엔 items 없이
 // 바로 배열이라고 잘못 가정해 대표 이미지가 항상 null로 나오는 버그가 있었다).
@@ -235,7 +262,15 @@ export function extractNaverPlaceCrawlResult(
   // 메뉴는 home/menu 두 페이지 중 어느 쪽이든 있는 대로 모아 이름 기준 중복 제거한다
   // (실측 확인: 두 페이지가 같은 PlaceMenuItem 데이터를 담고 있어 보통 완전히 겹치지만,
   // 드물게 한쪽만 로딩에 성공하는 경우를 대비한 방어적 병합).
-  const menuItemsRaw = [...(homeState ? extractMenuItems(homeState) : []), ...(menuState ? extractMenuItems(menuState) : [])];
+  const nativeMenuItems = [...(homeState ? extractMenuItems(homeState) : []), ...(menuState ? extractMenuItems(menuState) : [])];
+  // [배달의민족 메뉴 폴백](2026-09-19 실측): 네이버에 자체 메뉴(PlaceMenuItem)를 등록하지
+  // 않은 업체는 배달 메뉴(PlaceDetail_BaeminMenu)만 있다 — 배달가와 매장가가 다를 수 있어
+  // 자체 메뉴가 하나라도 있으면 그쪽을 우선하고(추측으로 두 출처를 섞지 않음), 자체 메뉴가
+  // 아예 없을 때만 배달 메뉴로 대체한다.
+  const menuItemsRaw =
+    nativeMenuItems.length > 0
+      ? nativeMenuItems
+      : [...(homeState ? extractBaeminMenuItems(homeState) : []), ...(menuState ? extractBaeminMenuItems(menuState) : [])];
   const menuItemsByName = new Map(menuItemsRaw.map((item) => [item.name, item]));
 
   return {

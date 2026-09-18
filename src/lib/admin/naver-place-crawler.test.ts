@@ -248,4 +248,74 @@ describe('extractNaverPlaceCrawlResult', () => {
     const result = extractNaverPlaceCrawlResult(PLACE_ID, toHtml(homeState), toHtml(menuOnlyState));
     expect(result.menuItems.map((m) => m.name).sort()).toEqual(['샐러드', '파스타']);
   });
+
+  // [배달의민족 메뉴 폴백 — 실측 확인](2026-09-19, 사용자가 실제 URL을 넣어보고 "메뉴가
+  // 안돼"라고 지적해 라이브 페이지를 다시 받아 확인한 실제 사례): "딸부자 닭갈비 닭도리탕"
+  // (placeId 1107293125)는 네이버에 자체 메뉴(PlaceMenuItem)를 등록하지 않고 배달의민족
+  // 메뉴만 연동돼 있어, placeDetail.baemin.menuGroups[].menus[]에만 데이터가 있다(엔티티
+  // 키 PlaceDetail_BaeminMenu:*, price는 문자열 "14000" 형태).
+  describe('배달의민족 메뉴만 있는 업체(자체 메뉴 미등록)', () => {
+    const BAEMIN_PLACE_ID = '1107293125';
+    const baeminOnlyState = {
+      ROOT_QUERY: {
+        __typename: 'Query',
+        [`placeDetail({"input":{"deviceType":"pcmap","id":"${BAEMIN_PLACE_ID}","isNx":false}})`]: {
+          __typename: 'PlaceDetail',
+          base: { __ref: `PlaceDetailBase:${BAEMIN_PLACE_ID}` },
+          baemin: {
+            __typename: 'PlaceDetail_BaeminData',
+            menuGroups: [{ __ref: 'PlaceDetail_BaeminMenuGroup:14149059_0' }],
+          },
+        },
+      },
+      [`PlaceDetailBase:${BAEMIN_PLACE_ID}`]: {
+        __typename: 'PlaceDetailBase',
+        id: BAEMIN_PLACE_ID,
+        name: '딸부자 닭갈비 닭도리탕',
+      },
+      'PlaceDetail_BaeminMenuGroup:14149059_0': {
+        __typename: 'PlaceDetail_BaeminMenuGroup',
+        order: 0,
+        id: '14149059_0',
+        name: '대표메뉴',
+        menus: [{ __ref: 'PlaceDetail_BaeminMenu:1136425081' }],
+      },
+      'PlaceDetail_BaeminMenu:1136425081': {
+        __typename: 'PlaceDetail_BaeminMenu',
+        order: 1,
+        id: '1136425081',
+        name: '딸부자 닭갈비(1인분)',
+        images: ['http://imagefarm.baemin.com/example.jpg'],
+        price: '14000',
+        orderType: 'DELIVERY',
+        source: 'baemin',
+      },
+    };
+
+    it('PlaceMenuItem이 하나도 없으면 배민 메뉴로 대체한다', () => {
+      const result = extractNaverPlaceCrawlResult(BAEMIN_PLACE_ID, toHtml(baeminOnlyState), null);
+      expect(result.menuItems).toEqual([
+        {
+          name: '딸부자 닭갈비(1인분)',
+          price: 14000,
+          priceDisplayText: '14,000원',
+          thumbnailUrl: 'http://imagefarm.baemin.com/example.jpg',
+        },
+      ]);
+    });
+
+    it('자체 메뉴(PlaceMenuItem)가 하나라도 있으면 배민 메뉴는 무시한다(배달가/매장가 혼합 방지)', () => {
+      const mixedState = {
+        ...baeminOnlyState,
+        'PlaceMenuItem:1': {
+          __typename: 'PlaceMenuItem',
+          name: '자체등록메뉴',
+          price: { __typename: 'PlaceMenuPrice', displayText: '15,000원' },
+          thumbnailUrl: null,
+        },
+      };
+      const result = extractNaverPlaceCrawlResult(BAEMIN_PLACE_ID, toHtml(mixedState), null);
+      expect(result.menuItems.map((m) => m.name)).toEqual(['자체등록메뉴']);
+    });
+  });
 });
