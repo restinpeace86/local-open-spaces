@@ -325,6 +325,14 @@ export async function autoAssignOpenSpacesToExistingGroups(client) {
 // 건드리지 않음), external_id가 달마다 새로 발급되는 소스(예: 매달 새 SVCID가 붙는
 // 안내글)의 새 이벤트도 매칭 조건만 맞으면 자동으로 이미 관리자가 큐레이션해 둔
 // open_spaces에 연결된다.
+//
+// [실측 타임아웃 수정](2026-09-18): space_id가 NULL인 이벤트가 매일 누적되면서 전체를
+// 매번 재스캔하는 Nested Loop 비용이 계속 커져 statement timeout으로 반복 실패했다
+// (EXPLAIN 실측). 이 기능은 "이번에 새로 들어온 이벤트"만 매칭하면 충분하므로 RPC
+// 기본값(p_since_days=3)이 최근 3일 이내 생성분만 대상으로 좁힌다 — 이 함수 시그니처는
+// 그대로 두고(인자 없이 호출하면 자동으로 기본값 적용), 필요하면 과거 전체를 다시
+// 훑어야 할 때만 client.rpc('match_events_to_open_spaces', { p_since_days: null })로
+// 직접 호출한다.
 export async function matchEventsToOpenSpaces(client) {
   const { data, error } = await client.rpc('match_events_to_open_spaces');
   if (error) throw new Error(`이벤트-스팟 자동 매칭 실패: ${error.message}`);

@@ -27,6 +27,23 @@ function buildExternalId(item) {
 // [가격 정보 파싱 고도화](2026-09-11 사용자 지시, todo.md 개선사항7-1) 단위 테스트를 위해
 // export한다(이 파일은 원래 BaseCollectorAdapter를 쓰지 않는 레거시 구조라 테스트가 없었으나,
 // 새로 추가한 price_text/source_url 추출 로직만이라도 직접 검증한다).
+// [배치 안정성 진단](2026-09-18 사용자 지시, implementation/todo.md 개선사항 2):
+// "538건이 왜 거부되는지 진단해달라" — mapToEventRow가 null을 반환하는 4가지 조건 중
+// 어떤 것이 실제 드롭 원인인지 pipeline_logs에서 구분할 수 있는 정보가 전혀 없었다
+// (errorCount는 items.length - count라는 단일 숫자뿐, 원인별 집계 없음). 실제 판정
+// 로직(mapToEventRow)은 그대로 두고, 같은 조건을 원인별로 다시 검사하는 순수 함수를
+// 추가해 run()에서 드롭된 건만 집계한다(judge 로직 이중 유지가 아니라, 판정 자체는
+// mapToEventRow 하나가 유일한 소스이고 이 함수는 "왜"만 설명한다).
+export function diagnoseDropReason(item) {
+  if (!item.TITLE) return 'MISSING_TITLE';
+  if (!item.STRTDATE) return 'MISSING_STRTDATE';
+  if (!item.END_DATE) return 'MISSING_END_DATE';
+  const lng = Number(item.LOT);
+  const lat = Number(item.LAT);
+  if (!lng || !lat) return 'MISSING_OR_INVALID_COORDS';
+  return null;
+}
+
 export async function mapToEventRow(item, { apiKey }) {
   const lng = Number(item.LOT);
   const lat = Number(item.LAT);
@@ -142,11 +159,17 @@ export async function run({ dryRun = false } = {}) {
   // 동시 호출 폭주를 없앤다(ai-rule.md 4.1의 "AI 불확실 시 ETC" 자체는 정상 설계이나,
   // 판단 불가가 아니라 요청 폭주로 인한 429는 막을 수 있는 문제라 순차 처리로 개선한다).
   const rows = [];
+  const errorCounts = {};
   for (const item of items) {
     const row = await mapToEventRow(item, { apiKey: env.GEMINI_API_KEY });
-    if (row) rows.push(row);
+    if (row) {
+      rows.push(row);
+    } else {
+      const reason = diagnoseDropReason(item) ?? 'UNKNOWN';
+      errorCounts[reason] = (errorCounts[reason] ?? 0) + 1;
+    }
   }
-  console.log(`  → 좌표/일자 유효 데이터: ${rows.length}건`);
+  console.log(`  → 좌표/일자 유효 데이터: ${rows.length}건 (드롭 사유별: ${JSON.stringify(errorCounts)})`);
 
   if (dryRun) {
     console.log(JSON.stringify(rows.slice(0, 3), null, 2));
@@ -158,6 +181,7 @@ export async function run({ dryRun = false } = {}) {
       upserted: false,
       rawCount: items.length,
       rawArchivedCount: undefined,
+      errorCounts,
     };
   }
 
@@ -179,6 +203,7 @@ export async function run({ dryRun = false } = {}) {
     rawArchivedCount: rawResult.count,
     safeMergeCount: duplicateWithinBatch + mergedWithExisting,
     errorCount: Math.max(0, items.length - count),
+    errorCounts,
   };
 }
 

@@ -326,7 +326,7 @@ describe('GgCultureEventsAdapter', () => {
       geocode.mockResolvedValueOnce(null);
       const adapter = new GgCultureEventsAdapter();
       const rows = await adapter.transform({ cultureEventItems: [], foundationEventItems: [FOUNDATION_EVENT_ITEM] });
-      expect(rows).toEqual([]);
+      expect(rows).toHaveLength(0);
     });
 
     // 실측 dry-run에서 발견한 버그 재현: "삼남길 제6길 화성효행길, ..."류 도보 코스 나열 LOC_NM을
@@ -339,7 +339,7 @@ describe('GgCultureEventsAdapter', () => {
         cultureEventItems: [],
         foundationEventItems: [{ ...FOUNDATION_EVENT_ITEM, LOC_NM: '삼남길 제6길 화성효행길, 평해길 제7길 지평향교길' }],
       });
-      expect(rows).toEqual([]);
+      expect(rows).toHaveLength(0);
     });
 
     it('제목/시작일/종료일 중 하나라도 없으면 해당 항목을 건너뛴다', async () => {
@@ -348,7 +348,28 @@ describe('GgCultureEventsAdapter', () => {
         cultureEventItems: [],
         foundationEventItems: [{ ...FOUNDATION_EVENT_ITEM, TITLE_NM: '' }],
       });
-      expect(rows).toEqual([]);
+      expect(rows).toHaveLength(0);
+    });
+
+    // [배치 안정성 진단](2026-09-18 사용자 지시, implementation/todo.md 개선사항 2): "3,270건
+    // 수신 중 312건이 왜 에러로 처리되는지" — transform()이 반환하는 배열의 errorCounts
+    // 프로퍼티로 드롭 사유별 집계를 확인할 수 있어야 한다.
+    it('제목/일자 누락은 MISSING_TITLE_OR_DATE로, LOC_NM 없음은 EMPTY_LOC_NM으로, 지오코딩 실패는 GEOCODE_FAILED로 각각 집계한다', async () => {
+      geocode.mockResolvedValueOnce(null);
+      const adapter = new GgCultureEventsAdapter();
+      const rows = await adapter.transform({
+        cultureEventItems: [{ ...CULTURE_EVENT_ITEM, TITLE: '' }],
+        foundationEventItems: [
+          { ...FOUNDATION_EVENT_ITEM, TITLE_NM: '' },
+          { ...FOUNDATION_EVENT_ITEM, DIV_NM: 'D2', LOC_NM: '' },
+          { ...FOUNDATION_EVENT_ITEM, DIV_NM: 'D3' },
+        ],
+      });
+      expect(rows.errorCounts).toEqual({
+        MISSING_TITLE_OR_DATE: 2, // API1 1건 + API2 1건
+        EMPTY_LOC_NM: 1,
+        GEOCODE_FAILED: 1,
+      });
     });
 
     it('동일한 DIV_NM은 동일한 external_id를 생성한다(결정적)', async () => {

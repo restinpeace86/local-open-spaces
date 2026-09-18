@@ -19,6 +19,7 @@ import { BaseCollectorAdapter } from './base-collector-adapter.mjs';
 import { fetchWithTimeout } from '../lib/fetch-with-timeout.mjs';
 import { buildEventRow, buildOpenSpaceRow, UI_CATEGORY } from './lib/schema-mapper.mjs';
 import { deriveParentalTags, deriveSpaceKidsFriendly } from '../lib/ai-tagging.mjs';
+import { bumpError } from '../lib/error-counts.mjs';
 import { extractYeyakDescription } from '../lib/seoul-yeyak-description.mjs';
 import { parsePriceFromText } from './lib/price-parser.mjs';
 
@@ -77,11 +78,6 @@ const SEOUL_GU_NAMES = [
 export function buildSigunguName(areanm) {
   if (!areanm) return null;
   return SEOUL_GU_NAMES.includes(areanm) ? `서울시 ${areanm}` : areanm;
-}
-
-// 에러 카운터 증가 헬퍼 — transformSplit()에서 반복 사용.
-function bumpError(errorCounts, type) {
-  errorCounts[type] = (errorCounts[type] || 0) + 1;
 }
 
 export class SeoulYeyakAdapter extends BaseCollectorAdapter {

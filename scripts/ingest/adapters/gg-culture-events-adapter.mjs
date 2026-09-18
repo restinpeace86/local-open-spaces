@@ -64,6 +64,7 @@ import { settleGroupFetches } from '../lib/settle-group-fetches.mjs';
 // (ESM 순환 참조의 잘 알려진 안전 패턴 — 실제로 테스트 스위트 통과로 재확인했다).
 import { normalizeVenueText } from './gg-culture-location-enrichment.mjs';
 import { parsePriceFromText } from './lib/price-parser.mjs';
+import { bumpError } from '../lib/error-counts.mjs';
 
 const CULTURE_EVENT_BASE_URL = 'https://openapi.gg.go.kr/GGCULTUREVENTSTUS';
 const FOUNDATION_EVENT_BASE_URL = 'https://openapi.gg.go.kr/GGCULFOUEVENSTM';
@@ -313,7 +314,10 @@ export class GgCultureEventsAdapter extends BaseCollectorAdapter {
   // 표본 실측과 다른 극히 일부 행 등)가 나도 그 건만 로그로 남기고 건너뛴다 — 이미 알려진 케이스
   // (제목/날짜 누락, 지오코딩 실패)는 기존처럼 continue로 조용히 스킵하고, try/catch는 그 외의
   // 진짜 예외 상황(전체 배치를 중단시킬 뻔한 버그)에 대한 안전망이다.
-  async transformCultureEvents(items) {
+  // [배치 안정성 진단](2026-09-18 사용자 지시, implementation/todo.md 개선사항 2): "3,270건
+  // 수신 중 312건이 왜 에러로 처리되는지" — 기존에는 rawCount-count 단일 숫자만 남고 원인별
+  // 집계가 없었다. seoul-yeyak-adapter.mjs의 bumpError 관례를 그대로 재사용한다(제5장 제4조).
+  async transformCultureEvents(items, errorCounts) {
     const rows = [];
 
     for (const item of items) {
@@ -321,7 +325,10 @@ export class GgCultureEventsAdapter extends BaseCollectorAdapter {
         const title = cleanText(item.TITLE);
         const startDate = formatYyyymmdd(item.BEGIN_DE);
         const endDate = formatYyyymmdd(item.END_DE);
-        if (!title || !startDate || !endDate) continue;
+        if (!title || !startDate || !endDate) {
+          bumpError(errorCounts, 'MISSING_TITLE_OR_DATE');
+          continue;
+        }
 
         const matchedSigun = matchGyeonggiSigunName(title) ?? matchGyeonggiSigunName(item.HOST_INST_NM);
         const coords = matchedSigun ? await this.geocodeCityCenterOrNull(matchedSigun) : null;
@@ -363,6 +370,7 @@ export class GgCultureEventsAdapter extends BaseCollectorAdapter {
 
         if (row) rows.push(row);
       } catch (err) {
+        bumpError(errorCounts, 'UNEXPECTED_ERROR');
         console.warn(`⚠️ [GGCULTUREVENTSTUS] 행 파싱 오류 [${item?.TITLE ?? '(제목 없음)'}]: ${err.message} — 건너뜀`);
       }
     }
@@ -370,7 +378,7 @@ export class GgCultureEventsAdapter extends BaseCollectorAdapter {
     return rows;
   }
 
-  async transformFoundationEvents(items) {
+  async transformFoundationEvents(items, errorCounts) {
     const rows = [];
 
     for (const item of items) {
@@ -378,12 +386,18 @@ export class GgCultureEventsAdapter extends BaseCollectorAdapter {
         const title = cleanText(item.TITLE_NM);
         const startDate = item.BGNG_NM?.slice(0, 10) ?? null;
         const endDate = item.END_NM?.slice(0, 10) ?? null;
-        if (!title || !startDate || !endDate) continue;
+        if (!title || !startDate || !endDate) {
+          bumpError(errorCounts, 'MISSING_TITLE_OR_DATE');
+          continue;
+        }
 
         // 콤마로 여러 장소가 나열된 경우 첫 번째만 대표 장소로 지오코딩한다
         // (national-park-ecotour-adapter.mjs와 동일한 정책).
         const primaryLocation = item.LOC_NM?.split(',')[0]?.trim();
-        if (!primaryLocation) continue;
+        if (!primaryLocation) {
+          bumpError(errorCounts, 'EMPTY_LOC_NM');
+          continue;
+        }
 
         // [지오코딩 실/층 단위 정규화 누락 수정](2026-09-05 사용자 지시): 원문을 먼저
         // 그대로 시도한다(건물명+실 전체가 하나의 POI로 등록돼 카카오 키워드 검색이
@@ -395,7 +409,10 @@ export class GgCultureEventsAdapter extends BaseCollectorAdapter {
           const normalized = normalizeVenueText(primaryLocation);
           if (normalized) coords = await this.geocodeOrSkip(title, normalized);
         }
-        if (!coords) continue;
+        if (!coords) {
+          bumpError(errorCounts, 'GEOCODE_FAILED');
+          continue;
+        }
 
         const tags = deriveParentalTags(JSON.stringify(item));
         const bookingStatus = deriveBookingStatus({
@@ -439,6 +456,7 @@ export class GgCultureEventsAdapter extends BaseCollectorAdapter {
 
         if (row) rows.push(row);
       } catch (err) {
+        bumpError(errorCounts, 'UNEXPECTED_ERROR');
         console.warn(`⚠️ [GGCULFOUEVENSTM] 행 파싱 오류 [${item?.TITLE_NM ?? '(제목 없음)'}]: ${err.message} — 건너뜀`);
       }
     }
@@ -447,10 +465,17 @@ export class GgCultureEventsAdapter extends BaseCollectorAdapter {
   }
 
   async transform({ cultureEventItems, foundationEventItems }) {
+    const errorCounts = {};
     const [cultureRows, foundationRows] = await Promise.all([
-      this.transformCultureEvents(cultureEventItems),
-      this.transformFoundationEvents(foundationEventItems),
+      this.transformCultureEvents(cultureEventItems, errorCounts),
+      this.transformFoundationEvents(foundationEventItems, errorCounts),
     ]);
-    return [...cultureRows, ...foundationRows];
+    // [배치 안정성 진단](2026-09-18): 반환값은 기존과 동일한 배열이다(하위 호환 —
+    // 이 배열을 rows[0]/rows.length로 직접 쓰는 기존 테스트들이 그대로 통과한다).
+    // errorCounts는 그 배열 객체에 추가 프로퍼티로만 실어 보낸다 — base-collector-
+    // adapter.mjs가 rawRows.errorCounts로 꺼내 pipeline_logs에 반영한다.
+    const rows = [...cultureRows, ...foundationRows];
+    rows.errorCounts = errorCounts;
+    return rows;
   }
 }

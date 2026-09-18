@@ -122,6 +122,43 @@ describe('BaseCollectorAdapter.run() — RAW 레이어 opt-in', () => {
       errorCount: 0, // rawCount(2) - count(2)
     });
   });
+
+  // [배치 안정성 진단](2026-09-18 사용자 지시, implementation/todo.md 개선사항 2): 단일
+  // 테이블 어댑터가 왜 특정 건이 드롭됐는지 원인별로 진단할 수 있도록, transform()이
+  // 반환하는 배열에 errorCounts 프로퍼티를 얹어 보내는 것도 허용한다(opt-in — 배열은
+  // JS 객체라 커스텀 프로퍼티를 가질 수 있고, Array.isArray는 여전히 true라 rows[0]/
+  // rows.length로 배열을 직접 쓰는 기존 24개 어댑터의 테스트는 전혀 영향받지 않는다).
+  it('transform()이 반환한 배열에 errorCounts 프로퍼티가 있으면 결과에 그대로 담는다', async () => {
+    class DiagnosedAdapter extends BaseCollectorAdapter {
+      constructor() {
+        super({ sourceKey: 'DIAGNOSED', targetTable: 'events' });
+      }
+      async fetch() {
+        return [{ id: 1 }, { id: 2 }];
+      }
+      transform(raw) {
+        const rows = raw.map((item) => ({ external_id: `id-${item.id}` }));
+        rows.errorCounts = { MISSING_TITLE: 3 };
+        return rows;
+      }
+    }
+
+    const adapter = new DiagnosedAdapter();
+    const result = await adapter.run();
+
+    expect(result.errorCounts).toEqual({ MISSING_TITLE: 3 });
+    expect(upsertRowsSafeMergeMock).toHaveBeenCalledWith(expect.anything(), 'events', [
+      { external_id: 'id-1' },
+      { external_id: 'id-2' },
+    ]);
+  });
+
+  it('transform()이 배열만 반환하는 기존 어댑터는 errorCounts가 undefined다(하위 호환)', async () => {
+    const adapter = new NoRawAdapter();
+    const result = await adapter.run();
+
+    expect(result.errorCounts).toBeUndefined();
+  });
 });
 
 describe('BaseCollectorAdapter.runServiceTransformFromRaw()', () => {

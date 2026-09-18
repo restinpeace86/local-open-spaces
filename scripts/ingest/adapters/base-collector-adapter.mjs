@@ -104,7 +104,17 @@ export class BaseCollectorAdapter {
         return await this.runMultiTableUpsert({ raw, rawCount, rawArchivedCount, dryRun });
       }
 
-      const rows = (await this.transform(raw)).filter(Boolean);
+      // [배치 안정성 진단](2026-09-18 사용자 지시, implementation/todo.md 개선사항 2):
+      // 기존 25개 단일 테이블 어댑터의 transform()은 배열만 반환해(드롭 사유 불명,
+      // pipeline_logs.meta_data.errorCounts가 항상 null) "312건/538건이 왜 거부되는지"를
+      // 사후에 알 방법이 없었다. transform()이 반환하는 배열에 errorCounts 프로퍼티를
+      // 얹어 보내는 것도 허용한다(배열은 JS 객체라 커스텀 프로퍼티를 가질 수 있음 —
+      // Array.isArray는 여전히 true라 기존 25개 어댑터를 직접 호출하는 테스트들이
+      // rows[0]/rows.length로 쓰는 코드는 전혀 안 바뀐다. 얹지 않으면 undefined로
+      // 남아 하위 호환).
+      const transformedRows = await this.transform(raw);
+      const rows = transformedRows.filter(Boolean);
+      const errorCounts = transformedRows.errorCounts;
       console.log(`  표준 스키마 변환 완료: ${rows.length}건 (유효성 검증 통과분만)`);
 
       if (dryRun) {
@@ -117,6 +127,7 @@ export class BaseCollectorAdapter {
           upserted: false,
           rawCount,
           rawArchivedCount,
+          errorCounts,
         };
       }
 
@@ -132,6 +143,7 @@ export class BaseCollectorAdapter {
           rawArchivedCount,
           safeMergeCount: 0,
           errorCount: typeof rawCount === 'number' ? rawCount : 0,
+          errorCounts,
           note: '유효 행 0건',
         };
       }
@@ -161,6 +173,7 @@ export class BaseCollectorAdapter {
         rawArchivedCount,
         safeMergeCount: duplicateWithinBatch + mergedWithExisting,
         errorCount,
+        errorCounts,
       };
     } catch (err) {
       throw err;
