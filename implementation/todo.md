@@ -176,6 +176,20 @@ KIDS_SCHOOL/INFANT/FAMILY/KIDS_PRE는 전혀 건드리지 않는다. 상세는
   3. `environment_type`이라는 이름을 계속 쓸 것인지, 기존 `facility_type`을 그대로
      쓸 것인지 확인이 필요합니다(이름이 다르면 중복 컬럼 생성 승인이 필요).
 
+**[x] 조건 A 재개 완료 (2026-09-19)** — 사용자 지시("default를 복합으로 한게
+잘못된거야.. unknown 혹은 null로 놔야돼")로 근본 원인(스킵 사유 4번)을 해결했다.
+`events.facility_type`을 nullable로 바꾸고(NOT NULL DEFAULT '복합' 제거), null=
+미판별로 명확히 구분되게 했다 — 더 이상 "구분 신호가 없어 조건 A를 반영할 수
+없는" 상태가 아니다. `scripts/ingest/classify-new-events-facility-type.mjs`(일일
+신규분)에 `.is('facility_type', null)` 조건을 추가해 조건 A를 실제로 반영했다.
+조건 B는 애초에 기존 target_audience IN (INFANT/KIDS_PRE/KIDS_SCHOOL/FAMILY)
+필터로 구조적으로 이미 충족되고 있었다(ADULT/SENIOR/YOUTH/OTHER 행은 그 필터에서
+아예 후보로 뽑히지 않음). 조건 C는 이미 구현 완료. 상세는
+`implementation/2026-09-19-facility-type-nullable-default-fix.md` 참고.
+백필 스크립트(`scripts/classify-events-facility-type.mjs`)는 "다 해"(이미 분류된
+것도 재검증 포함)라는 최초 지시가 여전히 유효해 facility_type 필터를 추가하지
+않았다.
+
 ---
 
 [개선사항 4] 관리자 페이지 >> 스팟 큐레이션쪽에 URL 크롤링 기능 추가 (해당 기능은 관리자 페이지 >> open_spaces >> 놀이방식당에서 상세페이지 팝업 >> 스팟 큐레이션 버튼 눌러서 나오는 화면도 동일하게 동작하도록해야함)

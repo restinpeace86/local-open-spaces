@@ -6,15 +6,13 @@ import { createAdminClient } from '@/lib/supabase/admin';
 // target-audience/route.ts와 동일한 관례 — facility_type은 events/open_spaces
 // 둘 다 있는 컬럼이지만, 이 편집 UI는 이벤트 상세 팝업(events) 전용이라 table
 // 파라미터를 받지 않는다(open_spaces 쪽은 요청 범위 밖 — 제5장 제7조).
-// [실측 확인] events.facility_type은 NOT NULL, 기본값 '복합'(실측: 전체 28,948건
-// 중 22,118건이 이 기본값에 그대로 머물러 있음 — 실제로 분류된 게 아니라 ETL이
-// 판단하지 못해 기본값을 둔 것과 사실상 동일). 그래서 새 값을 '실내외 복합' 같은
-// 임의 문자열로 만들지 않고 이미 쓰이고 있는 세 값 '실내'/'야외'/'복합'을 그대로
-// 쓴다 — LLM의 BOTH(복합 시설) 판정이 이 기존 기본값과 같은 문자열로 저장되는
-// 셈이지만, 이제는 "판단 못 해서 기본값"이 아니라 "LLM이 실제로 복합 시설이라고
-// 판단"한 결과라는 차이가 있다. UNKNOWN(판단 불가)은 저장할 대응값이 없어 이
-// 라우트로 적용하지 않는다(관리자 화면에서 안내만 하고 저장 버튼을 노출하지
-// 않음).
+// [facility_type 기본값 결함 수정](2026-09-19 사용자 지시): "default를 복합으로
+// 한게 잘못된거야.. unknown 혹은 null로 놔야돼". 이전엔 events.facility_type이
+// NOT NULL DEFAULT '복합'라 "실제로 실내외 둘 다 확인된 복합"과 "애초에 판별한
+// 적 없음"을 구분할 수 없었다(실측 2026-09-17: 28,948건 중 22,118건이 이 결함으로
+// 미판별 방치). 이제 컬럼이 nullable로 바뀌었으므로(scripts/migrations/2026-09-19-
+// facility-type-nullable-remove-default.sql), '실내'/'야외'/'복합' 확정값 외에
+// null(미판별로 되돌리기)도 명시적으로 허용한다.
 const FACILITY_TYPE_VALUES = ['실내', '야외', '복합'];
 
 export async function PATCH(request: NextRequest) {
@@ -25,11 +23,19 @@ export async function PATCH(request: NextRequest) {
     if (typeof id !== 'string' || !id) {
       return NextResponse.json({ error: 'id는 필수입니다.' }, { status: 400 });
     }
-    // facility_type은 NOT NULL 컬럼이라(기본값 '복합') target_audience처럼 null로
-    // 지울 수 없다 — 항상 세 값 중 하나를 명시해야 한다.
-    const nextFacilityType = typeof facilityType === 'string' ? facilityType.trim() : '';
-    if (!FACILITY_TYPE_VALUES.includes(nextFacilityType)) {
-      return NextResponse.json({ error: `facility_type은 다음 중 하나여야 합니다: ${FACILITY_TYPE_VALUES.join(', ')}` }, { status: 400 });
+    // null(또는 빈 문자열)이면 "미판별"로 되돌린다 — 그 외에는 확정값 세 개 중
+    // 하나여야 한다(추측 금지 — 다른 임의 문자열은 받지 않음).
+    const nextFacilityType =
+      facilityType === null || facilityType === undefined || facilityType === ''
+        ? null
+        : typeof facilityType === 'string'
+          ? facilityType.trim()
+          : undefined;
+    if (nextFacilityType !== null && !FACILITY_TYPE_VALUES.includes(nextFacilityType ?? '')) {
+      return NextResponse.json(
+        { error: `facility_type은 다음 중 하나이거나 null(미판별)이어야 합니다: ${FACILITY_TYPE_VALUES.join(', ')}` },
+        { status: 400 }
+      );
     }
 
     const admin = createAdminClient();

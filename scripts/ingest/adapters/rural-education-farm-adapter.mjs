@@ -205,7 +205,10 @@ export class RuralEducationFarmAdapter extends BaseCollectorAdapter {
       infoUrl: null,
       operatingHours: null,
       isKidsFriendly: true,
-      facilityType: '복합',
+      // [2026-09-19 사용자 지시] 이 소스는 실내외를 구분할 원본 필드/근거가 없어
+      // '복합'을 임의로 단정하고 있었다 — 근거 없이 확정값을 주지 않고 null(미판별)로
+      // 남긴다(spec/data/ai-rule.md 5.2-4 개정, 제3장 제5조 추측 금지).
+      facilityType: null,
       rawData: item,
       categoryMin: RURAL_EDUCATION_FARM_CATEGORY_MIN,
       categoryMinSource: 'RAW',

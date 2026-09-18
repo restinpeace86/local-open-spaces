@@ -24,9 +24,12 @@
 // facility_type: Task 지시서 원문은 "facility_type = '수영장'"이라고 적혀 있으나, 이는
 // spec/space/space-card.md의 실내/야외 뱃지 규약 및 schema-mapper.mjs의 normalizeFacilityType이
 // 정의하는 도메인('실내'|'야외'|'복합')과 다른 값이라 그대로 대입하면 정규화 과정에서 조용히
-// '복합'으로 치환될 뿐 실제로 반영되지 않는다. 대신 API1의 실제 필드 inout_gbn_nm(실내/실외/
+// null로 치환될 뿐 실제로 반영되지 않는다. 대신 API1의 실제 필드 inout_gbn_nm(실내/실외/
 // 실내외/없음)을 기존 어댑터들과 동일한 패턴(playground-adapter의 idrodrCdNm 매핑과 동일)으로
-// 정직하게 매핑한다. API2에는 실내/실외 필드가 없어 기본값(복합)을 그대로 둔다(추측 금지).
+// 정직하게 매핑한다. [2026-09-19 사용자 지시로 개정] "실내외"는 실제로 둘 다 확인된
+// 값이라 '복합'으로, "없음"(근거 없음)은 null(미판별)로 구분한다 — 이전엔 이 둘을 같은
+// '복합' 기본값으로 뭉뚱그렸었다(spec/data/ai-rule.md 5.2-4 개정). API2에는 실내/실외
+// 필드가 없어 null(미판별)로 둔다(추측 금지).
 //
 // is_free: 요금 필드가 원본에 없으나, 운영주체 필드가 레코드별로 실제 내려온다 — API1은
 // faci_gb_nm('공공'/그 외), API2는 PBP_SE_NM('공립'/'사립'). ai-rule.md 5.2-7 예외를 레코드
@@ -228,7 +231,10 @@ export class SwimmingPoolAdapter extends BaseCollectorAdapter {
     if (!name || !address || !item.faci_lat || !item.faci_lot) return null;
 
     const facilityType =
-      item.inout_gbn_nm === '실내' ? '실내' : item.inout_gbn_nm === '실외' ? '야외' : '복합';
+      item.inout_gbn_nm === '실내' ? '실내'
+      : item.inout_gbn_nm === '실외' ? '야외'
+      : item.inout_gbn_nm === '실내외' ? '복합'
+      : null;
 
     return buildOpenSpaceRow({
       externalId: `SWIMMING_POOL_A1_${item.faci_cd}`,

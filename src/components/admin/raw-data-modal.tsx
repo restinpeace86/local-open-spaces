@@ -307,17 +307,23 @@ function TargetAudienceEditor({
   );
 }
 
+// [facility_type 기본값 결함 수정](2026-09-19 사용자 지시): "default를 복합으로
+// 한게 잘못된거야.. unknown 혹은 null로 놔야돼" — facility_type이 nullable로
+// 바뀌어(scripts/migrations/2026-09-19-facility-type-nullable-remove-default.sql)
+// "미판별"을 명시적으로 고를 수 있어야 한다. select의 value로 빈 문자열을
+// null의 대리값으로 쓰고(HTML select는 null을 직접 표현 못함), 저장 시 다시
+// null로 되돌린다.
+const UNSET_SENTINEL = '';
 const FACILITY_TYPE_OPTIONS = ['실내', '야외', '복합'];
 // [실내/야외 분류 LLM 파이프라인](2026-09-17 사용자 지시): "공공데이터 및 외부
 // 제휴 API에서 수집된 아이와 함께 가기 좋은 나들이/체험 상품 데이터를 분석하여
 // 환경 속성을 자동으로 분류" — 제목+설명을 /api/admin/classify-facility-environment
-// 에 보내 INDOOR/OUTDOOR/BOTH/UNKNOWN 판정을 받아온다. 실측 확인(2026-09-17):
-// events.facility_type은 NOT NULL 기본값 '복합'이고 실제로 전체 28,948건 중
-// 22,118건이 이 기본값에 그대로 머물러 있다 — "판단 못 해서 기본값"과 "LLM이
-// 정말 복합 시설이라고 판단"을 구분하기 위해 이 기능을 만든다. INDOOR→실내,
-// OUTDOOR→야외, BOTH→복합으로 매핑해 select에 미리 채워주고, UNKNOWN(판단 불가)은
-// 저장할 대응값이 없어 select를 건드리지 않고 이유만 안내한다(추측으로 아무 값이나
-// 채우지 않음, 제3장 제5조).
+// 에 보내 INDOOR/OUTDOOR/BOTH/UNKNOWN 판정을 받아온다. 실측 확인(2026-09-17,
+// 2026-09-19 수정 반영): events.facility_type은 nullable이고 전체 28,948건 중
+// 22,118건이 null(미판별)이다 — "판단 못 해서 미판별"과 "LLM이 정말 복합 시설이라고
+// 판단"을 구분하기 위해 이 기능을 만든다. INDOOR→실내, OUTDOOR→야외, BOTH→복합으로
+// 매핑해 select에 미리 채워주고, UNKNOWN(판단 불가)은 저장할 대응값이 없어 select를
+// 건드리지 않고 이유만 안내한다(추측으로 아무 값이나 채우지 않음, 제3장 제5조).
 const CLASSIFICATION_TO_FACILITY_TYPE: Record<string, string> = { INDOOR: '실내', OUTDOOR: '야외', BOTH: '복합' };
 const CLASSIFICATION_LABEL: Record<string, string> = { INDOOR: '실내(INDOOR)', OUTDOOR: '야외(OUTDOOR)', BOTH: '복합(BOTH)', UNKNOWN: '판단 불가(UNKNOWN)' };
 
@@ -326,9 +332,9 @@ function FacilityTypeEditor({
   onUpdated,
 }: {
   row: AdminEventRow;
-  onUpdated: (id: string, nextFacilityType: string) => void;
+  onUpdated: (id: string, nextFacilityType: string | null) => void;
 }) {
-  const [value, setValue] = useState(row.facility_type || '복합');
+  const [value, setValue] = useState(row.facility_type ?? UNSET_SENTINEL);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isClassifying, setIsClassifying] = useState(false);
@@ -370,7 +376,7 @@ function FacilityTypeEditor({
       const res = await fetch('/api/admin/data-grid/facility-type', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: row.id, facility_type: value }),
+        body: JSON.stringify({ id: row.id, facility_type: value === UNSET_SENTINEL ? null : value }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? '수동 수정 실패');
@@ -387,7 +393,7 @@ function FacilityTypeEditor({
       <h3 className="text-xs font-semibold text-gray-500 mb-2">
         실내/야외(facility_type) 수동 수정
         <span className="ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-100 text-gray-600">
-          현재: {row.facility_type || '(없음)'}
+          현재: {row.facility_type || '미판별'}
         </span>
       </h3>
       <button
@@ -411,6 +417,7 @@ function FacilityTypeEditor({
           onChange={(e) => setValue(e.target.value)}
           className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs flex-1"
         >
+          <option value={UNSET_SENTINEL}>미판별</option>
           {FACILITY_TYPE_OPTIONS.map((opt) => (
             <option key={opt} value={opt}>
               {opt}
@@ -636,7 +643,7 @@ export function RawDataModal({
   onCategoryMinUpdated?: (id: string, nextCategoryMin: string | null, nextSource: string | null) => void;
   onTargetAudienceUpdated?: (id: string, nextTargetAudience: string | null, nextSource: string | null) => void;
   // [실내/야외 분류 LLM 파이프라인](2026-09-17 사용자 지시): events 탭 전용.
-  onFacilityTypeUpdated?: (id: string, nextFacilityType: string) => void;
+  onFacilityTypeUpdated?: (id: string, nextFacilityType: string | null) => void;
   // [운영 요일/반복 규칙](2026-09-12 사용자 지시): events 탭 전용. 편집기 자체는
   // [블로그 큐레이션 모달로 이동](2026-09-12 사용자 지시)에 따라 EventBlogCurationModal
   // 안으로 옮겨졌고, 이 콜백은 그 모달에 그대로 전달돼 저장 결과를 이 화면의 행

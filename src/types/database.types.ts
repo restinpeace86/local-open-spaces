@@ -337,7 +337,7 @@ export type Database = {
           event_type: string
           excluded_weekdays: string[] | null
           external_id: string
-          facility_type: string
+          facility_type: string | null
           has_parking: boolean
           id: string
           is_active: boolean | null
@@ -379,7 +379,7 @@ export type Database = {
           event_type: string
           excluded_weekdays?: string[] | null
           external_id: string
-          facility_type?: string
+          facility_type?: string | null
           has_parking?: boolean
           id?: string
           is_active?: boolean | null
@@ -421,7 +421,7 @@ export type Database = {
           event_type?: string
           excluded_weekdays?: string[] | null
           external_id?: string
-          facility_type?: string
+          facility_type?: string | null
           has_parking?: boolean
           id?: string
           is_active?: boolean | null
@@ -589,7 +589,7 @@ export type Database = {
           category_min_source: string | null
           created_at: string | null
           external_id: string
-          facility_type: string
+          facility_type: string | null
           feature_tag: string | null
           group_id: string | null
           has_parking: boolean
@@ -623,7 +623,7 @@ export type Database = {
           category_min_source?: string | null
           created_at?: string | null
           external_id: string
-          facility_type?: string
+          facility_type?: string | null
           feature_tag?: string | null
           group_id?: string | null
           has_parking?: boolean
@@ -657,7 +657,7 @@ export type Database = {
           category_min_source?: string | null
           created_at?: string | null
           external_id?: string
-          facility_type?: string
+          facility_type?: string | null
           feature_tag?: string | null
           group_id?: string | null
           has_parking?: boolean
@@ -1833,7 +1833,10 @@ export type Database = {
         Returns: boolean
       }
       longtransactionsenabled: { Args: never; Returns: boolean }
-      match_events_to_open_spaces: { Args: never; Returns: number }
+      match_events_to_open_spaces: {
+        Args: { p_since_days?: number }
+        Returns: number
+      }
       normalize_address_region_prefix: {
         Args: { addr: string }
         Returns: string

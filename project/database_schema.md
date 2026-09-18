@@ -38,7 +38,7 @@
 | `is_kids_friendly` | BOOLEAN | DEFAULT `false` | 키즈/어린이 친화 여부 |
 | `has_parking` | BOOLEAN | DEFAULT `false` | 주차 가능 여부 |
 | `stroller_accessible` | BOOLEAN | DEFAULT `false` | 유모차 접근 가능 여부 |
-| `facility_type` | VARCHAR(20) | DEFAULT `'복합'` | 시설 유형 (`실내` \| `야외` \| `복합`) |
+| `facility_type` | VARCHAR(20) | NULL | 시설 유형 (`실내` \| `야외` \| `복합`, `null`=미판별 — 2026-09-19 개정, 이전엔 `'복합'`이 기본값이라 미판별과 실제 복합 판정을 구분할 수 없었음) |
 | `target_age_group` | VARCHAR(50) | NULL | 대상 연령대 (예: `영유아`, `초등`, `전연령`) |
 
 - **공간 인덱스**: `CREATE INDEX idx_open_spaces_location ON public.open_spaces USING GIST(location);`
@@ -74,7 +74,7 @@
 | `is_kids_friendly` | BOOLEAN | DEFAULT `false` | 키즈/어린이 친화 여부 |
 | `has_parking` | BOOLEAN | DEFAULT `false` | 주차 가능 여부 |
 | `stroller_accessible` | BOOLEAN | DEFAULT `false` | 유모차 접근 가능 여부 |
-| `facility_type` | VARCHAR(20) | DEFAULT `'복합'` | 시설 유형 (`실내` \| `야외` \| `복합`) |
+| `facility_type` | VARCHAR(20) | NULL | 시설 유형 (`실내` \| `야외` \| `복합`, `null`=미판별 — 2026-09-19 개정, 이전엔 `'복합'`이 기본값이라 미판별과 실제 복합 판정을 구분할 수 없었음) |
 | `target_age_group` | VARCHAR(50) | NULL | 대상 연령대 (예: `영유아`, `초등`, `전연령`) |
 | `booking_status` | VARCHAR(50) | NULL | 예약/접수 상태 (`오늘방문` \| `D-1 마감임박` \| `주말예약` \| `접수중`) |
 | `venue_name` | TEXT | NULL | 원본 API의 실제 장소명(예: PLACENM). 2026-08-22 추가(`scripts/migrations/2026-08-22-events-add-venue-name.sql`), 문서 누락 정정 |

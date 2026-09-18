@@ -31,10 +31,16 @@ export function classifyPriceBadge(isFree, priceKrw) {
   return 'PAID';
 }
 
-// 실내외 뱃지 정규화 (#3) — 알 수 없으면 ai-rule.md 5.2-4 기본값 '복합'
+// 실내외 뱃지 정규화 (#3) — [2026-09-19 사용자 지시로 개정] spec/data/ai-rule.md
+// 5.2-4: 이전엔 알 수 없으면 '복합'을 기본값으로 강제했는데, 그러면 "실제로 실내외
+// 둘 다 확인된 복합 시설"과 "애초에 판별을 시도한 적도 없음"을 DB에서 구분할 수
+// 없었다(실측: 28,948건 중 22,118건이 이 결함으로 미판별 방치 상태였음 — 2026-09-17
+// 최초 진단). '복합'은 호출부가 실제로 그렇게(둘 다 확인) 판단해 명시적으로 넘긴
+// 경우에만 인정하고, 그 외(알 수 없음)는 null로 남겨 "아직 판별 안 됨"을 정직하게
+// 표현한다(제3장 제5조 추측 금지).
 export function normalizeFacilityType(raw) {
-  if (raw === '실내' || raw === '야외') return raw;
-  return '복합';
+  if (raw === '실내' || raw === '야외' || raw === '복합') return raw;
+  return null;
 }
 
 // Task 9-1-12(2026-08-22): 특별시/광역시 8곳의 공식 명칭 → 표기용 축약 명칭.
@@ -108,7 +114,7 @@ export function buildOpenSpaceRow({
   isKidsFriendly = false,
   hasParking = false,
   strollerAccessible = false,
-  facilityType = '복합',
+  facilityType = null,
   targetAgeGroup = null,
   rawData = null,
   sigunguName = undefined,
@@ -183,7 +189,7 @@ export function buildEventRow({
   isKidsFriendly = false,
   hasParking = false,
   strollerAccessible = false,
-  facilityType = '복합',
+  facilityType = null,
   targetAgeGroup = null,
   bookingStatus = null,
   isActive = true,

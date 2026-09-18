@@ -81,7 +81,7 @@ export type AdminOpenSpaceRow = {
   is_kids_friendly: boolean;
   has_parking: boolean;
   stroller_accessible: boolean;
-  facility_type: string;
+  facility_type: string | null;
   target_age_group: string | null;
   // [관리자화면 프론트엔드 렌더링 지연 진단](2026-09-12 사용자 지시): 목록 조회가
   // raw_data 전체를 실어 나르던 것을 없앴다(그리드 행은 이 값을 전혀 안 씀) —
@@ -119,7 +119,7 @@ export type AdminEventRow = {
   is_kids_friendly: boolean;
   has_parking: boolean;
   stroller_accessible: boolean;
-  facility_type: string;
+  facility_type: string | null;
   target_age_group: string | null;
   booking_status: string | null;
   is_active: boolean | null;
@@ -652,8 +652,11 @@ const FACILITY_TYPE_BADGE_STYLE: Record<string, string> = {
   야외: 'bg-emerald-100 text-emerald-700',
   복합: 'bg-gray-100 text-gray-600',
 };
-function FacilityTypeBadge({ facilityType }: { facilityType: string }) {
-  if (!facilityType) return <span className="text-xs text-gray-300">NULL</span>;
+function FacilityTypeBadge({ facilityType }: { facilityType: string | null }) {
+  // [facility_type 기본값 결함 수정](2026-09-19 사용자 지시): 이제 null이 "아직
+  // 판별 안 됨"을 정직하게 뜻한다(이전엔 이 값이 나올 일이 없었음 — 기본값이
+  // '복합'이었으므로). "NULL"보다 관리자가 바로 이해할 수 있는 라벨로 바꾼다.
+  if (!facilityType) return <span className="text-xs text-gray-300">미판별</span>;
   return (
     <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${FACILITY_TYPE_BADGE_STYLE[facilityType] ?? 'bg-gray-100 text-gray-600'}`}>
       {facilityType}

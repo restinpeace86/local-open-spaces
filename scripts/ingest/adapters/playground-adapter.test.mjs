@@ -163,6 +163,14 @@ describe('PlaygroundAdapter', () => {
       expect(rows[0].facility_type).toBe('실내');
     });
 
+    // [2026-09-19 사용자 지시] idrodrCdNm이 실내/실외 둘 다 아니면(값 없음/그 외) '복합'을
+    // 단정하지 않고 null(미판별)로 남긴다(spec/data/ai-rule.md 5.2-4 개정).
+    it('idrodrCdNm이 실내/실외가 아니면 facility_type을 null로 남긴다(추측 금지)', () => {
+      const adapter = new PlaygroundAdapter();
+      const rows = adapter.transform([{ ...BASE_ITEM, idrodrCdNm: '' }]);
+      expect(rows[0].facility_type).toBeNull();
+    });
+
     // [행안부 놀이시설 설치장소코드 매핑](2026-08-29): instlPlaceCd 기준으로 나들이 핵심
     // 중분류에 직접 매핑한다(category_min_source='RAW' — 소스 자체 분류값 사용, 키워드
     // 추측 아님). 실측 확인한 설치장소코드별 실제 시설명 표본(예: A013='서울형 키즈카페

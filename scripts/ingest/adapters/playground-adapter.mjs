@@ -170,7 +170,10 @@ export class PlaygroundAdapter extends BaseCollectorAdapter {
           lat,
           isFree: deriveIsFreeFallback({ hasFeeInfo: false, isPublicProvider }),
           isKidsFriendly: true,
-          facilityType: item.idrodrCdNm === '실내' ? '실내' : item.idrodrCdNm === '실외' ? '야외' : '복합',
+          // [2026-09-19 사용자 지시] idrodrCdNm이 '실내'/'실외' 둘 중 하나로 명확하지
+          // 않으면(값 없음/그 외 값) '복합'으로 단정하지 않고 null(미판별)로 남긴다 —
+          // spec/data/ai-rule.md 5.2-4 개정.
+          facilityType: item.idrodrCdNm === '실내' ? '실내' : item.idrodrCdNm === '실외' ? '야외' : null,
           rawData: item,
           categoryMin,
           categoryMinSource: categoryMin ? 'RAW' : null,

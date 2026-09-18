@@ -170,7 +170,10 @@ describe('SwimmingPoolAdapter', () => {
         source_type: 'SWIMMING_POOL',
         name: '용천초어울림센터',
         category: 'KIDS_ACTIVITY',
-        facility_type: '복합',
+        // [2026-09-19 사용자 지시로 개정] API2는 실내/실외 필드가 없어 이전엔 기본값
+        // '복합'으로 채워졌는데, 그러면 "실제로 확인된 복합"과 구분이 안 된다 —
+        // 근거가 없으므로 null(미판별)이 정확하다(spec/data/ai-rule.md 5.2-4).
+        facility_type: null,
         is_free: null,
       });
 
@@ -205,6 +208,26 @@ describe('SwimmingPoolAdapter', () => {
         api2Items: [],
       });
       expect(rows[0].facility_type).toBe('야외');
+    });
+
+    // [2026-09-19 사용자 지시] "실내외"는 실제로 둘 다 확인된 값이라 '복합'으로,
+    // "없음"(근거 없음)은 null(미판별)로 구분한다.
+    it('inout_gbn_nm이 실내외이면 facility_type을 복합으로 매핑한다(실제로 확인된 값)', () => {
+      const adapter = new SwimmingPoolAdapter();
+      const rows = adapter.transform({
+        api1Items: [{ ...API1_ITEM, inout_gbn_nm: '실내외' }],
+        api2Items: [],
+      });
+      expect(rows[0].facility_type).toBe('복합');
+    });
+
+    it('inout_gbn_nm이 없음이거나 그 외 값이면 facility_type을 null로 남긴다(추측 금지)', () => {
+      const adapter = new SwimmingPoolAdapter();
+      const rows = adapter.transform({
+        api1Items: [{ ...API1_ITEM, inout_gbn_nm: '없음' }],
+        api2Items: [],
+      });
+      expect(rows[0].facility_type).toBeNull();
     });
 
     it('faci_gb_nm이 공공이 아니면 is_free를 null로 판별한다', () => {

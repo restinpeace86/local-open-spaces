@@ -139,6 +139,10 @@ describe('RuralEducationFarmAdapter', () => {
         is_kids_friendly: true,
         category_min: RURAL_EDUCATION_FARM_CATEGORY_MIN,
         category_min_source: 'RAW',
+        // [2026-09-19 사용자 지시] 이 소스는 실내외를 구분할 근거가 없어 이전엔 '복합'을
+        // 임의로 단정했다 — 근거 없이 확정값을 주지 않고 null(미판별)로 남긴다
+        // (spec/data/ai-rule.md 5.2-4 개정).
+        facility_type: null,
       });
       expect(geocode).toHaveBeenCalledWith(BASE_ITEM.locplc);
       const match = rows[0].location.match(/POINT\(([\d.]+) ([\d.]+)\)/);

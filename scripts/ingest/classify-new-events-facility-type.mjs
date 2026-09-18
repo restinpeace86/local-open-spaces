@@ -45,6 +45,15 @@ function isExcludedFromFacilityClassification(categoryMin) {
   return categoryMin != null && EVENTS_EXCLUDED_FACILITY_CLASSIFICATION_MINS.includes(categoryMin);
 }
 
+// [조건 A: 이미 판별된 행 스킵](2026-09-19 사용자 지시로 마침내 반영 가능해짐):
+// "default를 복합으로 한게 잘못된거야.. unknown 혹은 null로 놔야돼" — 이 지적으로
+// facility_type이 nullable(null=미판별)로 바뀌어(scripts/migrations/2026-09-19-
+// facility-type-nullable-remove-default.sql), "이미 INDOOR/OUTDOOR/BOTH로 채워져
+// 있으면 스킵"을 마침내 안전하게 반영할 수 있게 됐다(이전엔 기본값 '복합' 때문에
+// 신규 행도 "이미 분류됨"으로 오인해 전부 건너뛰는 문제가 있어 미반영 상태였다 —
+// implementation/todo.md [개선사항 3] 스킵 사유 참고). 오늘 새로 들어온 행은 방금
+// 막 생성돼 facility_type이 null인 게 보통이지만, 이 워크플로가 하루에 두 번 이상
+// 실행되는 경우(수동 재실행 등) 이미 처리한 건을 다시 태우지 않도록 방어한다.
 async function fetchTodayNewRows() {
   const { data, error } = await supabase
     .from('events')
@@ -52,6 +61,7 @@ async function fetchTodayNewRows() {
     .eq('is_active', true)
     .in('target_audience', TARGET_AUDIENCES)
     .gte('created_at', todayStartIsoKst())
+    .is('facility_type', null)
     .order('id');
   if (error) throw new Error(`대상 조회 실패: ${error.message}`);
   const filtered = data.filter((row) => !isExcludedFromFacilityClassification(row.category_min));

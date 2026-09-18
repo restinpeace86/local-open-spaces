@@ -36,9 +36,16 @@ export function deriveParentalTags(sourceText) {
 
   const isIndoor = includesAny(['실내', '체육관', '박물관', '미술관', '전시관']);
   const isOutdoor = includesAny(['야외', '실외', '공원', '광장', '체험장']);
-  let facilityType = '복합';
-  if (isIndoor && !isOutdoor) facilityType = '실내';
-  else if (isOutdoor && !isIndoor) facilityType = '야외';
+  // [2026-09-19 사용자 지시로 개정] spec/data/ai-rule.md 5.2-4: 이전엔 "둘 다 포함
+  // 또는 판별 불분명"을 전부 '복합'으로 뭉뚱그렸는데, 그러면 "실내외 키워드가 실제로
+  // 둘 다 확인된 경우"와 "애초에 아무 근거도 없는 경우"를 구분할 수 없었다(실측:
+  // 28,948건 중 22,118건이 이 결함으로 미판별 방치 상태였음 — 이 함수가 가장 널리
+  // 쓰이는 facility_type 산출 경로라 주된 원인이었다). '복합'은 실내외 키워드가 실제로
+  // 둘 다 있을 때만, 근거가 전혀 없으면 null(미판별)로 정직하게 남긴다(추측 금지).
+  let facilityType = null;
+  if (isIndoor && isOutdoor) facilityType = '복합';
+  else if (isIndoor) facilityType = '실내';
+  else if (isOutdoor) facilityType = '야외';
 
   let targetAgeGroup = null;
   if (text.includes('영유아')) targetAgeGroup = '영유아';
