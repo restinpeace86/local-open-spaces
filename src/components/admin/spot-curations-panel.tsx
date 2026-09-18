@@ -42,6 +42,19 @@ export type SpotCurationItem = {
 
 export type SpotSearchResult = { id: string; name: string; address: string | null };
 
+// [관리자 페이지 스팟 큐레이션 URL 크롤링 기능](2026-09-18): /api/admin/spot-curations/
+// naver-crawl 응답 중 "정보 등록" 필드(imageUrl/businessHoursText/menuText)를 제외한
+// 나머지 — SpotCurationItem에 대응하는 컬럼이 없어(이름/주소/전화는 open_spaces 쪽 값이라
+// 별도 편집 UI가 이미 존재) 관리자가 눈으로 비교만 할 수 있는 참고용 정보다.
+type NaverPlaceCrawlPreview = {
+  name: string | null;
+  roadAddress: string | null;
+  address: string | null;
+  phone: string | null;
+  category: string | null;
+  conveniences: string[];
+};
+
 // [todo.md 개선사항 9](2026-09-03) 실측으로 발견: 후보 목록 조회를 재사용하는
 // /api/admin/data-grid는 page_size를 50/100/200 중 하나로만 받고(그 외 값은 조용히
 // 기본값 50으로 대체) 다른 값은 무시한다 — 클라이언트가 20을 요청해도 서버는 50건씩
@@ -170,6 +183,84 @@ export function CurationFormModal({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
+  // [관리자 페이지 스팟 큐레이션 URL 크롤링 기능](2026-09-18 사용자 지시): "네이버
+  // 플레이스 주소 입력 → [데이터 가져오기] → 대표이미지/영업시간/메뉴/기본정보/뱃지
+  // 자동 채움". open_spaces > 놀이방식당 상세팝업 > 스팟 큐레이션 버튼도 이 동일한
+  // CurationFormModal을 그대로 여는 구조라(위 2026-09-08 주석 참고) 이 한 곳에만
+  // 구현하면 두 진입점 모두 동일하게 동작한다(요구사항 원문 "동일하게 동작해야 함").
+  const [naverPlaceUrl, setNaverPlaceUrl] = useState('');
+  const [isCrawling, setIsCrawling] = useState(false);
+  const [crawlError, setCrawlError] = useState<string | null>(null);
+  const [crawlPreview, setCrawlPreview] = useState<NaverPlaceCrawlPreview | null>(null);
+
+  // [관리자 페이지 스팟 큐레이션 URL 크롤링 기능](2026-09-18 사용자 지시): "곧바로 기존의
+  // '영업시간 자동 파싱 버튼' 로직을 연동해서 정형화까지 원클릭으로 완료되게 함" — 크롤링
+  // 결과 텍스트를 state에 반영하는 동시에 handleParseHours/handleParseMenu와 동일한 파싱
+  // 로직을 그 자리에서 바로 호출한다(setState는 비동기라 handleParseHours()를 뒤이어 호출하면
+  // 아직 갱신 전의 hoursRaw를 읽는 클로저 문제가 생겨, 그 함수들을 재호출하지 않고 같은
+  // 파싱 함수를 크롤링 결과 텍스트에 직접 적용한다 — 로직 자체는 여전히 하나만 존재).
+  async function handleCrawlNaverPlace() {
+    const trimmedUrl = naverPlaceUrl.trim();
+    if (!trimmedUrl) {
+      setCrawlError('네이버 플레이스 URL을 먼저 입력해 주세요.');
+      return;
+    }
+    setIsCrawling(true);
+    setCrawlError(null);
+    try {
+      const res = await fetch('/api/admin/spot-curations/naver-crawl', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ naverUrl: trimmedUrl }),
+      });
+      const data: {
+        name?: string | null;
+        roadAddress?: string | null;
+        address?: string | null;
+        phone?: string | null;
+        category?: string | null;
+        conveniences?: string[];
+        businessHoursText?: string | null;
+        menuText?: string | null;
+        imageUrl?: string | null;
+        error?: string;
+      } = await res.json();
+      if (!res.ok) throw new Error(data.error ?? '네이버 플레이스 데이터를 가져오지 못했습니다.');
+
+      setCrawlPreview({
+        name: data.name ?? null,
+        roadAddress: data.roadAddress ?? null,
+        address: data.address ?? null,
+        phone: data.phone ?? null,
+        category: data.category ?? null,
+        conveniences: data.conveniences ?? [],
+      });
+
+      if (data.imageUrl) setImageUrl(data.imageUrl);
+
+      if (data.businessHoursText) {
+        setHoursRaw(data.businessHoursText);
+        const parsedHours = parseOperatingHoursText(data.businessHoursText);
+        setOpenTime(parsedHours.openTime ?? '');
+        setCloseTime(parsedHours.closeTime ?? '');
+        setBreakStart(parsedHours.breakStart ?? '');
+        setBreakEnd(parsedHours.breakEnd ?? '');
+        setLastOrder(parsedHours.lastOrder ?? '');
+      }
+
+      if (data.menuText) {
+        setMenuRaw(data.menuText);
+        const detected = detectKidsMenuItems(parseMenuText(data.menuText));
+        setMenuItems(detected);
+        if (detected.some((item) => item.is_kids_menu)) setHasKidsMenuBadge(true);
+      }
+    } catch (err) {
+      setCrawlError(err instanceof Error ? err.message : '네이버 플레이스 데이터를 가져오지 못했습니다.');
+    } finally {
+      setIsCrawling(false);
+    }
+  }
+
   async function handlePasteImage(e: React.ClipboardEvent<HTMLDivElement>) {
     const items = e.clipboardData?.items;
     if (!items) return;
@@ -289,6 +380,51 @@ export function CurationFormModal({
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {/* [관리자 페이지 스팟 큐레이션 URL 크롤링 기능](2026-09-18 사용자 지시):
+              "위치: 기존 관리자 입력 폼의 가장 맨 위(Header 영역 바로 아래)". */}
+          <div className="flex flex-col gap-1.5 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
+            <span className="font-medium text-gray-700">네이버 플레이스 주소로 자동 채우기</span>
+            <div className="flex gap-1.5">
+              <input
+                type="text"
+                value={naverPlaceUrl}
+                onChange={(e) => setNaverPlaceUrl(e.target.value)}
+                placeholder="https://map.naver.com/p/entry/place/36200306?..."
+                className="flex-1 min-w-0 rounded-lg border border-gray-300 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+              <button
+                type="button"
+                onClick={handleCrawlNaverPlace}
+                disabled={isCrawling}
+                className="shrink-0 rounded-lg bg-blue-600 text-white text-xs font-semibold px-3 py-1.5 disabled:opacity-50 hover:bg-blue-700"
+              >
+                {isCrawling ? '가져오는 중...' : '⚡ 데이터 가져오기'}
+              </button>
+            </div>
+            {crawlError && <p className="text-xs text-red-600">{crawlError}</p>}
+            {/* 요구사항 "관리자는 세팅된 이미지와 소스 데이터를 읽고.. 확인 및 비교" —
+                이름/주소/전화/편의시설은 이 화면에 대응하는 편집 필드가 없어(스팟 자체
+                이름/주소는 open_spaces 값) 비교용으로만 보여준다. 대표이미지/영업시간/
+                메뉴는 아래 각 필드에 실제로 반영된다. */}
+            {crawlPreview && (
+              <div className="rounded-lg bg-white border border-blue-100 p-2 text-xs text-gray-600">
+                <p className="font-medium text-gray-800">{crawlPreview.name ?? '(업체명 없음)'}</p>
+                <p>{crawlPreview.roadAddress || crawlPreview.address || '(주소 없음)'}</p>
+                <p>{crawlPreview.phone ?? '(전화번호 없음)'} · {crawlPreview.category ?? '(업종 없음)'}</p>
+                {crawlPreview.conveniences.length > 0 && (
+                  <p className="mt-1">
+                    편의시설:{' '}
+                    {crawlPreview.conveniences.map((c) => (
+                      <span key={c} className="mr-1 inline-block rounded-full bg-blue-100 text-blue-700 px-2 py-0.5">
+                        {c}
+                      </span>
+                    ))}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+
           <BoundSpotSummary name={spotDisplay.name} address={spotDisplay.address} />
 
           <label className="flex items-center gap-2 text-sm">
