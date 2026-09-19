@@ -38,10 +38,14 @@ export function usePublishedSpotNotices(spotId: string | null | undefined): Spot
       .catch(() => {
         if (!cancelled) setNotices([]);
       });
+    // [실사용 확인](2026-09-20 사용자 지시, spot-curation-refresh 트리거와 동일한
+    // 이유) keepalive로, 이 유저가 크롤링이 끝나기 전에 탭을 닫거나 페이지를
+    // 이동해도 요청이 중간에 끊기지 않고 백그라운드로 계속 전송되게 한다.
     fetch('/api/spot-notice-radar', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ spot_id: spotId }),
+      keepalive: true,
     }).catch(() => {}); // fire-and-forget — 실패해도 유저 화면에 영향 없음.
     return () => {
       cancelled = true;

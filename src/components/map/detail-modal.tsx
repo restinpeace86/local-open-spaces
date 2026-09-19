@@ -374,6 +374,12 @@ export function DetailModal({
   // 값은 이 페이지가 아니라 "스팟 상세"에서만 보여지므로(EVENT는 curation을 아예
   // 조회하지 않음, 위 주석 참고) 결과를 기다리지 않고 트리거만 해둔다 — 최소 7일에
   // 한 번만 실제로 크롤링이 도는 드문 트리거라 다음 방문부터 반영돼도 충분하다.
+  // [실사용 확인](2026-09-20 사용자 지시) "트리거된 유저가 크롤링하는 5~6초를
+  // 기다리게 하지 마라.. 그 유저는 단순히 트리거만 된 것" — 이 fetch를 await하지
+  // 않으므로 응답을 기다리는 동안 화면 렌더링이 막히는 일은 원래 없다. 다만
+  // keepalive를 켜서, 이 유저가 크롤링이 서버에서 끝나기 전에 탭을 닫거나 다른
+  // 페이지로 이동해도(모달을 보고 바로 나가는 경우가 흔함) 브라우저가 요청 자체를
+  // 중간에 끊지 않고 백그라운드로 계속 보내도록 한다(응답은 여전히 안 기다림).
   useEffect(() => {
     const spotId = isEvent ? item.space_id : item.id;
     if (!spotId) return;
@@ -381,6 +387,7 @@ export function DetailModal({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ spot_id: spotId }),
+      keepalive: true,
     }).catch(() => {}); // fire-and-forget — 실패해도 유저 화면에 영향 없음.
   }, [item.id, item.space_id, isEvent]);
 
