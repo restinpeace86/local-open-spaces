@@ -957,6 +957,7 @@ export type Database = {
           id: string
           image_url: string | null
           is_active: boolean
+          last_crawled_at: string | null
           last_order: string | null
           menu_items: Json
           min_age_recommended: number
@@ -982,6 +983,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           is_active?: boolean
+          last_crawled_at?: string | null
           last_order?: string | null
           menu_items?: Json
           min_age_recommended?: number
@@ -1007,6 +1009,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           is_active?: boolean
+          last_crawled_at?: string | null
           last_order?: string | null
           menu_items?: Json
           min_age_recommended?: number

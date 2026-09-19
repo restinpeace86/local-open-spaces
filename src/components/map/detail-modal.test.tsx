@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DetailModal } from './detail-modal';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
@@ -1448,5 +1448,52 @@ describe('DetailModal 네이버 플레이스 공지(2026-09-19)', () => {
     const banner = (await screen.findByText('사진 없는 안내')).closest('div');
     expect(banner?.className).toContain('bg-amber-50');
     expect(document.querySelector('img[alt=""]')).not.toBeInTheDocument();
+  });
+});
+
+// [스팟 큐레이션 온디맨드 재크롤링](2026-09-20 사용자 지시): "스팟 상세 페이지를
+// 눌렀을 때 혹은 이벤트를 눌렀는데 스팟 연동되어 있었으면.. 데이터 가져온 지 1주일이
+// 넘었는지 체크하고 넘었으면 다시 크롤링" — 공지 레이더와 동일한 스팟 id 해석으로
+// /api/spot-curation-refresh를 fire-and-forget 트리거하는지 검증한다.
+describe('DetailModal 스팟 큐레이션 재크롤링 트리거(2026-09-20)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('스팟(SPACE) 상세는 item.id로 재크롤링을 트리거한다', async () => {
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) => Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response));
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<DetailModal item={makeSpaceItem({ id: 'space-1' })} onClose={() => {}} />);
+
+    await waitFor(() => {
+      const refreshCall = fetchMock.mock.calls.find((c) => (c[0] as string) === '/api/spot-curation-refresh');
+      expect(refreshCall).toBeDefined();
+      expect((refreshCall![1] as RequestInit).method).toBe('POST');
+      expect(JSON.parse((refreshCall![1] as RequestInit).body as string)).toEqual({ spot_id: 'space-1' });
+    });
+  });
+
+  it('이벤트(EVENT) 상세는 item.space_id로 재크롤링을 트리거한다', async () => {
+    const fetchMock = vi.fn((_url: string, _init?: RequestInit) => Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response));
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT', space_id: 'space-99' })} onClose={() => {}} />);
+
+    await waitFor(() => {
+      const refreshCall = fetchMock.mock.calls.find((c) => (c[0] as string) === '/api/spot-curation-refresh');
+      expect(refreshCall).toBeDefined();
+      expect(JSON.parse((refreshCall![1] as RequestInit).body as string)).toEqual({ spot_id: 'space-99' });
+    });
+  });
+
+  it('이벤트에 연결된 space_id가 없으면 재크롤링을 트리거하지 않는다', async () => {
+    const fetchMock = vi.fn((_url: string) => Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response));
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT', space_id: null })} onClose={() => {}} />);
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(fetchMock.mock.calls.some((c) => (c[0] as string) === '/api/spot-curation-refresh')).toBe(false);
   });
 });

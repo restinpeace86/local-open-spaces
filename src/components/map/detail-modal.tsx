@@ -367,6 +367,23 @@ export function DetailModal({
   // (CuratedItemDetailModal도 동일한 훅을 재사용, 제5장 제4조).
   const publishedNotices = usePublishedSpotNotices(isEvent ? item.space_id : item.id);
 
+  // [스팟 큐레이션 온디맨드 재크롤링](2026-09-20 사용자 지시): "영업시간/메뉴 정보가
+  // 1주일이 지나면.. 스팟 상세 페이지를 눌렀을 때 혹은 이벤트를 눌렀는데 스팟
+  // 연동되어 있었으면.. 다시 크롤링해서 정보 비교하고 달라진 점을 반영" — 위 소식
+  // 레이더와 동일한 스팟 id 해석(스팟=item.id, 이벤트=item.space_id)을 쓰지만, 갱신된
+  // 값은 이 페이지가 아니라 "스팟 상세"에서만 보여지므로(EVENT는 curation을 아예
+  // 조회하지 않음, 위 주석 참고) 결과를 기다리지 않고 트리거만 해둔다 — 최소 7일에
+  // 한 번만 실제로 크롤링이 도는 드문 트리거라 다음 방문부터 반영돼도 충분하다.
+  useEffect(() => {
+    const spotId = isEvent ? item.space_id : item.id;
+    if (!spotId) return;
+    fetch('/api/spot-curation-refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ spot_id: spotId }),
+    }).catch(() => {}); // fire-and-forget — 실패해도 유저 화면에 영향 없음.
+  }, [item.id, item.space_id, isEvent]);
+
   // [스팟 상세 → 마이리얼트립 자동 매칭](2026-09-16 사용자 지시): "스팟픽에서
   // 우리의 키즈카페 장소 검색시 해당 장소 눌렀을때 내부적으로 마이리얼트립에서
   // 해당 상호명으로 검색하고 있으면.. 동적 버튼을 통하여 티켓 구매 둘러보기" —
