@@ -30,6 +30,9 @@
 # 로컬 실행 상태일 뿐 커밋할 소스가 아니다(scripts/classify-events-facility-type.mjs 참고).
 /scripts/tmp/
 
+# Claude Code 개인 로컬 권한 설정(팀 공유 아님, 사람마다 다를 수 있음)
+.claude/settings.local.json
+
 # misc
 .DS_Store
 *.pem
