@@ -335,6 +335,58 @@ describe('SpotCurationsPanel — 리스트 기반 등록/수정 (2026-09-03)', (
     expect(badgeCheckbox.checked).toBe(false);
   });
 
+  // [실사용 버그 제보](2026-09-19 사용자 지시) "애기밥이 메뉴로 있는데 키즈메뉴로
+  // 자동 매칭이 안 됐다.. 이건 키즈메뉴 맞으니깐 수동으로 키즈메뉴 뱃지 주려고
+  // 하는데 클릭해도 방법이 없다" — 원인 확인: [키즈메뉴] 뱃지 체크박스는
+  // 큐레이션 전체에 붙는 뱃지 하나일 뿐, 유저 화면(detail-modal.tsx)에 항목별로
+  // 붙는 ⭐[키즈추천] 표시는 메뉴 항목 각각의 is_kids_menu를 보는데 이걸 개별로
+  // 켜고 끌 UI가 없었다. 항목을 클릭하면 그 항목만 토글되고(자동 파싱이 놓친
+  // 항목을 구제), 함께 전체 뱃지도 OFF→ON 방향으로 제안되도록 했다.
+  it('자동 매칭되지 않은 메뉴 항목도 클릭하면 [키즈추천]으로 수동 전환되고, 재파싱해도 유지된다', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/api/admin/data-grid')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ rows: [{ id: 'spot-1', name: '육담 퇴계점', address: '대구' }], total: 1 }),
+        } as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [] }) } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<SpotCurationsPanel />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await waitFor(() => expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('육담 퇴계점'));
+    expect(await screen.findByText('+ 스팟 큐레이션 등록')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText(/짜장면 7,000원/), {
+      target: { value: '애기밥 3,000원\n삼겹살 15,000원' },
+    });
+    const parseButtons = screen.getAllByText('⚡ 자동 파싱');
+    fireEvent.click(parseButtons[1]);
+
+    await screen.findByText('애기밥 · 3,000원');
+    expect(screen.queryByText('[키즈추천]')).not.toBeInTheDocument();
+    const badgeCheckbox = screen.getByLabelText(/키즈메뉴\] 뱃지/) as HTMLInputElement;
+    expect(badgeCheckbox.checked).toBe(false);
+
+    // "애기밥" 항목을 클릭해 수동으로 키즈메뉴로 전환한다.
+    fireEvent.click(screen.getByText(/애기밥 · 3,000원/));
+    expect(await screen.findByText('[키즈추천]')).toBeInTheDocument();
+    // 전체 뱃지도 함께 OFF→ON으로 제안된다.
+    expect(badgeCheckbox.checked).toBe(true);
+
+    // 메뉴를 하나 더 추가해 재파싱해도(애기밥은 여전히 자동 매칭 안 됨) 수동
+    // 전환이 유지되어야 한다.
+    fireEvent.change(screen.getByPlaceholderText(/짜장면 7,000원/), {
+      target: { value: '애기밥 3,000원\n삼겹살 15,000원\n된장찌개 7,000원' },
+    });
+    fireEvent.click(parseButtons[1]);
+    await screen.findByText('된장찌개 · 7,000원');
+    expect(screen.getByText('[키즈추천]')).toBeInTheDocument();
+  });
+
   // [스팟 큐레이션 URL 크롤링 — 편의시설 뱃지 자동 체크](2026-09-19 사용자 지시):
   // "편의시설.. 가져온거랑 정합성 맞으면 체크해주는거.. 다만 이미 체크되어있는건
   // 해제하지 말고.. 자동으로 추가할때 놓칠 수도 있으니 사람이 수동으로 체크해줄

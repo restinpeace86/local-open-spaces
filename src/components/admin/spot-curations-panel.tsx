@@ -211,6 +211,14 @@ export function CurationFormModal({
   // 수동 해제가 무의미해지는 버그였다. 한 번이라도 체크박스를 직접 조작하면
   // 이후 자동 파싱은 이 값을 더 이상 건드리지 않도록 기록해둔다.
   const kidsMenuManuallySetRef = useRef(false);
+  // [실사용 버그 제보](2026-09-19 사용자 지시) "애기밥이 메뉴로 있는데 자동으로
+  // 키즈메뉴 매칭이 안 돼서 수동으로 키즈메뉴 뱃지 주려고 하는데 방법이 없어" —
+  // 위 hasKidsMenuBadge는 큐레이션 전체에 붙는 뱃지 하나일 뿐, 실제 유저 화면
+  // (detail-modal.tsx)에 메뉴 항목별로 붙는 ⭐[키즈추천] 표시는 각 항목의
+  // is_kids_menu 값을 따로 보는데, 이걸 개별로 수동 전환할 UI가 아예 없었다.
+  // 항목 이름별로 수동 전환 이력을 기록해두고, 위 kidsMenuManuallySetRef와
+  // 동일한 이유로 재파싱/재크롤링이 그 수동 판단을 되돌리지 않게 한다.
+  const kidsMenuItemOverridesRef = useRef<Map<string, boolean>>(new Map());
   // [스팟 큐레이션 URL 크롤링 — 편의시설 뱃지 자동 체크](2026-09-19 사용자 지시):
   // "체크박스도 이 화면에 넣어서 자동으로 배지 칩이 읽어온거 병합되어야지.. 다만
   // 자동으로 추가할 때 놓칠 수도 있으니 사람이 수동으로 체크해줄 수 있어야 하고..
@@ -347,7 +355,7 @@ export function CurationFormModal({
 
       if (data.menuText) {
         setMenuRaw(data.menuText);
-        const detected = detectKidsMenuItems(parseMenuText(data.menuText));
+        const detected = applyKidsMenuOverrides(detectKidsMenuItems(parseMenuText(data.menuText)));
         setMenuItems(detected);
         // handleParseMenu와 동일한 이유로 관리자의 수동 해제를 재크롤링이
         // 되돌리지 않도록 한다(위 kidsMenuManuallySetRef 주석 참고).
@@ -397,8 +405,35 @@ export function CurationFormModal({
     setLastOrder(parsed.lastOrder ?? '');
   }
 
+  // 항목 이름으로 수동 전환 이력(kidsMenuItemOverridesRef)을 적용한다 — 같은
+  // 이름의 항목이 재파싱으로 다시 나타나도 관리자가 수동으로 뒤집은 값을
+  // 그대로 유지한다.
+  function applyKidsMenuOverrides(items: ParsedMenuItem[]): ParsedMenuItem[] {
+    return items.map((item) => {
+      const override = kidsMenuItemOverridesRef.current.get(item.name);
+      return override === undefined ? item : { ...item, is_kids_menu: override };
+    });
+  }
+
+  function handleToggleMenuItemKidsMenu(index: number) {
+    setMenuItems((prev) => {
+      const target = prev[index];
+      if (!target) return prev;
+      const nextValue = !target.is_kids_menu;
+      kidsMenuItemOverridesRef.current.set(target.name, nextValue);
+      return prev.map((item, i) => (i === index ? { ...item, is_kids_menu: nextValue } : item));
+    });
+    // 항목을 키즈메뉴로 켰다면, 위 hasKidsMenuBadge와 동일한 "OFF→ON 방향으로만
+    // 제안" 정책을 그대로 적용한다 — 관리자가 이미 뱃지 체크박스를 직접
+    // 조작했다면(kidsMenuManuallySetRef) 그 판단을 우선한다.
+    const target = menuItems[index];
+    if (target && !target.is_kids_menu && !kidsMenuManuallySetRef.current) {
+      setHasKidsMenuBadge(true);
+    }
+  }
+
   function handleParseMenu() {
-    const detected = detectKidsMenuItems(parseMenuText(menuRaw));
+    const detected = applyKidsMenuOverrides(detectKidsMenuItems(parseMenuText(menuRaw)));
     setMenuItems(detected);
     // 자동 감지는 OFF→ON 방향으로만 제안한다 — 매칭이 하나도 없다고 해서 관리자가
     // 이미 수동으로 켜 둔 뱃지를 되돌리지 않는다(위 hasKidsMenuBadge 주석 참고).
@@ -728,6 +763,7 @@ export function CurationFormModal({
           <div className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-gray-700">
               메뉴 — "이름 가격원" 한 줄씩, 또는 이름/가격/설명이 줄바꿈으로 나뉜 형식도 지원
+              (파싱 후 항목을 클릭하면 [키즈추천] 표시를 직접 켜고 끌 수 있음)
             </span>
             <textarea
               value={menuRaw}
@@ -752,12 +788,24 @@ export function CurationFormModal({
                       item.is_kids_menu ? 'bg-amber-50 border border-amber-200' : 'bg-gray-50'
                     }`}
                   >
-                    <span>
+                    {/* [실사용 버그 제보](2026-09-19 사용자 지시) "애기밥은 키즈메뉴로
+                        자동 매칭이 안 됐는데 수동으로 줄 방법이 없다" — 자동 파싱이
+                        놓친 항목을 항목 클릭으로 직접 켜고 끌 수 있게 한다. */}
+                    <button
+                      type="button"
+                      onClick={() => handleToggleMenuItemKidsMenu(i)}
+                      title="클릭해서 키즈메뉴 여부를 수동으로 전환"
+                      className="flex-1 text-left"
+                    >
                       {item.is_kids_menu && <span className="mr-1">⭐</span>}
                       {item.name} · {item.price.toLocaleString()}원
                       {item.is_kids_menu && <span className="ml-1.5 text-amber-700 font-semibold">[키즈추천]</span>}
-                    </span>
-                    <button type="button" onClick={() => handleRemoveMenuItem(i)} className="text-gray-400 hover:text-red-500">
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveMenuItem(i)}
+                      className="ml-2 shrink-0 text-gray-400 hover:text-red-500"
+                    >
                       삭제
                     </button>
                   </li>
