@@ -601,6 +601,7 @@ export type Database = {
           location: unknown
           location_precision: string
           name: string
+          naver_place_id: string | null
           operating_hours: string | null
           raw_data: Json | null
           service_category_id: string | null
@@ -635,6 +636,7 @@ export type Database = {
           location?: unknown
           location_precision?: string
           name: string
+          naver_place_id?: string | null
           operating_hours?: string | null
           raw_data?: Json | null
           service_category_id?: string | null
@@ -669,6 +671,7 @@ export type Database = {
           location?: unknown
           location_precision?: string
           name?: string
+          naver_place_id?: string | null
           operating_hours?: string | null
           raw_data?: Json | null
           service_category_id?: string | null
