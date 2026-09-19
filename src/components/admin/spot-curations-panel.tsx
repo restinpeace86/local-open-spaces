@@ -196,10 +196,19 @@ export function CurationFormModal({
     (opt) => opt.key !== KIDS_MENU_BADGE_KEY
   );
 
+  // [해제 방지 범위 정정](2026-09-19 사용자 지적): "내가 여기서 체크 안된거에
+  // 대하여 체크했는데.. 해제하려니깐 안되네.. 저장 안된거 여기서 누른거 관련해서는
+  // 다시 해제 해야하는거 아니야 ? db에서 불러온거 말고?" — 해제 금지는 DB에
+  // 이미 저장돼 있던 뱃지(savedBadgeKeys)에만 적용해야 한다. 이번 화면에서 방금
+  // 체크한 것(수동 클릭이든 크롤링 자동 매칭이든, 아직 저장 전이라 초록색으로
+  // 보이는 것)은 실수로 잘못 켰을 수 있으니 자유롭게 다시 끌 수 있어야 한다.
   function handleToggleBadge(key: string) {
+    if (savedBadgeKeys.has(key)) return; // 이미 DB에 저장된 뱃지는 이 화면에서 해제할 수 없다.
     setSelectedBadges((prev) => {
-      if (prev.has(key)) return prev; // [해제 방지] 이미 체크된 뱃지는 이 화면에서 해제할 수 없다.
-      return new Set(prev).add(key);
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
     });
   }
   // [가격 및 입장료 스마트 파싱](2026-09-08 사용자 지시): "네이버 플레이스 등의
@@ -476,7 +485,7 @@ export function CurationFormModal({
               지우는 사고 방지 — 정말 해제해야 하면 뱃지 전용 화면에서 한다). */}
           <div className="flex flex-col gap-1.5">
             <span className="text-sm font-medium text-gray-700">
-              편의시설 뱃지 (⚡ 데이터 가져오기 시 자동 체크, 부족하면 직접 추가 체크 가능 — 체크 해제는 이 화면에서 불가)
+              편의시설 뱃지 (⚡ 데이터 가져오기 시 자동 체크, 부족하면 직접 추가 체크 가능 — 파란색(이미 저장됨)만 이 화면에서 해제 불가, 초록색은 저장 전이라 다시 해제 가능)
             </span>
             <div className="flex flex-col gap-2">
               {badgeGroups.map((group) => (
@@ -487,8 +496,8 @@ export function CurationFormModal({
                       .filter((opt) => opt.group === group)
                       .map((opt) => {
                         const checked = selectedBadges.has(opt.key);
-                        const isSaved = checked && savedBadgeKeys.has(opt.key);
-                        const isUnsaved = checked && !savedBadgeKeys.has(opt.key);
+                        const isSaved = savedBadgeKeys.has(opt.key); // DB에 이미 저장됨 — 해제 불가.
+                        const isUnsaved = checked && !isSaved;
                         const colorClass = isSaved
                           ? 'bg-blue-600 text-white border-blue-600'
                           : isUnsaved
@@ -498,13 +507,13 @@ export function CurationFormModal({
                           <label
                             key={opt.key}
                             className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs ${
-                              checked ? 'cursor-not-allowed' : 'cursor-pointer'
+                              isSaved ? 'cursor-not-allowed' : 'cursor-pointer'
                             } ${colorClass}`}
                           >
                             <input
                               type="checkbox"
                               checked={checked}
-                              disabled={checked}
+                              disabled={isSaved}
                               onChange={() => handleToggleBadge(opt.key)}
                               className="sr-only"
                             />

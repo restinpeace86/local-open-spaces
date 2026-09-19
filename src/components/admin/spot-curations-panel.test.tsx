@@ -381,6 +381,40 @@ describe('SpotCurationsPanel — 리스트 기반 등록/수정 (2026-09-03)', (
       fireEvent.click(nursingRoomCheckbox);
       expect(nursingRoomCheckbox.checked).toBe(true);
     });
+
+    // [해제 방지 범위 정정](2026-09-19 사용자 지적): "내가 여기서 체크 안된거에
+    // 대하여 체크했는데.. 해제하려니깐 안되네.. 저장 안된거 여기서 누른거
+    // 관련해서는 다시 해제 해야하는거 아니야 ? db에서 불러온거 말고?" — 해제
+    // 금지는 DB에 이미 저장된 뱃지(파란색)에만 적용돼야 하고, 이번 화면에서
+    // 방금 체크한 것(수동이든 크롤링 자동 매칭이든, 초록색=저장 전)은 실수로
+    // 잘못 켰을 수 있으니 다시 끌 수 있어야 한다.
+    it('DB에 아직 저장되지 않은 뱃지(방금 수동 체크)는 다시 눌러서 해제할 수 있다', async () => {
+      await openNewCurationModal();
+
+      const nursingRoomCheckbox = screen.getByLabelText('수유실 있음') as HTMLInputElement;
+      fireEvent.click(nursingRoomCheckbox);
+      expect(nursingRoomCheckbox.checked).toBe(true);
+      expect(nursingRoomCheckbox.disabled).toBe(false);
+
+      fireEvent.click(nursingRoomCheckbox);
+      expect(nursingRoomCheckbox.checked).toBe(false);
+    });
+
+    it('DB에 아직 저장되지 않은 뱃지(크롤링 자동 매칭)도 다시 눌러서 해제할 수 있다', async () => {
+      await openNewCurationModal({ name: '테스트 업체', conveniences: ['주차'] });
+
+      fireEvent.change(screen.getByPlaceholderText(/map\.naver\.com/), {
+        target: { value: 'https://map.naver.com/p/entry/place/36200306' },
+      });
+      fireEvent.click(screen.getByText('⚡ 데이터 가져오기'));
+
+      const parkingCheckbox = (await screen.findByLabelText('주차 완비')) as HTMLInputElement;
+      expect(parkingCheckbox.checked).toBe(true);
+      expect(parkingCheckbox.disabled).toBe(false); // 자동 매칭됐지만 아직 저장 전이라 잠기지 않는다.
+
+      fireEvent.click(parkingCheckbox);
+      expect(parkingCheckbox.checked).toBe(false);
+    });
   });
 });
 
