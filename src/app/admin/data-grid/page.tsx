@@ -125,6 +125,9 @@ export default async function AdminDataGridPage() {
         // [마이리얼트립 공식 파트너 API 연동](2026-09-16): MyRealTripSearchPanel도
         // 동일하게 자기완결적이라 빈 객체만 넘긴다.
         myrealtrip_search: {},
+        // [네이버 플레이스 공지 온디맨드 레이더](2026-09-19): SpotNoticesPanel도
+        // 동일하게 자기완결적이라 빈 객체만 넘긴다.
+        spot_notices: {},
       }}
     />
   );

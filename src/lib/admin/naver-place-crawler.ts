@@ -23,6 +23,21 @@ export type NaverPlaceMenuItem = {
   thumbnailUrl: string | null;
 };
 
+// [네이버 플레이스 공지 온디맨드 레이더](2026-09-19 사용자 지시): 실측 스키마
+// (Feed:{placeId}_{feedId} 엔티티) 그대로 — title/desc가 각각 제목/본문, category는
+// 네이버가 자체 분류한 값("알림" 등, 원문 그대로 보존해 관리자가 참고), media[0]의
+// 대표 이미지만 쓴다(추측으로 media 배열 전체를 다중 이미지로 확장하지 않음 — 우리
+// 스키마는 공지당 대표 이미지 1장만 다룬다).
+export type NaverPlaceFeedItem = {
+  naverFeedId: string;
+  title: string | null;
+  content: string | null;
+  category: string | null;
+  imageUrl: string | null;
+  isPinned: boolean;
+  postedAt: string | null;
+};
+
 export type NaverPlaceCrawlResult = {
   placeId: string;
   name: string | null;
@@ -58,6 +73,13 @@ export function buildNaverPlaceUrls(placeId: string): { homeUrl: string; menuUrl
     homeUrl: `https://pcmap.place.naver.com/restaurant/${placeId}/home`,
     menuUrl: `https://pcmap.place.naver.com/restaurant/${placeId}/menu/list`,
   };
+}
+
+// [네이버 플레이스 공지 온디맨드 레이더](2026-09-19 사용자 지시): "공지" 페이지도
+// home/menu와 동일하게 정적 __APOLLO_STATE__ 파싱으로 접근 가능함을 실측 확인했다
+// (헤드리스 브라우저 불필요).
+export function buildNaverPlaceFeedUrl(placeId: string): string {
+  return `https://pcmap.place.naver.com/restaurant/${placeId}/feed`;
 }
 
 // Apollo Client 정규화 캐시 — 값이 { __ref: "TypeName:id" } 형태면 실제 객체로 치환해야
@@ -286,4 +308,33 @@ export function extractNaverPlaceCrawlResult(
     representativeImageUrl: placeDetail ? extractRepresentativeImageUrl(placeDetail) : null,
     menuItems: [...menuItemsByName.values()],
   };
+}
+
+// [네이버 플레이스 공지 온디맨드 레이더](2026-09-19 사용자 지시): "Feed:" 접두어로
+// 평탄 스캔한다 — 위 PlaceMenuItem/PlaceDetail_BaeminMenu 스캔과 동일한 방식(Apollo
+// 정규화 캐시라 그래프 구조를 몰라도 접두어만으로 전량 수집 가능, 실측 확인).
+// isDeleted=true인 항목은 네이버 쪽에서 이미 삭제 처리된 공지라 제외한다(추측 금지 —
+// 원본이 삭제됐다고 명시된 값을 우리 쪽에서 되살리지 않음).
+export function extractNaverPlaceFeedItems(html: string | null): NaverPlaceFeedItem[] {
+  if (!html) return [];
+  const state = parseApolloState(html);
+  if (!state) return [];
+
+  const items: NaverPlaceFeedItem[] = [];
+  for (const [key, value] of Object.entries(state)) {
+    if (!key.startsWith('Feed:')) continue;
+    const feed = denormalizeApolloValue(state, value) as Record<string, unknown>;
+    if (feed.isDeleted === true) continue;
+    const media = feed.media as Array<{ thumbnail?: string | null }> | null;
+    items.push({
+      naverFeedId: String(feed.id ?? key.slice('Feed:'.length)),
+      title: (feed.title as string | null) ?? null,
+      content: (feed.desc as string | null) ?? null,
+      category: (feed.category as string | null) ?? null,
+      imageUrl: Array.isArray(media) && media[0]?.thumbnail ? media[0].thumbnail : null,
+      isPinned: feed.isPinned === true,
+      postedAt: (feed.createdString as string | null) ?? null,
+    });
+  }
+  return items;
 }

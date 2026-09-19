@@ -105,6 +105,7 @@ const EMPTY_FILTER_OPTIONS = {
   spot_dedup: {},
   category_mapping: {},
   myrealtrip_search: {},
+  spot_notices: {},
 };
 
 describe('AdminDataGridClient — curated_items 탭 통합', () => {

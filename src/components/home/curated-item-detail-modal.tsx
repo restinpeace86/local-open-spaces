@@ -2,6 +2,7 @@
 
 import { CuratedItem } from '@/components/home/best-pick-slider';
 import { useBackdropDismiss } from '@/lib/admin/use-backdrop-dismiss';
+import { usePublishedSpotNotices, SpotNoticesSection } from '@/components/common/spot-notices-section';
 
 // [제휴 상품 상세 뷰 도입](2026-09-17 사용자 지시, todo.md [개선사항 2]): "메인 피드의
 // 프리뷰 카드를 클릭했을 때 곧바로 외부 링크로 이동하는 대신, 내부 상세 뷰를 거쳐
@@ -44,6 +45,10 @@ export function CuratedItemDetailModal({ item, onClose }: { item: CuratedItem; o
   const backdropDismiss = useBackdropDismiss(onClose);
   const period = formatPeriodLabel(item.operation_start_date, item.operation_end_date);
   const locationLabel = item.spot?.name ?? null;
+  // [네이버 플레이스 공지 온디맨드 레이더](2026-09-19 사용자 지시): "제휴 상품 상세
+  // 페이지에서도 연동된 스팟의 최신 상태를 동일하게 체크" — 연동된 스팟이 없으면
+  // (item.spot이 null) 훅이 아무것도 하지 않는다.
+  const publishedNotices = usePublishedSpotNotices(item.spot?.id);
 
   return (
     <div
@@ -100,6 +105,8 @@ export function CuratedItemDetailModal({ item, onClose }: { item: CuratedItem; o
                 dangerouslySetInnerHTML={{ __html: item.description }}
               />
             )}
+
+            <SpotNoticesSection notices={publishedNotices} />
           </div>
         </div>
 

@@ -1,5 +1,5 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
 import { CuratedItemDetailModal } from './curated-item-detail-modal';
 import { CuratedItem } from './best-pick-slider';
 
@@ -69,5 +69,52 @@ describe('CuratedItemDetailModal', () => {
 
     fireEvent.click(screen.getByLabelText('닫기'));
     expect(onClose).toHaveBeenCalled();
+  });
+});
+
+// [네이버 플레이스 공지 온디맨드 레이더](2026-09-19 사용자 지시): "제휴 상품 상세
+// 페이지에서도 연동된 스팟의 최신 상태를 동일하게 체크" — item.spot.id로 발행된
+// 공지를 조회하고 레이더를 트리거하는지 검증한다.
+describe('CuratedItemDetailModal 네이버 플레이스 공지(2026-09-19)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('연동된 스팟(item.spot.id)으로 발행된 공지를 조회하고 레이더를 트리거한다', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/api/spot-notices')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              notices: [{ id: 'n1', curated_title: '팝업 이벤트 안내', curated_content: null, curated_image_url: null }],
+            }),
+        } as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<CuratedItemDetailModal item={buildItem()} onClose={vi.fn()} />);
+
+    expect(await screen.findByText('🔔 최신 소식')).toBeInTheDocument();
+    expect(screen.getByText('🔔 팝업 이벤트 안내')).toBeInTheDocument();
+
+    const noticesCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/spot-notices'));
+    expect(noticesCall?.[0]).toBe('/api/spot-notices?spot_id=spot-9');
+
+    const radarCall = fetchMock.mock.calls.find((c) => (c[0] as string) === '/api/spot-notice-radar');
+    expect(radarCall).toBeDefined();
+    expect(JSON.parse((radarCall![1] as RequestInit).body as string)).toEqual({ spot_id: 'spot-9' });
+  });
+
+  it('연동된 스팟이 없으면(item.spot이 null) 공지를 조회하지 않는다', () => {
+    const fetchMock = vi.fn((_url: string) => Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response));
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<CuratedItemDetailModal item={buildItem({ spot: null })} onClose={vi.fn()} />);
+
+    expect(fetchMock.mock.calls.some((c) => (c[0] as string).includes('/api/spot-notices'))).toBe(false);
+    expect(screen.queryByText('🔔 최신 소식')).not.toBeInTheDocument();
   });
 });

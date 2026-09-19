@@ -602,6 +602,7 @@ export type Database = {
           location_precision: string
           name: string
           naver_place_id: string | null
+          notice_checked_at: string | null
           operating_hours: string | null
           raw_data: Json | null
           service_category_id: string | null
@@ -637,6 +638,7 @@ export type Database = {
           location_precision?: string
           name: string
           naver_place_id?: string | null
+          notice_checked_at?: string | null
           operating_hours?: string | null
           raw_data?: Json | null
           service_category_id?: string | null
@@ -672,6 +674,7 @@ export type Database = {
           location_precision?: string
           name?: string
           naver_place_id?: string | null
+          notice_checked_at?: string | null
           operating_hours?: string | null
           raw_data?: Json | null
           service_category_id?: string | null
@@ -1131,6 +1134,68 @@ export type Database = {
             foreignKeyName: "spot_myrealtrip_links_spot_id_fkey"
             columns: ["spot_id"]
             isOneToOne: true
+            referencedRelation: "open_spaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      spot_notices: {
+        Row: {
+          created_at: string
+          curated_content: string | null
+          curated_image_url: string | null
+          curated_title: string | null
+          id: string
+          published_at: string | null
+          raw_category: string | null
+          raw_content: string | null
+          raw_image_url: string | null
+          raw_naver_feed_id: string
+          raw_posted_at: string | null
+          raw_title: string | null
+          spot_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          curated_content?: string | null
+          curated_image_url?: string | null
+          curated_title?: string | null
+          id?: string
+          published_at?: string | null
+          raw_category?: string | null
+          raw_content?: string | null
+          raw_image_url?: string | null
+          raw_naver_feed_id: string
+          raw_posted_at?: string | null
+          raw_title?: string | null
+          spot_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          curated_content?: string | null
+          curated_image_url?: string | null
+          curated_title?: string | null
+          id?: string
+          published_at?: string | null
+          raw_category?: string | null
+          raw_content?: string | null
+          raw_image_url?: string | null
+          raw_naver_feed_id?: string
+          raw_posted_at?: string | null
+          raw_title?: string | null
+          spot_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "spot_notices_spot_id_fkey"
+            columns: ["spot_id"]
+            isOneToOne: false
             referencedRelation: "open_spaces"
             referencedColumns: ["id"]
           },

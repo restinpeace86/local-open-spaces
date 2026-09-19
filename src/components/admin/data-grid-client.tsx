@@ -18,6 +18,7 @@ import { MomPickUnmappedSpotsPanel } from '@/components/admin/mom-pick-unmapped-
 import { SpotDedupPanel } from '@/components/admin/spot-dedup-panel';
 import { CategoryMappingPanel } from '@/components/admin/category-mapping-panel';
 import { MyRealTripSearchPanel } from '@/components/admin/myrealtrip-search-panel';
+import { SpotNoticesPanel } from '@/components/admin/spot-notices-panel';
 import { ServiceCategory } from '@/lib/admin/service-category';
 
 // [관리자 화면(/admin/data-grid) 기능 고도화 및 범용 제휴 상품 테이블 개편](2026-08-30
@@ -54,7 +55,8 @@ export type AdminTable =
   | 'mom_pick_unmapped_spots'
   | 'spot_dedup'
   | 'category_mapping'
-  | 'myrealtrip_search';
+  | 'myrealtrip_search'
+  | 'spot_notices';
 
 export type AdminOpenSpaceRow = {
   id: string;
@@ -202,6 +204,7 @@ type FilterOptions = {
   spot_dedup: Record<string, never>;
   category_mapping: Record<string, never>;
   myrealtrip_search: Record<string, never>;
+  spot_notices: Record<string, never>;
 };
 
 type TriState = 'all' | 'true' | 'false';
@@ -236,6 +239,9 @@ const TAB_LABEL: Record<AdminTable, string> = {
   // 구현해보자.. 탭 하나 파거나" — 기존 큐레이션/제휴 상품 탭과 목적이 달라(탐색
   // vs 관리) 별도 탭으로 분리했다(제5장 제4조, myrealtrip-search-panel.tsx 주석 참고).
   myrealtrip_search: '🔍 마이리얼트립 상품 검색',
+  // [네이버 플레이스 공지 온디맨드 레이더](2026-09-19 사용자 지시): "관리자 대시보드의
+  // '임시 보관함(Staging)'" — 다른 자기완결 탭과 동일한 이유로 분리(제5장 제4조).
+  spot_notices: '🔔 공지 스테이징함',
 };
 
 // [타임존 버그 수정](2026-09-15 사용자 지시, todo.md [개선사항 4]): 기존
@@ -796,6 +802,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     spot_dedup: false,
     category_mapping: false,
     myrealtrip_search: false,
+    spot_notices: false,
   });
 
   // [노출 중분류 개별 행 수정](2026-09-05 사용자 지시) 참고: open_spaces 행을 열 때
@@ -1160,6 +1167,8 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
         <CategoryMappingPanel categoryMinOptions={filterOptions.open_spaces.categoryMins} />
       ) : tab === 'myrealtrip_search' ? (
         <MyRealTripSearchPanel />
+      ) : tab === 'spot_notices' ? (
+        <SpotNoticesPanel />
       ) : (
       <>
       {/* [관리자 화면 모바일 필터 영역 축소](2026-09-06 사용자 지시, 2차 수정): "중분류나

@@ -1270,3 +1270,101 @@ describe('DetailModal — 마이리얼트립 매칭 버튼(2026-09-16)', () => {
     expect(fetchMock.mock.calls.some((c) => (c[0] as string).includes('/api/spots/myrealtrip-link'))).toBe(false);
   });
 });
+
+// [네이버 플레이스 공지 온디맨드 레이더](2026-09-19 사용자 지시): "유저가 스팟 상세
+// 페이지뿐만 아니라 이벤트 상세 페이지.. 에서도 연동된 스팟의 최신 상태를 동일하게
+// 체크" — 스팟(item.id)/이벤트(item.space_id) 양쪽에서 발행된 공지를 조회하고,
+// 동시에 온디맨드 레이더를 fire-and-forget으로 트리거하는지 검증한다.
+describe('DetailModal 네이버 플레이스 공지(2026-09-19)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('스팟(SPACE) 상세는 item.id로 발행된 공지를 조회하고 레이더를 트리거한다', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/api/spot-notices')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              notices: [
+                { id: 'n1', curated_title: '추석 연휴 정상영업', curated_content: '9/7~9/9 정상영업합니다', curated_image_url: null },
+              ],
+            }),
+        } as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<DetailModal item={makeSpaceItem({ id: 'space-1' })} onClose={() => {}} />);
+
+    expect(await screen.findByText('🔔 최신 소식')).toBeInTheDocument();
+    expect(screen.getByText('🔔 추석 연휴 정상영업')).toBeInTheDocument();
+
+    const noticesCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/spot-notices'));
+    expect(noticesCall?.[0]).toBe('/api/spot-notices?spot_id=space-1');
+
+    const radarCall = fetchMock.mock.calls.find((c) => (c[0] as string) === '/api/spot-notice-radar');
+    expect(radarCall).toBeDefined();
+    expect((radarCall![1] as RequestInit).method).toBe('POST');
+    expect(JSON.parse((radarCall![1] as RequestInit).body as string)).toEqual({ spot_id: 'space-1' });
+  });
+
+  it('이벤트(EVENT) 상세는 item.space_id로 발행된 공지를 조회한다', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/api/spot-notices')) {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({ notices: [{ id: 'n1', curated_title: '이벤트 연동 공지', curated_content: null, curated_image_url: null }] }),
+        } as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT', space_id: 'space-99' })} onClose={() => {}} />);
+
+    expect(await screen.findByText('🔔 이벤트 연동 공지')).toBeInTheDocument();
+    const noticesCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/spot-notices'));
+    expect(noticesCall?.[0]).toBe('/api/spot-notices?spot_id=space-99');
+  });
+
+  it('이벤트에 연결된 space_id가 없으면 공지를 조회하지 않는다', () => {
+    const fetchMock = vi.fn((_url: string) => Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response));
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT', space_id: null })} onClose={() => {}} />);
+
+    expect(fetchMock.mock.calls.some((c) => (c[0] as string).includes('/api/spot-notices'))).toBe(false);
+    expect(screen.queryByText('🔔 최신 소식')).not.toBeInTheDocument();
+  });
+
+  it('발행된 공지가 없으면 섹션 자체를 렌더링하지 않는다', () => {
+    render(<DetailModal item={makeSpaceItem()} onClose={() => {}} />);
+    expect(screen.queryByText('🔔 최신 소식')).not.toBeInTheDocument();
+  });
+
+  it('이미지가 없는(텍스트 전용) 공지는 배너 형태로 보여준다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/spot-notices')) {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({ notices: [{ id: 'n1', curated_title: '텍스트 공지', curated_content: '사진 없는 안내', curated_image_url: null }] }),
+          } as Response);
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+      })
+    );
+
+    render(<DetailModal item={makeSpaceItem()} onClose={() => {}} />);
+
+    const banner = (await screen.findByText('사진 없는 안내')).closest('div');
+    expect(banner?.className).toContain('bg-amber-50');
+    expect(document.querySelector('img[alt=""]')).not.toBeInTheDocument();
+  });
+});

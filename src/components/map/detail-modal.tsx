@@ -13,6 +13,7 @@ import { ReservationRequestModal } from '@/components/map/reservation-request-mo
 import { EventOperatingCalendarSheet } from '@/components/map/event-operating-calendar-sheet';
 import { BookmarkButton } from '@/components/community/bookmark-button';
 import { KIDS_RESTAURANT_CATEGORY_MIN } from '@/lib/spaces/spot-category-groups';
+import { usePublishedSpotNotices, SpotNoticesSection } from '@/components/common/spot-notices-section';
 
 const NO_INFO_TEXT = '정보 준비 중 (공공 기관 문의)';
 
@@ -343,6 +344,13 @@ export function DetailModal({
       cancelled = true;
     };
   }, [item.id, item.space_id, item.address, isEvent]);
+
+  // [네이버 플레이스 공지 온디맨드 레이더](2026-09-19 사용자 지시): "유저가 스팟 상세
+  // 페이지뿐만 아니라 이벤트 상세 페이지.. 에서도 연동된 스팟의 최신 상태를 동일하게
+  // 체크" — 스팟이면 item.id, 이벤트면 item.space_id가 곧 open_spaces id다. 공유
+  // 훅(usePublishedSpotNotices)이 조회+온디맨드 레이더 트리거를 전부 담당한다
+  // (CuratedItemDetailModal도 동일한 훅을 재사용, 제5장 제4조).
+  const publishedNotices = usePublishedSpotNotices(isEvent ? item.space_id : item.id);
 
   // [스팟 상세 → 마이리얼트립 자동 매칭](2026-09-16 사용자 지시): "스팟픽에서
   // 우리의 키즈카페 장소 검색시 해당 장소 눌렀을때 내부적으로 마이리얼트립에서
@@ -799,6 +807,8 @@ export function DetailModal({
                 </div>
               )}
 
+              <SpotNoticesSection notices={publishedNotices} />
+
               {/* 7단: 인앱 지도 & 스팟 마커(미니맵). 근사/미상 좌표는 정확한 핀처럼
                   오인시키지 않도록 지도 대신 안내 문구만 보여준다(Task 9-6-2). */}
               {hasExactLocation ? (
@@ -1121,6 +1131,8 @@ export function DetailModal({
                 </div>
               </div>
             )}
+
+            <SpotNoticesSection notices={publishedNotices} />
 
             {/* Task 9-5-1: 콤팩트 인앱 미니맵 — 상세 화면을 벗어나지 않고 위치를 바로 확인하고,
                 "🔍 크게보기"로 풀스크린 지도 모달을 띄운다.
