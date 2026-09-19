@@ -288,6 +288,53 @@ describe('SpotCurationsPanel — 리스트 기반 등록/수정 (2026-09-03)', (
     expect(badgeCheckbox.checked).toBe(false);
   });
 
+  // [실사용 버그 제보](2026-09-19 사용자 지시) "스팟 큐레이션에서 키즈메뉴 선택된거
+  // 수동 변경 가능하다고 적혀있는데 수동변경 안되던데? 자동체크 이후에?" — 관리자가
+  // 체크박스를 직접 해제한 뒤 메뉴 텍스트를 수정해 다시 파싱하면(예: 메뉴 추가 후
+  // 재파싱), 여전히 키즈메뉴가 매칭되므로 handleParseMenu가 매번 다시 true로
+  // 되돌려버려 수동 해제가 무의미해지는 버그였다. 한 번이라도 체크박스를 직접
+  // 조작하면 이후 자동 파싱은 그 값을 더 이상 건드리면 안 된다.
+  it('자동 체크된 [키즈메뉴] 뱃지를 수동으로 해제하면, 메뉴를 다시 파싱해도 자동으로 다시 켜지지 않는다', async () => {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.includes('/api/admin/data-grid')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ rows: [{ id: 'spot-1', name: '플레이버디 키즈카페', address: '경기도 의정부시' }], total: 1 }),
+        } as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [] }) } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<SpotCurationsPanel />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await waitFor(() => expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument());
+
+    fireEvent.click(screen.getByText('플레이버디 키즈카페'));
+    expect(await screen.findByText('+ 스팟 큐레이션 등록')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText(/짜장면 7,000원/), {
+      target: { value: '치즈돈까스 9,000원' },
+    });
+    const parseButtons = screen.getAllByText('⚡ 자동 파싱');
+    fireEvent.click(parseButtons[1]);
+
+    const badgeCheckbox = screen.getByLabelText(/키즈메뉴\] 뱃지/) as HTMLInputElement;
+    expect(badgeCheckbox.checked).toBe(true);
+
+    // 관리자가 수동으로 해제한다.
+    fireEvent.click(badgeCheckbox);
+    expect(badgeCheckbox.checked).toBe(false);
+
+    // 메뉴를 더 추가하고 다시 파싱해도(여전히 키즈메뉴 매칭이 있음) 수동 해제가
+    // 유지되어야 한다.
+    fireEvent.change(screen.getByPlaceholderText(/짜장면 7,000원/), {
+      target: { value: '치즈돈까스 9,000원\n김치찌개 8,000원' },
+    });
+    fireEvent.click(parseButtons[1]);
+    await screen.findByText('김치찌개 · 8,000원');
+    expect(badgeCheckbox.checked).toBe(false);
+  });
+
   // [스팟 큐레이션 URL 크롤링 — 편의시설 뱃지 자동 체크](2026-09-19 사용자 지시):
   // "편의시설.. 가져온거랑 정합성 맞으면 체크해주는거.. 다만 이미 체크되어있는건
   // 해제하지 말고.. 자동으로 추가할때 놓칠 수도 있으니 사람이 수동으로 체크해줄

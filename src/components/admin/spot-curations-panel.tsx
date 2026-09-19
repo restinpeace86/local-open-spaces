@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   detectKidsMenuItems,
   parseEntranceFeeText,
@@ -205,6 +205,12 @@ export function CurationFormModal({
   const [hasKidsMenuBadge, setHasKidsMenuBadge] = useState(
     (initial?.curation_badges ?? []).includes(KIDS_MENU_BADGE_KEY)
   );
+  // [실사용 버그 제보](2026-09-19) "키즈메뉴 자동체크 이후에 수동변경 안되던데" —
+  // 관리자가 체크박스로 직접 해제한 뒤 메뉴 텍스트를 다시 파싱(예: 메뉴 추가 후
+  // 재파싱)하면, 매칭이 여전히 있어 handleParseMenu가 다시 true로 되돌려버려
+  // 수동 해제가 무의미해지는 버그였다. 한 번이라도 체크박스를 직접 조작하면
+  // 이후 자동 파싱은 이 값을 더 이상 건드리지 않도록 기록해둔다.
+  const kidsMenuManuallySetRef = useRef(false);
   // [스팟 큐레이션 URL 크롤링 — 편의시설 뱃지 자동 체크](2026-09-19 사용자 지시):
   // "체크박스도 이 화면에 넣어서 자동으로 배지 칩이 읽어온거 병합되어야지.. 다만
   // 자동으로 추가할 때 놓칠 수도 있으니 사람이 수동으로 체크해줄 수 있어야 하고..
@@ -343,7 +349,11 @@ export function CurationFormModal({
         setMenuRaw(data.menuText);
         const detected = detectKidsMenuItems(parseMenuText(data.menuText));
         setMenuItems(detected);
-        if (detected.some((item) => item.is_kids_menu)) setHasKidsMenuBadge(true);
+        // handleParseMenu와 동일한 이유로 관리자의 수동 해제를 재크롤링이
+        // 되돌리지 않도록 한다(위 kidsMenuManuallySetRef 주석 참고).
+        if (!kidsMenuManuallySetRef.current && detected.some((item) => item.is_kids_menu)) {
+          setHasKidsMenuBadge(true);
+        }
       }
     } catch (err) {
       setCrawlError(err instanceof Error ? err.message : '네이버 플레이스 데이터를 가져오지 못했습니다.');
@@ -392,7 +402,9 @@ export function CurationFormModal({
     setMenuItems(detected);
     // 자동 감지는 OFF→ON 방향으로만 제안한다 — 매칭이 하나도 없다고 해서 관리자가
     // 이미 수동으로 켜 둔 뱃지를 되돌리지 않는다(위 hasKidsMenuBadge 주석 참고).
-    if (detected.some((item) => item.is_kids_menu)) {
+    // 단, 관리자가 체크박스를 한 번이라도 직접 조작했다면 그 판단을 최종으로
+    // 보고 재파싱 결과로 덮어쓰지 않는다(위 kidsMenuManuallySetRef 주석 참고).
+    if (!kidsMenuManuallySetRef.current && detected.some((item) => item.is_kids_menu)) {
       setHasKidsMenuBadge(true);
     }
   }
@@ -758,7 +770,10 @@ export function CurationFormModal({
               <input
                 type="checkbox"
                 checked={hasKidsMenuBadge}
-                onChange={(e) => setHasKidsMenuBadge(e.target.checked)}
+                onChange={(e) => {
+                  kidsMenuManuallySetRef.current = true;
+                  setHasKidsMenuBadge(e.target.checked);
+                }}
               />
               🌟 [키즈메뉴] 뱃지 (⚡ 자동 파싱 시 키즈메뉴 매칭되면 자동 체크됨, 수동 변경 가능)
             </label>
