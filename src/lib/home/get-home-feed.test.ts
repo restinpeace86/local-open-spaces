@@ -1591,6 +1591,31 @@ describe('getTodayEventsPage / getCurrentlyOngoingEventsPage / getReservationOpe
     expect(result.items[0].name).toBe('행사1');
   });
 
+  // [전체보기 카드 거리 표시 누락 수정](2026-09-19 사용자 지적): "이벤트픽 메인 카드에는
+  // 거리가 나오는데 전체보기/상세에서는 안 나온다" — toEventItem()이 항상 distance_meters를
+  // -1로 고정 반환해, RPC(PostGIS)가 이미 계산해 둔 진짜 거리를 덮어써 버리던 버그.
+  it('RPC가 계산한 distance_meters를 -1로 덮어쓰지 않고 그대로 살린다', async () => {
+    const rows = [browseRow({ id: 'e1', distance_meters: 1234.5 })];
+    const { createClient } = mockRpc(rows);
+    vi.doMock('@/lib/supabase/server', () => ({ createClient }));
+
+    const { getCurrentlyOngoingEventsPage } = await import('./get-home-feed');
+    const result = await getCurrentlyOngoingEventsPage(1, 24);
+
+    expect(result.items[0].distance_meters).toBe(1234.5);
+  });
+
+  it('RPC의 distance_meters가 null이면(좌표 없이 조회) -1(위치 미상)로 안전하게 폴백한다', async () => {
+    const rows = [browseRow({ id: 'e1', distance_meters: null })];
+    const { createClient } = mockRpc(rows);
+    vi.doMock('@/lib/supabase/server', () => ({ createClient }));
+
+    const { getCurrentlyOngoingEventsPage } = await import('./get-home-feed');
+    const result = await getCurrentlyOngoingEventsPage(1, 24);
+
+    expect(result.items[0].distance_meters).toBe(-1);
+  });
+
   it('RPC가 빈 배열을 반환하면 total은 0이다(첫 행이 없어 total_count를 읽을 수 없는 엣지 케이스)', async () => {
     const { createClient } = mockRpc([]);
     vi.doMock('@/lib/supabase/server', () => ({ createClient }));

@@ -757,7 +757,14 @@ async function fetchBrowsePage(
 
   const rows = (data ?? []) as unknown as BrowsePageRow[];
   const total = rows[0]?.total_count ?? 0;
-  const items = rows.map((row) => toEventItem(row));
+  // [전체보기 카드 거리 표시 누락 수정](2026-09-19 사용자 지적): "이벤트픽 메인 카드에는
+  // 거리가 나오는데 전체보기/상세에서는 안 나온다" — 원인은 이 RPC(get_events_browse_page,
+  // PostGIS)가 p_user_lat/lng를 받으면 진짜 거리를 계산해 각 행의 distance_meters에
+  // 담아 내려주는데도, toEventItem()은 항상 distance_meters: -1로 고정해 반환한다(다른
+  // 대부분의 이벤트 조회 경로는 실제 좌표 계산 없이 -1을 "위치 미상" sentinel로 쓰는
+  // 것이 맞기 때문 — Task 9-1-3). 여기서만 RPC가 이미 계산해 둔 진짜 값으로 덮어써서
+  // 살린다(좌표를 안 보냈으면 row.distance_meters가 null이라 안전하게 -1로 폴백).
+  const items = rows.map((row) => ({ ...toEventItem(row), distance_meters: row.distance_meters ?? -1 }));
   return { items, total };
 }
 
