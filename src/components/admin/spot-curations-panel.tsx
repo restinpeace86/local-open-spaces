@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { detectKidsMenuItems, parseEntranceFeeText, parseMenuText, parseOperatingHoursText, ParsedMenuItem } from '@/lib/admin/spot-curation-parsers';
 import { KIDS_RESTAURANT_CATEGORY_MIN } from '@/lib/spaces/spot-category-groups';
+import { getBadgeGroupsForCategory, getBadgeOptionsForCategory, matchBadgeKeysFromText } from '@/lib/admin/curation-badges';
 
 // [개발 종합 요청] 스팟픽 MVP 스마트 폴백, 관리자 큐레이션 및 배치 안정화 고도화(2026-09-01)
 // 섹션 2: 관리자 전용 "스팟 큐레이션" 탭. curated_items(제휴 상품, booking_url 외부 링크
@@ -66,6 +67,14 @@ const PAGE_SIZE = 50;
 // curation-badges.ts의 RESTAURANT_CONFIG에 정의된 뱃지 키를 그대로 재사용한다(제5장
 // 제4조 기존 구조 우선 — 새 뱃지 키를 만들지 않음).
 const KIDS_MENU_BADGE_KEY = 'kids_menu';
+
+// [스팟 큐레이션 URL 크롤링 — 편의시설 뱃지 자동 체크](2026-09-19 사용자 지시):
+// "편의시설: 유아시설(놀이방)이라던가 아기의자라던가 이런거 가져오는데.. 우리쪽
+// 뱃지에 대하여.. 편의시설 가져온거랑 정합성 맞으면 체크해주는거.. 다만 이미
+// 체크되어있는건 해제하지 말고" — 이 화면은 이미 restaurant(키즈친화 식당) 노출
+// 중분류로 고정돼 있으므로(위 KIDS_RESTAURANT_CATEGORY_MIN 참고) 그 config의
+// categoryId 문자열 그대로 쓴다(curation-badges.ts RESTAURANT_CONFIG.categoryId).
+const RESTAURANT_CURATION_CATEGORY_ID = 'restaurant';
 
 // [관리자 '스팟 큐레이션' 탭 대상 범위](2026-09-01 사용자 지시): 스팟 큐레이션은
 // 애초에 "키즈친화 식당"(gg-kidscafe-adapter.mjs가 적재하는 category_min='놀이방식당')을
@@ -170,6 +179,29 @@ export function CurationFormModal({
   const [hasKidsMenuBadge, setHasKidsMenuBadge] = useState(
     (initial?.curation_badges ?? []).includes(KIDS_MENU_BADGE_KEY)
   );
+  // [스팟 큐레이션 URL 크롤링 — 편의시설 뱃지 자동 체크](2026-09-19 사용자 지시):
+  // "체크박스도 이 화면에 넣어서 자동으로 배지 칩이 읽어온거 병합되어야지.. 다만
+  // 자동으로 추가할 때 놓칠 수도 있으니 사람이 수동으로 체크해줄 수 있어야 하고..
+  // 체크된 걸 해제하는 것만 못하게" — kids_menu(위, 기존 정책 그대로 완전
+  // 양방향 토글 유지)와 달리, 이 뱃지들은 "체크 추가만 가능, 이 화면에서 해제는
+  // 불가"로 동작한다(handleToggleBadge 참고) — 이미 체크된 뱃지를 잘못 해제하는
+  // 사고를 막기 위함이다. 정말 해제해야 하면 blog-curation-modal(뱃지 전용 화면)
+  // 에서 한다. savedBadgeKeys는 "이미 저장된 값(파란색)"과 "이번 화면에서 방금
+  // 추가된 값(초록색)"을 구분하는 용도로, curation-badge-form.tsx의 기존 색상
+  // 관례를 그대로 재사용한다(제5장 제4조).
+  const [selectedBadges, setSelectedBadges] = useState<Set<string>>(() => new Set(otherBadges));
+  const [savedBadgeKeys] = useState<Set<string>>(() => new Set(otherBadges));
+  const badgeGroups = getBadgeGroupsForCategory(RESTAURANT_CURATION_CATEGORY_ID);
+  const badgeOptions = getBadgeOptionsForCategory(RESTAURANT_CURATION_CATEGORY_ID).filter(
+    (opt) => opt.key !== KIDS_MENU_BADGE_KEY
+  );
+
+  function handleToggleBadge(key: string) {
+    setSelectedBadges((prev) => {
+      if (prev.has(key)) return prev; // [해제 방지] 이미 체크된 뱃지는 이 화면에서 해제할 수 없다.
+      return new Set(prev).add(key);
+    });
+  }
   // [가격 및 입장료 스마트 파싱](2026-09-08 사용자 지시): "네이버 플레이스 등의
   // 가격 텍스트를 그대로 복사·붙여넣기할 수 있는 [가격 스마트 입력창]을 제공.. 어린이
   // 요금, 보호자 요금 등의 필드에 숫자가 자동으로 쪼개져 매핑되도록" — feeRaw(붙여넣기
@@ -235,6 +267,17 @@ export function CurationFormModal({
         category: data.category ?? null,
         conveniences: data.conveniences ?? [],
       });
+
+      // [편의시설 뱃지 자동 체크](2026-09-19 사용자 지시): 가져온 편의시설 텍스트를
+      // 기존 뱃지 키워드 매칭 엔진(curation-badges.ts, 블로그 본문 자동 체크와
+      // 동일한 함수)에 그대로 통과시킨다 — 매칭된 것만 추가하고(합집합), 기존에
+      // 체크돼 있던 건 절대 건드리지 않는다(handleToggleBadge와 동일한 안전장치).
+      if (data.conveniences && data.conveniences.length > 0) {
+        const matched = matchBadgeKeysFromText(data.conveniences.join(' '), RESTAURANT_CURATION_CATEGORY_ID);
+        if (matched.size > 0) {
+          setSelectedBadges((prev) => new Set([...prev, ...matched]));
+        }
+      }
 
       if (data.imageUrl) setImageUrl(data.imageUrl);
 
@@ -338,7 +381,7 @@ export function CurationFormModal({
         guardian_fee: guardianFee,
         naver_booking_url: naverBookingUrl.trim() || null,
         curation_note: curationNote || null,
-        curation_badges: hasKidsMenuBadge ? [...otherBadges, KIDS_MENU_BADGE_KEY] : otherBadges,
+        curation_badges: hasKidsMenuBadge ? [...selectedBadges, KIDS_MENU_BADGE_KEY] : [...selectedBadges],
       };
       const res = isEdit
         ? await fetch('/api/admin/spot-curations', {
@@ -423,6 +466,56 @@ export function CurationFormModal({
                 )}
               </div>
             )}
+          </div>
+
+          {/* [스팟 큐레이션 URL 크롤링 — 편의시설 뱃지 자동 체크](2026-09-19 사용자
+              지시): 위 "편의시설" 텍스트와 일치하는 뱃지는 데이터를 가져올 때 자동으로
+              체크되고(초록색), 자동 감지가 놓친 게 있으면 관리자가 직접 체크해 보완할
+              수 있다 — 다만 이미 체크된 뱃지(파란색=기존 저장값, 초록색=이번에 추가된
+              값 모두 포함)는 이 화면에서 다시 눌러도 해제되지 않는다(실수로 기존 체크를
+              지우는 사고 방지 — 정말 해제해야 하면 뱃지 전용 화면에서 한다). */}
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm font-medium text-gray-700">
+              편의시설 뱃지 (⚡ 데이터 가져오기 시 자동 체크, 부족하면 직접 추가 체크 가능 — 체크 해제는 이 화면에서 불가)
+            </span>
+            <div className="flex flex-col gap-2">
+              {badgeGroups.map((group) => (
+                <div key={group} className="flex flex-col gap-1">
+                  <span className="text-[11px] font-semibold text-gray-400">{group}</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {badgeOptions
+                      .filter((opt) => opt.group === group)
+                      .map((opt) => {
+                        const checked = selectedBadges.has(opt.key);
+                        const isSaved = checked && savedBadgeKeys.has(opt.key);
+                        const isUnsaved = checked && !savedBadgeKeys.has(opt.key);
+                        const colorClass = isSaved
+                          ? 'bg-blue-600 text-white border-blue-600'
+                          : isUnsaved
+                            ? 'bg-green-600 text-white border-green-600'
+                            : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50';
+                        return (
+                          <label
+                            key={opt.key}
+                            className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs ${
+                              checked ? 'cursor-not-allowed' : 'cursor-pointer'
+                            } ${colorClass}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              disabled={checked}
+                              onChange={() => handleToggleBadge(opt.key)}
+                              className="sr-only"
+                            />
+                            {opt.label}
+                          </label>
+                        );
+                      })}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           <BoundSpotSummary name={spotDisplay.name} address={spotDisplay.address} />

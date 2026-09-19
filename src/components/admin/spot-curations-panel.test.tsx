@@ -7,8 +7,12 @@ import { SpotCurationsPanel } from './spot-curations-panel';
 // 모달 안에서 2글자 이상 타이핑해 자동완성 검색을 해야 했지만, 이제는 후보 목록
 // (/api/admin/data-grid?table=open_spaces&category_min=놀이방식당)을 먼저 보여주고
 // 클릭만 하면 된다 — 모달 자체의 검색 UI는 완전히 제거됐다.
-function mockFetchByUrl(handlers: { dataGrid?: unknown; curations?: unknown }) {
+function mockFetchByUrl(handlers: { dataGrid?: unknown; curations?: unknown; naverCrawl?: unknown }) {
   return vi.fn((url: string) => {
+    // naver-crawl은 /api/admin/spot-curations 접두어를 공유하므로 더 구체적인 경로를 먼저 확인한다.
+    if (url.includes('/api/admin/spot-curations/naver-crawl')) {
+      return Promise.resolve({ ok: true, json: () => Promise.resolve(handlers.naverCrawl ?? {}) } as Response);
+    }
     if (url.includes('/api/admin/data-grid')) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve(handlers.dataGrid ?? { rows: [], total: 0 }) } as Response);
     }
@@ -282,6 +286,101 @@ describe('SpotCurationsPanel — 리스트 기반 등록/수정 (2026-09-03)', (
     await screen.findByText('설렁탕 · 12,000원');
     const badgeCheckbox = screen.getByLabelText(/키즈메뉴\] 뱃지/) as HTMLInputElement;
     expect(badgeCheckbox.checked).toBe(false);
+  });
+
+  // [스팟 큐레이션 URL 크롤링 — 편의시설 뱃지 자동 체크](2026-09-19 사용자 지시):
+  // "편의시설.. 가져온거랑 정합성 맞으면 체크해주는거.. 다만 이미 체크되어있는건
+  // 해제하지 말고.. 자동으로 추가할때 놓칠 수도 있으니 사람이 수동으로 체크해줄
+  // 수 있어야 하고.. 체크된걸 해제하는 것만 못하게".
+  describe('편의시설 뱃지 자동 체크(2026-09-19)', () => {
+    async function openNewCurationModal(naverCrawl?: unknown) {
+      vi.stubGlobal(
+        'fetch',
+        mockFetchByUrl({
+          dataGrid: { rows: [{ id: 'spot-1', name: '플레이버디 키즈카페', address: '경기도 의정부시' }], total: 1 },
+          curations: { items: [] },
+          naverCrawl,
+        })
+      );
+      render(<SpotCurationsPanel />);
+      fireEvent.click(screen.getByText('📥 불러오기'));
+      await waitFor(() => expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument());
+      fireEvent.click(screen.getByText('플레이버디 키즈카페'));
+      expect(await screen.findByText('+ 스팟 큐레이션 등록')).toBeInTheDocument();
+    }
+
+    it('가져온 편의시설과 일치하는 뱃지를 자동으로 체크한다', async () => {
+      await openNewCurationModal({
+        name: '테스트 업체',
+        conveniences: ['주차', '아기의자', '유아시설 (놀이방)'],
+      });
+
+      fireEvent.change(screen.getByPlaceholderText(/map\.naver\.com/), {
+        target: { value: 'https://map.naver.com/p/entry/place/36200306' },
+      });
+      fireEvent.click(screen.getByText('⚡ 데이터 가져오기'));
+
+      // parking/kids_chair/kids_zone 키워드가 각각 "주차"/"아기의자"/"놀이방"과 매칭된다.
+      expect((await screen.findByLabelText('주차 완비')) as HTMLInputElement).toHaveProperty('checked', true);
+      expect(screen.getByLabelText('아기의자')).toHaveProperty('checked', true);
+      expect(screen.getByLabelText('키즈존/놀이방')).toHaveProperty('checked', true);
+      // 매칭되지 않은 뱃지는 그대로 미체크 상태다.
+      expect(screen.getByLabelText('수유실 있음')).toHaveProperty('checked', false);
+    });
+
+    it('이미 체크된 뱃지는 이 화면에서 다시 눌러도 해제되지 않는다', async () => {
+      vi.stubGlobal(
+        'fetch',
+        mockFetchByUrl({
+          dataGrid: { rows: [{ id: 'spot-1', name: '킹콩점프', address: '경기도 용인시' }], total: 1 },
+          curations: {
+            items: [
+              {
+                id: 'curation-1',
+                spot_id: 'spot-1',
+                is_active: true,
+                image_url: null,
+                operating_hours_raw: null,
+                open_time: null,
+                close_time: null,
+                break_start: null,
+                break_end: null,
+                last_order: null,
+                menu_items: [],
+                naver_booking_url: null,
+                curation_note: null,
+                curation_badges: ['parking'],
+                created_at: '2026-09-01T00:00:00.000Z',
+                updated_at: '2026-09-01T00:00:00.000Z',
+                open_spaces: { name: '킹콩점프', address: '경기도 용인시', category: 'INDOOR_PLAYGROUND' },
+              },
+            ],
+          },
+        })
+      );
+      render(<SpotCurationsPanel />);
+      fireEvent.click(screen.getByText('📥 불러오기'));
+      await waitFor(() => expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument());
+      fireEvent.click(screen.getByText('킹콩점프'));
+      await screen.findByText('스팟 큐레이션 수정');
+
+      const parkingCheckbox = screen.getByLabelText('주차 완비') as HTMLInputElement;
+      expect(parkingCheckbox.checked).toBe(true);
+      expect(parkingCheckbox.disabled).toBe(true); // 이미 체크된 뱃지는 해제할 수 없도록 잠김.
+
+      fireEvent.click(parkingCheckbox);
+      expect(parkingCheckbox.checked).toBe(true); // 클릭해도 여전히 체크 상태 유지.
+    });
+
+    it('자동 체크가 놓친 뱃지는 관리자가 직접 눌러서 추가로 체크할 수 있다', async () => {
+      await openNewCurationModal();
+
+      const nursingRoomCheckbox = screen.getByLabelText('수유실 있음') as HTMLInputElement;
+      expect(nursingRoomCheckbox.checked).toBe(false);
+
+      fireEvent.click(nursingRoomCheckbox);
+      expect(nursingRoomCheckbox.checked).toBe(true);
+    });
   });
 });
 
