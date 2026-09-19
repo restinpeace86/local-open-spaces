@@ -98,6 +98,11 @@ export async function POST(request: NextRequest) {
       category: result.category,
       conveniences: result.conveniences,
       businessHoursText: result.businessHoursFreeText,
+      // [스팟 큐레이션 요일별 영업시간](2026-09-19 사용자 지시): 요일별 원본 구조
+      // (NaverPlaceBusinessHourDay[])도 함께 내려준다 — businessHoursText(사람이
+      // 읽는 한 줄 요약)와 별개로, 관리자 화면이 요일별 표를 정확히 채우려면 이
+      // 구조화된 데이터가 필요하다(텍스트를 다시 파싱하지 않음, 제5장 제4조).
+      businessHourDays: result.businessHourDays,
       menuText: formatMenuText(result.menuItems),
       imageUrl,
     });

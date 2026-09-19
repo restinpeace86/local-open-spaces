@@ -1,4 +1,5 @@
 import { KIDS_MENU_ITEM_KEYWORDS } from './curation-badges';
+import type { NaverPlaceBusinessHourDay } from './naver-place-crawler';
 
 // [개발 종합 요청] 스팟픽 MVP 스마트 폴백, 관리자 큐레이션 및 배치 안정화 고도화(2026-09-01)
 // 섹션 2 "스마트 텍스트 파서": 영업시간/메뉴 텍스트 덩어리를 통째로 붙여넣으면 구조화된
@@ -15,6 +16,27 @@ export type ParsedOperatingHours = {
   breakEnd: string | null;
   lastOrder: string | null;
 };
+
+// [스팟 큐레이션 요일별 영업시간](2026-09-19 사용자 지시): "요일별로 시간 담을 수
+// 있게.. 매일 같으면 모든 요일에 동일한 시간, 요일별로 다르면 요일별로 채우고" —
+// 크롤러가 이미 요일별로 구조화해 둔 데이터(NaverPlaceBusinessHourDay[])를 그대로
+// 옮겨 담는다(새로 파싱하지 않음, 제5장 제4조). "모든 요일 동일" 요구사항은 별도
+// 로직 없이 자연히 충족된다 — 원본이 7일 전부 같은 시간이면 결과도 7일 전부 같은
+// 시간으로 채워진다.
+//
+// [일시적 예외(공휴일 등) 제외](2026-09-19 사용자 확인, "그냥 넘어가자.. 원문
+// 보존"): day 값에 "목(9/24)"처럼 괄호+날짜가 붙은 임시 스케줄(추석 연휴 등)은
+// 정규 주간 스케줄이 아니므로 이 요일별 표에서 제외한다 — 그 요일의 진짜 정규
+// 시간을 오늘 크롤링 데이터가 알려주지 않는 경우(예: 목/금이 전부 임시 스케줄로만
+// 잡힌 주간) 억지로 추정해 채우지 않고 그 요일 칸을 비워 둔다(추측 금지, 제3장
+// 제5조) — 관리자가 알고 있으면 수동으로 채울 수 있다.
+export type OperatingHoursByDay = { day: string; open: string | null; close: string | null };
+
+export function extractRegularWeekdayHours(days: NaverPlaceBusinessHourDay[]): OperatingHoursByDay[] {
+  return days
+    .filter((d) => !/\(/.test(d.day))
+    .map((d) => ({ day: d.day, open: d.start, close: d.end }));
+}
 
 const TIME_RANGE = /(\d{1,2}:\d{2})\s*[~\-–]\s*(\d{1,2}:\d{2})/g;
 const BREAK_KEYWORD = /(?:브레이크\s*타임|브레이크타임|휴게\s*시간|휴게시간)/;

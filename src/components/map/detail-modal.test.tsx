@@ -463,6 +463,88 @@ describe('DetailModal 스마트 폴백(View/Reservation Fallback, 2026-09-01)', 
     expect(screen.queryByText('평일 09:00-18:00')).not.toBeInTheDocument();
   });
 
+  // [스팟 큐레이션 요일별 영업시간](2026-09-19 사용자 지시): "DetailModal의 운영시간
+  // 표시도 요일별로 보여주도록" — 요일별 데이터가 있으면 기존 단일 값 요약 대신
+  // 요일별 줄바꿈으로 보여준다.
+  describe('요일별 영업시간 표시(2026-09-19)', () => {
+    it('요일별 데이터가 있으면 단일 값 요약 대신 요일별로 줄바꿈해 보여준다', async () => {
+      mockCurationResponse({
+        id: 'curation-1',
+        spot_id: 'space-1',
+        image_url: null,
+        operating_hours_raw: null,
+        open_time: '10:00',
+        close_time: '22:00',
+        break_start: null,
+        break_end: null,
+        last_order: null,
+        menu_items: [],
+        naver_booking_url: null,
+        curation_note: null,
+        operating_hours_by_day: [
+          { day: '월', open: '14:00', close: '22:00' },
+          { day: '화', open: '14:00', close: '22:00' },
+          { day: '토', open: '11:00', close: '22:00' },
+          { day: '일', open: '11:00', close: '22:00' },
+        ],
+      });
+      render(<DetailModal item={makeSpaceItem()} onClose={() => {}} />);
+
+      expect(await screen.findByText('월 14:00 ~ 22:00')).toBeInTheDocument();
+      expect(screen.getByText('화 14:00 ~ 22:00')).toBeInTheDocument();
+      expect(screen.getByText('토 11:00 ~ 22:00')).toBeInTheDocument();
+      expect(screen.getByText('일 11:00 ~ 22:00')).toBeInTheDocument();
+      // 단일 값 요약("10:00~22:00")은 요일별 표가 있으면 대신 보여주지 않는다.
+      expect(screen.queryByText('10:00~22:00')).not.toBeInTheDocument();
+    });
+
+    it('데이터 없는(open/close 둘 다 null) 요일은 "휴무"로 단정하지 않고 그 줄을 생략한다', async () => {
+      mockCurationResponse({
+        id: 'curation-1',
+        spot_id: 'space-1',
+        image_url: null,
+        operating_hours_raw: null,
+        open_time: null,
+        close_time: null,
+        break_start: null,
+        break_end: null,
+        last_order: null,
+        menu_items: [],
+        naver_booking_url: null,
+        curation_note: null,
+        operating_hours_by_day: [
+          { day: '토', open: '11:00', close: '22:00' },
+          { day: '목', open: null, close: null },
+        ],
+      });
+      render(<DetailModal item={makeSpaceItem()} onClose={() => {}} />);
+
+      expect(await screen.findByText('토 11:00 ~ 22:00')).toBeInTheDocument();
+      expect(screen.queryByText(/^목/)).not.toBeInTheDocument();
+      expect(screen.queryByText('휴무')).not.toBeInTheDocument();
+    });
+
+    it('요일별 데이터가 없으면(이 기능 이전에 저장된 큐레이션) 기존 단일 값 요약을 그대로 보여준다', async () => {
+      mockCurationResponse({
+        id: 'curation-1',
+        spot_id: 'space-1',
+        image_url: null,
+        operating_hours_raw: null,
+        open_time: '10:00',
+        close_time: '22:00',
+        break_start: null,
+        break_end: null,
+        last_order: null,
+        menu_items: [],
+        naver_booking_url: null,
+        curation_note: null,
+      });
+      render(<DetailModal item={makeSpaceItem()} onClose={() => {}} />);
+
+      expect(await screen.findByText('10:00~22:00')).toBeInTheDocument();
+    });
+  });
+
   it('큐레이션에 메뉴가 있으면 메뉴 목록을 보여준다', async () => {
     mockCurationResponse({
       id: 'curation-1',

@@ -1,9 +1,18 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { detectKidsMenuItems, parseEntranceFeeText, parseMenuText, parseOperatingHoursText, ParsedMenuItem } from '@/lib/admin/spot-curation-parsers';
+import {
+  detectKidsMenuItems,
+  parseEntranceFeeText,
+  parseMenuText,
+  parseOperatingHoursText,
+  extractRegularWeekdayHours,
+  ParsedMenuItem,
+  OperatingHoursByDay,
+} from '@/lib/admin/spot-curation-parsers';
 import { KIDS_RESTAURANT_CATEGORY_MIN } from '@/lib/spaces/spot-category-groups';
 import { getBadgeGroupsForCategory, getBadgeOptionsForCategory, matchBadgeKeysFromText } from '@/lib/admin/curation-badges';
+import type { NaverPlaceBusinessHourDay } from '@/lib/admin/naver-place-crawler';
 
 // [개발 종합 요청] 스팟픽 MVP 스마트 폴백, 관리자 큐레이션 및 배치 안정화 고도화(2026-09-01)
 // 섹션 2: 관리자 전용 "스팟 큐레이션" 탭. curated_items(제휴 상품, booking_url 외부 링크
@@ -21,6 +30,10 @@ export type SpotCurationItem = {
   break_start: string | null;
   break_end: string | null;
   last_order: string | null;
+  // [스팟 큐레이션 요일별 영업시간](2026-09-19 사용자 지시): 위 open_time/close_time
+  // (단일 값, 기존 큐레이션과의 하위 호환용)과 별개로 요일별 영업시작/영업종료.
+  // 이 기능 이전에 저장된 큐레이션에는 없을 수 있어(JSONB) optional/nullable로 둔다.
+  operating_hours_by_day?: OperatingHoursByDay[] | null;
   menu_items: ParsedMenuItem[];
   // [가격 및 입장료 스마트 파싱](2026-09-08 사용자 지시): 원래 BlogCurationModal
   // 쪽으로 옮겼다가 "블로그 뱃지큐레이션하고 스팟큐레이션 합쳤는데.. 다시
@@ -75,6 +88,10 @@ const KIDS_MENU_BADGE_KEY = 'kids_menu';
 // 중분류로 고정돼 있으므로(위 KIDS_RESTAURANT_CATEGORY_MIN 참고) 그 config의
 // categoryId 문자열 그대로 쓴다(curation-badges.ts RESTAURANT_CONFIG.categoryId).
 const RESTAURANT_CURATION_CATEGORY_ID = 'restaurant';
+
+// [스팟 큐레이션 요일별 영업시간](2026-09-19 사용자 지시): 크롤링 데이터가 없거나
+// 특정 요일이 빠져 있어도 화면에는 항상 월~일 7행이 보이도록 고정 순서로 둔다.
+const WEEKDAY_LABELS = ['월', '화', '수', '목', '금', '토', '일'];
 
 // [관리자 '스팟 큐레이션' 탭 대상 범위](2026-09-01 사용자 지시): 스팟 큐레이션은
 // 애초에 "키즈친화 식당"(gg-kidscafe-adapter.mjs가 적재하는 category_min='놀이방식당')을
@@ -166,6 +183,15 @@ export function CurationFormModal({
   const [breakStart, setBreakStart] = useState(initial?.break_start ?? '');
   const [breakEnd, setBreakEnd] = useState(initial?.break_end ?? '');
   const [lastOrder, setLastOrder] = useState(initial?.last_order ?? '');
+  // [스팟 큐레이션 요일별 영업시간](2026-09-19 사용자 지시): "요일별로 시간 담을 수
+  // 있게" — 위 openTime/closeTime(단일 값, 하위 호환 유지)과 별개로 7개 요일 각각의
+  // 영업시작/영업종료를 담는다. 항상 7행을 유지해(빈 값은 null) 관리자가 특정 요일만
+  // 수동으로 채울 수도 있게 한다.
+  const [hoursByDay, setHoursByDay] = useState<OperatingHoursByDay[]>(
+    initial?.operating_hours_by_day && initial.operating_hours_by_day.length > 0
+      ? initial.operating_hours_by_day
+      : WEEKDAY_LABELS.map((d) => ({ day: d, open: null, close: null }))
+  );
   const [menuRaw, setMenuRaw] = useState('');
   const [menuItems, setMenuItems] = useState<ParsedMenuItem[]>(initial?.menu_items ?? []);
   // [스팟 큐레이션 메뉴 파싱 및 '키즈메뉴' 자동 감지](2026-09-15 사용자 지시,
@@ -262,6 +288,7 @@ export function CurationFormModal({
         category?: string | null;
         conveniences?: string[];
         businessHoursText?: string | null;
+        businessHourDays?: NaverPlaceBusinessHourDay[];
         menuText?: string | null;
         imageUrl?: string | null;
         error?: string;
@@ -298,6 +325,18 @@ export function CurationFormModal({
         setBreakStart(parsedHours.breakStart ?? '');
         setBreakEnd(parsedHours.breakEnd ?? '');
         setLastOrder(parsedHours.lastOrder ?? '');
+      }
+
+      // [스팟 큐레이션 요일별 영업시간](2026-09-19 사용자 지시): "매일 같으면 모든
+      // 요일 동일하게, 요일별로 다르면 요일별로" — extractRegularWeekdayHours가
+      // 이미 구조화된 크롤링 데이터를 그대로 옮겨 담으므로 별도 분기 없이 자연히
+      // 충족된다. 임시 공휴일 스케줄(day에 날짜가 붙은 것)은 정규 요일표에서
+      // 빠지므로 그 요일 칸은 비워둔 채(추측 금지) 나머지 요일만 채운다.
+      if (data.businessHourDays && data.businessHourDays.length > 0) {
+        const regular = extractRegularWeekdayHours(data.businessHourDays);
+        setHoursByDay(
+          WEEKDAY_LABELS.map((label) => regular.find((r) => r.day === label) ?? { day: label, open: null, close: null })
+        );
       }
 
       if (data.menuText) {
@@ -382,6 +421,9 @@ export function CurationFormModal({
         operating_hours_raw: hoursRaw || null,
         open_time: openTime || null,
         close_time: closeTime || null,
+        // 전부 비어 있으면(요일별 기능을 아예 안 쓴 경우) null로 저장 — 위 open_time/
+        // close_time(단일 값)만 쓰는 기존 큐레이션과 명확히 구분한다.
+        operating_hours_by_day: hoursByDay.some((d) => d.open || d.close) ? hoursByDay : null,
         break_start: breakStart || null,
         break_end: breakEnd || null,
         last_order: lastOrder || null,
@@ -629,6 +671,40 @@ export function CurationFormModal({
                 placeholder="라스트오더"
                 className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs col-span-2"
               />
+            </div>
+          </div>
+
+          {/* [스팟 큐레이션 요일별 영업시간](2026-09-19 사용자 지시): "요일별로 시간
+              담을 수 있게.. 매일 같으면 모든 요일 동일하게, 요일별로 다르면 요일별로" —
+              ⚡ 데이터 가져오기 시 위 크롤링 데이터로 자동 채워지고(추석 연휴 등
+              임시 스케줄은 정규 요일표에서 제외돼 그 요일 칸은 비어 있을 수 있음),
+              관리자가 각 요일을 직접 입력/수정할 수도 있다. */}
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-gray-700">요일별 영업시간(선택 — ⚡ 데이터 가져오기 시 자동 채움)</span>
+            <div className="flex flex-col gap-1">
+              {hoursByDay.map((row, i) => (
+                <div key={row.day} className="grid grid-cols-[2rem_1fr_1fr] gap-2 items-center">
+                  <span className="text-xs font-medium text-gray-600">{row.day}</span>
+                  <input
+                    type="text"
+                    value={row.open ?? ''}
+                    onChange={(e) =>
+                      setHoursByDay((prev) => prev.map((r, idx) => (idx === i ? { ...r, open: e.target.value || null } : r)))
+                    }
+                    placeholder="오픈(예: 10:00)"
+                    className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs"
+                  />
+                  <input
+                    type="text"
+                    value={row.close ?? ''}
+                    onChange={(e) =>
+                      setHoursByDay((prev) => prev.map((r, idx) => (idx === i ? { ...r, close: e.target.value || null } : r)))
+                    }
+                    placeholder="마감(예: 22:00)"
+                    className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs"
+                  />
+                </div>
+              ))}
             </div>
           </div>
 

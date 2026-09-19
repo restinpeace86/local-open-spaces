@@ -21,6 +21,9 @@ type SpotCurationRow = {
   break_start: string | null;
   break_end: string | null;
   last_order: string | null;
+  // [스팟 큐레이션 요일별 영업시간](2026-09-19 사용자 지시): 위 open_time/close_time
+  // (단일 값, 하위 호환)과 별개로 요일별 영업시작/영업종료. [{day, open, close}].
+  operating_hours_by_day: unknown;
   menu_items: unknown;
   // [가격 및 입장료 스마트 파싱](2026-09-08 사용자 지시, todo.md 개선사항1-3):
   // 어린이/보호자 요금. 파싱 실패/미입력이면 NULL(추측해서 채우지 않음).
@@ -114,6 +117,21 @@ function isValidMenuItems(value: unknown): value is Array<{ name: string; price:
   );
 }
 
+// [스팟 큐레이션 요일별 영업시간](2026-09-19 사용자 지시): [{day, open, close}] —
+// open/close는 미입력 요일이 있을 수 있어(추측 금지) null도 허용한다.
+function isValidOperatingHoursByDay(value: unknown): value is Array<{ day: string; open: string | null; close: string | null }> {
+  if (!Array.isArray(value)) return false;
+  return value.every((item) => {
+    if (!item || typeof item !== 'object') return false;
+    const row = item as Record<string, unknown>;
+    return (
+      typeof row.day === 'string' &&
+      (row.open === null || typeof row.open === 'string') &&
+      (row.close === null || typeof row.close === 'string')
+    );
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -138,6 +156,7 @@ export async function POST(request: NextRequest) {
         break_start: body.break_start || null,
         break_end: body.break_end || null,
         last_order: body.last_order || null,
+        operating_hours_by_day: isValidOperatingHoursByDay(body.operating_hours_by_day) ? body.operating_hours_by_day : null,
         menu_items: isValidMenuItems(body.menu_items) ? body.menu_items : [],
         child_fee: normalizeFee(body.child_fee),
         guardian_fee: normalizeFee(body.guardian_fee),
@@ -188,6 +207,7 @@ export async function PATCH(request: NextRequest) {
       break_start: string | null;
       break_end: string | null;
       last_order: string | null;
+      operating_hours_by_day: Array<{ day: string; open: string | null; close: string | null }> | null;
       menu_items: Array<{ name: string; price: number }>;
       child_fee: number | null;
       guardian_fee: number | null;
@@ -207,6 +227,9 @@ export async function PATCH(request: NextRequest) {
     if ('break_start' in body) updates.break_start = body.break_start || null;
     if ('break_end' in body) updates.break_end = body.break_end || null;
     if ('last_order' in body) updates.last_order = body.last_order || null;
+    if ('operating_hours_by_day' in body) {
+      updates.operating_hours_by_day = isValidOperatingHoursByDay(body.operating_hours_by_day) ? body.operating_hours_by_day : null;
+    }
     if ('menu_items' in body) updates.menu_items = isValidMenuItems(body.menu_items) ? body.menu_items : [];
     if ('child_fee' in body) updates.child_fee = normalizeFee(body.child_fee);
     if ('guardian_fee' in body) updates.guardian_fee = normalizeFee(body.guardian_fee);

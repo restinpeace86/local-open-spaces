@@ -962,6 +962,7 @@ export type Database = {
           min_age_recommended: number
           naver_booking_url: string | null
           open_time: string | null
+          operating_hours_by_day: Json | null
           operating_hours_raw: string | null
           spot_id: string
           updated_at: string
@@ -986,6 +987,7 @@ export type Database = {
           min_age_recommended?: number
           naver_booking_url?: string | null
           open_time?: string | null
+          operating_hours_by_day?: Json | null
           operating_hours_raw?: string | null
           spot_id: string
           updated_at?: string
@@ -1010,6 +1012,7 @@ export type Database = {
           min_age_recommended?: number
           naver_booking_url?: string | null
           open_time?: string | null
+          operating_hours_by_day?: Json | null
           operating_hours_raw?: string | null
           spot_id?: string
           updated_at?: string

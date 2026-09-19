@@ -492,3 +492,152 @@ describe('SpotCurationsPanel — 노출중분류 있는것/없는것 따로 보�
     expect(screen.getAllByText('노출중분류 없음').length).toBeGreaterThan(0);
   });
 });
+
+// [스팟 큐레이션 요일별 영업시간](2026-09-19 사용자 지시): "요일별로 시간 담을 수
+// 있게.. 매일 같으면 모든 요일 동일하게, 요일별로 다르면 요일별로" — 실측 확인한
+// 딸부자 닭갈비 실제 스키마(토/일/월/화/수는 정규, 목(9/24)/금(9/25)은 추석 연휴
+// 임시 스케줄)로 검증한다.
+describe('요일별 영업시간(2026-09-19)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  async function openNewCurationModal(naverCrawl?: unknown) {
+    vi.stubGlobal(
+      'fetch',
+      mockFetchByUrl({
+        dataGrid: { rows: [{ id: 'spot-1', name: '딸부자 닭갈비 닭도리탕', address: '경기 의정부시' }], total: 1 },
+        curations: { items: [] },
+        naverCrawl,
+      })
+    );
+    render(<SpotCurationsPanel />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await waitFor(() => expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByText('딸부자 닭갈비 닭도리탕'));
+    expect(await screen.findByText('+ 스팟 큐레이션 등록')).toBeInTheDocument();
+  }
+
+  const REAL_BUSINESS_HOUR_DAYS = [
+    { day: '토', start: '11:00', end: '22:00', breakStart: null, breakEnd: null, description: null },
+    { day: '일', start: '11:00', end: '22:00', breakStart: null, breakEnd: null, description: null },
+    { day: '월', start: '14:00', end: '22:00', breakStart: null, breakEnd: null, description: null },
+    { day: '화', start: '14:00', end: '22:00', breakStart: null, breakEnd: null, description: null },
+    { day: '수', start: '14:00', end: '22:00', breakStart: null, breakEnd: null, description: null },
+    { day: '목(9/24)', start: '11:00', end: '22:00', breakStart: null, breakEnd: null, description: '추석 연휴' },
+    { day: '금(9/25)', start: '11:00', end: '22:00', breakStart: null, breakEnd: null, description: '추석' },
+  ];
+
+  it('데이터를 가져오면 요일별 표가 실제 크롤링 데이터로 채워지고, 임시 공휴일 스케줄은 제외된다', async () => {
+    await openNewCurationModal({ businessHourDays: REAL_BUSINESS_HOUR_DAYS });
+
+    fireEvent.change(screen.getByPlaceholderText(/map\.naver\.com/), {
+      target: { value: 'https://map.naver.com/p/entry/place/36200306' },
+    });
+    fireEvent.click(screen.getByText('⚡ 데이터 가져오기'));
+
+    await waitFor(() => {
+      const dayInputs = screen.getAllByPlaceholderText('오픈(예: 10:00)');
+      // 첫 번째 "오픈" 입력은 위쪽 단일 openTime 필드라 요일별 표는 그 다음 7개.
+      expect(dayInputs.length).toBeGreaterThanOrEqual(8);
+    });
+
+    const openInputs = screen.getAllByPlaceholderText('오픈(예: 10:00)').slice(1) as HTMLInputElement[]; // 월~일 순서
+    const closeInputs = screen.getAllByPlaceholderText('마감(예: 22:00)').slice(1) as HTMLInputElement[];
+
+    // WEEKDAY_LABELS 순서: 월,화,수,목,금,토,일
+    expect(openInputs.map((el) => el.value)).toEqual(['14:00', '14:00', '14:00', '', '', '11:00', '11:00']);
+    expect(closeInputs.map((el) => el.value)).toEqual(['22:00', '22:00', '22:00', '', '', '22:00', '22:00']);
+  });
+
+  it('모든 요일이 같은 시간이면 7개 요일 모두 동일한 시간으로 채워진다', async () => {
+    const uniformDays = ['월', '화', '수', '목', '금', '토', '일'].map((day) => ({
+      day,
+      start: '08:00',
+      end: '20:00',
+      breakStart: null,
+      breakEnd: null,
+      description: null,
+    }));
+    await openNewCurationModal({ businessHourDays: uniformDays });
+
+    fireEvent.change(screen.getByPlaceholderText(/map\.naver\.com/), {
+      target: { value: 'https://map.naver.com/p/entry/place/36200306' },
+    });
+    fireEvent.click(screen.getByText('⚡ 데이터 가져오기'));
+
+    await waitFor(() => {
+      const openInputs = screen.getAllByPlaceholderText('오픈(예: 10:00)').slice(1) as HTMLInputElement[];
+      expect(openInputs.every((el) => el.value === '08:00')).toBe(true);
+    });
+    const closeInputs = screen.getAllByPlaceholderText('마감(예: 22:00)').slice(1) as HTMLInputElement[];
+    expect(closeInputs.every((el) => el.value === '20:00')).toBe(true);
+  });
+
+  it('관리자가 요일별로 직접 입력하면 저장 시 그대로 전송된다', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/api/admin/data-grid')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ rows: [{ id: 'spot-1', name: '딸부자 닭갈비 닭도리탕', address: '경기 의정부시' }], total: 1 }),
+        } as Response);
+      }
+      if (url.includes('/api/admin/spot-curations') && init?.method === 'POST') {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ item: { id: 'curation-1' } }),
+        } as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [] }) } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<SpotCurationsPanel />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await waitFor(() => expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByText('딸부자 닭갈비 닭도리탕'));
+    await screen.findByText('+ 스팟 큐레이션 등록');
+
+    const openInputs = screen.getAllByPlaceholderText('오픈(예: 10:00)').slice(1) as HTMLInputElement[];
+    const closeInputs = screen.getAllByPlaceholderText('마감(예: 22:00)').slice(1) as HTMLInputElement[];
+    fireEvent.change(openInputs[0], { target: { value: '09:00' } }); // 월
+    fireEvent.change(closeInputs[0], { target: { value: '18:00' } });
+
+    fireEvent.click(screen.getByText('등록하기'));
+
+    await waitFor(() => {
+      const postCall = fetchMock.mock.calls.find((c) => (c[1] as RequestInit)?.method === 'POST');
+      expect(postCall).toBeDefined();
+      const body = JSON.parse((postCall![1] as RequestInit).body as string);
+      expect(body.operating_hours_by_day[0]).toEqual({ day: '월', open: '09:00', close: '18:00' });
+    });
+  });
+
+  it('요일별 표를 전혀 안 채우면 operating_hours_by_day는 null로 저장된다', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/api/admin/data-grid')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ rows: [{ id: 'spot-1', name: '딸부자 닭갈비 닭도리탕', address: '경기 의정부시' }], total: 1 }),
+        } as Response);
+      }
+      if (url.includes('/api/admin/spot-curations') && init?.method === 'POST') {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ item: { id: 'curation-1' } }) } as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [] }) } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<SpotCurationsPanel />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await waitFor(() => expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByText('딸부자 닭갈비 닭도리탕'));
+    await screen.findByText('+ 스팟 큐레이션 등록');
+
+    fireEvent.click(screen.getByText('등록하기'));
+
+    await waitFor(() => {
+      const postCall = fetchMock.mock.calls.find((c) => (c[1] as RequestInit)?.method === 'POST');
+      const body = JSON.parse((postCall![1] as RequestInit).body as string);
+      expect(body.operating_hours_by_day).toBeNull();
+    });
+  });
+});

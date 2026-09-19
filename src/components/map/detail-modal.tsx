@@ -52,6 +52,10 @@ type SpotCuration = {
   break_start: string | null;
   break_end: string | null;
   last_order: string | null;
+  // [스팟 큐레이션 요일별 영업시간](2026-09-19 사용자 지시): 위 open_time/close_time
+  // (단일 값, 하위 호환)과 별개로 요일별 영업시작/영업종료. 이 기능 이전에 저장된
+  // 큐레이션에는 없을 수 있어(JSONB) optional/nullable로 둔다.
+  operating_hours_by_day?: Array<{ day: string; open: string | null; close: string | null }> | null;
   // [스팟 큐레이션 메뉴 파싱 및 '키즈메뉴' 자동 감지](2026-09-15 사용자 지시,
   // implementation/todo.md [개선사항 5]): is_kids_menu는 이 기능 도입 이전에 저장된
   // 항목에는 없을 수 있어(JSONB, 스키마 없음) optional로 둔다.
@@ -90,6 +94,17 @@ function formatCuratedHours(curation: SpotCuration): string | null {
   }
   if (curation.last_order) extras.push(`라스트오더 ${curation.last_order}`);
   return extras.length > 0 ? `${main} (${extras.join(', ')})` : main;
+}
+
+// [스팟 큐레이션 요일별 영업시간](2026-09-19 사용자 지시): "DetailModal의 운영시간
+// 표시도 요일별로 보여주도록" — 데이터가 없는(open/close 둘 다 null) 요일은 "휴무"로
+// 단정하지 않고 그 줄 자체를 생략한다(추측 금지 — 이 요일별 표는 open/close만 담아
+// "정기휴무"인지 "크롤링이 못 채운 것"인지 구분할 근거가 없다).
+function formatCuratedHoursByDay(curation: SpotCuration): string[] | null {
+  const rows = curation.operating_hours_by_day;
+  if (!rows || rows.length === 0) return null;
+  const lines = rows.filter((r) => r.open || r.close).map((r) => `${r.day} ${[r.open, r.close].filter(Boolean).join(' ~ ')}`);
+  return lines.length > 0 ? lines : null;
 }
 
 // spec/space/space-detail.md, spec/event/event-detail.md: 공간/행사 상세 정보 모달
@@ -1012,12 +1027,29 @@ export function DetailModal({
                 {/* [View Fallback](2026-09-01 사용자 지시): 관리자가 구조화한 영업시간
                     (오픈~마감/브레이크타임/라스트오더)이 있으면 그걸 우선 보여주고,
                     없으면 원문(operating_hours_raw) → 공공데이터 기본값 순으로
-                    폴백한다 — 추측으로 빈 칸을 만들지 않는다. */}
+                    폴백한다 — 추측으로 빈 칸을 만들지 않는다.
+                    [스팟 큐레이션 요일별 영업시간](2026-09-19 사용자 지시): 요일별
+                    데이터가 있으면 그것을 최우선으로 요일별 줄바꿈으로 보여준다 —
+                    없는(이 기능 이전에 저장된) 큐레이션은 기존 단일 값 표시 그대로. */}
                 <dd className="text-right text-gray-900">
-                  {(curation && formatCuratedHours(curation)) ||
-                    curation?.operating_hours_raw ||
-                    item.operating_hours ||
-                    HOURS_PLACEHOLDER}
+                  {(() => {
+                    const byDay = curation && formatCuratedHoursByDay(curation);
+                    if (byDay) {
+                      return (
+                        <div className="flex flex-col items-end gap-0.5">
+                          {byDay.map((line) => (
+                            <span key={line}>{line}</span>
+                          ))}
+                        </div>
+                      );
+                    }
+                    return (
+                      (curation && formatCuratedHours(curation)) ||
+                      curation?.operating_hours_raw ||
+                      item.operating_hours ||
+                      HOURS_PLACEHOLDER
+                    );
+                  })()}
                 </dd>
               </div>
 

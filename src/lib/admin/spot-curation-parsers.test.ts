@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { detectKidsMenuItems, parseEntranceFeeText, parseMenuText, parseOperatingHoursText } from './spot-curation-parsers';
+import {
+  detectKidsMenuItems,
+  parseEntranceFeeText,
+  parseMenuText,
+  parseOperatingHoursText,
+  extractRegularWeekdayHours,
+} from './spot-curation-parsers';
+import type { NaverPlaceBusinessHourDay } from './naver-place-crawler';
 
 describe('parseOperatingHoursText', () => {
   it('단순 영업시간(10:00~22:00)만 있으면 open/close만 채우고 나머지는 null이다', () => {
@@ -229,5 +236,61 @@ describe('detectKidsMenuItems', () => {
   it('이미 is_kids_menu가 있어도 새로 재판정한 값으로 덮어쓴다', () => {
     const result = detectKidsMenuItems([{ name: '계란찜', price: 4000, is_kids_menu: false }]);
     expect(result[0].is_kids_menu).toBe(true);
+  });
+});
+
+// [스팟 큐레이션 요일별 영업시간](2026-09-19 사용자 지시): 실측 확인한 실제 스키마
+// (딸부자 닭갈비 닭도리탕) 그대로의 픽스처로 검증한다.
+describe('extractRegularWeekdayHours', () => {
+  function day(overrides: Partial<NaverPlaceBusinessHourDay> = {}): NaverPlaceBusinessHourDay {
+    return { day: '월', start: '09:00', end: '18:00', breakStart: null, breakEnd: null, description: null, ...overrides };
+  }
+
+  it('요일별로 다른 시간이면 각 요일에 각자의 시간을 채운다', () => {
+    const result = extractRegularWeekdayHours([
+      day({ day: '토', start: '11:00', end: '22:00' }),
+      day({ day: '일', start: '11:00', end: '22:00' }),
+      day({ day: '월', start: '14:00', end: '22:00' }),
+      day({ day: '화', start: '14:00', end: '22:00' }),
+      day({ day: '수', start: '14:00', end: '22:00' }),
+    ]);
+    expect(result).toEqual([
+      { day: '토', open: '11:00', close: '22:00' },
+      { day: '일', open: '11:00', close: '22:00' },
+      { day: '월', open: '14:00', close: '22:00' },
+      { day: '화', open: '14:00', close: '22:00' },
+      { day: '수', open: '14:00', close: '22:00' },
+    ]);
+  });
+
+  it('모든 요일이 같은 시간이면 그대로 각 요일에 동일한 시간이 담긴다(별도 병합 로직 불필요)', () => {
+    const allDays = ['월', '화', '수', '목', '금', '토', '일'];
+    const result = extractRegularWeekdayHours(allDays.map((d) => day({ day: d, start: '08:00', end: '20:00' })));
+    expect(result).toHaveLength(7);
+    expect(result.every((r) => r.open === '08:00' && r.close === '20:00')).toBe(true);
+  });
+
+  // [일시적 예외 제외](2026-09-19 사용자 확인 "그냥 넘어가자") — 실측: 딸부자 닭갈비의
+  // 실제 목/금은 "목(9/24) 추석 연휴"/"금(9/25) 추석"처럼 임시 스케줄로만 잡혀 있었다.
+  it('day에 괄호+날짜가 붙은 임시 스케줄(공휴일 등)은 제외한다', () => {
+    const result = extractRegularWeekdayHours([
+      day({ day: '토', start: '11:00', end: '22:00' }),
+      day({ day: '목(9/24)', start: '11:00', end: '22:00', description: '추석 연휴' }),
+      day({ day: '금(9/25)', start: '11:00', end: '22:00', description: '추석' }),
+    ]);
+    expect(result).toEqual([{ day: '토', open: '11:00', close: '22:00' }]);
+  });
+
+  it('정규 스케줄이 아예 없으면 빈 배열이다(억지로 추정해 채우지 않음)', () => {
+    expect(extractRegularWeekdayHours([day({ day: '목(9/24)' })])).toEqual([]);
+  });
+
+  it('휴무일(start/end가 null)은 open/close가 null로 담긴다', () => {
+    const result = extractRegularWeekdayHours([day({ day: '월', start: null, end: null, description: '정기휴무' })]);
+    expect(result).toEqual([{ day: '월', open: null, close: null }]);
+  });
+
+  it('빈 배열이면 빈 배열을 반환한다', () => {
+    expect(extractRegularWeekdayHours([])).toEqual([]);
   });
 });
