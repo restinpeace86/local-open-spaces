@@ -311,6 +311,39 @@ export function DetailModal({
     };
   }, [item.id, isEvent]);
 
+  // [이벤트픽 카드 — 동일 스팟 예약 옵션 그룹핑](2026-09-19 사용자 지시): "탭했을 때는
+  // 각 옵션을 개별적으로 볼 수 있게 하되.. 프리뷰카드든 상세페이지든에 접근은..지금
+  // 처럼 별개로 냅둬야하지" — 위 linkedEvents(스팟→연결된 이벤트)의 반대 방향이다:
+  // 이벤트를 열었는데 같은 space_id(+같은 venue_name, 상위 매칭 오류로 다른 물리적
+  // 장소가 섞이는 것을 막기 위해 get-home-feed.ts groupBySpaceId와 동일한 키)의 다른
+  // 예약 옵션이 있으면 목록으로 보여준다. 같은 API 라우트(/api/spots/linked-events)를
+  // 그대로 재사용한다 — "space_id로 연결된 활성 이벤트를 돌려준다"는 그 라우트의
+  // 의미 자체는 호출 방향과 무관하게 동일하다(백엔드 변경 불필요, 제5장 제4조).
+  const [spaceSiblingOptions, setSpaceSiblingOptions] = useState<NearbyItem[]>([]);
+  useEffect(() => {
+    if (!isEvent || !item.space_id) {
+      setSpaceSiblingOptions([]);
+      return;
+    }
+    let cancelled = false;
+    setSpaceSiblingOptions([]);
+    fetch(`/api/spots/linked-events?spot_id=${encodeURIComponent(item.space_id)}`)
+      .then((res) => res.json())
+      .then((data: { events?: NearbyItem[] }) => {
+        if (cancelled) return;
+        const siblings = (Array.isArray(data.events) ? data.events : []).filter(
+          (ev) => ev.id !== item.id && ev.address === item.address
+        );
+        setSpaceSiblingOptions(siblings);
+      })
+      .catch(() => {
+        if (!cancelled) setSpaceSiblingOptions([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [item.id, item.space_id, item.address, isEvent]);
+
   // [스팟 상세 → 마이리얼트립 자동 매칭](2026-09-16 사용자 지시): "스팟픽에서
   // 우리의 키즈카페 장소 검색시 해당 장소 눌렀을때 내부적으로 마이리얼트립에서
   // 해당 상호명으로 검색하고 있으면.. 동적 버튼을 통하여 티켓 구매 둘러보기" —
@@ -739,6 +772,31 @@ export function DetailModal({
                   <span>📍 연결된 장소: {linkedSpot.name}</span>
                   <span aria-hidden>›</span>
                 </button>
+              )}
+
+              {/* [이벤트픽 카드 — 동일 스팟 예약 옵션 그룹핑](2026-09-19 사용자 지시): 메인
+                  피드에서 "예약 옵션 N개"로 묶여 대표 1건만 보였던 나머지 옵션들을 여기서
+                  펼쳐 보여준다. 각 옵션은 자기 자신의 완전히 독립된 상세(CTA/예약 링크
+                  포함)로 열린다 — 그룹핑은 표시 전용이고 데이터/예약 흐름은 건드리지
+                  않는다(요청사항 그대로). 기존 linkedEvents와 동일하게 setLinkedDetailItem으로
+                  중첩 DetailModal을 연다(새 상태/모달을 만들지 않음, 제5장 제4조). */}
+              {spaceSiblingOptions.length > 0 && (
+                <div className="mt-3">
+                  <p className="text-xs font-semibold text-gray-500 mb-1.5">📋 이 장소의 다른 예약 옵션</p>
+                  <div className="flex flex-col gap-1.5">
+                    {spaceSiblingOptions.map((ev) => (
+                      <button
+                        key={ev.id}
+                        type="button"
+                        onClick={() => setLinkedDetailItem(ev)}
+                        className="w-full flex items-center justify-between gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
+                      >
+                        <span className="truncate">{ev.name}</span>
+                        <span className="shrink-0 text-gray-400" aria-hidden>›</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
               )}
 
               {/* 7단: 인앱 지도 & 스팟 마커(미니맵). 근사/미상 좌표는 정확한 핀처럼

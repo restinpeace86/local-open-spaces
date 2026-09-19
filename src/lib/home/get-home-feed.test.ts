@@ -968,6 +968,121 @@ describe('getCategoryMinFeed (대분류·중분류 드릴다운)', () => {
 
     expect(items).toEqual([]);
   });
+
+  // [이벤트픽 카드 — 동일 스팟 예약 옵션 그룹핑](2026-09-19 사용자 지시): "한강공원
+  // 난지캠핑장에 대하여.. 그 예약 이벤트 한건으로 해서 보게 못해? 묶음으로 해서
+  // 이벤트 보여주던가?" — 실측으로 안전함이 확인된 '캠핑장' 중분류에 한해, 같은
+  // space_id+venue_name(address)을 공유하는 이벤트는 대표 1건+grouped_count로
+  // 묶여야 한다. 대표는 start_date가 가장 이른 것을 고른다.
+  describe('동일 스팟(space_id) 예약 옵션 그룹핑 — 캠핑장 한정', () => {
+    it('같은 space_id+장소명(venue_name)인 이벤트는 대표 1건+grouped_count로 묶인다(가장 이른 start_date가 대표)', async () => {
+      const rows = [
+        eventRow({
+          id: 'camp-2',
+          title: '10월 일반캠핑존 B형',
+          category_min: '캠핑장',
+          is_active: true,
+          space_id: 'space-nanji',
+          venue_name: '한강공원 난지캠핑장',
+          start_date: '2026-09-01',
+          end_date: '2026-10-31',
+        }),
+        eventRow({
+          id: 'camp-1',
+          title: '9월 프리캠핑존',
+          category_min: '캠핑장',
+          is_active: true,
+          space_id: 'space-nanji',
+          venue_name: '한강공원 난지캠핑장',
+          start_date: '2026-08-01',
+          end_date: '2026-09-30',
+        }),
+        eventRow({
+          id: 'camp-3',
+          title: '9월 캠프파이어존',
+          category_min: '캠핑장',
+          is_active: true,
+          space_id: 'space-nanji',
+          venue_name: '한강공원 난지캠핑장',
+          start_date: '2026-08-01',
+          end_date: '2026-09-30',
+        }),
+      ];
+
+      vi.doMock('@/lib/supabase/server', () => ({
+        createClient: () => Promise.resolve({ from: () => makeFilteringChainable(rows) }),
+      }));
+
+      const { getCategoryMinFeed } = await import('./get-home-feed');
+      const items = await getCategoryMinFeed('캠핑장', 20, { sigunguName: '성남시 분당구' });
+
+      expect(items).toHaveLength(1);
+      expect(items[0].id).toBe('camp-1');
+      expect(items[0].grouped_count).toBe(3);
+    });
+
+    it('같은 space_id라도 장소명(venue_name)이 다르면 묶지 않는다(상위 매칭 오류로 다른 물리적 장소가 섞인 경우 방지)', async () => {
+      const rows = [
+        eventRow({
+          id: 'pocheon-1',
+          title: '포천 서울캠핑장 (9월)',
+          category_min: '캠핑장',
+          is_active: true,
+          space_id: 'space-mismatched',
+          venue_name: '포천 서울캠핑장',
+        }),
+        eventRow({
+          id: 'seocheon-1',
+          title: '서천 서울캠핑장 (9월)',
+          category_min: '캠핑장',
+          is_active: true,
+          space_id: 'space-mismatched',
+          venue_name: '서천 서울캠핑장',
+        }),
+      ];
+
+      vi.doMock('@/lib/supabase/server', () => ({
+        createClient: () => Promise.resolve({ from: () => makeFilteringChainable(rows) }),
+      }));
+
+      const { getCategoryMinFeed } = await import('./get-home-feed');
+      const items = await getCategoryMinFeed('캠핑장', 20, { sigunguName: '성남시 분당구' });
+
+      expect(items.map((i) => i.id).sort()).toEqual(['pocheon-1', 'seocheon-1']);
+      expect(items.every((i) => i.grouped_count == null)).toBe(true);
+    });
+
+    it('캠핑장이 아닌 다른 중분류는 space_id가 같아도 묶지 않는다(검증 안 된 카테고리 — 추측 금지)', async () => {
+      const rows = [
+        eventRow({
+          id: 'museum-1',
+          title: '역사특강 A',
+          category_min: '역사박물관',
+          is_active: true,
+          space_id: 'space-museum',
+          venue_name: '서울역사박물관',
+        }),
+        eventRow({
+          id: 'museum-2',
+          title: '역사특강 B',
+          category_min: '역사박물관',
+          is_active: true,
+          space_id: 'space-museum',
+          venue_name: '서울역사박물관',
+        }),
+      ];
+
+      vi.doMock('@/lib/supabase/server', () => ({
+        createClient: () => Promise.resolve({ from: () => makeFilteringChainable(rows) }),
+      }));
+
+      const { getCategoryMinFeed } = await import('./get-home-feed');
+      const items = await getCategoryMinFeed('역사박물관', 20, { sigunguName: '성남시 분당구' });
+
+      expect(items.map((i) => i.id).sort()).toEqual(['museum-1', 'museum-2']);
+      expect(items.every((i) => i.grouped_count == null)).toBe(true);
+    });
+  });
 });
 
 // [todo.md 개선사항 4 되돌림](2026-09-19 사용자 지시): getCategoryMinCounts가 더 이상

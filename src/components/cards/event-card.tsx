@@ -114,6 +114,15 @@ export function EventCard({
         >
           {item.category_min ?? meta.label}
         </span>
+        {/* [이벤트픽 카드 — 동일 스팟 예약 옵션 그룹핑](2026-09-19 사용자 지시): "대표
+            1건으로 보이고 예약 옵션 N개라던가 묶여야하지 않을까?" — get-home-feed.ts
+            getCategoryMinFeed가 캠핑장처럼 검증된 중분류에 한해 같은 스팟의 여러 예약
+            옵션을 대표 1건+개수로 묶어 내려줄 때만 채워진다(그 외엔 항상 undefined). */}
+        {item.grouped_count != null && item.grouped_count > 1 && (
+          <span className="absolute top-2 right-2 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-black/60 text-white">
+            예약 옵션 {item.grouped_count}개
+          </span>
+        )}
       </div>
 
       <div className={`p-3 min-h-0 overflow-hidden flex flex-col gap-1.5 ${hasThumbnail ? 'flex-[5]' : 'flex-[8]'}`}>

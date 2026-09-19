@@ -102,7 +102,7 @@ function extractCoords(location: unknown): { lng: number; lat: number } {
 // 걸러내려면 이 세 컬럼이 모든 이벤트 조회에 공통으로 실려야 한다(EVENT_COLUMNS를
 // 쓰는 모든 함수가 대상).
 export const EVENT_COLUMNS =
-  'id, title, description, event_type, category_min, target_audience, location, location_precision, thumbnail_url, start_date, end_date, reservation_start_date, reservation_end_date, reservation_url, is_reservation_required, is_free, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, venue_name, sigungu_name, price_text, source_url, operating_weekdays, excluded_weekdays, operating_nth_weekdays';
+  'id, title, description, event_type, category_min, target_audience, location, location_precision, thumbnail_url, start_date, end_date, reservation_start_date, reservation_end_date, reservation_url, is_reservation_required, is_free, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, venue_name, sigungu_name, price_text, source_url, operating_weekdays, excluded_weekdays, operating_nth_weekdays, space_id';
 
 export type EventRow = {
   id: string;
@@ -134,6 +134,9 @@ export type EventRow = {
   operating_weekdays: string[] | null;
   excluded_weekdays: string[] | null;
   operating_nth_weekdays: string[] | null;
+  // [이벤트픽 카드 — 동일 스팟 예약 옵션 그룹핑](2026-09-19 사용자 지시): getCategoryMinFeed가
+  // 캠핑장처럼 검증된 중분류에 한해 같은 스팟의 여러 예약 옵션을 대표 1건+개수로 묶을 때 쓴다.
+  space_id: string | null;
 };
 
 // [운영 요일/반복 규칙](2026-09-12 사용자 지시): "이벤트 기간중에 있더라도 이에
@@ -189,6 +192,7 @@ export function toEventItem(row: EventRow): NearbyItem {
     booking_status: row.booking_status,
     price_text: row.price_text,
     source_url: row.source_url,
+    space_id: row.space_id,
   };
 }
 
@@ -1124,6 +1128,56 @@ export async function getThemeSpotFeed(
 const PAGINATION_OVERFETCH_BUFFER = 60;
 const PAGINATION_OVERFETCH_CEILING = 500;
 
+// [이벤트픽 카드 — 동일 스팟 예약 옵션 그룹핑](2026-09-19 사용자 지시): "한강공원
+// 난지캠핑장에 대하여 장소스팟으로 그룹핑하긴 했는데 그 예약 이벤트 한건으로 해서
+// 보게 못해?" — 실측 확인: 이 스팟 하나에 진짜 events.space_id로 연결된 활성
+// 이벤트가 13건(프리캠핑존/일반캠핑존 A~D형/캠프파이어존/바비큐존을 월별로 각각
+// 별도 예약 서비스로 등록)이라 캠핑장 카테고리 피드가 사실상 한 스팟으로 도배됐다.
+//
+// [왜 space_id만으로 전체 중분류에 일반화하면 안 되는가 — 실측 조사]: space_id당
+// 활성 이벤트 5건 이상인 스팟 29곳을 전수 확인한 결과, "같은 프로그램의 옵션
+// 차이"인 경우는 GO_CAMPING 소스 캠핑장 2곳(난지캠핑장 13건/서천 금빛노을
+// 서울캠핑장 5건, 전부 category_min='캠핑장')뿐이었다. 나머지 22곳은 전부
+// 박물관/아트센터/도서관 등(CULTURE_FACILITY)이고 실제 제목을 확인해보니 서로
+// 다른 전시/강좌/프로그램이다 — 이런 곳까지 space_id만으로 묶으면 사용자가
+// 명시적으로 금지한 "동일 스팟이지만 다른 이벤트를 합치는" 오류가 그대로
+// 발생한다. 원천 데이터(SEOUL_YEYAK)에는 "같은 프로그램의 옵션"과 "다른
+// 프로그램"을 구분할 구조적 필드가 아예 없어(SVCID는 옵션 단위로 유일,
+// MINCLASSNM은 너무 뭉뚱그려짐) 텍스트로 구분하는 것은 추측 금지 원칙(제3장
+// 제5조)에 어긋난다 — 그래서 실측으로 안전함이 확인된 category_min만 허용
+// 목록(Set)으로 좁힌다(EXCLUDED_CATEGORY_MIN_FILTER와 동일한 관례). 다른
+// 중분류도 검증되면 여기에 추가할 수 있다.
+const SPACE_ID_GROUP_CATEGORY_MINS = new Set(['캠핑장']);
+
+// [같은 스팟인데 서로 다른 물리적 장소가 섞이는 사고 방지]: "서천 금빛노을
+// 서울캠핑장" 1개 스팟에 실제로는 "포천 서울캠핑장"/"서천 서울오토캠핑장"/
+// "서천 서울캠핑장" 3개의 서로 다른 물리적 장소가 연결돼 있었다(상위 매칭
+// 배치의 기존 부정확성 — 별도 이슈, 이번 범위 아님). space_id만 키로 쓰면 이
+// 서로 다른 장소들까지 한 카드로 잘못 합쳐진다 — NearbyItem.address(이벤트는
+// toEventItem이 venue_name을 그대로 담음, 위 참고)를 그룹핑 키에 함께 넣어
+// 막는다.
+function groupBySpaceId(items: NearbyItem[]): NearbyItem[] {
+  const groups = new Map<string, NearbyItem[]>();
+  const ungrouped: NearbyItem[] = [];
+  for (const item of items) {
+    if (!item.space_id) {
+      ungrouped.push(item);
+      continue;
+    }
+    const key = `${item.space_id}::${item.address ?? ''}`;
+    const group = groups.get(key);
+    if (group) group.push(item);
+    else groups.set(key, [item]);
+  }
+
+  const result = [...ungrouped];
+  for (const group of groups.values()) {
+    const representative = [...group].sort((a, b) => (a.start_date ?? '').localeCompare(b.start_date ?? ''))[0];
+    result.push(group.length > 1 ? { ...representative, grouped_count: group.length } : representative);
+  }
+  return result;
+}
+
 export async function getCategoryMinFeed(
   categoryMin: string,
   limit = 20,
@@ -1152,7 +1206,8 @@ export async function getCategoryMinFeed(
 
   const eventData = await fetchRegionFirstRows<EventRow>(buildEventQuery, region, minRequired);
 
-  const items = dedupeAndMergeFree(filterEventsOperatingToday(eventData).map(toEventItem));
+  const merged = dedupeAndMergeFree(filterEventsOperatingToday(eventData).map(toEventItem));
+  const items = SPACE_ID_GROUP_CATEGORY_MINS.has(categoryMin) ? groupBySpaceId(merged) : merged;
   const ordered = sortByDistanceIfKnown(items, region);
   return selectRegionFirst(ordered, region, offset, limit);
 }

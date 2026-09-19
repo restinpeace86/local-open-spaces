@@ -73,6 +73,18 @@ export type NearbyItem = {
   price_text?: string | null;
   // 이벤트 원천 상세 페이지/공식 홈페이지 URL(정규화됨). 위와 동일하게 events 전용.
   source_url?: string | null;
+  // [이벤트픽 카드 — 동일 스팟 예약 옵션 그룹핑](2026-09-19 사용자 지시): "한강공원
+  // 난지캠핑장에 대하여 장소스팟으로 그룹핑하긴 했는데 그 예약 이벤트 한건으로 해서
+  // 보게 못해?" — events.space_id(FK → open_spaces.id)를 그대로 노출한다. 위 group_id
+  // (스팟 중복 통합용)와는 완전히 다른 개념이라 혼동하지 않도록 별도 필드로 둔다 —
+  // events는 group_id를 쓰지 않고(항상 null), 이 space_id는 SPACE에는 없다(항상
+  // undefined). get-home-feed.ts의 events 조회 경로만 채운다.
+  space_id?: string | null;
+  // 위 space_id 그룹핑으로 대표 1건에 합쳐진 나머지 건수(2 이상일 때만 채움 — 예:
+  // 3이면 "이 대표 카드 뒤에 이런 옵션이 2개 더 있다"는 뜻). get-home-feed.ts의
+  // getCategoryMinFeed(캠핑장 등 검증된 중분류에 한해)만 채운다 — 그 외 모든 생성
+  // 경로는 undefined로 남는다(추측 금지 — 검증 안 된 카테고리는 절대 묶지 않는다).
+  grouped_count?: number;
 };
 
 // Task 9-6-10(2026-08-23): itemType을 넘기면 RPC가 해당 타입만 반환한다(예: '/nearby' 지도는

@@ -77,6 +77,14 @@ export function EventListRow({
         >
           {item.category_min ?? meta.label}
         </span>
+        {/* [이벤트픽 카드 — 동일 스팟 예약 옵션 그룹핑](2026-09-19 사용자 지시): EventCard와
+            동일한 조건 — get-home-feed.ts getCategoryMinFeed가 검증된 중분류에 한해서만
+            채운다. */}
+        {item.grouped_count != null && item.grouped_count > 1 && (
+          <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-gray-800 text-white">
+            예약 옵션 {item.grouped_count}개
+          </span>
+        )}
         {badges.map((badge) => (
           <span
             key={badge.key}

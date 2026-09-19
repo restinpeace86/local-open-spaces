@@ -1132,6 +1132,83 @@ describe('DetailModal Event↔Spot 양방향 링킹 (개선사항10, 2026-09-11)
   });
 });
 
+// [이벤트픽 카드 — 동일 스팟 예약 옵션 그룹핑](2026-09-19 사용자 지시): "탭했을 때는
+// 각 옵션을 개별적으로 볼 수 있게 하되.. 프리뷰카드든 상세페이지든에 접근은..지금처럼
+// 별개로 냅둬야하지" — 메인 피드에서 대표 1건+grouped_count로 묶인 이벤트를 열었을 때
+// 나머지 옵션을 여기서 보여준다.
+describe('DetailModal 동일 스팟 예약 옵션 (2026-09-19)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('space_id가 있으면 같은 space_id+address의 다른 예약 옵션을 보여주고, 누르면 그 옵션 상세가 중첩으로 열린다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/spots/linked-events')) {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                events: [
+                  makeSpaceItem({
+                    id: 'camp-self',
+                    item_type: 'EVENT',
+                    name: '이 자체 옵션(자기 자신, 제외돼야 함)',
+                    address: '한강공원 난지캠핑장',
+                  }),
+                  makeSpaceItem({
+                    id: 'camp-2',
+                    item_type: 'EVENT',
+                    name: '일반캠핑존 B형',
+                    address: '한강공원 난지캠핑장',
+                  }),
+                  makeSpaceItem({
+                    id: 'camp-mismatched',
+                    item_type: 'EVENT',
+                    name: '포천 서울캠핑장(주소 다름 — 제외돼야 함)',
+                    address: '포천 서울캠핑장',
+                  }),
+                ],
+              }),
+          } as Response);
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+      })
+    );
+    render(
+      <DetailModal
+        item={makeSpaceItem({
+          id: 'camp-self',
+          item_type: 'EVENT',
+          name: '프리캠핑존',
+          address: '한강공원 난지캠핑장',
+          space_id: 'space-nanji',
+        })}
+        onClose={() => {}}
+      />
+    );
+
+    expect(await screen.findByText('📋 이 장소의 다른 예약 옵션')).toBeInTheDocument();
+    expect(screen.getByText('일반캠핑존 B형')).toBeInTheDocument();
+    expect(screen.queryByText(/자기 자신/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/주소 다름/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('일반캠핑존 B형'));
+    expect(screen.getAllByText('일반캠핑존 B형')).toHaveLength(2);
+  });
+
+  it('space_id가 없으면 섹션을 렌더링하지 않는다', () => {
+    render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT', space_id: null })} onClose={() => {}} />);
+    expect(screen.queryByText('📋 이 장소의 다른 예약 옵션')).not.toBeInTheDocument();
+  });
+
+  it('스팟(SPACE) 항목에는 이 섹션을 렌더링하지 않는다', () => {
+    render(<DetailModal item={makeSpaceItem({ item_type: 'SPACE' })} onClose={() => {}} />);
+    expect(screen.queryByText('📋 이 장소의 다른 예약 옵션')).not.toBeInTheDocument();
+  });
+});
+
 // [스팟 상세 → 마이리얼트립 자동 매칭](2026-09-16 사용자 지시): "동적 버튼을
 // 통하여 티켓 구매 둘러보기.. 관리자가 승인을 한 번 거치기" — 유저 화면은
 // 관리자가 이미 승인해 둔 결과만 조회한다(실시간 검색 없음).

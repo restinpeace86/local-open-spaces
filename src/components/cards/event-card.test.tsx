@@ -243,3 +243,18 @@ describe('EventCard 거리 정보 상시 노출 (2026-09-04)', () => {
     expect(screen.queryByText(/현재 위치에서/)).not.toBeInTheDocument();
   });
 });
+
+// [이벤트픽 카드 — 동일 스팟 예약 옵션 그룹핑](2026-09-19 사용자 지시): "대표 1건으로
+// 보이고 예약 옵션 N개라던가 묶여야하지 않을까?" — get-home-feed.ts getCategoryMinFeed가
+// 캠핑장처럼 검증된 중분류에 한해서만 grouped_count를 채운다(그 외엔 항상 undefined).
+describe('EventCard 예약 옵션 그룹핑 뱃지 (2026-09-19)', () => {
+  it('grouped_count가 2 이상이면 "예약 옵션 N개" 뱃지를 보여준다', () => {
+    render(<EventCard item={makeEventItem({ grouped_count: 13 })} onSelect={() => {}} />);
+    expect(screen.getByText('예약 옵션 13개')).toBeInTheDocument();
+  });
+
+  it('grouped_count가 없으면(대부분의 카드) 뱃지를 보여주지 않는다', () => {
+    render(<EventCard item={makeEventItem()} onSelect={() => {}} />);
+    expect(screen.queryByText(/예약 옵션/)).not.toBeInTheDocument();
+  });
+});

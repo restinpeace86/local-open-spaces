@@ -114,4 +114,16 @@ describe('EventListRow', () => {
     const button = screen.getByRole('button');
     expect(button.className).not.toContain('ring-2');
   });
+
+  // [이벤트픽 카드 — 동일 스팟 예약 옵션 그룹핑](2026-09-19 사용자 지시): EventCard와
+  // 동일한 조건으로 grouped_count 뱃지를 노출한다.
+  it('grouped_count가 2 이상이면 "예약 옵션 N개" 뱃지를 보여준다', () => {
+    render(<EventListRow item={makeEventItem({ grouped_count: 5 })} onSelect={() => {}} />);
+    expect(screen.getByText('예약 옵션 5개')).toBeInTheDocument();
+  });
+
+  it('grouped_count가 없으면 뱃지를 보여주지 않는다', () => {
+    render(<EventListRow item={makeEventItem()} onSelect={() => {}} />);
+    expect(screen.queryByText(/예약 옵션/)).not.toBeInTheDocument();
+  });
 });
