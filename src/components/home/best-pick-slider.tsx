@@ -32,6 +32,10 @@ export type CuratedItem = {
   price_display?: string | null;
   description?: string | null;
   spot?: { id: string; name: string; address: string | null } | null;
+  // [상시 추천 픽 테마별 분류](2026-09-20 사용자 지시): 상시 티켓(operation_end_date
+  // 없음) 섹션을 테마 칩으로 나누기 위한 다중 태그. 기간한정 특가 카드에는 의미가
+  // 없지만(그 섹션은 테마 분류 대상이 아님) 타입은 모든 CuratedItem이 공유한다.
+  themes?: string[] | null;
 };
 
 // [개선사항 2] "상품 성격에 따른 뱃지 필요한가? 제안할 것" — 카드 자체엔 지금까지

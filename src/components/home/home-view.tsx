@@ -8,7 +8,12 @@ import { HeroCarousel } from '@/components/home/hero-carousel';
 import { ReservationOpenSlider, ReservationOpenSliderSkeleton } from '@/components/home/reservation-open-slider';
 import { BestPickSlider, BestPickSliderSkeleton, CuratedItem } from '@/components/home/best-pick-slider';
 import { CuratedItemDetailModal } from '@/components/home/curated-item-detail-modal';
-import { splitCuratedItemsByPeriod } from '@/lib/home/curated-items';
+import {
+  splitCuratedItemsByPeriod,
+  filterCuratedItemsByTheme,
+  CURATED_ITEM_THEME_OPTIONS,
+  CuratedItemThemeKey,
+} from '@/lib/home/curated-items';
 import { EventBrowseSheet, EventBrowseSheetMode } from '@/components/home/event-browse-sheet';
 import { MajorCategoryGrid } from '@/components/home/major-category-grid';
 import { FeedCard } from '@/components/home/feed-card';
@@ -228,6 +233,13 @@ export function HomeView({
   // 카드는 selectedItem(NearbyItem 전용 DetailModal)과 스키마가 달라 별도 state로
   // 관리한다 — 카드 클릭 시 곧바로 외부 링크가 아니라 이 상세 모달을 먼저 연다.
   const [selectedCuratedItem, setSelectedCuratedItem] = useState<CuratedItem | null>(null);
+  // [상시 추천 픽 테마별 분류](2026-09-20 사용자 지시): "클릭하면 거기에 맞는 제휴
+  // 상품들 나오는 구조로 해줘" — 빈 상태로 시작하면 섹션이 통째로 비어 보이는
+  // 어색함이 있어, 첫 번째 테마를 기본 선택해 둔다(사용자가 곧바로 다른 칩을
+  // 눌러 바꿀 수 있음).
+  const [selectedEvergreenTheme, setSelectedEvergreenTheme] = useState<CuratedItemThemeKey>(
+    CURATED_ITEM_THEME_OPTIONS[0].key
+  );
   // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시) 요구사항 3: "전체보기"가 페이지 이동 대신
   // 이 화면 위 바텀시트로 뜬다 — 어떤 종류의 전체보기를 열지만 상태로 들고 있으면 된다.
   const [browseSheetMode, setBrowseSheetMode] = useState<EventBrowseSheetMode | null>(null);
@@ -536,15 +548,47 @@ export function HomeView({
                 든든하게 받쳐주는 스테디셀러 스토어 형태로 배치한다는 기획 의도. 다른
                 섹션과 동일한 가변 노출 원칙을 그대로 따른다. */}
             {(evergreenTickets === null || evergreenTickets.length > 0) && (
-              <section aria-label="언제 가도 좋은 상시 추천 픽">
+              <section aria-label="언제 가도 좋은 상시 테마별 추천픽">
                 <div className="px-4 mb-3">
-                  <h2 className="text-base font-bold text-gray-900">🧸 언제 가도 좋은 상시 추천 픽</h2>
-                  <p className="text-xs text-gray-400 mt-0.5">마감 걱정 없이, 아이와 언제든 떠날 수 있는 스테디셀러 티켓이에요.</p>
+                  <h2 className="text-base font-bold text-gray-900">🧸 언제 가도 좋은 상시 테마별 추천픽</h2>
+                  <p className="text-xs text-gray-400 mt-0.5">마감 걱정 없이, 지금 하고 싶은 걸 골라보세요.</p>
+                </div>
+                {/* [상시 추천 픽 테마별 분류](2026-09-20 사용자 지시): "위 상품/매장
+                    용어 없이" 테마 칩으로만 먼저 고르게 하고, 고른 테마에 맞는 카드만
+                    보여준다 — major-category-grid.tsx의 칩 스타일(rounded-full,
+                    선택 시 bg-gray-900)을 그대로 재사용한다(제5장 제4조). */}
+                <div className="flex gap-1.5 overflow-x-auto px-4 pb-2.5 -mt-0.5">
+                  {CURATED_ITEM_THEME_OPTIONS.map((opt) => {
+                    const isActive = selectedEvergreenTheme === opt.key;
+                    return (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        aria-pressed={isActive}
+                        onClick={() => setSelectedEvergreenTheme(opt.key)}
+                        className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                          isActive ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        {opt.emoji} {opt.label}
+                      </button>
+                    );
+                  })}
                 </div>
                 {evergreenTickets === null ? (
-                  <BestPickSliderSkeleton label="언제 가도 좋은 상시 추천 픽 불러오는 중" />
+                  <BestPickSliderSkeleton label="언제 가도 좋은 상시 테마별 추천픽 불러오는 중" />
                 ) : (
-                  <BestPickSlider items={evergreenTickets} onSelect={setSelectedCuratedItem} />
+                  (() => {
+                    const themedItems = filterCuratedItemsByTheme(evergreenTickets, selectedEvergreenTheme);
+                    // 선택한 테마에 해당하는 상품이 아직 없을 때 슬라이더가 조용히
+                    // 사라지면(BestPickSlider의 0건 처리) 칩을 눌렀는데 아무 반응이
+                    // 없는 것처럼 보인다 — 안내 문구로 대체한다.
+                    return themedItems.length > 0 ? (
+                      <BestPickSlider items={themedItems} onSelect={setSelectedCuratedItem} />
+                    ) : (
+                      <p className="px-4 text-xs text-gray-400">이 테마에 해당하는 추천 픽을 준비 중이에요.</p>
+                    );
+                  })()
                 )}
               </section>
             )}

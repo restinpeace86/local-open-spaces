@@ -313,15 +313,15 @@ describe('HomeView', () => {
       expect(await screen.findByText('엄선된 기간 한정 특가 픽')).toBeInTheDocument();
       expect(screen.getByText('아이와 함께 가기 좋은 한정기간 추천 픽만 모았어요.')).toBeInTheDocument();
       expect(await screen.findByText('가을 단풍 나들이 축제 입장권')).toBeInTheDocument();
-      expect(screen.queryByText('🧸 언제 가도 좋은 상시 추천 픽')).not.toBeInTheDocument();
+      expect(screen.queryByText('🧸 언제 가도 좋은 상시 테마별 추천픽')).not.toBeInTheDocument();
     });
 
-    it('상시 티켓(operation_end_date 없음)은 "🧸 언제 가도 좋은 상시 추천 픽"에 뜬다', async () => {
-      stubFetchBestPicks([makeCuratedItem({ operation_end_date: null })]);
+    it('상시 티켓(operation_end_date 없음)은 "🧸 언제 가도 좋은 상시 테마별 추천픽"에 뜬다', async () => {
+      stubFetchBestPicks([makeCuratedItem({ operation_end_date: null, themes: ['KIDS_CAFE'] })]);
       render(<HomeView initialHeroEvents={[]} />);
 
-      expect(await screen.findByText('🧸 언제 가도 좋은 상시 추천 픽')).toBeInTheDocument();
-      expect(screen.getByText('마감 걱정 없이, 아이와 언제든 떠날 수 있는 스테디셀러 티켓이에요.')).toBeInTheDocument();
+      expect(await screen.findByText('🧸 언제 가도 좋은 상시 테마별 추천픽')).toBeInTheDocument();
+      expect(screen.getByText('마감 걱정 없이, 지금 하고 싶은 걸 골라보세요.')).toBeInTheDocument();
       expect(await screen.findByText('가을 단풍 나들이 축제 입장권')).toBeInTheDocument();
       expect(screen.queryByText('엄선된 기간 한정 특가 픽')).not.toBeInTheDocument();
     });
@@ -365,7 +365,7 @@ describe('HomeView', () => {
 
       await waitFor(() => {
         expect(screen.queryByLabelText('엄선된 기간 한정 특가 픽')).not.toBeInTheDocument();
-        expect(screen.queryByLabelText('언제 가도 좋은 상시 추천 픽')).not.toBeInTheDocument();
+        expect(screen.queryByLabelText('언제 가도 좋은 상시 테마별 추천픽')).not.toBeInTheDocument();
       });
     });
 
@@ -381,7 +381,12 @@ describe('HomeView', () => {
                 Promise.resolve({
                   items: [
                     makeCuratedItem({ id: 'deal-1', operation_end_date: '2026-10-31' }),
-                    makeCuratedItem({ id: 'evergreen-1', title: '상시 키즈카페 이용권', operation_end_date: null }),
+                    makeCuratedItem({
+                      id: 'evergreen-1',
+                      title: '상시 키즈카페 이용권',
+                      operation_end_date: null,
+                      themes: ['KIDS_CAFE'],
+                    }),
                   ],
                 }),
             } as Response);
@@ -409,7 +414,7 @@ describe('HomeView', () => {
       const ongoingIndex = labels.indexOf('지금 이 순간 함께하기 좋은 알찬 픽');
       const dealsIndex = labels.indexOf('엄선된 기간 한정 특가 픽');
       const reservationIndex = labels.indexOf('놓치면 후회하는 인기 만점 예약 픽');
-      const evergreenIndex = labels.indexOf('언제 가도 좋은 상시 추천 픽');
+      const evergreenIndex = labels.indexOf('언제 가도 좋은 상시 테마별 추천픽');
 
       expect(ongoingIndex).toBeGreaterThanOrEqual(0);
       expect(dealsIndex).toBeGreaterThan(ongoingIndex);

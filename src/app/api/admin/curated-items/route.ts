@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { escapeIlikePattern, splitSearchTokens } from '@/lib/search/keyword-search';
+import { isCuratedItemThemeKey } from '@/lib/home/curated-items';
 
 // [관리자 화면(/admin/data-grid) 기능 고도화 및 범용 제휴 상품 테이블 개편](2026-08-30
 // 사용자 지시): curated_items(범용 큐레이션/제휴 상품) 관리 전용 API. 이 앱은 아직
@@ -103,6 +104,14 @@ function validatePayload(body: Record<string, unknown>): string | null {
   return null;
 }
 
+// [상시 추천 픽 테마별 분류](2026-09-20 사용자 지시): 배열이 아니거나 알 수 없는
+// 값이 섞여 들어와도(예: 프론트 버그) 조용히 걸러낸다 — DB 제약(check)을 걸지
+// 않고 앱 레이어에서만 검증하는 이 프로젝트의 기존 관례(제5장 제4조)를 따른다.
+function parseThemes(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.filter((v): v is string => typeof v === 'string' && isCuratedItemThemeKey(v));
+}
+
 // 요구사항 2 "[+ 신규 상품 등록]": title/image_url/booking_url/category/is_active/
 // operation_start_date/operation_end_date를 받아 바로 DB에 추가한다.
 export async function POST(request: NextRequest) {
@@ -134,6 +143,7 @@ export async function POST(request: NextRequest) {
         description: typeof body.description === 'string' && body.description.trim() ? body.description.trim() : null,
         myrealtrip_gid: typeof body.myrealtrip_gid === 'string' && body.myrealtrip_gid.trim() ? body.myrealtrip_gid.trim() : null,
         facility_type: typeof body.facility_type === 'string' && body.facility_type.trim() ? body.facility_type.trim() : null,
+        themes: parseThemes(body.themes),
       })
       .select(SPOT_ID_SELECT)
       .single();
@@ -171,6 +181,7 @@ export async function PATCH(request: NextRequest) {
       price_display: string | null;
       description: string | null;
       facility_type: string | null;
+      themes: string[];
     }> = {};
     if (typeof body.title === 'string') {
       if (!body.title.trim()) return NextResponse.json({ error: '상품명을 입력해 주세요.' }, { status: 400 });
@@ -215,6 +226,9 @@ export async function PATCH(request: NextRequest) {
     }
     if ('facility_type' in body) {
       updates.facility_type = typeof body.facility_type === 'string' && body.facility_type.trim() ? body.facility_type.trim() : null;
+    }
+    if ('themes' in body) {
+      updates.themes = parseThemes(body.themes);
     }
 
     if (Object.keys(updates).length === 0) {

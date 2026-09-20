@@ -114,6 +114,7 @@ export type Database = {
           operation_start_date: string | null
           price_display: string | null
           spot_id: string | null
+          themes: string[]
           title: string
         }
         Insert: {
@@ -130,6 +131,7 @@ export type Database = {
           operation_start_date?: string | null
           price_display?: string | null
           spot_id?: string | null
+          themes?: string[]
           title: string
         }
         Update: {
@@ -146,6 +148,7 @@ export type Database = {
           operation_start_date?: string | null
           price_display?: string | null
           spot_id?: string | null
+          themes?: string[]
           title?: string
         }
         Relationships: [

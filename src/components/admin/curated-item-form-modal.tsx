@@ -6,6 +6,7 @@ import { SpotPicker, SpotOption } from '@/components/community/spot-picker';
 import { SpotServiceCategoryCheck } from '@/components/admin/spot-service-category-check';
 import { ServiceCategory } from '@/lib/admin/service-category';
 import { FacilityClassificationResult } from '@/lib/admin/llm-facility-classification';
+import { CURATED_ITEM_THEME_OPTIONS } from '@/lib/home/curated-items';
 
 // [관리자 화면(/admin/data-grid) 기능 고도화 및 범용 제휴 상품 테이블 개편](2026-08-30
 // 사용자 지시) 요구사항 2: "[+ 신규 상품 등록]"/각 행의 "[수정]"이 여는 팝업 폼. 신규
@@ -45,6 +46,11 @@ export type CuratedItemFormValue = {
   // [실내/야외 분류 LLM 파이프라인](2026-09-17 사용자 지시): 관리자가 이 폼에서
   // "🤖 LLM로 실내/야외 자동 분류"를 눌러 채우거나 직접 고를 수 있다.
   facility_type?: string | null;
+  // [상시 추천 픽 테마별 분류](2026-09-20 사용자 지시): 상시 티켓(기간한정 아닌
+  // 상품)이 홈 화면 하단에서 어느 테마 칩에 노출될지 결정한다. 여러 개 선택
+  // 가능(다대다) — 예: "동탄 공룡월드&키즈카페"는 키즈카페 테마 하나로 충분하지만,
+  // 필요하면 여러 테마에 동시에 걸칠 수 있다.
+  themes?: string[] | null;
 };
 
 export function CuratedItemFormModal({
@@ -82,6 +88,9 @@ export function CuratedItemFormModal({
   const [priceDisplay, setPriceDisplay] = useState(initial?.price_display ?? prefill?.price_display ?? '');
   const [description, setDescription] = useState(initial?.description ?? prefill?.description ?? '');
   const [facilityType, setFacilityType] = useState(initial?.facility_type ?? '');
+  // [상시 추천 픽 테마별 분류](2026-09-20 사용자 지시): spot-curations-panel.tsx의
+  // curation_badges와 동일한 Set<string> 다중 선택 관례(제5장 제4조).
+  const [selectedThemes, setSelectedThemes] = useState<Set<string>>(() => new Set(initial?.themes ?? []));
   const [isClassifying, setIsClassifying] = useState(false);
   const [classifyError, setClassifyError] = useState<string | null>(null);
   const [classifySuggestion, setClassifySuggestion] = useState<FacilityClassificationResult | null>(null);
@@ -193,6 +202,7 @@ export function CuratedItemFormModal({
         description: description.trim() || null,
         myrealtrip_gid: myrealtripGid,
         facility_type: facilityType || null,
+        themes: [...selectedThemes],
       };
       const res = isEdit
         ? await fetch('/api/admin/curated-items', {
@@ -336,6 +346,44 @@ export function CuratedItemFormModal({
               ))}
             </select>
           </label>
+
+          {/* [상시 추천 픽 테마별 분류](2026-09-20 사용자 지시): "언제가도 좋은 상시
+              테마별 추천픽" 하단 섹션에서 이 상품이 어느 칩에 노출될지 결정한다.
+              spot-curations-panel.tsx의 curation_badges 체크박스와 동일한 다중
+              선택 UI지만, 그 패널의 "이미 저장된 값은 해제 불가" 제약은 이 상품
+              성격과 무관해 가져오지 않는다. */}
+          <div className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-gray-700">상시 추천 픽 테마 — 다중 선택</span>
+            <div className="flex flex-wrap gap-2">
+              {CURATED_ITEM_THEME_OPTIONS.map((opt) => {
+                const isChecked = selectedThemes.has(opt.key);
+                return (
+                  <label
+                    key={opt.key}
+                    className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-xs cursor-pointer ${
+                      isChecked ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-300 text-gray-700 hover:bg-gray-50'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => {
+                        setSelectedThemes((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(opt.key)) next.delete(opt.key);
+                          else next.add(opt.key);
+                          return next;
+                        });
+                      }}
+                      className="sr-only"
+                    />
+                    {opt.emoji} {opt.label}
+                  </label>
+                );
+              })}
+            </div>
+            <p className="text-xs text-gray-400">아무것도 선택하지 않으면 "기타" 테마로 노출됩니다.</p>
+          </div>
 
           {/* [제휴 상품 ↔ 스팟 연동](2026-09-10 사용자 지시, todo.md 개선사항6):
               통합 장소 검색(내부 DB → 카카오 로컬 Fallback → Auto-Upsert)을 그대로
