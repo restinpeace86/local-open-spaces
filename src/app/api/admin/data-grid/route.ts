@@ -155,7 +155,7 @@ function applyDateRange<Q extends { gte: (c: string, v: string) => Q; lt: (c: st
 // 상세 모달을 열 때만 /api/admin/data-grid/raw-data로 그 한 건만 따로 받아온다
 // (아래 GET 핸들러, data-grid-client.tsx의 handleOpenDataRow가 호출).
 const OPEN_SPACES_COLUMNS =
-  'id, external_id, source_type, source, name, display_name, category, category_min, category_min_source, service_category_id, group_id, is_dedup_representative, address, location, location_precision, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, sigungu_name, created_at, updated_at';
+  'id, external_id, source_type, source, name, display_name, naver_place_id, category, category_min, category_min_source, service_category_id, group_id, is_dedup_representative, address, location, location_precision, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, sigungu_name, created_at, updated_at';
 
 // queryOpenSpacesViaSourceSubset(SEOUL_YEYAK 전용 JS 메모리 필터 경로)만은 여전히
 // raw_data->>'MINCLASSNM'/'SVCSTATNM'를 애플리케이션 코드에서 직접 읽어야 해서

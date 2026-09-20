@@ -69,6 +69,9 @@ export type AdminOpenSpaceRow = {
   // 경우가 있어 관리자가 노출용 이름을 별도로 지정할 수 있게 한다. null이면 원본
   // name을 그대로 노출한다.
   display_name: string | null;
+  // [스팟 큐레이션 네이버 플레이스 ID 저장](2026-09-19 최초 도입, 2026-09-20 저장
+  // 경로 완성): 이 스팟에 이미 연동해 크롤링한 네이버 플레이스가 있으면 그 ID.
+  naver_place_id: string | null;
   category: string;
   category_min: string | null;
   category_min_source: string | null;
@@ -1935,6 +1938,14 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
             );
             setSelectedRow((prev) =>
               prev && 'id' in prev && prev.id === id ? { ...prev, display_name: nextDisplayName } : prev
+            );
+          }}
+          onNaverPlaceIdUpdated={(id, nextNaverPlaceId) => {
+            setRows((prev) =>
+              prev.map((row) => ('id' in row && row.id === id ? { ...row, naver_place_id: nextNaverPlaceId } : row))
+            );
+            setSelectedRow((prev) =>
+              prev && 'id' in prev && prev.id === id ? { ...prev, naver_place_id: nextNaverPlaceId } : prev
             );
           }}
           onMigratedToEvent={(id) => {

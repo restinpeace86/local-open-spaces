@@ -18,10 +18,12 @@ export function SpotCurationQuickModal({
   spotId,
   spotName,
   spotDisplayName,
+  spotNaverPlaceId,
   spotAddress,
   onClose,
   onSaved,
   onDisplayNameUpdated,
+  onNaverPlaceIdUpdated,
 }: {
   spotId: string;
   spotName: string;
@@ -29,6 +31,10 @@ export function SpotCurationQuickModal({
   // 있으면 신규 등록 모드로 열 때도 그 값을 프리필해야 한다(원본 name만 보내면
   // CurationFormModal이 override를 모른 채 다시 원본으로 덮어써 보일 수 있음).
   spotDisplayName: string | null;
+  // [스팟 큐레이션 네이버 플레이스 ID 저장](2026-09-20 사용자 지시): 이미 연동된
+  // 플레이스가 있으면 신규 등록 모드로 열 때도 프리필해야 한다(위 display_name과
+  // 동일한 이유).
+  spotNaverPlaceId: string | null;
   spotAddress: string | null;
   onClose: () => void;
   onSaved: (item: SpotCurationItem) => void;
@@ -39,6 +45,9 @@ export function SpotCurationQuickModal({
   // 열어도 예전 값이 보였다. onServiceCategoryUpdated(BlogCurationModal)와 동일한
   // 관례로, 저장된 최신 display_name을 부모(raw-data-modal.tsx)에 직접 알린다.
   onDisplayNameUpdated?: (id: string, nextDisplayName: string | null) => void;
+  // naver_place_id도 동일한 스테일 상태 위험이 있어(위 onDisplayNameUpdated와
+  // 같은 이유) 같은 방식으로 부모에 알린다.
+  onNaverPlaceIdUpdated?: (id: string, nextNaverPlaceId: string | null) => void;
 }) {
   // undefined = 조회 중, null = 큐레이션 없음(신규 등록), 객체 = 기존 큐레이션(수정).
   const [existingCuration, setExistingCuration] = useState<SpotCurationItem | null | undefined>(undefined);
@@ -74,11 +83,20 @@ export function SpotCurationQuickModal({
     <CurationFormModal
       initial={existingCuration ?? undefined}
       presetSpot={
-        existingCuration ? undefined : { id: spotId, name: spotName, display_name: spotDisplayName, address: spotAddress }
+        existingCuration
+          ? undefined
+          : {
+              id: spotId,
+              name: spotName,
+              display_name: spotDisplayName,
+              naver_place_id: spotNaverPlaceId,
+              address: spotAddress,
+            }
       }
       onClose={onClose}
       onSaved={(item) => {
         onDisplayNameUpdated?.(item.spot_id, item.open_spaces?.display_name ?? null);
+        onNaverPlaceIdUpdated?.(item.spot_id, item.open_spaces?.naver_place_id ?? null);
         onSaved(item);
       }}
     />

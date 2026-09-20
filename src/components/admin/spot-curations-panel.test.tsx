@@ -682,6 +682,134 @@ describe('SpotCurationsPanel — 노출 이름 자동 채움(2026-09-20)', () =>
   });
 });
 
+// [스팟 큐레이션 네이버 플레이스 ID 저장](2026-09-19 최초 도입, 2026-09-20 저장
+// 경로 완성): "처음에 스팟 큐레이션 등록때 네이버의 스팟 id.. 저장하라고 했는데..
+// 이거 관련해서 스팟 큐레이션에서 보여줘 한번 이미 가져온거는" — 크롤링이 뽑아낸
+// placeId가 실제로 저장되고, 이미 연동된 스팟이면 그 사실과 ID가 화면에 보이는지
+// 검증한다.
+describe('SpotCurationsPanel — 네이버 플레이스 ID 저장/표시(2026-09-20)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function mockFetchWithSave(naverCrawl?: unknown) {
+    return vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/api/admin/spot-curations/naver-crawl')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(naverCrawl ?? {}) } as Response);
+      }
+      if (url.includes('/api/admin/data-grid/display-name') || url.includes('/api/admin/data-grid/naver-place-id')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ row: {} }) } as Response);
+      }
+      if (url.includes('/api/admin/data-grid')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ rows: [{ id: 'spot-1', name: '장우랑 놀이방', address: '경기도 양주시' }], total: 1 }),
+        } as Response);
+      }
+      if (url.includes('/api/admin/spot-curations') && init?.method === 'POST') {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              item: {
+                id: 'curation-1',
+                spot_id: 'spot-1',
+                is_active: true,
+                menu_items: [],
+                curation_badges: [],
+                created_at: '2026-09-20T00:00:00.000Z',
+                updated_at: '2026-09-20T00:00:00.000Z',
+                open_spaces: { name: '장우랑 놀이방', display_name: null, address: '경기도 양주시', category: 'RESTAURANT', naver_place_id: null },
+              },
+            }),
+        } as Response);
+      }
+      if (url.includes('/api/admin/spot-curations')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [] }) } as Response);
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+  }
+
+  it('⚡ 데이터 가져오기로 크롤링하면 URL에서 뽑아낸 네이버 플레이스 ID가 저장 시 함께 반영된다', async () => {
+    const fetchMock = mockFetchWithSave({ placeId: '1419884543', name: '장우랑 놀이방' });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<SpotCurationsPanel />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await waitFor(() => expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByText('장우랑 놀이방'));
+    await screen.findByText('+ 스팟 큐레이션 등록');
+
+    fireEvent.change(screen.getByPlaceholderText(/map\.naver\.com/), {
+      target: { value: 'https://map.naver.com/p/entry/place/1419884543' },
+    });
+    fireEvent.click(screen.getByText('⚡ 데이터 가져오기'));
+
+    // 크롤링 직후 "이미 연동된" 안내가 뜬다(저장 전이라도 이번 크롤링으로 방금
+    // 확보한 ID를 바로 알려준다).
+    expect(await screen.findByText(/이미 연동된 네이버 플레이스\(ID: 1419884543\)/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('등록하기'));
+
+    await waitFor(() => {
+      const patchCall = fetchMock.mock.calls.find(
+        (c) => (c[0] as string).includes('/api/admin/data-grid/naver-place-id') && (c[1] as RequestInit)?.method === 'PATCH'
+      );
+      expect(patchCall).toBeDefined();
+      const body = JSON.parse((patchCall![1] as RequestInit).body as string);
+      expect(body).toEqual({ id: 'spot-1', naver_place_id: '1419884543' });
+    });
+  });
+
+  it('이미 네이버 플레이스가 연동된 스팟을 다시 열면 URL 입력창이 자동으로 채워지고 안내 문구가 보인다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/admin/data-grid')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ rows: [{ id: 'spot-1', name: '장우랑 놀이방', address: '경기도 양주시' }], total: 1 }),
+          } as Response);
+        }
+        if (url.includes('/api/admin/spot-curations')) {
+          return Promise.resolve({
+            ok: true,
+            json: () =>
+              Promise.resolve({
+                items: [
+                  {
+                    id: 'curation-1',
+                    spot_id: 'spot-1',
+                    is_active: true,
+                    menu_items: [],
+                    curation_badges: [],
+                    created_at: '2026-09-20T00:00:00.000Z',
+                    updated_at: '2026-09-20T00:00:00.000Z',
+                    open_spaces: {
+                      name: '장우랑 놀이방',
+                      display_name: null,
+                      address: '경기도 양주시',
+                      category: 'RESTAURANT',
+                      naver_place_id: '1419884543',
+                    },
+                  },
+                ],
+              }),
+          } as Response);
+        }
+        return Promise.reject(new Error(`unexpected fetch: ${url}`));
+      })
+    );
+    render(<SpotCurationsPanel />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await waitFor(() => expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByText('장우랑 놀이방'));
+
+    expect(await screen.findByText(/이미 연동된 네이버 플레이스\(ID: 1419884543\)/)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/map\.naver\.com/)).toHaveValue('https://pcmap.place.naver.com/restaurant/1419884543/home');
+  });
+});
+
 // [노출중분류 있는것/없는것 따로 보기](2026-09-06 사용자 지시): "스팟 큐레이션 탭에
 // 노출중분류 된거랑 안된거 따로도 볼수 있게해줘 기본적으로 노출중분류가 분류된
 // 식당에 대하여 스팟 큐레이션에서 메뉴작업할꺼라.. 일단은 노출중분류 있는것만도

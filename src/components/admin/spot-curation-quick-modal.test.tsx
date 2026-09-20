@@ -55,6 +55,7 @@ describe('SpotCurationQuickModal — 노출 이름 변경 알림(2026-09-20)', (
         spotId="spot-1"
         spotName="장우랑 & 양주회센터"
         spotDisplayName={null}
+        spotNaverPlaceId={null}
         spotAddress={null}
         onClose={vi.fn()}
         onSaved={vi.fn()}

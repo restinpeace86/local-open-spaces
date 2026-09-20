@@ -13,6 +13,7 @@ function buildRow(overrides: Partial<AdminOpenSpaceRow> = {}): AdminOpenSpaceRow
     source: 'test',
     name: '테스트 공간',
     display_name: null,
+    naver_place_id: null,
     category: 'CULTURE',
     category_min: null,
     category_min_source: null,

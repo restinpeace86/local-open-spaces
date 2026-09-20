@@ -51,10 +51,24 @@ export type SpotCurationItem = {
   curation_badges: string[];
   created_at: string;
   updated_at: string;
-  open_spaces: { name: string; display_name: string | null; address: string | null; category: string } | null;
+  open_spaces: {
+    name: string;
+    display_name: string | null;
+    address: string | null;
+    category: string;
+    // [스팟 큐레이션 네이버 플레이스 ID 저장](2026-09-19 최초 도입, 2026-09-20 저장
+    // 경로 완성): 이 스팟에 이미 연동해 크롤링한 네이버 플레이스가 있으면 그 ID.
+    naver_place_id: string | null;
+  } | null;
 };
 
-export type SpotSearchResult = { id: string; name: string; display_name: string | null; address: string | null };
+export type SpotSearchResult = {
+  id: string;
+  name: string;
+  display_name: string | null;
+  naver_place_id: string | null;
+  address: string | null;
+};
 
 // [관리자 페이지 스팟 큐레이션 URL 크롤링 기능](2026-09-18): /api/admin/spot-curations/
 // naver-crawl 응답 중 "정보 등록" 필드(imageUrl/businessHoursText/menuText)를 제외한
@@ -185,6 +199,19 @@ export function CurationFormModal({
     : (presetSpot!.display_name ?? presetSpot!.name ?? '');
   const [displayName, setDisplayName] = useState(initialDisplayName);
 
+  // [스팟 큐레이션 네이버 플레이스 ID 저장](2026-09-19 최초 도입, 2026-09-20 저장
+  // 경로 완성): "처음에 스팟 큐레이션 등록때 네이버의 스팟 id.. 저장하라고 했는데..
+  // 이거 관련해서 스팟 큐레이션에서 보여줘 한번 이미 가져온거는" — 조사 결과
+  // open_spaces.naver_place_id 컬럼은 있었지만 실제 저장 경로가 없었다(딸부자
+  // 닭갈비 1건만 수동 백필). 크롤링이 URL에서 뽑아낸 placeId를 여기 상태로 갖고
+  // 있다가 폼 저장 시 함께 반영하고, 이미 연동된 스팟이면 URL 입력창에 그 플레이스로
+  // 다시 조회할 수 있는 주소를 미리 채워 "한 번 가져온 건" 재입력 없이 새로고침만
+  // 누르면 되게 한다.
+  const initialNaverPlaceId = isEdit
+    ? (initial!.open_spaces?.naver_place_id ?? null)
+    : (presetSpot!.naver_place_id ?? null);
+  const [naverPlaceId, setNaverPlaceId] = useState<string | null>(initialNaverPlaceId);
+
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
   const [imageUrl, setImageUrl] = useState(initial?.image_url ?? '');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -280,7 +307,12 @@ export function CurationFormModal({
   // 자동 채움". open_spaces > 놀이방식당 상세팝업 > 스팟 큐레이션 버튼도 이 동일한
   // CurationFormModal을 그대로 여는 구조라(위 2026-09-08 주석 참고) 이 한 곳에만
   // 구현하면 두 진입점 모두 동일하게 동작한다(요구사항 원문 "동일하게 동작해야 함").
-  const [naverPlaceUrl, setNaverPlaceUrl] = useState('');
+  // [스팟 큐레이션 네이버 플레이스 ID 저장](2026-09-20 사용자 지시): 이미 연동된
+  // 플레이스가 있으면 그 ID로 만든 조회 주소를 미리 채워, 관리자가 URL을 다시 찾아
+  // 붙여넣지 않고 바로 "⚡ 데이터 가져오기"만 눌러 새로고침할 수 있게 한다.
+  const [naverPlaceUrl, setNaverPlaceUrl] = useState(
+    initialNaverPlaceId ? `https://pcmap.place.naver.com/restaurant/${initialNaverPlaceId}/home` : ''
+  );
   const [isCrawling, setIsCrawling] = useState(false);
   const [crawlError, setCrawlError] = useState<string | null>(null);
   const [crawlPreview, setCrawlPreview] = useState<NaverPlaceCrawlPreview | null>(null);
@@ -306,6 +338,7 @@ export function CurationFormModal({
         body: JSON.stringify({ naverUrl: trimmedUrl }),
       });
       const data: {
+        placeId?: string | null;
         name?: string | null;
         roadAddress?: string | null;
         address?: string | null;
@@ -333,6 +366,11 @@ export function CurationFormModal({
       // 상호명도 들어가도록" — 크롤링한 상호명을 노출 이름 입력창에 자동으로
       // 채운다(다른 필드처럼 관리자가 이어서 직접 고칠 수 있다).
       if (data.name) setDisplayName(data.name);
+
+      // [스팟 큐레이션 네이버 플레이스 ID 저장](2026-09-20 사용자 지시): 크롤링
+      // 응답이 URL에서 뽑아낸 placeId를 그대로 내려주므로(naver-crawl/route.ts),
+      // 폼 저장 시 open_spaces.naver_place_id에 반영할 수 있도록 상태로 갖고 있는다.
+      if (data.placeId) setNaverPlaceId(data.placeId);
 
       // [편의시설 뱃지 자동 체크](2026-09-19 사용자 지시): 가져온 편의시설 텍스트를
       // 기존 뱃지 키워드 매칭 엔진(curation-badges.ts, 블로그 본문 자동 체크와
@@ -529,14 +567,35 @@ export function CurationFormModal({
         }
       }
 
+      // [스팟 큐레이션 네이버 플레이스 ID 저장](2026-09-20 사용자 지시): "처음에..
+      // 네이버의 스팟 id.. 저장하라고 했는데" — 위 노출 이름과 동일한 이유(별도
+      // open_spaces 컬럼)로 별도 API 호출이 필요하다. naver_place_id는 unique
+      // 제약이 있어 실패할 수 있지만(다른 스팟에 이미 연동됨), 이미 성공한 큐레이션
+      // 저장을 되돌리지 않고 조용히 넘어간다(위와 동일한 원칙).
+      if (naverPlaceId !== initialNaverPlaceId) {
+        try {
+          await fetch('/api/admin/data-grid/naver-place-id', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: spotId, naver_place_id: naverPlaceId }),
+          });
+        } catch {
+          // 위 주석 참고 — 조용히 무시.
+        }
+      }
+
       // [실사용 버그 제보](2026-09-20 사용자 지시, "편백회관 장곡점" 사례): "스팟큐레이션에서
       // 노출이름 수정되었는데.. 창닫고 다시열어도 그 상세페이지의 노출이름 수동수정쪽은
       // 그대로 있던데" — DB 반영 자체는 정상이었지만(위 PATCH), data.item.open_spaces는
       // 그 PATCH 이전(스팟 큐레이션 저장 응답) 시점의 스냅샷이라 새 display_name을 몰랐다.
       // onSaved로 넘기기 전에 방금 반영한 값으로 보정해야 이 값을 구독하는 화면(open_spaces
-      // 상세 모달의 SpotDisplayNameEditor 등)이 최신 값을 받는다.
+      // 상세 모달의 SpotDisplayNameEditor 등)이 최신 값을 받는다. naver_place_id도
+      // 동일한 이유로 함께 보정한다.
       if (data.item.open_spaces) {
-        data.item = { ...data.item, open_spaces: { ...data.item.open_spaces, display_name: effectiveDisplayName } };
+        data.item = {
+          ...data.item,
+          open_spaces: { ...data.item.open_spaces, display_name: effectiveDisplayName, naver_place_id: naverPlaceId },
+        };
       }
 
       onSaved(data.item);
@@ -569,6 +628,16 @@ export function CurationFormModal({
               "위치: 기존 관리자 입력 폼의 가장 맨 위(Header 영역 바로 아래)". */}
           <div className="flex flex-col gap-1.5 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
             <span className="font-medium text-gray-700">네이버 플레이스 주소로 자동 채우기</span>
+            {/* [스팟 큐레이션 네이버 플레이스 ID 저장](2026-09-20 사용자 지시): "이거
+                관련해서 스팟 큐레이션에서 보여줘 한번 이미 가져온거는" — 이미 연동된
+                스팟이면 위 URL 입력창이 그 플레이스로 미리 채워져 있고(초기화 로직
+                참고), 여기서 그 사실과 ID를 명시적으로 보여준다. */}
+            {naverPlaceId && (
+              <p className="text-xs text-emerald-700">
+                ✅ 이미 연동된 네이버 플레이스(ID: {naverPlaceId}) — 아래 주소가 자동으로
+                채워졌어요, ⚡ 데이터 가져오기를 다시 누르면 최신 정보로 새로고침됩니다.
+              </p>
+            )}
             <div className="flex gap-1.5">
               <input
                 type="text"
@@ -983,6 +1052,7 @@ type CandidateSpotRow = {
   id: string;
   name: string;
   display_name: string | null;
+  naver_place_id: string | null;
   address: string;
   service_category_id: string | null;
 };
@@ -1118,7 +1188,15 @@ export function SpotCurationsPanel() {
   function handleRowClick(spot: CandidateSpotRow) {
     const existing = curationsBySpotId.get(spot.id);
     setModalTarget(
-      existing ?? { presetSpot: { id: spot.id, name: spot.name, display_name: spot.display_name, address: spot.address } }
+      existing ?? {
+        presetSpot: {
+          id: spot.id,
+          name: spot.name,
+          display_name: spot.display_name,
+          naver_place_id: spot.naver_place_id,
+          address: spot.address,
+        },
+      }
     );
   }
 

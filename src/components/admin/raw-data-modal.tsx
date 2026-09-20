@@ -839,6 +839,7 @@ export function RawDataModal({
   onSpaceLinkUpdated,
   onServiceCategoryUpdated,
   onDisplayNameUpdated,
+  onNaverPlaceIdUpdated,
   onMigratedToEvent,
   onDeleted,
 }: {
@@ -870,6 +871,10 @@ export function RawDataModal({
   onServiceCategoryUpdated?: (id: string, nextServiceCategoryId: string | null) => void;
   // [OPEN_SPACES 노출 이름 수동 수정](2026-09-20 사용자 지시): open_spaces 탭 전용.
   onDisplayNameUpdated?: (id: string, nextDisplayName: string | null) => void;
+  // [스팟 큐레이션 네이버 플레이스 ID 저장](2026-09-20 사용자 지시): open_spaces 탭
+  // 전용. SpotCurationQuickModal이 저장한 최신 naver_place_id를 부모(그리드 상태)에
+  // 즉시 반영하기 위한 콜백 — onDisplayNameUpdated와 동일한 스테일 상태 방지 목적.
+  onNaverPlaceIdUpdated?: (id: string, nextNaverPlaceId: string | null) => void;
   // [todo.md 개선사항 5](2026-09-03): open_spaces 탭에서만 전달된다 — 이관 성공 시 부모가
   // 목록에서 이 행을 제거하고 상세 모달을 닫는다(원본이 실제로 삭제됐으므로).
   onMigratedToEvent?: (id: string) => void;
@@ -1344,10 +1349,12 @@ export function RawDataModal({
           spotId={(row as AdminOpenSpaceRow).id}
           spotName={(row as AdminOpenSpaceRow).name}
           spotDisplayName={(row as AdminOpenSpaceRow).display_name}
+          spotNaverPlaceId={(row as AdminOpenSpaceRow).naver_place_id}
           spotAddress={(row as AdminOpenSpaceRow).address}
           onClose={() => setIsSpotCurationModalOpen(false)}
           onSaved={() => setIsSpotCurationModalOpen(false)}
           onDisplayNameUpdated={onDisplayNameUpdated}
+          onNaverPlaceIdUpdated={onNaverPlaceIdUpdated}
         />
       )}
 
