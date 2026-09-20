@@ -221,6 +221,43 @@ describe('SeoulYeyakAdapter', () => {
     });
   });
 
+  // [실사용 버그 제보](2026-09-20 사용자 지시, 마포구 망원한강공원 서울형키즈카페 사례):
+  // "예약하기 눌렀는데 페이지 표시할 수 없대.. 원천소스 SVCURL은
+  // umppa.seoul.go.kr/icare/user/kidsCafeResve/... 인데 저장된 reservation_url은
+  // yeyak.seoul.go.kr 였다" — SVCID가 "XML-{시설ID}" 형식인 서울형키즈카페는 기존의
+  // "SVCID로 yeyak.seoul.go.kr URL을 항상 새로 구성" 방식이 깨진 URL을 만든다. 원본
+  // SVCURL 필드를 그대로 신뢰하도록 고쳤다.
+  describe('transformSplit — 예약 URL(reservation_url) 원본 SVCURL 신뢰(2026-09-20 수정)', () => {
+    it('일반 SVCID는 SVCURL이 기존 구성 방식과 동일한 값이라 결과가 그대로다(회귀 없음)', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const [row] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '문화체험' }]).events;
+      expect(row.reservation_url).toBe('https://yeyak.seoul.go.kr/web/reservation/selectReservView.do?rsv_svc_id=S260722093915914461');
+    });
+
+    it('서울형키즈카페(XML- 접두 SVCID)는 SVCURL을 그대로 쓴다(yeyak.seoul.go.kr로 재구성하지 않음)', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const kidsCafeItem = {
+        ...BASE_ITEM,
+        SVCID: 'XML-MP260301',
+        MAXCLASSNM: '체육시설',
+        MINCLASSNM: '서울형키즈카페',
+        SVCNM: '마포구 망원한강공원',
+        SVCURL: 'https://umppa.seoul.go.kr/icare/user/kidsCafeResve/BD_selectKidsCafeResveCal.do?q_fcltyId=MP260301',
+      };
+      const [row] = adapter.transformSplit([kidsCafeItem]).events;
+      expect(row.reservation_url).toBe(
+        'https://umppa.seoul.go.kr/icare/user/kidsCafeResve/BD_selectKidsCafeResveCal.do?q_fcltyId=MP260301'
+      );
+    });
+
+    it('SVCURL 필드 자체가 없으면 기존 SVCID 구성 방식으로 안전하게 폴백한다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const item = { ...BASE_ITEM, SVCID: 'S999', MAXCLASSNM: '문화체험', SVCURL: undefined };
+      const [row] = adapter.transformSplit([item]).events;
+      expect(row.reservation_url).toBe('https://yeyak.seoul.go.kr/web/reservation/selectReservView.do?rsv_svc_id=S999');
+    });
+  });
+
   // [원천 필드 직접 반영](2026-09-18 사용자 지시): "USETGTINFO: 성인으로 되어있는거는
   // 연령 ADULT로 자동으로 박아줘".
   describe('transformSplit — USETGTINFO 원천 필드 직접 반영(target_audience)', () => {

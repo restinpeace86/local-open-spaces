@@ -203,7 +203,17 @@ export class SeoulYeyakAdapter extends BaseCollectorAdapter {
         }
         const locationPrecision = hasCoords ? 'EXACT' : 'UNKNOWN';
 
-        const reservationUrl = `${OUTLINK_BASE}?rsv_svc_id=${item.SVCID}`;
+        // [실사용 버그 제보](2026-09-20 사용자 지시, 마포구 망원한강공원 서울형키즈카페
+        // 사례) "예약하기 눌렀는데 페이지 표시할 수 없대" — 기존엔 SVCID로 이
+        // yeyak.seoul.go.kr URL을 항상 직접 구성했는데(아래 OUTLINK_BASE), 이는 대부분의
+        // 레코드에서 SVCURL과 우연히 동일해(2026-08-22 결정 당시 실측으로 확인된 우연의
+        // 일치를 "항상 같다"로 잘못 일반화한 것) 원본 SVCURL을 별도로 안 쓰기로 했었다.
+        // 그런데 서울형키즈카페(MINCLASSNM)는 SVCID가 "XML-{시설ID}" 형식이라 이 템플릿에
+        // 넣으면 깨진 URL이 되고, 실제 예약 페이지는 완전히 다른 도메인(umppa.seoul.go.kr)
+        // 이다 — 실측 확인(원본 SVCURL 필드에 이미 올바른 URL이 들어있음). 추측으로
+        // 재구성하는 대신 원본 필드를 그대로 신뢰하고, SVCURL이 없는 극히 드문 경우에만
+        // 기존 구성 방식으로 안전하게 폴백한다(제3장 제5조 추측 금지).
+        const reservationUrl = item.SVCURL || `${OUTLINK_BASE}?rsv_svc_id=${item.SVCID}`;
         const broadTags = deriveParentalTags(JSON.stringify(item));
         const sigunguName = buildSigunguName(item.AREANM);
         // [카테고리 정제 & 어드민 확장](2026-08-26): MINCLASSNM은 이 소스만 갖고 있는 서울시
@@ -278,8 +288,8 @@ export class SeoulYeyakAdapter extends BaseCollectorAdapter {
             categoryMinSource,
             // [가격 정보 파싱 고도화](2026-09-11 사용자 지시, todo.md 개선사항7-1): 이 소스는
             // 구조화된 가격 필드가 없어(PAYATNM은 유료/무료 구분뿐, 실측 확인) DTLCONT(상세
-            // 안내문)에서 라벨+금액 패턴을 찾는다. reservation_url이 이미 SVCURL과 동등한
-            // 값(reservationUrl, 위 참고)이라 source_url을 별도로 중복 저장하지 않는다.
+            // 안내문)에서 라벨+금액 패턴을 찾는다. reservation_url이 이제 SVCURL 값 그대로다
+            // (2026-09-20 수정, 위 reservationUrl 참고)라 source_url을 별도로 중복 저장하지 않는다.
             // (2026-09-18) PAYATNM이 명시적으로 무료면 그 구조화된 신호를 우선한다(위 참고).
             priceText,
             targetAudience,
