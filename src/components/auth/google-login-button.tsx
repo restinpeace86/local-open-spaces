@@ -6,12 +6,20 @@ import { createClient } from '@/lib/supabase/client';
 // 진한 회색 텍스트가 구글이 권장하는 "Sign in with Google" 버튼의 기본 스타일이다. "G"
 // 로고는 공식 4색 배색을 근사한 인라인 SVG다 — 정확한 브랜드 자산이 필요하면 구글의
 // 공식 브랜드 리소스 다운로드로 교체를 권장한다(추측 근사치임을 명시).
-export function GoogleLoginButton({ onError }: { onError?: (message: string) => void }) {
+// [나드리픽 파트너 PMS Phase 1](2026-09-20 사용자 지시): kakao-login-button.tsx와 동일한
+// 이유로 콜백 경로를 선택적으로 바꿀 수 있게 한다.
+export function GoogleLoginButton({
+  onError,
+  callbackPath = '/auth/callback',
+}: {
+  onError?: (message: string) => void;
+  callbackPath?: string;
+}) {
   async function handleClick() {
     const supabase = createClient();
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: { redirectTo: `${window.location.origin}${callbackPath}` },
     });
     if (error) {
       console.error('[GoogleLoginButton] 로그인 요청 실패:', error.message);

@@ -67,4 +67,17 @@ describe('BottomTabs', () => {
     render(<BottomTabs />);
     expect(screen.queryByLabelText('화면 전환 중')).not.toBeInTheDocument();
   });
+
+  // [나드리픽 파트너 PMS Phase 1](2026-09-20 사용자 지시): "기존 나드리픽 루트
+  // 코드베이스와 오염되지 않도록" — /partner, /hq 경로에서는 소비자용 하단 탭이
+  // 아예 렌더링되지 않아야 한다(그 영역은 각자 독립된 탭바/레이아웃을 쓴다).
+  it('/partner 또는 /hq 경로에서는 아무것도 렌더링하지 않는다', () => {
+    mockPathname = '/partner/today';
+    const { container: partnerContainer } = render(<BottomTabs />);
+    expect(partnerContainer).toBeEmptyDOMElement();
+
+    mockPathname = '/hq';
+    const { container: hqContainer } = render(<BottomTabs />);
+    expect(hqContainer).toBeEmptyDOMElement();
+  });
 });

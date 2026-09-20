@@ -42,6 +42,24 @@ describe('KakaoLoginButton / GoogleLoginButton', () => {
     });
   });
 
+  // [나드리픽 파트너 PMS Phase 1](2026-09-20 사용자 지시): 파트너 로그인은 일반 유저
+  // 콜백(/auth/callback)이 아니라 파트너 전용 콜백으로 보내야 한다.
+  it('callbackPath를 넘기면 그 경로로 redirectTo를 보낸다(카카오/구글 둘 다)', async () => {
+    render(<KakaoLoginButton callbackPath="/partner/auth/callback" />);
+    fireEvent.click(screen.getByText('카카오로 3초 만에 시작하기'));
+    expect(signInWithOAuthMock).toHaveBeenCalledWith({
+      provider: 'kakao',
+      options: { redirectTo: `${window.location.origin}/partner/auth/callback` },
+    });
+
+    render(<GoogleLoginButton callbackPath="/partner/auth/callback" />);
+    fireEvent.click(screen.getAllByText('구글로 시작하기')[0]);
+    expect(signInWithOAuthMock).toHaveBeenCalledWith({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/partner/auth/callback` },
+    });
+  });
+
   it('로그인 요청이 에러를 반환하면 콘솔에 남기고 onError 콜백을 호출한다', async () => {
     signInWithOAuthMock.mockResolvedValueOnce({ data: {}, error: { message: '일시적 오류' } } as never);
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});

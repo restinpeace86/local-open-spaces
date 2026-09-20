@@ -72,6 +72,56 @@ export type Database = {
         }
         Relationships: []
       }
+      bookings: {
+        Row: {
+          booking_date: string
+          booking_time: string
+          created_at: string
+          customer_name: string
+          customer_phone: string
+          headcount: number
+          id: string
+          memo: string | null
+          partner_id: string
+          source: string
+          status: string
+        }
+        Insert: {
+          booking_date: string
+          booking_time: string
+          created_at?: string
+          customer_name: string
+          customer_phone: string
+          headcount?: number
+          id?: string
+          memo?: string | null
+          partner_id: string
+          source: string
+          status?: string
+        }
+        Update: {
+          booking_date?: string
+          booking_time?: string
+          created_at?: string
+          customer_name?: string
+          customer_phone?: string
+          headcount?: number
+          id?: string
+          memo?: string | null
+          partner_id?: string
+          source?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bookings_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partners"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       category_rules: {
         Row: {
           category_min: string
@@ -707,6 +757,59 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      partner_settings: {
+        Row: {
+          auto_reminder_enabled: boolean
+          partner_id: string
+          reminder_template: string | null
+          updated_at: string
+        }
+        Insert: {
+          auto_reminder_enabled?: boolean
+          partner_id: string
+          reminder_template?: string | null
+          updated_at?: string
+        }
+        Update: {
+          auto_reminder_enabled?: boolean
+          partner_id?: string
+          reminder_template?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partner_settings_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: true
+            referencedRelation: "partners"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      partners: {
+        Row: {
+          created_at: string
+          farm_name: string
+          id: string
+          owner_name: string
+          phone: string
+        }
+        Insert: {
+          created_at?: string
+          farm_name: string
+          id: string
+          owner_name: string
+          phone: string
+        }
+        Update: {
+          created_at?: string
+          farm_name?: string
+          id?: string
+          owner_name?: string
+          phone?: string
+        }
+        Relationships: []
       }
       pipeline_logs: {
         Row: {

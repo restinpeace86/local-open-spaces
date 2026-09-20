@@ -12,7 +12,10 @@ import { getMyProfile } from '@/lib/auth/profile';
 // 화면으로 이동하든 프로필이 아직 비어 있으면 이 화면(전역 마운트, layout.tsx)이
 // 완성 화면으로 되돌려보낸다. root layout(서버 컴포넌트)에 BottomTabs와 나란히
 // 렌더링만 되는 화면 없는(return null) 가드 컴포넌트다.
-const EXEMPT_PATH_PREFIXES = ['/auth/complete-profile', '/auth/callback'];
+// [나드리픽 파트너 PMS Phase 1](2026-09-20 사용자 지시, docs/partner_spec.md 2절):
+// 파트너/HQ는 profiles(닉네임/자녀 출생년도)와 무관한 완전히 별도 사용자층이라(partners
+// 테이블) 이 가드가 개입하면 안 된다 — "기존 코드베이스와 오염되지 않도록" 요구사항.
+const EXEMPT_PATH_PREFIXES = ['/auth/complete-profile', '/auth/callback', '/partner', '/hq'];
 
 export function ProfileCompletionGuard() {
   const { user, isLoading: isUserLoading } = useUser();

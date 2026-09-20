@@ -50,6 +50,14 @@ export function BottomTabs() {
   // 느껴질 수 있다 — useTransition으로 전환 상태(isPending)를 잡아 즉시 로딩 오버레이를 띄운다.
   const [isPending, startTransition] = useTransition();
 
+  // [나드리픽 파트너 PMS Phase 1](2026-09-20 사용자 지시, docs/partner_spec.md 2절):
+  // "기존 나드리픽 루트 코드베이스와 오염되지 않도록" — 이 컴포넌트는 root layout에
+  // 전역 마운트돼 있어(src/app/layout.tsx) /partner, /hq에도 그대로 렌더링될 뻔했다.
+  // 전체 소비자 라우트를 route group으로 옮기는 대규모 리팩터 대신, 이 컴포넌트가
+  // 스스로 판단해 숨도록 최소 변경으로 격리한다(훅 호출 순서를 지키기 위해 모든 훅
+  // 다음, 실제 렌더링 전에 조건부 반환한다).
+  if (pathname?.startsWith('/partner') || pathname?.startsWith('/hq')) return null;
+
   const navigateTo = (href: string) => {
     if (pathname === href) return;
     startTransition(() => {

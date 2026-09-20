@@ -83,4 +83,23 @@ describe('ProfileCompletionGuard', () => {
     expect(fromMock).not.toHaveBeenCalled();
     expect(replaceMock).not.toHaveBeenCalled();
   });
+
+  // [나드리픽 파트너 PMS Phase 1](2026-09-20 사용자 지시): 파트너/HQ는 profiles와
+  // 무관한 별도 사용자층(partners 테이블)이라 이 가드가 개입하면 안 된다.
+  it('/partner, /hq 경로에서는 확인하지 않는다', async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
+    stubProfile({ nickname: null, birth_years: [] });
+
+    mockPathname = '/partner/today';
+    render(<ProfileCompletionGuard />);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(fromMock).not.toHaveBeenCalled();
+    expect(replaceMock).not.toHaveBeenCalled();
+
+    mockPathname = '/hq';
+    render(<ProfileCompletionGuard />);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(fromMock).not.toHaveBeenCalled();
+    expect(replaceMock).not.toHaveBeenCalled();
+  });
 });

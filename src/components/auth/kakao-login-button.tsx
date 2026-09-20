@@ -6,13 +6,23 @@ import { createClient } from '@/lib/supabase/client';
 // 텍스트(#191919, 카카오 로그인 버튼 가이드 공식 텍스트 색). 아이콘은 카카오 말풍선
 // 모양을 단순화한 인라인 SVG로 근사했다 — 정확한 브랜드 자산이 필요하면 카카오
 // 디벨로퍼스의 공식 로그인 버튼 이미지로 교체를 권장한다(추측 근사치임을 명시).
-export function KakaoLoginButton({ onError }: { onError?: (message: string) => void }) {
+// [나드리픽 파트너 PMS Phase 1](2026-09-20 사용자 지시): 파트너 로그인(`/partner/login`)도
+// 동일한 카카오 로그인 버튼을 그대로 재사용하되(제5장 제4조 기존 구조 우선), 콜백만
+// 파트너 전용 경로(`/partner/auth/callback`)로 보내야 한다 — 일반 유저 콜백(`/auth/
+// callback`)은 profiles 테이블을 기준으로 판단해 파트너 온보딩과 무관하게 동작한다.
+export function KakaoLoginButton({
+  onError,
+  callbackPath = '/auth/callback',
+}: {
+  onError?: (message: string) => void;
+  callbackPath?: string;
+}) {
   async function handleClick() {
     const supabase = createClient();
     // 요구사항: provider만 다르고 나머지(redirectTo)는 구글 버튼과 동일한 콜백 경로를 쓴다.
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'kakao',
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
+      options: { redirectTo: `${window.location.origin}${callbackPath}` },
     });
     if (error) {
       // 요구사항 2 "에러를 콘솔 또는 UI 상에서 확인 가능하도록" — 둘 다 한다.
