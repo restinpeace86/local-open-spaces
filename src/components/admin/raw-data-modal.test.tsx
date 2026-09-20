@@ -1260,3 +1260,110 @@ describe('RawDataModal — 제목(title) 수동 수정(TitleEditor, 2026-09-20)'
     expect(screen.queryByText('제목(title) 수동 수정')).not.toBeInTheDocument();
   });
 });
+
+// [예약 오픈 알림](2026-09-20 사용자 지시): "사전예약 오픈일에 맞추어.. 예약 오픈 전
+// 10분전이라던가 앱 푸시 주는 기능을 만들고 싶은데" — 서울형키즈카페 등 예약 오픈
+// 규칙이 자치구별 시차를 두고 시기별로도 바뀌어 코드에 하드코딩하지 않기로 했다.
+// 관리자가 직접 입력하는 ReservationOpenAtEditor를 검증한다. datetime-local 값은
+// 테스트를 실행하는 로컬 타임존에 따라 화면 표시가 달라지므로, 절대 시각을 하드코딩해
+// 검증하지 않고 "입력한 로컬 문자열 → new Date(...).toISOString()"의 왕복 변환이 그대로
+// PATCH 바디에 실리는지만 확인한다(어느 타임존에서 실행해도 동일하게 통과).
+describe('RawDataModal — 다음 예약 오픈 시각 수동 입력(ReservationOpenAtEditor, 2026-09-20)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function mockReservationOpenAtFetch(handlers: { saveOk?: boolean }) {
+    return vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/api/admin/data-grid/reservation-open-at')) {
+        if (handlers.saveOk === false) {
+          return Promise.resolve({ ok: false, json: () => Promise.resolve({ error: '저장 실패' }) } as Response);
+        }
+        const body = JSON.parse(init!.body as string);
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ row: { id: body.id, next_reservation_open_at: body.next_reservation_open_at } }),
+        } as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+    });
+  }
+
+  it('값을 입력하고 "오픈 시각 저장"을 누르면 ISO로 변환해 PATCH하고 onReservationOpenAtUpdated를 호출한다', async () => {
+    const fetchMock = mockReservationOpenAtFetch({});
+    vi.stubGlobal('fetch', fetchMock);
+    const onReservationOpenAtUpdated = vi.fn();
+    const row = { ...buildRow(), id: 'row-1', title: '망원한강공원 서울형키즈카페', next_reservation_open_at: null };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        onClose={vi.fn()}
+        onReservationOpenAtUpdated={onReservationOpenAtUpdated}
+      />
+    );
+
+    const localValue = '2026-09-28T10:00';
+    const expectedIso = new Date(localValue).toISOString();
+    const input = document.querySelector('input[type="datetime-local"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: localValue } });
+    fireEvent.click(screen.getByText('오픈 시각 저장'));
+
+    await waitFor(() => expect(onReservationOpenAtUpdated).toHaveBeenCalledWith('row-1', expectedIso));
+    const patchCall = fetchMock.mock.calls.find(
+      (c) => (c[0] as string).includes('/api/admin/data-grid/reservation-open-at') && (c[1] as RequestInit)?.method === 'PATCH'
+    );
+    expect(JSON.parse((patchCall![1] as RequestInit).body as string)).toEqual({
+      id: 'row-1',
+      next_reservation_open_at: expectedIso,
+    });
+  });
+
+  it('값을 비우고 저장하면 next_reservation_open_at을 null로 PATCH한다', async () => {
+    const fetchMock = mockReservationOpenAtFetch({});
+    vi.stubGlobal('fetch', fetchMock);
+    const row = { ...buildRow(), id: 'row-1', title: '망원한강공원 서울형키즈카페', next_reservation_open_at: '2026-09-28T01:00:00.000Z' };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        onClose={vi.fn()}
+        onReservationOpenAtUpdated={vi.fn()}
+      />
+    );
+
+    const input = document.querySelector('input[type="datetime-local"]') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: '' } });
+    fireEvent.click(screen.getByText('오픈 시각 저장'));
+
+    await waitFor(() => {
+      const patchCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/data-grid/reservation-open-at'));
+      expect(JSON.parse((patchCall![1] as RequestInit).body as string)).toEqual({ id: 'row-1', next_reservation_open_at: null });
+    });
+  });
+
+  it('저장 실패 시 에러 메시지를 보여준다', async () => {
+    vi.stubGlobal('fetch', mockReservationOpenAtFetch({ saveOk: false }));
+    const row = { ...buildRow(), id: 'row-1', title: '망원한강공원 서울형키즈카페', next_reservation_open_at: null };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        onClose={vi.fn()}
+        onReservationOpenAtUpdated={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText('오픈 시각 저장'));
+    expect(await screen.findByText('저장 실패')).toBeInTheDocument();
+  });
+
+  it('onReservationOpenAtUpdated가 없으면 에디터를 렌더링하지 않는다', () => {
+    const row = { ...buildRow(), id: 'row-1', title: '망원한강공원 서울형키즈카페', next_reservation_open_at: null };
+    render(<RawDataModal table="events" row={row as unknown as AdminEventRow} categoryMinOptions={[]} onClose={vi.fn()} />);
+    expect(screen.queryByText(/다음 예약 오픈 시각/)).not.toBeInTheDocument();
+  });
+});

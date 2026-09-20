@@ -1,0 +1,35 @@
+name: Event Reservation Open Reminder Push (Every 10 min)
+
+# [예약 오픈 알림](2026-09-20 사용자 지시): "사전예약 오픈일에 맞추어 예약 오픈전
+# 10분전이라던가 앱 푸시 주는 기능을 만들고 싶은데" — events.next_reservation_open_at을
+# 관리자가 직접 입력해 둔 이벤트를 10분마다 확인해, 오픈 시각이 5~15분 앞으로 다가온
+# 이벤트를 구독한 유저에게 웹 푸시를 보낸다(스크립트 자체의 창 폭 주석 참고 — GitHub
+# Actions 스케줄은 정확한 시각 실행을 보장하지 않으므로 창을 실행 주기보다 넓게 잡았다).
+permissions:
+  contents: read
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  event-reservation-reminder-push-batch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Send event reservation-open reminder push (로그인 유저 누구나 구독 가능)
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${{ secrets.NEXT_PUBLIC_VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+        run: node scripts/ingest/event-reservation-reminder-push-batch.mjs

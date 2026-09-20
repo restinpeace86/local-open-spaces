@@ -276,6 +276,35 @@ export type Database = {
           },
         ]
       }
+      event_reservation_reminders: {
+        Row: {
+          created_at: string
+          event_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          event_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          event_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_reservation_reminders_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       event_tickets: {
         Row: {
           booking_url: string
@@ -346,11 +375,13 @@ export type Database = {
           is_reservation_required: boolean | null
           location: unknown
           location_precision: string
+          next_reservation_open_at: string | null
           operating_nth_weekdays: string[] | null
           operating_weekdays: string[] | null
           price_text: string | null
           raw_data: Json | null
           reservation_end_date: string | null
+          reservation_open_reminder_sent_at: string | null
           reservation_start_date: string | null
           reservation_url: string | null
           sigungu_name: string | null
@@ -388,11 +419,13 @@ export type Database = {
           is_reservation_required?: boolean | null
           location?: unknown
           location_precision?: string
+          next_reservation_open_at?: string | null
           operating_nth_weekdays?: string[] | null
           operating_weekdays?: string[] | null
           price_text?: string | null
           raw_data?: Json | null
           reservation_end_date?: string | null
+          reservation_open_reminder_sent_at?: string | null
           reservation_start_date?: string | null
           reservation_url?: string | null
           sigungu_name?: string | null
@@ -430,11 +463,13 @@ export type Database = {
           is_reservation_required?: boolean | null
           location?: unknown
           location_precision?: string
+          next_reservation_open_at?: string | null
           operating_nth_weekdays?: string[] | null
           operating_weekdays?: string[] | null
           price_text?: string | null
           raw_data?: Json | null
           reservation_end_date?: string | null
+          reservation_open_reminder_sent_at?: string | null
           reservation_start_date?: string | null
           reservation_url?: string | null
           sigungu_name?: string | null

@@ -362,6 +362,87 @@ function TitleEditor({ row, onUpdated }: { row: AdminEventRow; onUpdated: (id: s
   );
 }
 
+// [예약 오픈 알림](2026-09-20 사용자 지시): "사전예약 오픈일에 맞추어.. 예약 오픈 전
+// 10분전이라던가 앱 푸시 주는 기능을 만들고 싶은데" — 서울형키즈카페 등 예약 오픈
+// 규칙이 자치구별 시차를 두고, 그 규칙 자체도 시기에 따라 바뀌는 것으로 확인돼(사용자가
+// 2026-04/2026-09 두 시점의 서로 다른 공지문을 제시) 코드에 규칙을 하드코딩하지
+// 않기로 했다(제3장 제5조 추측 금지). 대신 관리자가 이벤트마다 "다음 예약 오픈 시각"을
+// 직접 입력한다 — 발송 배치(scripts/ingest/event-reservation-reminder-push-batch.mjs)가
+// 이 값을 기준으로 대상을 고른다.
+function toDatetimeLocalValue(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '';
+  // datetime-local input은 타임존 표기가 없는 "로컬 시각" 문자열을 기대한다 — 브라우저
+  // 로컬 타임존(관리자는 KST 사용 전제) 기준으로 YYYY-MM-DDTHH:mm을 만든다.
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function ReservationOpenAtEditor({
+  row,
+  onUpdated,
+}: {
+  row: AdminEventRow;
+  onUpdated: (id: string, nextOpenAt: string | null) => void;
+}) {
+  const [value, setValue] = useState(toDatetimeLocalValue(row.next_reservation_open_at));
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setErrorMessage(null);
+    try {
+      // datetime-local 값("YYYY-MM-DDTHH:mm", 타임존 표기 없음)은 new Date()가 로컬
+      // 시각으로 해석하므로 toISOString()이 정확히 UTC로 변환해준다 — 별도 라이브러리
+      // 불필요.
+      const iso = value ? new Date(value).toISOString() : null;
+      const res = await fetch('/api/admin/data-grid/reservation-open-at', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: row.id, next_reservation_open_at: iso }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? '예약 오픈 시각 수동 수정 실패');
+      onUpdated(row.id, json.row.next_reservation_open_at);
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : '예약 오픈 시각 수동 수정 실패');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 rounded-xl border border-gray-200 p-3">
+      <h3 className="text-xs font-semibold text-gray-500 mb-2">
+        다음 예약 오픈 시각(next_reservation_open_at) 수동 입력
+      </h3>
+      <p className="mb-2 text-[11px] text-gray-400">
+        이 시각 10분 전, 알림을 신청한 유저에게 푸시가 발송됩니다. 매주/매월 반복되는 오픈
+        규칙은 자동 계산하지 않으므로, 다음 회차가 확정될 때마다 이 값을 갱신해 주세요.
+      </p>
+      <div className="flex items-center gap-2">
+        <input
+          type="datetime-local"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs flex-1"
+        />
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={isSaving}
+          className="rounded-full bg-purple-600 text-white text-xs font-semibold px-3 py-1.5 disabled:opacity-40 hover:bg-purple-700"
+        >
+          {isSaving ? '저장 중...' : '오픈 시각 저장'}
+        </button>
+      </div>
+      {errorMessage && <p className="mt-1.5 text-xs text-red-500">{errorMessage}</p>}
+    </div>
+  );
+}
+
 // [facility_type 기본값 결함 수정](2026-09-19 사용자 지시): "default를 복합으로
 // 한게 잘못된거야.. unknown 혹은 null로 놔야돼" — facility_type이 nullable로
 // 바뀌어(scripts/migrations/2026-09-19-facility-type-nullable-remove-default.sql)
@@ -680,6 +761,7 @@ export function RawDataModal({
   onTargetAudienceUpdated,
   onFacilityTypeUpdated,
   onTitleUpdated,
+  onReservationOpenAtUpdated,
   onOperatingScheduleUpdated,
   onLocationUpdated,
   onSpaceLinkUpdated,
@@ -702,6 +784,8 @@ export function RawDataModal({
   onFacilityTypeUpdated?: (id: string, nextFacilityType: string | null) => void;
   // [실사용 버그 제보](2026-09-20 사용자 지시): events 탭 전용, 제목(title) 수동 수정.
   onTitleUpdated?: (id: string, nextTitle: string) => void;
+  // [예약 오픈 알림](2026-09-20 사용자 지시): events 탭 전용, 다음 예약 오픈 시각 수동 입력.
+  onReservationOpenAtUpdated?: (id: string, nextOpenAt: string | null) => void;
   // [운영 요일/반복 규칙](2026-09-12 사용자 지시): events 탭 전용. 편집기 자체는
   // [블로그 큐레이션 모달로 이동](2026-09-12 사용자 지시)에 따라 EventBlogCurationModal
   // 안으로 옮겨졌고, 이 콜백은 그 모달에 그대로 전달돼 저장 결과를 이 화면의 행
@@ -868,6 +952,10 @@ export function RawDataModal({
           )}
 
           {table === 'events' && onTitleUpdated && <TitleEditor row={row as AdminEventRow} onUpdated={onTitleUpdated} />}
+
+          {table === 'events' && onReservationOpenAtUpdated && (
+            <ReservationOpenAtEditor row={row as AdminEventRow} onUpdated={onReservationOpenAtUpdated} />
+          )}
 
           {table === 'events' && onLocationUpdated && <LocationEditor row={row as AdminEventRow} onUpdated={onLocationUpdated} />}
 

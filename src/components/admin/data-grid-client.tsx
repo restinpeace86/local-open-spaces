@@ -161,6 +161,10 @@ export type AdminEventRow = {
   // description 컬럼이 있지만(공개 홈 피드 API가 써 왔음, get-home-feed.ts) 이
   // 관리자 그리드는 지금까지 select하지 않고 있었다.
   description?: string | null;
+  // [예약 오픈 알림](2026-09-20 사용자 지시): 관리자가 직접 입력하는 "다음 예약 오픈
+  // 시각" — 서울형키즈카페 등 오픈 규칙이 자치구별 시차를 두고 시기별로도 바뀌어
+  // 코드에 하드코딩하지 않기로 했다(제3장 제5조 추측 금지).
+  next_reservation_open_at?: string | null;
 };
 
 export type AdminRawIngestRow = {
@@ -1845,6 +1849,14 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
           onTitleUpdated={(id, nextTitle) => {
             setRows((prev) => prev.map((row) => ('id' in row && row.id === id ? { ...row, title: nextTitle } : row)));
             setSelectedRow((prev) => (prev && 'id' in prev && prev.id === id ? { ...prev, title: nextTitle } : prev));
+          }}
+          onReservationOpenAtUpdated={(id, nextOpenAt) => {
+            setRows((prev) =>
+              prev.map((row) => ('id' in row && row.id === id ? { ...row, next_reservation_open_at: nextOpenAt } : row))
+            );
+            setSelectedRow((prev) =>
+              prev && 'id' in prev && prev.id === id ? { ...prev, next_reservation_open_at: nextOpenAt } : prev
+            );
           }}
           onOperatingScheduleUpdated={(id, nextOperatingWeekdays, nextExcludedWeekdays, nextOperatingNthWeekdays) => {
             setRows((prev) =>
