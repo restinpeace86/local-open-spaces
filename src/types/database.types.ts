@@ -794,6 +794,7 @@ export type Database = {
           farm_name: string
           id: string
           image_url: string | null
+          inbound_token: string
           owner_name: string
           phone: string
           spot_id: string | null
@@ -804,6 +805,7 @@ export type Database = {
           farm_name: string
           id: string
           image_url?: string | null
+          inbound_token?: string
           owner_name: string
           phone: string
           spot_id?: string | null
@@ -814,6 +816,7 @@ export type Database = {
           farm_name?: string
           id?: string
           image_url?: string | null
+          inbound_token?: string
           owner_name?: string
           phone?: string
           spot_id?: string | null
