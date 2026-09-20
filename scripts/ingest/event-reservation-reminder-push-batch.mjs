@@ -1,8 +1,16 @@
 // [예약 오픈 알림](2026-09-20 사용자 지시): "사전예약 오픈일에 맞추어 예약 오픈전 10분전
 // 이라던가 앱 푸시 주는 기능을 만들고 싶은데" — 관리자가 이벤트마다 직접 입력해 둔
-// events.next_reservation_open_at을 기준으로, 그 시각이 다가온 이벤트를 구독한 유저에게
-// 웹 푸시를 보낸다. 구독 조건은 "로그인만 하면 누구나"(사용자 확인) — 기존
-// mom-pick-push-send-batch.mjs와 달리 등급(grade) 필터를 두지 않는다.
+// events.next_reservation_open_at을 기준으로, 그 시각이 다가온 이벤트를 찜(북마크)해 둔
+// 유저에게 웹 푸시를 보낸다.
+//
+// [찜(북마크) 연동으로 설계 변경](2026-09-20 사용자 지시): "내 알림신청목록은 찜했을때
+// 찜한것에 대하여만 알림오도록 하는거지" — 별도 구독 테이블(event_reservation_reminders,
+// 폐기함) 없이 이미 있는 user_bookmarks를 그대로 구독 신호로 재사용한다.
+//
+// [등급 정책 변경](2026-09-20 사용자 확인): "알림도 열심맙 이상만" — 애초에 찜 자체가
+// 열심맘(active) 이상만 가능하므로(src/lib/community/grades.ts canBookmark), 이 배치도
+// 동일한 기준으로 발송 대상을 좁힌다. 기존 mom-pick-push-send-batch.mjs(우수맘/excellent
+// 이상)보다 한 단계 낮은 문턱이다 — 서로 다른 기능이라 별도 기준을 쓴다.
 //
 // [정밀도에 대한 정직한 기록] 이 배치는 GitHub Actions 스케줄(cron)로 10분마다 실행된다.
 // GitHub Actions의 스케줄 트리거는 공식적으로 "정확한 시각 실행을 보장하지 않으며 부하가
@@ -21,6 +29,9 @@ import { createAdminClient } from './lib/supabase-admin.mjs';
 
 const WINDOW_START_MINUTES = 5;
 const WINDOW_END_MINUTES = 15;
+// src/lib/community/grades.ts의 canBookmark(hasReachedGrade(grade, 'active'))와 동일한
+// 문턱 — GRADE_RANK 순서상 'active' 이상은 ['active','excellent','power'].
+const ELIGIBLE_GRADES = ['active', 'excellent', 'power'];
 
 function configureWebPush() {
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
@@ -55,16 +66,29 @@ export async function run() {
   let eventsProcessed = 0;
 
   for (const event of targetEvents) {
-    const { data: reminders, error: remindersError } = await admin
-      .from('event_reservation_reminders')
+    const { data: bookmarks, error: bookmarksError } = await admin
+      .from('user_bookmarks')
       .select('user_id')
       .eq('event_id', event.id);
-    if (remindersError) {
-      console.error(`[EVENT_RESERVATION_REMINDER] ${event.id} 구독자 조회 실패: ${remindersError.message}`);
+    if (bookmarksError) {
+      console.error(`[EVENT_RESERVATION_REMINDER] ${event.id} 찜 조회 실패: ${bookmarksError.message}`);
       continue;
     }
 
-    const userIds = [...new Set((reminders ?? []).map((r) => r.user_id))];
+    // push_subscriptions.user_id와 profiles.id는 둘 다 auth.users(id)를 가리키는 형제 FK라
+    // PostgREST 임베디드 조회로 자동 연결되지 않는다(mom-pick-push-send-batch.mjs와 동일한
+    // 실측 확인 사례) — 두 번 조회해 JS에서 등급으로 걸러낸다.
+    const bookmarkedUserIds = [...new Set((bookmarks ?? []).map((r) => r.user_id))];
+    const { data: eligibleProfiles, error: profilesError } =
+      bookmarkedUserIds.length > 0
+        ? await admin.from('profiles').select('id').in('id', bookmarkedUserIds).in('grade', ELIGIBLE_GRADES)
+        : { data: [], error: null };
+    if (profilesError) {
+      console.error(`[EVENT_RESERVATION_REMINDER] ${event.id} 찜한 유저 등급 조회 실패: ${profilesError.message}`);
+      continue;
+    }
+
+    const userIds = (eligibleProfiles ?? []).map((p) => p.id);
     const { data: subscriptions, error: subsError } =
       userIds.length > 0
         ? await admin.from('push_subscriptions').select('id, endpoint, p256dh, auth_key').in('user_id', userIds)

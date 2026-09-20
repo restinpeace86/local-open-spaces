@@ -14,7 +14,7 @@ import { EventOperatingCalendarSheet } from '@/components/map/event-operating-ca
 import { BookmarkButton } from '@/components/community/bookmark-button';
 import { KIDS_RESTAURANT_CATEGORY_MIN } from '@/lib/spaces/spot-category-groups';
 import { usePublishedSpotNotices, SpotNoticesSection } from '@/components/common/spot-notices-section';
-import { EventReservationReminderButton } from '@/components/common/event-reservation-reminder-button';
+import { EventReservationReminderHint } from '@/components/common/event-reservation-reminder-hint';
 
 const NO_INFO_TEXT = '정보 준비 중 (공공 기관 문의)';
 
@@ -849,10 +849,12 @@ export function DetailModal({
 
               <SpotNoticesSection notices={publishedNotices} />
 
-              {/* [예약 오픈 알림](2026-09-20 사용자 지시): 관리자가 next_reservation_open_at을
-                  입력해 둔 이벤트에만 표시된다(값이 없거나 이미 지났으면 컴포넌트가 스스로
-                  아무것도 렌더링하지 않음). */}
-              <EventReservationReminderButton eventId={item.id} />
+              {/* [예약 오픈 알림 — 찜 연동](2026-09-20 사용자 지시): "내 알림신청목록은
+                  찜했을때 찜한것에 대하여만 알림오도록 하는거지" — 별도 구독 버튼 없이
+                  기존 찜(BookmarkButton, 위쪽에 이미 렌더링됨)에 올라탄다. 이 안내는
+                  next_reservation_open_at이 있고(미래) 열심맘 이상(찜 가능 등급)일 때만
+                  보인다. */}
+              <EventReservationReminderHint eventId={item.id} />
 
               {/* 7단: 인앱 지도 & 스팟 마커(미니맵). 근사/미상 좌표는 정확한 핀처럼
                   오인시키지 않도록 지도 대신 안내 문구만 보여준다(Task 9-6-2). */}
