@@ -1156,6 +1156,18 @@ const PAGINATION_OVERFETCH_CEILING = 500;
 // 중분류도 검증되면 여기에 추가할 수 있다.
 const SPACE_ID_GROUP_CATEGORY_MINS = new Set(['캠핑장']);
 
+// [동네 우선(진짜 거리순) 정렬](2026-09-20 사용자 지시): "동네 우선 정렬이 맞는거
+// 같아" — 서울형키즈카페/공공키즈카페는 시 전체에 145건 안팎만 있는 희소
+// 카테고리라, selectRegionFirst의 자치구 텍스트 일치 우선순위(regionTier)가
+// 실제 GPS 거리보다 앞서면 "같은 구 안이지만 15km 떨어진 곳"이 "이웃 구지만
+// 200m 거리인 곳"보다 먼저 뜨는 역전이 생긴다. 이 두 중분류만 정확한 좌표
+// (region.lat/lng)가 있을 때 텍스트 지역 우선순위를 건너뛰고 sortByDistanceIfKnown
+// 이 이미 계산해 둔 진짜 거리순을 그대로 쓴다. 다른 중분류(문화/축제·자연/체험 등)는
+// 기존 동작 그대로 유지한다 — 그쪽은 건수가 많아 자치구 우선순위가 여전히
+// 유효한 1차 필터이고, 이번 지시 범위도 키즈카페 한정이었다(제3장 제5조 추측
+// 금지 — 다른 화면까지 임의로 확장하지 않음).
+const DISTANCE_FIRST_CATEGORY_MINS = new Set(['공공키즈카페', '서울형키즈카페']);
+
 // [같은 스팟인데 서로 다른 물리적 장소가 섞이는 사고 방지]: "서천 금빛노을
 // 서울캠핑장" 1개 스팟에 실제로는 "포천 서울캠핑장"/"서천 서울오토캠핑장"/
 // "서천 서울캠핑장" 3개의 서로 다른 물리적 장소가 연결돼 있었다(상위 매칭
@@ -1216,6 +1228,10 @@ export async function getCategoryMinFeed(
   const merged = dedupeAndMergeFree(filterEventsOperatingToday(eventData).map(toEventItem));
   const items = SPACE_ID_GROUP_CATEGORY_MINS.has(categoryMin) ? groupBySpaceId(merged) : merged;
   const ordered = sortByDistanceIfKnown(items, region);
+  const hasCoords = typeof region.lat === 'number' && typeof region.lng === 'number';
+  if (DISTANCE_FIRST_CATEGORY_MINS.has(categoryMin) && hasCoords) {
+    return ordered.slice(offset, offset + limit);
+  }
   return selectRegionFirst(ordered, region, offset, limit);
 }
 

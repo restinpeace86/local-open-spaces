@@ -1083,6 +1083,101 @@ describe('getCategoryMinFeed (대분류·중분류 드릴다운)', () => {
       expect(items.every((i) => i.grouped_count == null)).toBe(true);
     });
   });
+
+  // [동네 우선(진짜 거리순) 정렬](2026-09-20 사용자 지시): "동네 우선 정렬이 맞는거
+  // 같아" — 공공키즈카페/서울형키즈카페는 희소 카테고리라, 자치구 텍스트 일치
+  // 우선순위(regionTier)가 실제 GPS 거리보다 앞서면 "같은 구 안이지만 먼 곳"이
+  // "이웃 구지만 훨씬 가까운 곳"보다 먼저 뜨는 역전이 생긴다. 좌표가 있으면 이
+  // 두 중분류만 진짜 거리순을 그대로 쓰도록 고쳤다.
+  describe('공공키즈카페/서울형키즈카페 — 좌표 있으면 자치구 우선순위 대신 진짜 거리순(2026-09-20)', () => {
+    it('공공키즈카페는 다른 구여도 더 가까우면 먼저 나온다(자치구 우선순위 무시)', async () => {
+      const origin = { lat: 37.5, lng: 127.0 };
+      // 선택 지역(성남시 분당구)과 정확히 일치하지만 훨씬 먼 곳.
+      const sameSigunguFar = eventRow({
+        id: 'same-sigungu-far',
+        title: '분당구 키즈카페(멀리)',
+        category_min: '공공키즈카페',
+        is_active: true,
+        sigungu_name: '성남시 분당구',
+        location: { coordinates: [127.5, 37.9] },
+      });
+      // 다른 구지만 origin 바로 근처.
+      const otherSigunguNear = eventRow({
+        id: 'other-sigungu-near',
+        title: '강남구 키즈카페(가까이)',
+        category_min: '공공키즈카페',
+        is_active: true,
+        sigungu_name: '서울시 강남구',
+        location: { coordinates: [127.001, 37.501] },
+      });
+
+      vi.doMock('@/lib/supabase/server', () => ({
+        createClient: () => Promise.resolve({ from: () => makeFilteringChainable([sameSigunguFar, otherSigunguNear]) }),
+      }));
+
+      const { getCategoryMinFeed } = await import('./get-home-feed');
+      const items = await getCategoryMinFeed('공공키즈카페', 20, { sigunguName: '성남시 분당구', ...origin });
+
+      expect(items.map((i) => i.id)).toEqual(['other-sigungu-near', 'same-sigungu-far']);
+    });
+
+    it('좌표가 없으면(기본값) 기존처럼 자치구 우선순위를 그대로 쓴다(회귀 없음)', async () => {
+      const sameSigunguFar = eventRow({
+        id: 'same-sigungu-far',
+        title: '분당구 키즈카페(멀리)',
+        category_min: '공공키즈카페',
+        is_active: true,
+        sigungu_name: '성남시 분당구',
+        location: { coordinates: [127.5, 37.9] },
+      });
+      const otherSigunguNear = eventRow({
+        id: 'other-sigungu-near',
+        title: '강남구 키즈카페(가까이)',
+        category_min: '공공키즈카페',
+        is_active: true,
+        sigungu_name: '서울시 강남구',
+        location: { coordinates: [127.001, 37.501] },
+      });
+
+      vi.doMock('@/lib/supabase/server', () => ({
+        createClient: () => Promise.resolve({ from: () => makeFilteringChainable([sameSigunguFar, otherSigunguNear]) }),
+      }));
+
+      const { getCategoryMinFeed } = await import('./get-home-feed');
+      const items = await getCategoryMinFeed('공공키즈카페', 20, { sigunguName: '성남시 분당구' });
+
+      expect(items.map((i) => i.id)).toEqual(['same-sigungu-far', 'other-sigungu-near']);
+    });
+
+    it('키즈카페가 아닌 다른 중분류는 좌표가 있어도 기존 자치구 우선순위를 그대로 쓴다(범위 한정)', async () => {
+      const origin = { lat: 37.5, lng: 127.0 };
+      const sameSigunguFar = eventRow({
+        id: 'same-sigungu-far',
+        title: '분당구 도시농업(멀리)',
+        category_min: '도시농업',
+        is_active: true,
+        sigungu_name: '성남시 분당구',
+        location: { coordinates: [127.5, 37.9] },
+      });
+      const otherSigunguNear = eventRow({
+        id: 'other-sigungu-near',
+        title: '강남구 도시농업(가까이)',
+        category_min: '도시농업',
+        is_active: true,
+        sigungu_name: '서울시 강남구',
+        location: { coordinates: [127.001, 37.501] },
+      });
+
+      vi.doMock('@/lib/supabase/server', () => ({
+        createClient: () => Promise.resolve({ from: () => makeFilteringChainable([sameSigunguFar, otherSigunguNear]) }),
+      }));
+
+      const { getCategoryMinFeed } = await import('./get-home-feed');
+      const items = await getCategoryMinFeed('도시농업', 20, { sigunguName: '성남시 분당구', ...origin });
+
+      expect(items.map((i) => i.id)).toEqual(['same-sigungu-far', 'other-sigungu-near']);
+    });
+  });
 });
 
 // [todo.md 개선사항 4 되돌림](2026-09-19 사용자 지시): getCategoryMinCounts가 더 이상
