@@ -64,6 +64,11 @@ export type AdminOpenSpaceRow = {
   source_type: string;
   source: string | null;
   name: string;
+  // [OPEN_SPACES 노출 이름 수동 수정](2026-09-20 사용자 지시, "장우랑 놀이방" 사례):
+  // "장우랑 & 양주회센터"처럼 원본 상호명이 여러 사업장이 합쳐진 값으로 들어오는
+  // 경우가 있어 관리자가 노출용 이름을 별도로 지정할 수 있게 한다. null이면 원본
+  // name을 그대로 노출한다.
+  display_name: string | null;
   category: string;
   category_min: string | null;
   category_min_source: string | null;
@@ -1640,7 +1645,12 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
 
                 const isEvent = tab === 'events';
                 const r = row as AdminOpenSpaceRow | AdminEventRow;
-                const titleText = isEvent ? (r as AdminEventRow).title : (r as AdminOpenSpaceRow).name;
+                // [OPEN_SPACES 노출 이름 수동 수정](2026-09-20 사용자 지시): 목록에서도
+                // 관리자가 설정한 override가 있으면 그걸 보여준다(원본 name은 상세
+                // 모달의 SpotDisplayNameEditor에서 계속 확인 가능).
+                const titleText = isEvent
+                  ? (r as AdminEventRow).title
+                  : ((r as AdminOpenSpaceRow).display_name ?? (r as AdminOpenSpaceRow).name);
                 const venueText = isEvent ? (r as AdminEventRow).venue_name ?? '-' : (r as AdminOpenSpaceRow).name;
                 const addressText = isEvent ? (r as AdminEventRow).sigungu_name ?? '-' : (r as AdminOpenSpaceRow).address;
                 const categoryValue = isEvent ? (r as AdminEventRow).event_type : (r as AdminOpenSpaceRow).category;
@@ -1917,6 +1927,14 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
               prev && 'id' in prev && prev.id === id
                 ? { ...prev, service_category_id: nextServiceCategoryId, updated_at: nowIso }
                 : prev
+            );
+          }}
+          onDisplayNameUpdated={(id, nextDisplayName) => {
+            setRows((prev) =>
+              prev.map((row) => ('id' in row && row.id === id ? { ...row, display_name: nextDisplayName } : row))
+            );
+            setSelectedRow((prev) =>
+              prev && 'id' in prev && prev.id === id ? { ...prev, display_name: nextDisplayName } : prev
             );
           }}
           onMigratedToEvent={(id) => {

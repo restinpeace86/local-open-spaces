@@ -9,6 +9,7 @@ function buildOpenSpaceRow(overrides: Partial<AdminOpenSpaceRow> = {}): AdminOpe
     source_type: 'TEST_SOURCE',
     source: 'test',
     name: '테스트 공간',
+    display_name: null,
     category: 'CULTURE',
     category_min: null,
     category_min_source: null,

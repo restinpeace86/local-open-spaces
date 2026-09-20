@@ -12,6 +12,7 @@ function buildRow(overrides: Partial<AdminOpenSpaceRow> = {}): AdminOpenSpaceRow
     source_type: 'TEST_SOURCE',
     source: 'test',
     name: '테스트 공간',
+    display_name: null,
     category: 'CULTURE',
     category_min: null,
     category_min_source: null,
@@ -1258,6 +1259,87 @@ describe('RawDataModal — 제목(title) 수동 수정(TitleEditor, 2026-09-20)'
     const row = { ...buildRow(), id: 'row-1', title: '마포구 망원한강공원' };
     render(<RawDataModal table="events" row={row as unknown as AdminEventRow} categoryMinOptions={[]} onClose={vi.fn()} />);
     expect(screen.queryByText('제목(title) 수동 수정')).not.toBeInTheDocument();
+  });
+});
+
+// [OPEN_SPACES 노출 이름 수동 수정](2026-09-20 사용자 지시, "장우랑 놀이방" 사례):
+// "장우랑 & 양주회센터"처럼 원본 상호명이 여러 사업장이 합쳐진 값으로 들어와도
+// open_spaces는 재수집 시 안전 병합을 쓰지 않아 원본 name을 직접 고칠 수 없다 —
+// 별도 컬럼(display_name)에 저장하는 SpotDisplayNameEditor를 검증한다.
+describe('RawDataModal — 노출 이름 수동 수정(SpotDisplayNameEditor, 2026-09-20)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function mockDisplayNameFetch(handlers: { saveOk?: boolean }) {
+    return vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/api/admin/data-grid/display-name')) {
+        if (handlers.saveOk === false) {
+          return Promise.resolve({ ok: false, json: () => Promise.resolve({ error: '저장 실패' }) } as Response);
+        }
+        const body = JSON.parse(init!.body as string);
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ row: { id: body.id, name: '장우랑 & 양주회센터', display_name: body.display_name } }),
+        } as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+    });
+  }
+
+  it('기본값은 원본 상호명이고, 바꿔서 저장하면 display_name을 PATCH하고 onDisplayNameUpdated를 호출한다', async () => {
+    const fetchMock = mockDisplayNameFetch({});
+    vi.stubGlobal('fetch', fetchMock);
+    const onDisplayNameUpdated = vi.fn();
+    const row = { ...buildRow(), id: 'space-1', name: '장우랑 & 양주회센터', display_name: null };
+    render(
+      <RawDataModal
+        table="open_spaces"
+        row={row}
+        categoryMinOptions={[]}
+        onClose={vi.fn()}
+        onDisplayNameUpdated={onDisplayNameUpdated}
+      />
+    );
+
+    const input = screen.getByDisplayValue('장우랑 & 양주회센터');
+    fireEvent.change(input, { target: { value: '장우랑 놀이방' } });
+    fireEvent.click(screen.getByText('노출 이름 저장'));
+
+    await waitFor(() => expect(onDisplayNameUpdated).toHaveBeenCalledWith('space-1', '장우랑 놀이방'));
+    const patchCall = fetchMock.mock.calls.find(
+      (c) => (c[0] as string).includes('/api/admin/data-grid/display-name') && (c[1] as RequestInit)?.method === 'PATCH'
+    );
+    expect(JSON.parse((patchCall![1] as RequestInit).body as string)).toEqual({
+      id: 'space-1',
+      display_name: '장우랑 놀이방',
+    });
+  });
+
+  it('이미 override가 설정돼 있으면 원본이 아니라 override 값을 기본값으로 보여준다', () => {
+    vi.stubGlobal('fetch', mockDisplayNameFetch({}));
+    const row = { ...buildRow(), id: 'space-1', name: '장우랑 & 양주회센터', display_name: '장우랑 놀이방' };
+    render(
+      <RawDataModal table="open_spaces" row={row} categoryMinOptions={[]} onClose={vi.fn()} onDisplayNameUpdated={vi.fn()} />
+    );
+    expect(screen.getByDisplayValue('장우랑 놀이방')).toBeInTheDocument();
+  });
+
+  it('저장 실패 시 에러 메시지를 보여준다', async () => {
+    vi.stubGlobal('fetch', mockDisplayNameFetch({ saveOk: false }));
+    const row = { ...buildRow(), id: 'space-1', name: '장우랑 & 양주회센터', display_name: null };
+    render(
+      <RawDataModal table="open_spaces" row={row} categoryMinOptions={[]} onClose={vi.fn()} onDisplayNameUpdated={vi.fn()} />
+    );
+
+    fireEvent.click(screen.getByText('노출 이름 저장'));
+    expect(await screen.findByText('저장 실패')).toBeInTheDocument();
+  });
+
+  it('onDisplayNameUpdated가 없으면(events 탭 등) 에디터를 렌더링하지 않는다', () => {
+    const row = { ...buildRow(), id: 'space-1', name: '장우랑 & 양주회센터', display_name: null };
+    render(<RawDataModal table="open_spaces" row={row} categoryMinOptions={[]} onClose={vi.fn()} />);
+    expect(screen.queryByText(/노출 이름 수동 수정/)).not.toBeInTheDocument();
   });
 });
 

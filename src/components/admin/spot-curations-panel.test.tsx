@@ -517,6 +517,109 @@ describe('SpotCurationsPanel — 리스트 기반 등록/수정 (2026-09-03)', (
   });
 });
 
+// [OPEN_SPACES 노출 이름 수동 수정](2026-09-20 사용자 지시, "장우랑 놀이방" 사례):
+// "스팟큐레이션으로 데이터 가져올때 상호명도 가져오는데.. 자동적으로 상호명도
+// 들어가도록" — 네이버 플레이스 크롤링이 반환한 상호명이 노출 이름 입력창에
+// 자동으로 채워지고, 폼을 저장하면 open_spaces.display_name에도 반영되는지 검증한다.
+describe('SpotCurationsPanel — 노출 이름 자동 채움(2026-09-20)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function mockFetchWithSave(naverCrawl?: unknown) {
+    return vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/api/admin/spot-curations/naver-crawl')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(naverCrawl ?? {}) } as Response);
+      }
+      if (url.includes('/api/admin/data-grid/display-name')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ row: {} }) } as Response);
+      }
+      if (url.includes('/api/admin/data-grid')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ rows: [{ id: 'spot-1', name: '장우랑 & 양주회센터', address: '경기도 양주시' }], total: 1 }),
+        } as Response);
+      }
+      if (url.includes('/api/admin/spot-curations') && init?.method === 'POST') {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ item: { id: 'curation-1' } }) } as Response);
+      }
+      if (url.includes('/api/admin/spot-curations')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [] }) } as Response);
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+  }
+
+  it('신규 등록 모달을 열면 노출 이름 입력창 기본값은 원본 상호명이다', async () => {
+    vi.stubGlobal('fetch', mockFetchWithSave());
+    render(<SpotCurationsPanel />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await waitFor(() => expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByText('장우랑 & 양주회센터'));
+    expect(await screen.findByText('+ 스팟 큐레이션 등록')).toBeInTheDocument();
+
+    expect(screen.getByLabelText(/노출 이름/)).toHaveValue('장우랑 & 양주회센터');
+  });
+
+  it('⚡ 데이터 가져오기로 크롤링한 상호명이 노출 이름 입력창에 자동으로 채워진다', async () => {
+    vi.stubGlobal('fetch', mockFetchWithSave({ name: '장우랑 놀이방' }));
+    render(<SpotCurationsPanel />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await waitFor(() => expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByText('장우랑 & 양주회센터'));
+    await screen.findByText('+ 스팟 큐레이션 등록');
+
+    fireEvent.change(screen.getByPlaceholderText(/map\.naver\.com/), {
+      target: { value: 'https://map.naver.com/p/entry/place/36200306' },
+    });
+    fireEvent.click(screen.getByText('⚡ 데이터 가져오기'));
+
+    await waitFor(() => expect(screen.getByLabelText(/노출 이름/)).toHaveValue('장우랑 놀이방'));
+  });
+
+  it('노출 이름을 바꾸고 저장하면 open_spaces.display_name을 PATCH한다', async () => {
+    const fetchMock = mockFetchWithSave();
+    vi.stubGlobal('fetch', fetchMock);
+    render(<SpotCurationsPanel />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await waitFor(() => expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByText('장우랑 & 양주회센터'));
+    await screen.findByText('+ 스팟 큐레이션 등록');
+
+    fireEvent.change(screen.getByLabelText(/노출 이름/), { target: { value: '장우랑 놀이방' } });
+    fireEvent.click(screen.getByText('등록하기'));
+
+    await waitFor(() => {
+      const patchCall = fetchMock.mock.calls.find(
+        (c) => (c[0] as string).includes('/api/admin/data-grid/display-name') && (c[1] as RequestInit)?.method === 'PATCH'
+      );
+      expect(patchCall).toBeDefined();
+      const body = JSON.parse((patchCall![1] as RequestInit).body as string);
+      expect(body).toEqual({ id: 'spot-1', display_name: '장우랑 놀이방' });
+    });
+  });
+
+  it('노출 이름을 건드리지 않고 저장하면 display_name PATCH를 호출하지 않는다', async () => {
+    const fetchMock = mockFetchWithSave();
+    vi.stubGlobal('fetch', fetchMock);
+    render(<SpotCurationsPanel />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await waitFor(() => expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByText('장우랑 & 양주회센터'));
+    await screen.findByText('+ 스팟 큐레이션 등록');
+
+    fireEvent.click(screen.getByText('등록하기'));
+
+    await waitFor(() => {
+      const saveCall = fetchMock.mock.calls.find(
+        (c) => (c[0] as string) === '/api/admin/spot-curations' && (c[1] as RequestInit)?.method === 'POST'
+      );
+      expect(saveCall).toBeDefined();
+    });
+    expect(fetchMock.mock.calls.some((c) => (c[0] as string).includes('/api/admin/data-grid/display-name'))).toBe(false);
+  });
+});
+
 // [노출중분류 있는것/없는것 따로 보기](2026-09-06 사용자 지시): "스팟 큐레이션 탭에
 // 노출중분류 된거랑 안된거 따로도 볼수 있게해줘 기본적으로 노출중분류가 분류된
 // 식당에 대하여 스팟 큐레이션에서 메뉴작업할꺼라.. 일단은 노출중분류 있는것만도

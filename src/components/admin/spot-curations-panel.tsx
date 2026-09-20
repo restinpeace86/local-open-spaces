@@ -51,10 +51,10 @@ export type SpotCurationItem = {
   curation_badges: string[];
   created_at: string;
   updated_at: string;
-  open_spaces: { name: string; address: string | null; category: string } | null;
+  open_spaces: { name: string; display_name: string | null; address: string | null; category: string } | null;
 };
 
-export type SpotSearchResult = { id: string; name: string; address: string | null };
+export type SpotSearchResult = { id: string; name: string; display_name: string | null; address: string | null };
 
 // [관리자 페이지 스팟 큐레이션 URL 크롤링 기능](2026-09-18): /api/admin/spot-curations/
 // naver-crawl 응답 중 "정보 등록" 필드(imageUrl/businessHoursText/menuText)를 제외한
@@ -173,6 +173,17 @@ export function CurationFormModal({
   const spotDisplay = isEdit
     ? { name: initial!.open_spaces?.name ?? '(이름 없음)', address: initial!.open_spaces?.address ?? null }
     : { name: presetSpot!.name, address: presetSpot!.address };
+  // [OPEN_SPACES 노출 이름 수동 수정](2026-09-20 사용자 지시): "스팟큐레이션으로
+  // 데이터 가져올때 상호명도 가져오는데.. 자동적으로 상호명도 들어가도록" — 이
+  // 화면(네이버 플레이스 크롤링)이 open_spaces.name을 대체할 노출 이름을 채우는
+  // 유일한 진입점이라, 여기서 편집하고 이 폼을 저장할 때 open_spaces에도 함께
+  // 반영한다(스팟 큐레이션 저장과 별개 API — display_name은 spot_curations가 아닌
+  // open_spaces 컬럼). 현재 노출 중인 이름(override 있으면 override, 없으면 원본)을
+  // 기본값으로 프리필한다.
+  const initialDisplayName = isEdit
+    ? (initial!.open_spaces?.display_name ?? initial!.open_spaces?.name ?? '')
+    : (presetSpot!.display_name ?? presetSpot!.name ?? '');
+  const [displayName, setDisplayName] = useState(initialDisplayName);
 
   const [isActive, setIsActive] = useState(initial?.is_active ?? true);
   const [imageUrl, setImageUrl] = useState(initial?.image_url ?? '');
@@ -317,6 +328,11 @@ export function CurationFormModal({
         category: data.category ?? null,
         conveniences: data.conveniences ?? [],
       });
+
+      // [OPEN_SPACES 노출 이름 수동 수정](2026-09-20 사용자 지시): "자동적으로
+      // 상호명도 들어가도록" — 크롤링한 상호명을 노출 이름 입력창에 자동으로
+      // 채운다(다른 필드처럼 관리자가 이어서 직접 고칠 수 있다).
+      if (data.name) setDisplayName(data.name);
 
       // [편의시설 뱃지 자동 체크](2026-09-19 사용자 지시): 가져온 편의시설 텍스트를
       // 기존 뱃지 키워드 매칭 엔진(curation-badges.ts, 블로그 본문 자동 체크와
@@ -495,6 +511,23 @@ export function CurationFormModal({
       const data: { item?: SpotCurationItem; error?: string } = await res.json();
       if (!res.ok || !data.item) throw new Error(data.error ?? '저장에 실패했습니다.');
 
+      // [OPEN_SPACES 노출 이름 수동 수정](2026-09-20 사용자 지시): 스팟 큐레이션
+      // 저장이 성공한 뒤에만 노출 이름을 반영한다. display_name은 spot_curations가
+      // 아닌 open_spaces 컬럼이라 별도 API 호출이 필요하다 — 실패해도 방금 성공한
+      // 큐레이션 저장 자체를 실패로 되돌리지 않는다(제5장 제11조 오류 처리 원칙).
+      const trimmedDisplayName = displayName.trim();
+      if (trimmedDisplayName !== initialDisplayName.trim()) {
+        try {
+          await fetch('/api/admin/data-grid/display-name', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: spotId, display_name: trimmedDisplayName }),
+          });
+        } catch {
+          // 위 주석 참고 — 조용히 무시.
+        }
+      }
+
       onSaved(data.item);
       onClose();
     } catch (err) {
@@ -617,6 +650,25 @@ export function CurationFormModal({
           </div>
 
           <BoundSpotSummary name={spotDisplay.name} address={spotDisplay.address} />
+
+          {/* [OPEN_SPACES 노출 이름 수동 수정](2026-09-20 사용자 지시, "장우랑 놀이방"
+              사례): 원본 상호명(위 BoundSpotSummary가 보여주는 값)이 "장우랑 &
+              양주회센터"처럼 여러 사업장이 합쳐진 경우 여기서 노출용 이름을 따로
+              지정한다. ⚡ 데이터 가져오기로 크롤링한 상호명이 자동으로 채워지고,
+              직접 고칠 수도 있다. 저장 버튼을 누르면 이 폼(스팟 큐레이션)과 함께
+              open_spaces.display_name에도 반영된다. */}
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-gray-700">
+              노출 이름(선택 — ⚡ 데이터 가져오기 시 상호명 자동 채움, 비우면 원본 이름 사용)
+            </span>
+            <input
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder={spotDisplay.name}
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </label>
 
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
@@ -916,7 +968,13 @@ export function CurationFormModal({
 // only_mapped를 그대로 재사용한다(제5장 제4조 — 어제 이미 추가된 필터).
 type ServiceCategoryFilter = 'all' | 'mapped' | 'unmapped';
 
-type CandidateSpotRow = { id: string; name: string; address: string; service_category_id: string | null };
+type CandidateSpotRow = {
+  id: string;
+  name: string;
+  display_name: string | null;
+  address: string;
+  service_category_id: string | null;
+};
 
 // 모달을 "기존 큐레이션 수정" 또는 "리스트에서 고른 신규 스팟으로 등록" 중 하나로 연다.
 // 자유 검색으로 등록하는 경로는 더 이상 없다 — 리스트의 검색창이 그 역할을 대신한다.
@@ -1048,7 +1106,9 @@ export function SpotCurationsPanel() {
 
   function handleRowClick(spot: CandidateSpotRow) {
     const existing = curationsBySpotId.get(spot.id);
-    setModalTarget(existing ?? { presetSpot: { id: spot.id, name: spot.name, address: spot.address } });
+    setModalTarget(
+      existing ?? { presetSpot: { id: spot.id, name: spot.name, display_name: spot.display_name, address: spot.address } }
+    );
   }
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));

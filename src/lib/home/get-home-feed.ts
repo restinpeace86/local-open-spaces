@@ -911,11 +911,14 @@ export async function searchSpacesNationwide(
 // 한 번도 매치될 수 없는 잠재 버그였다(이번 작업의 관리자 큐레이션 검색이 category_min 필터를
 // 요구하면서 발견함). 추가해도 기존 소비처(getFreeFeed 등)는 순수 추가 필드라 영향 없다.
 export const SPACE_COLUMNS =
-  'id, name, category, category_min, address, location, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, sigungu_name, source_type';
+  'id, name, display_name, category, category_min, address, location, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, sigungu_name, source_type';
 
 export type SpaceRow = {
   id: string;
   name: string;
+  // [OPEN_SPACES 노출 이름 수동 수정](2026-09-20 사용자 지시): 관리자가 지정한 override.
+  // null이면 화면에서 name을 그대로 쓴다.
+  display_name: string | null;
   category: string;
   category_min: string | null;
   address: string | null;
@@ -936,7 +939,7 @@ export function toSpaceItem(row: SpaceRow): NearbyItem {
   const { lng, lat } = extractCoords(row.location);
   return {
     id: row.id,
-    name: row.name,
+    name: row.display_name ?? row.name,
     category: row.category,
     category_min: row.category_min,
     distance_meters: -1,

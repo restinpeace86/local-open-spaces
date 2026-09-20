@@ -68,7 +68,15 @@ function getModalContent(table: AdminTable, row: AdminRow): { title: string; sub
     };
   }
   const r = row as AdminOpenSpaceRow;
-  return { title: r.name, subtitle: `${r.source_type} · ${r.external_id}`, raw: r.raw_data, sourceUrl: r.info_url };
+  // [OPEN_SPACES 노출 이름 수동 수정](2026-09-20 사용자 지시): 관리자가 override를
+  // 설정했으면 모달 헤더도 실제 노출되는 이름을 보여준다 — 원본 name은 아래
+  // SpotDisplayNameEditor의 subtitle로 계속 확인 가능하다.
+  return {
+    title: r.display_name ?? r.name,
+    subtitle: `${r.source_type} · ${r.external_id}`,
+    raw: r.raw_data,
+    sourceUrl: r.info_url,
+  };
 }
 
 // [카테고리 정제 & 어드민 확장](2026-08-26): 상세 모달에서 category_min을 직접 선택해
@@ -355,6 +363,70 @@ function TitleEditor({ row, onUpdated }: { row: AdminEventRow; onUpdated: (id: s
           className="rounded-full bg-purple-600 text-white text-xs font-semibold px-3 py-1.5 disabled:opacity-40 hover:bg-purple-700"
         >
           {isSaving ? '저장 중...' : '제목 저장'}
+        </button>
+      </div>
+      {errorMessage && <p className="mt-1.5 text-xs text-red-500">{errorMessage}</p>}
+    </div>
+  );
+}
+
+// [OPEN_SPACES 노출 이름 수동 수정](2026-09-20 사용자 지시, "장우랑 놀이방" 사례):
+// "장우랑 & 양주회센터"처럼 원본 상호명(BIZPLC_NM)이 여러 사업장이 합쳐진 값으로
+// 들어오는 경우가 있어 관리자가 노출용 이름을 별도로 지정할 수 있게 한다. events의
+// TitleEditor와 달리 원본 name 컬럼을 직접 고치지 않고 별도 컬럼(display_name)에
+// 저장한다 — open_spaces는 재수집 시 안전 병합을 쓰지 않아(위 API route 주석 참고)
+// 원본 컬럼을 고치면 다음 재수집에 되돌아가기 때문이다. 빈 값으로 저장하면 override를
+// 지워 원본 이름으로 되돌린다.
+function SpotDisplayNameEditor({
+  row,
+  onUpdated,
+}: {
+  row: AdminOpenSpaceRow;
+  onUpdated: (id: string, nextDisplayName: string | null) => void;
+}) {
+  const [value, setValue] = useState(row.display_name ?? row.name);
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setErrorMessage(null);
+    try {
+      const res = await fetch('/api/admin/data-grid/display-name', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: row.id, display_name: value }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? '노출 이름 수동 수정 실패');
+      onUpdated(row.id, json.row.display_name);
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : '노출 이름 수동 수정 실패');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 rounded-xl border border-gray-200 p-3">
+      <h3 className="text-xs font-semibold text-gray-500 mb-2">
+        노출 이름 수동 수정 (원본 상호명: {row.name})
+      </h3>
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          placeholder="비워두고 저장하면 원본 상호명을 그대로 사용합니다"
+          className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs flex-1"
+        />
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={isSaving}
+          className="rounded-full bg-purple-600 text-white text-xs font-semibold px-3 py-1.5 disabled:opacity-40 hover:bg-purple-700"
+        >
+          {isSaving ? '저장 중...' : '노출 이름 저장'}
         </button>
       </div>
       {errorMessage && <p className="mt-1.5 text-xs text-red-500">{errorMessage}</p>}
@@ -766,6 +838,7 @@ export function RawDataModal({
   onLocationUpdated,
   onSpaceLinkUpdated,
   onServiceCategoryUpdated,
+  onDisplayNameUpdated,
   onMigratedToEvent,
   onDeleted,
 }: {
@@ -795,6 +868,8 @@ export function RawDataModal({
   // [개선사항10](2026-09-11 사용자 지시): events 탭 전용, 연결된 스팟(space_id) 수동 지정.
   onSpaceLinkUpdated?: (id: string, nextSpaceId: string | null) => void;
   onServiceCategoryUpdated?: (id: string, nextServiceCategoryId: string | null) => void;
+  // [OPEN_SPACES 노출 이름 수동 수정](2026-09-20 사용자 지시): open_spaces 탭 전용.
+  onDisplayNameUpdated?: (id: string, nextDisplayName: string | null) => void;
   // [todo.md 개선사항 5](2026-09-03): open_spaces 탭에서만 전달된다 — 이관 성공 시 부모가
   // 목록에서 이 행을 제거하고 상세 모달을 닫는다(원본이 실제로 삭제됐으므로).
   onMigratedToEvent?: (id: string) => void;
@@ -995,6 +1070,10 @@ export function RawDataModal({
               serviceCategories={serviceCategories}
               onUpdated={onServiceCategoryUpdated}
             />
+          )}
+
+          {table === 'open_spaces' && onDisplayNameUpdated && (
+            <SpotDisplayNameEditor row={row as AdminOpenSpaceRow} onUpdated={onDisplayNameUpdated} />
           )}
 
           {/* [관리자용 블로그 큐레이션 모달](2026-09-05 사용자 지시, Decision 021):
@@ -1264,6 +1343,7 @@ export function RawDataModal({
         <SpotCurationQuickModal
           spotId={(row as AdminOpenSpaceRow).id}
           spotName={(row as AdminOpenSpaceRow).name}
+          spotDisplayName={(row as AdminOpenSpaceRow).display_name}
           spotAddress={(row as AdminOpenSpaceRow).address}
           onClose={() => setIsSpotCurationModalOpen(false)}
           onSaved={() => setIsSpotCurationModalOpen(false)}

@@ -10,7 +10,8 @@ export async function getAllOpenSpaces(referencePoint: { lat: number; lng: numbe
   const { data, error } = await supabase
     .from('open_spaces')
     .select(
-      'id, name, category, address, location, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, sigungu_name, source_type'
+      // [OPEN_SPACES 노출 이름 수동 수정](2026-09-20 사용자 지시): display_name이 있으면 우선한다.
+      'id, name, display_name, category, address, location, is_free, operating_hours, info_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, sigungu_name, source_type'
     )
     .order('name');
 
@@ -26,7 +27,7 @@ export async function getAllOpenSpaces(referencePoint: { lat: number; lng: numbe
 
     return {
       id: row.id,
-      name: row.name,
+      name: row.display_name ?? row.name,
       category: row.category,
       distance_meters: haversineDistanceMeters(referencePoint, { lat, lng }),
       item_type: 'SPACE' as const,

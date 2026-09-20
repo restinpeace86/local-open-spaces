@@ -597,6 +597,7 @@ export type Database = {
           category_min: string | null
           category_min_source: string | null
           created_at: string | null
+          display_name: string | null
           external_id: string
           facility_type: string | null
           feature_tag: string | null
@@ -633,6 +634,7 @@ export type Database = {
           category_min?: string | null
           category_min_source?: string | null
           created_at?: string | null
+          display_name?: string | null
           external_id: string
           facility_type?: string | null
           feature_tag?: string | null
@@ -669,6 +671,7 @@ export type Database = {
           category_min?: string | null
           category_min_source?: string | null
           created_at?: string | null
+          display_name?: string | null
           external_id?: string
           facility_type?: string | null
           feature_tag?: string | null
@@ -1749,44 +1752,74 @@ export type Database = {
           post_count: number
         }[]
       }
-      get_nearby_spaces_and_events: {
-        Args: {
-          p_category_mins?: string[]
-          p_item_type?: string
-          radius_meters?: number
-          user_lat: number
-          user_lng: number
-        }
-        Returns: {
-          address: string
-          booking_status: string
-          category: string
-          category_min: string
-          distance_meters: number
-          end_date: string
-          facility_type: string
-          group_id: string
-          has_parking: boolean
-          id: string
-          info_url: string
-          is_free: boolean
-          is_kids_friendly: boolean
-          is_reservation_required: boolean
-          item_type: string
-          lat: number
-          lng: number
-          name: string
-          operating_hours: string
-          reservation_end_date: string
-          reservation_start_date: string
-          reservation_url: string
-          source_type: string
-          start_date: string
-          stroller_accessible: boolean
-          target_age_group: string
-          thumbnail_url: string
-        }[]
-      }
+      get_nearby_spaces_and_events:
+        | {
+            Args: { radius_meters?: number; user_lat: number; user_lng: number }
+            Returns: {
+              address: string
+              booking_status: string
+              category: string
+              distance_meters: number
+              end_date: string
+              facility_type: string
+              has_parking: boolean
+              id: string
+              info_url: string
+              is_free: boolean
+              is_kids_friendly: boolean
+              is_reservation_required: boolean
+              item_type: string
+              lat: number
+              lng: number
+              name: string
+              operating_hours: string
+              reservation_end_date: string
+              reservation_start_date: string
+              reservation_url: string
+              start_date: string
+              stroller_accessible: boolean
+              target_age_group: string
+              thumbnail_url: string
+            }[]
+          }
+        | {
+            Args: {
+              p_category_mins?: string[]
+              p_item_type?: string
+              radius_meters?: number
+              user_lat: number
+              user_lng: number
+            }
+            Returns: {
+              address: string
+              booking_status: string
+              category: string
+              category_min: string
+              distance_meters: number
+              end_date: string
+              facility_type: string
+              group_id: string
+              has_parking: boolean
+              id: string
+              info_url: string
+              is_free: boolean
+              is_kids_friendly: boolean
+              is_reservation_required: boolean
+              item_type: string
+              lat: number
+              lng: number
+              name: string
+              operating_hours: string
+              reservation_end_date: string
+              reservation_start_date: string
+              reservation_url: string
+              source_type: string
+              start_date: string
+              stroller_accessible: boolean
+              target_age_group: string
+              thumbnail_url: string
+            }[]
+          }
       get_nearest_spot_weather: {
         Args: { max_radius_meters?: number; user_lat: number; user_lng: number }
         Returns: {

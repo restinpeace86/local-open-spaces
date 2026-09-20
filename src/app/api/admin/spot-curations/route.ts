@@ -42,7 +42,7 @@ type SpotCurationRow = {
   min_age_recommended: number;
   created_at: string;
   updated_at: string;
-  open_spaces: { name: string; address: string | null; category: string } | null;
+  open_spaces: { name: string; display_name: string | null; address: string | null; category: string } | null;
 };
 
 // blog_url_N은 빈 문자열/공백을 null로 정규화한다(기존 naver_booking_url과 동일 관례).
@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
     if (spotId) {
       const { data, error } = await admin
         .from('spot_curations')
-        .select('*, open_spaces(name, address, category)')
+        .select('*, open_spaces(name, display_name, address, category)')
         .eq('spot_id', spotId)
         .maybeSingle();
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -85,7 +85,7 @@ export async function GET(request: NextRequest) {
 
     let query = admin
       .from('spot_curations')
-      .select('*, open_spaces!inner(name, address, category)', { count: 'exact' })
+      .select('*, open_spaces!inner(name, display_name, address, category)', { count: 'exact' })
       .order('updated_at', { ascending: false });
 
     // 검색어는 조인된 open_spaces.name/address를 대상으로 한다 — 관리자가 스팟 이름으로
@@ -168,7 +168,7 @@ export async function POST(request: NextRequest) {
         curation_badges: normalizeBadges(body.curation_badges),
         min_age_recommended: clampMinAgeRecommended(body.min_age_recommended),
       })
-      .select('*, open_spaces(name, address, category)')
+      .select('*, open_spaces(name, display_name, address, category)')
       .single();
 
     if (error) {
@@ -252,7 +252,7 @@ export async function PATCH(request: NextRequest) {
       .from('spot_curations')
       .update(updates)
       .eq('id', id)
-      .select('*, open_spaces(name, address, category)')
+      .select('*, open_spaces(name, display_name, address, category)')
       .single();
 
     if (error) {

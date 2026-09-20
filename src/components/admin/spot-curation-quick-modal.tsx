@@ -17,12 +17,17 @@ import { CurationFormModal, SpotCurationItem } from '@/components/admin/spot-cur
 export function SpotCurationQuickModal({
   spotId,
   spotName,
+  spotDisplayName,
   spotAddress,
   onClose,
   onSaved,
 }: {
   spotId: string;
   spotName: string;
+  // [OPEN_SPACES 노출 이름 수동 수정](2026-09-20 사용자 지시): 이미 설정된 override가
+  // 있으면 신규 등록 모드로 열 때도 그 값을 프리필해야 한다(원본 name만 보내면
+  // CurationFormModal이 override를 모른 채 다시 원본으로 덮어써 보일 수 있음).
+  spotDisplayName: string | null;
   spotAddress: string | null;
   onClose: () => void;
   onSaved: (item: SpotCurationItem) => void;
@@ -60,7 +65,9 @@ export function SpotCurationQuickModal({
   return (
     <CurationFormModal
       initial={existingCuration ?? undefined}
-      presetSpot={existingCuration ? undefined : { id: spotId, name: spotName, address: spotAddress }}
+      presetSpot={
+        existingCuration ? undefined : { id: spotId, name: spotName, display_name: spotDisplayName, address: spotAddress }
+      }
       onClose={onClose}
       onSaved={onSaved}
     />
