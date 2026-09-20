@@ -435,6 +435,10 @@ async function queryEvents(supabase: Ctx, searchParams: URLSearchParams, page: n
   // [10대 타겟 분류 체계 실제 적용](2026-08-27): category_min과 동일한 필터 관례.
   const targetAudienceFilter = searchParams.get('target_audience');
   const isActive = parseIsActiveFilter(searchParams.get('is_active'));
+  // [스팟 연결 여부 필터](2026-09-20 사용자 지시): "관리자 화면 EVENTS쪽 스팟 연결
+  // 안된거만 확인, 스팟 연결된 것만 확인 등도 가능하게" — is_active와 동일한
+  // tri-state 관례. true=연결됨(space_id NOT NULL), false=연결안됨(space_id IS NULL).
+  const spaceLinked = parseBoolFilter(searchParams.get('space_linked'));
   const isFree = parseBoolFilter(searchParams.get('is_free'));
   const hasParking = parseBoolFilter(searchParams.get('has_parking'));
   const strollerAccessible = parseBoolFilter(searchParams.get('stroller_accessible'));
@@ -467,6 +471,8 @@ async function queryEvents(supabase: Ctx, searchParams: URLSearchParams, page: n
   query = applyMultiValueOrNullFilter(query, 'category_min', categoryMinFilter);
   query = applyMultiValueOrNullFilter(query, 'target_audience', targetAudienceFilter);
   if (isActive !== null) query = query.eq('is_active', isActive);
+  if (spaceLinked === true) query = query.not('space_id', 'is', null);
+  else if (spaceLinked === false) query = query.is('space_id', null);
   if (isFree !== null) query = query.eq('is_free', isFree);
   if (hasParking !== null) query = query.eq('has_parking', hasParking);
   if (strollerAccessible !== null) query = query.eq('stroller_accessible', strollerAccessible);

@@ -743,6 +743,11 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
   // tri-state 필터와 달리 기본값이 'all'이 아니라 'true'다(비활성 만료 데이터가 기본적으로
   // 섞여 나오지 않도록). events 탭에만 의미가 있다(open_spaces에는 is_active 컬럼이 없음).
   const [isActive, setIsActive] = useState<TriState>('true');
+  // [스팟 연결 여부 필터](2026-09-20 사용자 지시): "관리자 화면 EVENTS쪽 스팟 연결
+  // 안된거만 확인, 스팟 연결된 것만 확인 등도 가능하게 조건 좀 만들어줘" — is_active와
+  // 동일한 tri-state 관례(기본값은 'all' — is_active와 달리 기본으로 좁힐 이유가
+  // 없음). events 탭에만 의미가 있다(open_spaces에는 space_id 컬럼 자체가 없음).
+  const [spaceLinked, setSpaceLinked] = useState<TriState>('all');
   // [노출 중분류 미지정만 보기](2026-09-06 사용자 지시): "노출중분류가 null 인거에
   // 대하여 어디서 체크할수있도록 해놓은거야? open_spaces.에 안보이는데?" — 이전에
   // CategoryMappingPanel의 RowPicker에만 이 필터를 넣었는데, 관리자가 실제로
@@ -986,7 +991,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
 
   useEffect(() => {
     setPage(1);
-  }, [debouncedQ, sourceTypes, sources, categories, minClassName, appliedCategoryMin, appliedTargetAudience, isActive, createdFrom, createdTo, updatedFrom, updatedTo]);
+  }, [debouncedQ, sourceTypes, sources, categories, minClassName, appliedCategoryMin, appliedTargetAudience, isActive, spaceLinked, createdFrom, createdTo, updatedFrom, updatedTo]);
 
   // [행사 데이터 수집/정제 파이프라인 및 홈 피드 필터링 개선](2026-08-27) 사용자 지시 4번:
   // [조회하기] 버튼 클릭 시 pending → applied로 한 번에 반영한다 — 이 시점에만 아래 fetch
@@ -1013,6 +1018,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     if (appliedCategoryMin.length > 0) params.set('category_min', appliedCategoryMin.join(','));
     if (tab === 'events' && appliedTargetAudience.length > 0) params.set('target_audience', appliedTargetAudience.join(','));
     if (tab === 'events') params.set('is_active', isActive);
+    if (tab === 'events' && spaceLinked !== 'all') params.set('space_linked', spaceLinked);
     if (tab === 'open_spaces' && onlyUnmapped) params.set('only_unmapped', 'true');
     if (tab === 'open_spaces' && onlyUncurated) params.set('only_uncurated', 'true');
     if (tab !== 'raw_ingest_data' && createdFrom) params.set('created_from', createdFrom);
@@ -1046,7 +1052,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, hasLoaded, debouncedQ, sourceTypes, sources, categories, minClassName, appliedCategoryMin, appliedTargetAudience, isActive, onlyUnmapped, onlyUncurated, createdFrom, createdTo, updatedFrom, updatedTo, page, pageSize]);
+  }, [tab, hasLoaded, debouncedQ, sourceTypes, sources, categories, minClassName, appliedCategoryMin, appliedTargetAudience, isActive, spaceLinked, onlyUnmapped, onlyUncurated, createdFrom, createdTo, updatedFrom, updatedTo, page, pageSize]);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
   const currentOptions = filterOptions[tab];
@@ -1458,6 +1464,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
             {tab === 'events' && (
               <div className="flex flex-wrap gap-x-4 gap-y-2">
                 <TriStateToggle label="✅ 활성 상태(is_active)" value={isActive} onChange={setIsActive} />
+                <TriStateToggle label="📍 스팟 연결(space_id)" value={spaceLinked} onChange={setSpaceLinked} />
               </div>
             )}
 
