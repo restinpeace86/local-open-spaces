@@ -21,6 +21,7 @@ export function SpotCurationQuickModal({
   spotAddress,
   onClose,
   onSaved,
+  onDisplayNameUpdated,
 }: {
   spotId: string;
   spotName: string;
@@ -31,6 +32,13 @@ export function SpotCurationQuickModal({
   spotAddress: string | null;
   onClose: () => void;
   onSaved: (item: SpotCurationItem) => void;
+  // [실사용 버그 제보](2026-09-20 사용자 지시, "편백회관 장곡점" 사례): 이 모달이
+  // 스팟 큐레이션 저장과 함께 open_spaces.display_name도 반영하는데, 그 사실을
+  // open_spaces 상세 모달(RawDataModal)의 SpotDisplayNameEditor는 모른 채로 있었다
+  // — 이미 열려 있던 화면의 로컬 state(rows/selectedRow)가 새 값을 모르니 다시
+  // 열어도 예전 값이 보였다. onServiceCategoryUpdated(BlogCurationModal)와 동일한
+  // 관례로, 저장된 최신 display_name을 부모(raw-data-modal.tsx)에 직접 알린다.
+  onDisplayNameUpdated?: (id: string, nextDisplayName: string | null) => void;
 }) {
   // undefined = 조회 중, null = 큐레이션 없음(신규 등록), 객체 = 기존 큐레이션(수정).
   const [existingCuration, setExistingCuration] = useState<SpotCurationItem | null | undefined>(undefined);
@@ -69,7 +77,10 @@ export function SpotCurationQuickModal({
         existingCuration ? undefined : { id: spotId, name: spotName, display_name: spotDisplayName, address: spotAddress }
       }
       onClose={onClose}
-      onSaved={onSaved}
+      onSaved={(item) => {
+        onDisplayNameUpdated?.(item.spot_id, item.open_spaces?.display_name ?? null);
+        onSaved(item);
+      }}
     />
   );
 }

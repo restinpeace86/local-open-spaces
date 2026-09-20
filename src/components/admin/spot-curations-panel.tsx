@@ -516,6 +516,7 @@ export function CurationFormModal({
       // 아닌 open_spaces 컬럼이라 별도 API 호출이 필요하다 — 실패해도 방금 성공한
       // 큐레이션 저장 자체를 실패로 되돌리지 않는다(제5장 제11조 오류 처리 원칙).
       const trimmedDisplayName = displayName.trim();
+      const effectiveDisplayName = trimmedDisplayName || null;
       if (trimmedDisplayName !== initialDisplayName.trim()) {
         try {
           await fetch('/api/admin/data-grid/display-name', {
@@ -526,6 +527,16 @@ export function CurationFormModal({
         } catch {
           // 위 주석 참고 — 조용히 무시.
         }
+      }
+
+      // [실사용 버그 제보](2026-09-20 사용자 지시, "편백회관 장곡점" 사례): "스팟큐레이션에서
+      // 노출이름 수정되었는데.. 창닫고 다시열어도 그 상세페이지의 노출이름 수동수정쪽은
+      // 그대로 있던데" — DB 반영 자체는 정상이었지만(위 PATCH), data.item.open_spaces는
+      // 그 PATCH 이전(스팟 큐레이션 저장 응답) 시점의 스냅샷이라 새 display_name을 몰랐다.
+      // onSaved로 넘기기 전에 방금 반영한 값으로 보정해야 이 값을 구독하는 화면(open_spaces
+      // 상세 모달의 SpotDisplayNameEditor 등)이 최신 값을 받는다.
+      if (data.item.open_spaces) {
+        data.item = { ...data.item, open_spaces: { ...data.item.open_spaces, display_name: effectiveDisplayName } };
       }
 
       onSaved(data.item);

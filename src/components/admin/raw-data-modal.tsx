@@ -1347,6 +1347,7 @@ export function RawDataModal({
           spotAddress={(row as AdminOpenSpaceRow).address}
           onClose={() => setIsSpotCurationModalOpen(false)}
           onSaved={() => setIsSpotCurationModalOpen(false)}
+          onDisplayNameUpdated={onDisplayNameUpdated}
         />
       )}
 

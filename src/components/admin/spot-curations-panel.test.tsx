@@ -618,6 +618,68 @@ describe('SpotCurationsPanel — 노출 이름 자동 채움(2026-09-20)', () =>
     });
     expect(fetchMock.mock.calls.some((c) => (c[0] as string).includes('/api/admin/data-grid/display-name'))).toBe(false);
   });
+
+  // [실사용 버그 제보](2026-09-20 사용자 지시, "편백회관 장곡점" 사례): "스팟큐레이션에서
+  // 노출이름 수정되었는데.. 창닫고 다시열어도 그 상세페이지의 노출이름 수동수정쪽은
+  // 그대로 있던데" — 스팟 큐레이션 저장 응답(open_spaces 조인)은 display_name PATCH
+  // 이전 시점 스냅샷이라 방금 바꾼 값을 모른다. 저장 직후 같은 행을 다시 열었을 때
+  // 방금 저장한 노출 이름이 프리필돼야 한다(보정 없이는 예전 값이 다시 보였을 것).
+  it('저장 직후 서버 응답이 예전 display_name을 담고 있어도, 다시 열면 방금 저장한 노출 이름이 프리필된다', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/api/admin/spot-curations/naver-crawl')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+      }
+      if (url.includes('/api/admin/data-grid/display-name')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ row: {} }) } as Response);
+      }
+      if (url.includes('/api/admin/data-grid')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ rows: [{ id: 'spot-1', name: '장우랑 & 양주회센터', address: '경기도 양주시' }], total: 1 }),
+        } as Response);
+      }
+      if (url.includes('/api/admin/spot-curations') && init?.method === 'POST') {
+        // 서버가 스팟 큐레이션 저장 시점에 함께 내려주는 open_spaces 조인은 그 이후에
+        // 벌어지는 display-name PATCH를 아직 모른다 — 일부러 예전 값(원본 상호명)을
+        // 그대로 응답에 담아 실제 버그 상황을 재현한다.
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              item: {
+                id: 'curation-1',
+                spot_id: 'spot-1',
+                is_active: true,
+                menu_items: [],
+                curation_badges: [],
+                created_at: '2026-09-20T00:00:00.000Z',
+                updated_at: '2026-09-20T00:00:00.000Z',
+                open_spaces: { name: '장우랑 & 양주회센터', display_name: null, address: '경기도 양주시', category: 'INDOOR_PLAYGROUND' },
+              },
+            }),
+        } as Response);
+      }
+      if (url.includes('/api/admin/spot-curations')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [] }) } as Response);
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<SpotCurationsPanel />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await waitFor(() => expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByText('장우랑 & 양주회센터'));
+    await screen.findByText('+ 스팟 큐레이션 등록');
+
+    fireEvent.change(screen.getByLabelText(/노출 이름/), { target: { value: '장우랑 놀이방' } });
+    fireEvent.click(screen.getByText('등록하기'));
+
+    await screen.findByText('큐레이션됨');
+    fireEvent.click(screen.getByText('장우랑 & 양주회센터'));
+
+    expect(await screen.findByText('스팟 큐레이션 수정')).toBeInTheDocument();
+    expect(screen.getByLabelText(/노출 이름/)).toHaveValue('장우랑 놀이방');
+  });
 });
 
 // [노출중분류 있는것/없는것 따로 보기](2026-09-06 사용자 지시): "스팟 큐레이션 탭에
