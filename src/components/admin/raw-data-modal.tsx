@@ -307,6 +307,61 @@ function TargetAudienceEditor({
   );
 }
 
+// [실사용 버그 제보](2026-09-20 사용자 지시, 마포구 망원한강공원 서울형키즈카페 사례):
+// "이게 서울형키즈카페인데.. 그냥 장소로 들어왔네.. 이게 제목으로 보이면 안되는데" —
+// title이 원본 API 필드(SVCNM)를 그대로 옮겨 담을 뿐이라 코드로는 고칠 수 없는 원천
+// 데이터 품질 문제였다(조사 완료). events.title은 재수집 시 안전 병합이 이미 채워진
+// 값을 보호하므로(위 카테고리/실내야외 에디터와 동일한 안전장치), 여기서 한 번
+// 고쳐두면 다음 재수집에도 그대로 유지된다 — events 탭 전용(open_spaces의 name은
+// 이번 제보 범위 밖).
+function TitleEditor({ row, onUpdated }: { row: AdminEventRow; onUpdated: (id: string, nextTitle: string) => void }) {
+  const [value, setValue] = useState(row.title);
+  const [isSaving, setIsSaving] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setErrorMessage(null);
+    try {
+      const res = await fetch('/api/admin/data-grid/title', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: row.id, title: value }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error ?? '제목 수동 수정 실패');
+      onUpdated(row.id, json.row.title);
+    } catch (err) {
+      setErrorMessage(err instanceof Error ? err.message : '제목 수동 수정 실패');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <div className="mt-3 rounded-xl border border-gray-200 p-3">
+      <h3 className="text-xs font-semibold text-gray-500 mb-2">제목(title) 수동 수정</h3>
+      <div className="flex items-center gap-2">
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          className="rounded-lg border border-gray-300 px-2 py-1.5 text-xs flex-1"
+        />
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={isSaving || !value.trim()}
+          className="rounded-full bg-purple-600 text-white text-xs font-semibold px-3 py-1.5 disabled:opacity-40 hover:bg-purple-700"
+        >
+          {isSaving ? '저장 중...' : '제목 저장'}
+        </button>
+      </div>
+      {errorMessage && <p className="mt-1.5 text-xs text-red-500">{errorMessage}</p>}
+    </div>
+  );
+}
+
 // [facility_type 기본값 결함 수정](2026-09-19 사용자 지시): "default를 복합으로
 // 한게 잘못된거야.. unknown 혹은 null로 놔야돼" — facility_type이 nullable로
 // 바뀌어(scripts/migrations/2026-09-19-facility-type-nullable-remove-default.sql)
@@ -624,6 +679,7 @@ export function RawDataModal({
   onCategoryMinUpdated,
   onTargetAudienceUpdated,
   onFacilityTypeUpdated,
+  onTitleUpdated,
   onOperatingScheduleUpdated,
   onLocationUpdated,
   onSpaceLinkUpdated,
@@ -644,6 +700,8 @@ export function RawDataModal({
   onTargetAudienceUpdated?: (id: string, nextTargetAudience: string | null, nextSource: string | null) => void;
   // [실내/야외 분류 LLM 파이프라인](2026-09-17 사용자 지시): events 탭 전용.
   onFacilityTypeUpdated?: (id: string, nextFacilityType: string | null) => void;
+  // [실사용 버그 제보](2026-09-20 사용자 지시): events 탭 전용, 제목(title) 수동 수정.
+  onTitleUpdated?: (id: string, nextTitle: string) => void;
   // [운영 요일/반복 규칙](2026-09-12 사용자 지시): events 탭 전용. 편집기 자체는
   // [블로그 큐레이션 모달로 이동](2026-09-12 사용자 지시)에 따라 EventBlogCurationModal
   // 안으로 옮겨졌고, 이 콜백은 그 모달에 그대로 전달돼 저장 결과를 이 화면의 행
@@ -808,6 +866,8 @@ export function RawDataModal({
           {table === 'events' && onFacilityTypeUpdated && (
             <FacilityTypeEditor row={row as AdminEventRow} onUpdated={onFacilityTypeUpdated} />
           )}
+
+          {table === 'events' && onTitleUpdated && <TitleEditor row={row as AdminEventRow} onUpdated={onTitleUpdated} />}
 
           {table === 'events' && onLocationUpdated && <LocationEditor row={row as AdminEventRow} onUpdated={onLocationUpdated} />}
 

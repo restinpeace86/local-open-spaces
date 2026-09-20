@@ -1168,3 +1168,95 @@ describe('RawDataModal — 실내/야외 자동 분류(FacilityTypeEditor, 2026-
     expect(JSON.parse((patchCall![1] as RequestInit).body as string)).toEqual({ id: 'row-1', facility_type: '실내' });
   });
 });
+
+// [실사용 버그 제보](2026-09-20 사용자 지시, 마포구 망원한강공원 서울형키즈카페 사례):
+// "이게 서울형키즈카페인데.. 그냥 장소로 들어왔네.. 이게 제목으로 보이면 안되는데" —
+// 원인 조사 결과 title은 원본 API 필드(SVCNM)를 그대로 옮겨 담을 뿐이라 코드로 고칠 수
+// 없는 원천 데이터 품질 문제였다. 관리자가 직접 바로잡을 수 있는 TitleEditor를 검증한다.
+describe('RawDataModal — 제목(title) 수동 수정(TitleEditor, 2026-09-20)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function mockTitleFetch(handlers: { saveOk?: boolean }) {
+    return vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/api/admin/data-grid/title')) {
+        if (handlers.saveOk === false) {
+          return Promise.resolve({ ok: false, json: () => Promise.resolve({ error: '저장 실패' }) } as Response);
+        }
+        const body = JSON.parse(init!.body as string);
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ row: { id: body.id, title: body.title } }) } as Response);
+      }
+      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+    });
+  }
+
+  it('입력값을 바꾸고 "제목 저장"을 누르면 title을 PATCH하고 onTitleUpdated를 호출한다', async () => {
+    const fetchMock = mockTitleFetch({});
+    vi.stubGlobal('fetch', fetchMock);
+    const onTitleUpdated = vi.fn();
+    const row = { ...buildRow(), id: 'row-1', title: '마포구 망원한강공원' };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        onClose={vi.fn()}
+        onTitleUpdated={onTitleUpdated}
+      />
+    );
+
+    const input = screen.getByDisplayValue('마포구 망원한강공원');
+    fireEvent.change(input, { target: { value: '망원한강공원 서울형키즈카페' } });
+    fireEvent.click(screen.getByText('제목 저장'));
+
+    await waitFor(() => expect(onTitleUpdated).toHaveBeenCalledWith('row-1', '망원한강공원 서울형키즈카페'));
+    const patchCall = fetchMock.mock.calls.find(
+      (c) => (c[0] as string).includes('/api/admin/data-grid/title') && (c[1] as RequestInit)?.method === 'PATCH'
+    );
+    expect(JSON.parse((patchCall![1] as RequestInit).body as string)).toEqual({
+      id: 'row-1',
+      title: '망원한강공원 서울형키즈카페',
+    });
+  });
+
+  it('빈 값이면 저장 버튼이 비활성화된다(제목은 비울 수 없음)', () => {
+    vi.stubGlobal('fetch', mockTitleFetch({}));
+    const row = { ...buildRow(), id: 'row-1', title: '마포구 망원한강공원' };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        onClose={vi.fn()}
+        onTitleUpdated={vi.fn()}
+      />
+    );
+
+    fireEvent.change(screen.getByDisplayValue('마포구 망원한강공원'), { target: { value: '   ' } });
+    expect(screen.getByText('제목 저장')).toBeDisabled();
+  });
+
+  it('저장 실패 시 에러 메시지를 보여준다', async () => {
+    vi.stubGlobal('fetch', mockTitleFetch({ saveOk: false }));
+    const row = { ...buildRow(), id: 'row-1', title: '마포구 망원한강공원' };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        onClose={vi.fn()}
+        onTitleUpdated={vi.fn()}
+      />
+    );
+
+    fireEvent.click(screen.getByText('제목 저장'));
+    expect(await screen.findByText('저장 실패')).toBeInTheDocument();
+  });
+
+  it('onTitleUpdated가 없으면(open_spaces 탭 등) 에디터를 렌더링하지 않는다', () => {
+    const row = { ...buildRow(), id: 'row-1', title: '마포구 망원한강공원' };
+    render(<RawDataModal table="events" row={row as unknown as AdminEventRow} categoryMinOptions={[]} onClose={vi.fn()} />);
+    expect(screen.queryByText('제목(title) 수동 수정')).not.toBeInTheDocument();
+  });
+});

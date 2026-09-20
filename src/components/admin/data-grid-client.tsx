@@ -1842,6 +1842,10 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
             setRows((prev) => prev.map((row) => ('id' in row && row.id === id ? { ...row, facility_type: nextFacilityType } : row)));
             setSelectedRow((prev) => (prev && 'id' in prev && prev.id === id ? { ...prev, facility_type: nextFacilityType } : prev));
           }}
+          onTitleUpdated={(id, nextTitle) => {
+            setRows((prev) => prev.map((row) => ('id' in row && row.id === id ? { ...row, title: nextTitle } : row)));
+            setSelectedRow((prev) => (prev && 'id' in prev && prev.id === id ? { ...prev, title: nextTitle } : prev));
+          }}
           onOperatingScheduleUpdated={(id, nextOperatingWeekdays, nextExcludedWeekdays, nextOperatingNthWeekdays) => {
             setRows((prev) =>
               prev.map((row) =>
