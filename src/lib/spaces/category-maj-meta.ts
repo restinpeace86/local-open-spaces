@@ -42,7 +42,11 @@ export const CATEGORY_MAJ_OPTIONS: CategoryMajOption[] = [
   // "0건 중분류 제외" 로직으로 바텀시트에서 자연히 숨겨진다. 이 taxonomy 목록 자체는
   // 스팟픽(open_spaces 탐색) 화면에서 여전히 쓰이므로 값은 그대로 둔다.
   { maj: '자연 / 캠핑', emoji: '🏕️', color: '#16a34a', minorCategories: ['캠핑장', '산림여가', '공원탐방'] },
-  { maj: '키즈놀이터', emoji: '🧸', color: '#f59e0b', minorCategories: ['공공키즈카페', '어린이실내놀이터', '키즈카페'] },
+  // [여기저기/일반 서울형키즈카페 구분](2026-09-20 사용자 지시): '서울형키즈카페'
+  // (한강공원/근린공원 등 공원형 팝업 "여기저기" 30개소)를 '공공키즈카페'(동네
+  // 상설 지점망 "일반")와 같은 대분류(키즈놀이터)로 추가한다 — scripts/ingest/lib/
+  // category-maj-taxonomy.mjs의 CATEGORY_MAJ_OF와 반드시 동일하게 유지(위 지침).
+  { maj: '키즈놀이터', emoji: '🧸', color: '#f59e0b', minorCategories: ['공공키즈카페', '어린이실내놀이터', '키즈카페', '서울형키즈카페'] },
   {
     maj: '체험 / 농장',
     emoji: '🌱',

@@ -258,6 +258,52 @@ describe('SeoulYeyakAdapter', () => {
     });
   });
 
+  // [여기저기/일반 서울형키즈카페 구분](2026-09-20 사용자 지시): "여기저기 서울형키즈카페랑
+  // 일반키즈카페랑 기준 다른건 알지?" — MINCLASSNM만으로는 두 서브타입을 구분할 수 없어
+  // (둘 다 '서울형키즈카페'로 동일, 실측 확인) 사용자가 제시한 공식 30개소 명단으로
+  // 분류한다. 제목에 "키즈카페" 포함 여부는 신뢰할 수 없다(서울식물원/오목공원 반례).
+  describe('transformSplit — 여기저기/일반 서울형키즈카페 구분(2026-09-20 수정)', () => {
+    it('공식 30개소 명단에 있는 장소명이면 category_min을 서울형키즈카페(여기저기)로 유지한다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const item = { ...BASE_ITEM, MAXCLASSNM: '체육시설', MINCLASSNM: '서울형키즈카페', SVCNM: '마포구 망원한강공원' };
+      const [row] = adapter.transformSplit([item]).events;
+      expect(row.category_min).toBe('서울형키즈카페');
+      expect(row.category_min_source).toBe('RAW');
+    });
+
+    it('명단에 없는 동네 상설 지점명이면 category_min을 공공키즈카페(일반)로 분류한다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const item = {
+        ...BASE_ITEM,
+        MAXCLASSNM: '체육시설',
+        MINCLASSNM: '서울형키즈카페',
+        SVCNM: '서울형 키즈카페 강동구 상일2동점(아이·맘 강동)',
+      };
+      const [row] = adapter.transformSplit([item]).events;
+      expect(row.category_min).toBe('공공키즈카페');
+      expect(row.category_min_source).toBe('RAW');
+    });
+
+    it('제목에 "키즈카페"가 있어도 공식 명단에 있으면(예외 케이스) 여기저기로 분류한다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const item = {
+        ...BASE_ITEM,
+        MAXCLASSNM: '체육시설',
+        MINCLASSNM: '서울형키즈카페',
+        SVCNM: '서울형 키즈카페 시립 서울식물원점',
+      };
+      const [row] = adapter.transformSplit([item]).events;
+      expect(row.category_min).toBe('서울형키즈카페');
+    });
+
+    it('MINCLASSNM이 서울형키즈카페가 아니면 이 구분 로직과 무관하게 기존처럼 RAW로 그대로 태깅한다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const item = { ...BASE_ITEM, MAXCLASSNM: '문화체험', MINCLASSNM: '교육체험' };
+      const [row] = adapter.transformSplit([item]).events;
+      expect(row.category_min).toBe('교육체험');
+    });
+  });
+
   // [원천 필드 직접 반영](2026-09-18 사용자 지시): "USETGTINFO: 성인으로 되어있는거는
   // 연령 ADULT로 자동으로 박아줘".
   describe('transformSplit — USETGTINFO 원천 필드 직접 반영(target_audience)', () => {
