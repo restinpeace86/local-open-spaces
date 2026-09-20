@@ -1,5 +1,6 @@
 'use server';
 
+import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
 
 // [나드리픽 파트너 PMS — 일간 뷰](2026-09-20 사용자 지시): "예약 상태를 변경할 수
@@ -26,6 +27,62 @@ export async function updateBookingStatus(bookingId: string, status: BookingStat
 
   const { error } = await supabase.from('bookings').update({ status }).eq('id', bookingId);
   if (error) return { error: error.message };
+
+  return { success: true };
+}
+
+// [나드리픽 파트너 PMS — 수기 예약 등록](2026-09-20 사용자 지시): "파트너가 직접
+// 전화/방문 예약을 등록할 수 있는 기능". source는 항상 'nadripik'(수기 등록 자체가
+// 네이버 예약이 아니라는 뜻), status는 항상 'confirmed'로 고정한다(요구사항 원문).
+export type CreateBookingInput = {
+  customer_name: string;
+  customer_phone: string;
+  booking_date: string; // "YYYY-MM-DD"
+  booking_time: string; // "HH:MM"
+  headcount: number;
+  memo: string | null;
+};
+
+export type CreateBookingResult = { error: string } | { success: true };
+
+function isBlank(value: string): boolean {
+  return value.trim().length === 0;
+}
+
+export async function createBooking(input: CreateBookingInput): Promise<CreateBookingResult> {
+  if (isBlank(input.customer_name)) return { error: '예약자명을 입력해 주세요.' };
+  if (isBlank(input.customer_phone)) return { error: '연락처를 입력해 주세요.' };
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.booking_date)) return { error: '예약 날짜를 선택해 주세요.' };
+  if (!/^\d{2}:\d{2}$/.test(input.booking_time)) return { error: '예약 시간을 선택해 주세요.' };
+  if (!Number.isInteger(input.headcount) || input.headcount < 1) return { error: '방문 인원은 1명 이상이어야 합니다.' };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: '로그인이 필요합니다.' };
+
+  const { error } = await supabase.from('bookings').insert({
+    // [멀티 테넌시](spec.md 4절): "세션의 auth.uid()를 추출하여 partner_id로 자동
+    // 주입" — 클라이언트가 partner_id를 보낼 수 없게 애초에 입력 타입에서 뺐다.
+    partner_id: user.id,
+    customer_name: input.customer_name.trim(),
+    customer_phone: input.customer_phone.trim(),
+    booking_date: input.booking_date,
+    booking_time: `${input.booking_time}:00`,
+    headcount: input.headcount,
+    source: 'nadripik',
+    status: 'confirmed',
+    memo: input.memo?.trim() || null,
+  });
+  if (error) return { error: error.message };
+
+  // [즉시 새로고침](요구사항 3): 일간 뷰가 이 액션과 별도로 서버에서 매번 새로
+  // 조회하는 동적 라우트이긴 하지만, "Revalidate"를 명시적으로 지시받았으므로
+  // 캐시 계층과 무관하게 확실히 무효화한다 — 실제 화면 갱신은 클라이언트 쪽에서
+  // 이어서 호출하는 router.refresh()가 담당한다(BookingCard의 상태 변경과 동일한
+  // 관례).
+  revalidatePath('/partner/today');
 
   return { success: true };
 }

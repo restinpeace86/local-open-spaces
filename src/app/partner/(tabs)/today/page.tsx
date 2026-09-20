@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { todayKstDateString } from '@/lib/partner/date';
 import { DailyDateNav } from '@/components/partner/daily-date-nav';
 import { BookingCard } from '@/components/partner/booking-card';
+import { AddBookingFab } from '@/components/partner/add-booking-fab';
 
 // [나드리픽 파트너 PMS — 일간 뷰](2026-09-20 사용자 지시, docs/partner_spec.md 5절):
 // "[⏰ 오늘(일간)] (기본 홈 디폴트: 시간대별 타임스케줄)". Phase 1 스텁을 실제 데이터
@@ -36,6 +37,10 @@ export default async function PartnerTodayPage({ searchParams }: { searchParams:
           bookings.map((booking) => <BookingCard key={booking.id} booking={booking} />)
         )}
       </div>
+      {/* [수기 예약 등록](2026-09-20 사용자 지시): 기본 날짜는 "일간 뷰에서 현재
+          보고 있던 날짜"(요구사항 2) — 지금 이 페이지가 보여주는 date를 그대로
+          넘긴다. */}
+      <AddBookingFab defaultDate={date} />
     </div>
   );
 }
