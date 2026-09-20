@@ -789,27 +789,44 @@ export type Database = {
       }
       partners: {
         Row: {
+          address: string | null
           created_at: string
           farm_name: string
           id: string
+          image_url: string | null
           owner_name: string
           phone: string
+          spot_id: string | null
         }
         Insert: {
+          address?: string | null
           created_at?: string
           farm_name: string
           id: string
+          image_url?: string | null
           owner_name: string
           phone: string
+          spot_id?: string | null
         }
         Update: {
+          address?: string | null
           created_at?: string
           farm_name?: string
           id?: string
+          image_url?: string | null
           owner_name?: string
           phone?: string
+          spot_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "partners_spot_id_fkey"
+            columns: ["spot_id"]
+            isOneToOne: false
+            referencedRelation: "open_spaces"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       pipeline_logs: {
         Row: {
