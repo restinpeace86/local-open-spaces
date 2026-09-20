@@ -1292,6 +1292,18 @@ export function SpotCurationsPanel() {
                             미등록
                           </span>
                         )}
+                        {/* [스팟 큐레이션 네이버 플레이스 ID 저장](2026-09-20 사용자
+                            지시): "관리자 화면에 '미연동' 표시만 추가" — 이미 큐레이션은
+                            있지만 naver_place_id가 없는 스팟은 1주일 온디맨드 재크롤링
+                            (checkAndRefreshSpotCuration)이 전혀 동작하지 않는다는 뜻이라
+                            관리자가 우선순위를 잡아 재크롤링할 수 있도록 눈에 띄게 표시한다.
+                            아직 큐레이션 자체가 없는(미등록) 행에는 표시하지 않는다 —
+                            "연동이 끊긴" 게 아니라 애초에 아무것도 없는 정상 상태다. */}
+                        {curation && !curation.open_spaces?.naver_place_id && (
+                          <span className="mr-1.5 inline-block align-middle text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                            🔗 네이버 미연동
+                          </span>
+                        )}
                         {/* [노출중분류 있는것/없는것 따로 보기](2026-09-06 사용자
                             지시): 필터로 걸러 보는 것과 별개로, 행 하나하나에도
                             바로 눈에 띄게 표시한다. */}

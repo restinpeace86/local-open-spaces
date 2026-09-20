@@ -808,6 +808,68 @@ describe('SpotCurationsPanel — 네이버 플레이스 ID 저장/표시(2026-09
     expect(await screen.findByText(/이미 연동된 네이버 플레이스\(ID: 1419884543\)/)).toBeInTheDocument();
     expect(screen.getByPlaceholderText(/map\.naver\.com/)).toHaveValue('https://pcmap.place.naver.com/restaurant/1419884543/home');
   });
+
+  // [스팟 큐레이션 네이버 플레이스 ID 저장](2026-09-20 사용자 지시): "관리자 화면에
+  // '미연동' 표시만 추가" — DB 실측 확인 결과 이미 큐레이션된 372건 중 371건이
+  // naver_place_id 없이 남아 있어, 1주일 온디맨드 재크롤링(checkAndRefreshSpotCuration)이
+  // 그 스팟들에는 전혀 동작하지 않고 있었다. 관리자가 우선순위를 잡을 수 있도록
+  // 목록에서 눈에 띄게 표시한다.
+  it('이미 큐레이션됐지만 네이버 플레이스가 연동 안 된 스팟은 "🔗 네이버 미연동" 뱃지를 보여준다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      mockFetchByUrl({
+        dataGrid: {
+          rows: [
+            { id: 'spot-1', name: '연동 안 된 식당', address: '서울' },
+            { id: 'spot-2', name: '연동된 식당', address: '서울' },
+            { id: 'spot-3', name: '미등록 식당', address: '서울' },
+          ],
+          total: 3,
+        },
+        curations: {
+          items: [
+            {
+              id: 'curation-1',
+              spot_id: 'spot-1',
+              is_active: true,
+              menu_items: [],
+              curation_badges: [],
+              created_at: '2026-09-01T00:00:00.000Z',
+              updated_at: '2026-09-01T00:00:00.000Z',
+              open_spaces: { name: '연동 안 된 식당', display_name: null, address: '서울', category: 'RESTAURANT', naver_place_id: null },
+            },
+            {
+              id: 'curation-2',
+              spot_id: 'spot-2',
+              is_active: true,
+              menu_items: [],
+              curation_badges: [],
+              created_at: '2026-09-01T00:00:00.000Z',
+              updated_at: '2026-09-01T00:00:00.000Z',
+              open_spaces: {
+                name: '연동된 식당',
+                display_name: null,
+                address: '서울',
+                category: 'RESTAURANT',
+                naver_place_id: '1107293125',
+              },
+            },
+          ],
+        },
+      })
+    );
+    render(<SpotCurationsPanel />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await waitFor(() => expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument());
+
+    await screen.findByText('연동 안 된 식당');
+    // "연동 안 된 식당" 행에만 뱃지가 붙고, 이미 연동된 행과 아직 미등록(큐레이션
+    // 자체가 없는) 행에는 붙지 않는다.
+    expect(screen.getAllByText('🔗 네이버 미연동')).toHaveLength(1);
+    expect(screen.getByText('연동 안 된 식당').closest('li')).toHaveTextContent('🔗 네이버 미연동');
+    expect(screen.getByText('연동된 식당').closest('li')).not.toHaveTextContent('🔗 네이버 미연동');
+    expect(screen.getByText('미등록 식당').closest('li')).not.toHaveTextContent('🔗 네이버 미연동');
+  });
 });
 
 // [노출중분류 있는것/없는것 따로 보기](2026-09-06 사용자 지시): "스팟 큐레이션 탭에
