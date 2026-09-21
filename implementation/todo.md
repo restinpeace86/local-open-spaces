@@ -25,3 +25,33 @@
 
 수정이 필요한 파일 경로와 구체적인 수정 방향을 리스트업해 줘.
 
+[개선사항 2] 
+네이버 예약 데이터를 자동 수집하여 우리 PMS(Supabase + PostgreSQL) DB에 동기화하는 백그라운드 봇을 구현하려고해. 아래 조건과 DB 구조를 반영해서 코드를 작성해줘.
+
+기술 스택: Node.js, TypeScript, Playwright, Supabase Client (@supabase/supabase-js)
+
+작동 방식:
+
+공용 스프레드/스태프 계정 세션 쿠키를 주입하여 로그인 과정을 생략하고 예약 관리 페이지로 진입.
+
+등록된 여러 업체의 비즈니스 ID(bizes_id) 목록을 순회(Loop)하며 예약 데이터를 스크래핑.
+
+중복 저장을 방지하기 위해 예약 번호(또는 고유 식별값)를 기준으로 Supabase DB에 Upsert(있으면 업데이트, 없으면 삽입) 처리.
+
+예상되는 Supabase DB 테이블 구조 (reservations):
+
+id (uuid, PK)
+
+business_id (text, 연동된 농장/업체 식별자)
+
+naver_reservation_id (text, 네이버 고유 예약 번호 - 중복 방지 키)
+
+guest_name (text, 예약자명)
+
+reservation_date (timestamptz, 이용 일시)
+
+status (text, 예약 상태: 확정, 취소 등)
+
+raw_data (jsonb, 파싱된 전체 원본 데이터 보관)
+
+updated_at (timestamptz)
