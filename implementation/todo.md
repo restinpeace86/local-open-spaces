@@ -25,7 +25,12 @@
 
 수정이 필요한 파일 경로와 구체적인 수정 방향을 리스트업해 줘.
 
-### ✅ [개선사항 1] 완료 (2026-09-21)
+### ✅ [개선사항 1] 완료 (2026-09-21) — 후속 외부 점검 리스트 추가
+외부 벤더 대시보드 점검 리스트: `implementation/2026-09-21-domain-migration-
+external-checklist.md` 참고(요약: 반드시 확인해야 하는 건 Supabase Auth
+Redirect URLs 화이트리스트와 Kakao Developers Web 플랫폼 도메인 등록 2곳).
+
+
 전체 코드베이스 감사 결과 및 적용한 변경 사항: `implementation/2026-09-21-
 custom-domain-migration-audit.md` 참고. 요약 — 하드코딩된 `.vercel.app`/
 `localhost`는 없었고(OAuth 리다이렉트도 이미 `window.location.origin` 기반이라
