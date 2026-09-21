@@ -13,7 +13,19 @@
 
 ---
 
-[개선사항 1] 클라우드플레어 이메일 라우팅과 워커를 통해 *@nadri-pick.com으로 수신된 모든 메일을 Next.js 백엔드로 전달하는 웹훅 엔드포인트를 구현하려고 해.
+
+[개선사항 1] 현재 Next.js 프로젝트의 도메인을 `vercel.app`에서 커스텀 도메인 `https://nadri-pick.com`으로 변경하려고 해. 
+이 작업과 관련해서 프로젝트 코드베이스 전체를 스캔하고 수정해야 할 부분을 파악해 줘.
+
+[체크해 줬으면 하는 내용]
+1. 코드 내에 하드코딩되어 있는 기존 도메인(`vercel.app` 등)이나 `localhost` 주소가 있는지 검색해 줘.
+2. Next.js App Router 메타데이터 설정(예: `metadataBase` 또는 OG 태그) 중 도메인 변경이 필요한 부분이 있는지 확인해 줘.
+3. 환경 변수 파일(`.env.example` 등)에 추가하거나 수정해야 할 도메인 관련 환경 변수가 있는지 점검해 줘.
+4. 그 외에 API 라우트나 백엔드 로직 중 도메인 주소에 의존하는 코드가 있는지 검토해 줘.
+
+수정이 필요한 파일 경로와 구체적인 수정 방향을 리스트업해 줘.
+
+[개선사항 2] 클라우드플레어 이메일 라우팅과 워커를 통해 *@nadri-pick.com으로 수신된 모든 메일을 Next.js 백엔드로 전달하는 웹훅 엔드포인트를 구현하려고 해.
 Next.js App Router 환경(`app/api/webhooks/email/route.ts`)에 맞게 POST API 핸들러를 작성해 줘.
 
 [요구사항]
@@ -27,18 +39,7 @@ Next.js App Router 환경(`app/api/webhooks/email/route.ts`)에 맞게 POST API 
 3. 파싱된 이메일 데이터를 Supabase DB에 저장하거나 콘솔에 로깅하는 기본 비즈니스 로직 구조를 포함해 줘.
 
 4. TypeScript 타입 정의와 예외 처리(try/catch 및 적절한 응답 코드 반환)를 견고하게 짜 줘.
-
-[개선사항 2] 현재 Next.js 프로젝트의 도메인을 `vercel.app`에서 커스텀 도메인 `https://nadri-pick.com`으로 변경하려고 해. 
-이 작업과 관련해서 프로젝트 코드베이스 전체를 스캔하고 수정해야 할 부분을 파악해 줘.
-
-[체크해 줬으면 하는 내용]
-1. 코드 내에 하드코딩되어 있는 기존 도메인(`vercel.app` 등)이나 `localhost` 주소가 있는지 검색해 줘.
-2. Next.js App Router 메타데이터 설정(예: `metadataBase` 또는 OG 태그) 중 도메인 변경이 필요한 부분이 있는지 확인해 줘.
-3. 환경 변수 파일(`.env.example` 등)에 추가하거나 수정해야 할 도메인 관련 환경 변수가 있는지 점검해 줘.
-4. 그 외에 API 라우트나 백엔드 로직 중 도메인 주소에 의존하는 코드가 있는지 검토해 줘.
-
-수정이 필요한 파일 경로와 구체적인 수정 방향을 리스트업해 줘.
-
+5. 
 [개선사항 3] Next.js App Router 환경에서 클라우드플레어 이메일 워커(Cloudflare Email Worker)가 보내는 웹훅(POST 요청)을 받아 처리할 API 엔드포인트(`app/api/webhooks/email/route.ts`)를 개발해 주세요.
 
 ### 📋 요구사항 및 명세:
