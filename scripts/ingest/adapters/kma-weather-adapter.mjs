@@ -27,6 +27,7 @@ import { settleGroupFetches } from '../lib/settle-group-fetches.mjs';
 import { createAdminClient } from '../lib/supabase-admin.mjs';
 import { loadEnv } from '../../lib/load-env.mjs';
 import { getMissingEnvVars, formatMissingEnvVarsMessage } from '../lib/env-precheck.mjs';
+import { isNorthernRegionSpot } from '../lib/province-region.mjs';
 
 const BASE_URL = 'https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0';
 const SOURCE_KEY = 'KMA_WEATHER';
@@ -247,6 +248,20 @@ function toSpot(row) {
 
 const PAGE_SIZE = 1000;
 
+// [기상청 API 일일 할당량 초과 — 북부 지역으로 범위 축소](2026-09-21 사용자 지시)
+// "api 트래픽 한도 관련 10000건으로 보고 더 줄여보자 스팟을 일단 서울 경기 강원
+// 쪽하고 그 아래까지 해서 북부쪽으로 해봐." 8회→4회 감축(같은 날 앞선 조치)만으로도
+// 여전히 하루 약 15,784건이 필요해 잔여 위험으로 고지했던 부분을 마저 줄인다.
+// 실측(2026-09-21, 운영 DB 직접 조회): 전국 EXACT 스팟 140,757건 중 북부(서울/인천/
+// 경기/강원/충북/충남/대전/세종) 86,667건, 남부 53,223건, 판별 불가(주소 이상값) 867건
+// (안전하게 제외) → 고유 5km 격자 3,946개에서 1,740개로 축소 → 하루 4회 기준 API
+// 호출이 약 15,784건에서 약 6,960건으로 줄어 사용자가 가정한 일일 한도(10,000건)에
+// 여유 있게 들어온다. 이 축소는 사용자가 명시한 "임시 완화 조치"(잔여 위험 고지 참고)라
+// 코드 수정 없이 되돌릴 수 있어야 하므로 regionScope 파라미터로 분기한다(기본값
+// 'northern' — 지금 당장 필요한 완화가 기본 동작이어야 하므로).
+export const REGION_SCOPE_NORTHERN = 'northern';
+export const REGION_SCOPE_NATIONWIDE = 'nationwide';
+
 // [3시간 주기 배치 파이프라인 연동](2026-09-01 사용자 지시) 요구사항 1 "open_spaces
 // 테이블에서 활성화된 모든 스팟을 가져옴" — open_spaces에는 소프트 삭제/활성화 컬럼이
 // 없어(dedupe-open-spaces.mjs 조사 시 이미 확인한 사실) "활성화된 스팟"은 이 프로젝트의
@@ -254,13 +269,14 @@ const PAGE_SIZE = 1000;
 // 구현 작업과 동일한 해석). 141,980행 규모 전체를 PostgREST 기본 응답 상한 없이 안전하게
 // 다 가져와야 하므로, dedupe-open-spaces.mjs의 fetchAllOpenSpaces()와 동일한 `.gt('id',
 // lastId)` 커서 페이지네이션 패턴을 그대로 재사용한다(제5장 제4조 기존 구조 우선).
-export async function fetchAllExactSpots(client) {
+export async function fetchAllExactSpots(client, { regionScope = REGION_SCOPE_NORTHERN } = {}) {
   const spots = [];
+  let excludedByRegion = 0;
   let lastId = null;
   for (;;) {
     let query = client
       .from('open_spaces')
-      .select('id, location')
+      .select('id, location, address, sigungu_name')
       .eq('location_precision', 'EXACT')
       .order('id', { ascending: true })
       .limit(PAGE_SIZE);
@@ -270,12 +286,17 @@ export async function fetchAllExactSpots(client) {
     if (error) throw new Error(`open_spaces 조회 실패: ${error.message}`);
     for (const row of data ?? []) {
       const spot = toSpot(row);
-      if (spot) spots.push(spot);
+      if (!spot) continue;
+      if (regionScope === REGION_SCOPE_NORTHERN && !isNorthernRegionSpot(row.address, row.sigungu_name)) {
+        excludedByRegion += 1;
+        continue;
+      }
+      spots.push(spot);
     }
     if (!data || data.length < PAGE_SIZE) break;
     lastId = data[data.length - 1].id;
   }
-  return spots;
+  return { spots, excludedByRegion };
 }
 
 // CLI/수동 테스트용 — `limit`을 명시적으로 넘겼을 때만 쓰는 소규모 단건 조회다(3건짜리
@@ -305,7 +326,17 @@ async function fetchLimitedExactSpots(client, limit) {
 // 시점에 한 번에 검사한다.
 const REQUIRED_ENV_VARS = ['NEXT_PUBLIC_SUPABASE_URL', 'SUPABASE_SERVICE_ROLE_KEY', 'PUBLIC_DATA_API_KEY'];
 
-export async function run({ dryRun = false, limit, useUltraSrtNcst = false } = {}) {
+// [북부 지역 축소 — 코드 수정 없이 되돌릴 수 있게](2026-09-21) 이 축소는 "임시 완화
+// 조치"라 공공데이터포털 한도 증량이 승인되는 등 사정이 바뀌면 전국 범위로 즉시
+// 되돌릴 수 있어야 한다 — env var로 노출해 GitHub Actions 워크플로 수정만으로
+// 전환 가능하게 한다(코드 배포 불필요).
+function resolveRegionScope() {
+  const raw = process.env.WEATHER_BATCH_REGION_SCOPE?.trim();
+  if (raw === REGION_SCOPE_NATIONWIDE) return REGION_SCOPE_NATIONWIDE;
+  return REGION_SCOPE_NORTHERN;
+}
+
+export async function run({ dryRun = false, limit, useUltraSrtNcst = false, regionScope } = {}) {
   const startedAt = Date.now();
 
   const missingEnvVars = getMissingEnvVars(REQUIRED_ENV_VARS);
@@ -316,12 +347,24 @@ export async function run({ dryRun = false, limit, useUltraSrtNcst = false } = {
   }
 
   const client = createAdminClient();
+  const resolvedRegionScope = regionScope ?? resolveRegionScope();
 
-  console.log(`▶▶▶ [${SOURCE_KEY}] 배치 시작 (dry-run: ${dryRun}, 범위: ${limit ? `상위 ${limit}건` : '전국 EXACT 스팟 전체'})`);
+  console.log(
+    `▶▶▶ [${SOURCE_KEY}] 배치 시작 (dry-run: ${dryRun}, 범위: ${limit ? `상위 ${limit}건` : '전국 EXACT 스팟 전체'}, 지역 범위: ${resolvedRegionScope})`
+  );
 
-  const spots = typeof limit === 'number' ? await fetchLimitedExactSpots(client, limit) : await fetchAllExactSpots(client);
+  let spots;
+  let excludedByRegion = 0;
+  if (typeof limit === 'number') {
+    spots = await fetchLimitedExactSpots(client, limit);
+  } else {
+    ({ spots, excludedByRegion } = await fetchAllExactSpots(client, { regionScope: resolvedRegionScope }));
+  }
 
-  console.log(`▶ [${SOURCE_KEY}] 대상 스팟 ${spots.length}건`);
+  console.log(
+    `▶ [${SOURCE_KEY}] 대상 스팟 ${spots.length}건` +
+      (resolvedRegionScope === REGION_SCOPE_NORTHERN ? ` (지역 범위 밖 제외 ${excludedByRegion}건)` : '')
+  );
   const { rows, totalGroups, succeededGroups, failedGroups } = await collectWeatherForSpots(spots, { useUltraSrtNcst });
   console.log(
     `  격자 처리 결과: 총 ${totalGroups}개(성공 ${succeededGroups} / 실패 ${failedGroups}) → 날씨 데이터 확보 ${rows.length}/${spots.length}스팟`
@@ -349,8 +392,9 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const useUltraSrtNcst = process.argv.includes('--with-ultra-srt-ncst');
   const limitArg = process.argv.find((arg) => arg.startsWith('--limit='));
   const limit = limitArg ? Number(limitArg.slice('--limit='.length)) : undefined;
+  const regionScope = process.argv.includes('--nationwide') ? REGION_SCOPE_NATIONWIDE : undefined;
 
-  run({ dryRun, useUltraSrtNcst, ...(limit ? { limit } : {}) })
+  run({ dryRun, useUltraSrtNcst, ...(limit ? { limit } : {}), ...(regionScope ? { regionScope } : {}) })
     .then(({ count, failedGroups }) => {
       console.log(`▶▶▶ [${SOURCE_KEY}] 종료: ${count}건 처리`);
       process.exitCode = failedGroups > 0 ? 1 : 0;

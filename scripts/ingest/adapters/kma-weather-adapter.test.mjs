@@ -7,6 +7,7 @@ import {
   groupSpotsByGrid,
   parseUltraSrtNcstItems,
   parseVilageFcstItems,
+  REGION_SCOPE_NATIONWIDE,
   upsertWeatherCaches,
 } from './kma-weather-adapter.mjs';
 
@@ -131,7 +132,9 @@ describe('fetchAllExactSpots', () => {
       }),
     };
 
-    const spots = await fetchAllExactSpots(client);
+    // 이 테스트는 페이지네이션 자체를 검증하는 것이라, 지역 필터(기본값 'northern')가
+    // address/sigungu_name 없는 목업 행을 전부 제외해버리지 않도록 'nationwide'로 지정한다.
+    const { spots } = await fetchAllExactSpots(client, { regionScope: REGION_SCOPE_NATIONWIDE });
 
     expect(callCount).toBe(2); // 1000건 꽉 찬 첫 페이지 다음, 미만인 두 번째 페이지에서 종료
     expect(spots).toHaveLength(1001);
@@ -151,7 +154,32 @@ describe('fetchAllExactSpots', () => {
       }),
     };
 
-    expect(await fetchAllExactSpots(client)).toEqual([]);
+    const { spots } = await fetchAllExactSpots(client, { regionScope: REGION_SCOPE_NATIONWIDE });
+    expect(spots).toEqual([]);
+  });
+
+  it('regionScope가 northern(기본값)이면 북부 외 지역 스팟을 제외한다', async () => {
+    const page = [
+      { id: 'seoul-1', location: { coordinates: [127, 37] }, address: '서울특별시 강남구', sigungu_name: null },
+      { id: 'busan-1', location: { coordinates: [129, 35] }, address: '부산광역시 해운대구', sigungu_name: null },
+      { id: 'unknown-1', location: { coordinates: [127.5, 36.5] }, address: null, sigungu_name: '택시' },
+    ];
+    const client = {
+      from: () => ({
+        select: () => ({
+          eq: () => ({
+            order: () => ({
+              limit: () => ({ gt: () => {}, then: (resolve) => resolve({ data: page, error: null }) }),
+            }),
+          }),
+        }),
+      }),
+    };
+
+    const { spots, excludedByRegion } = await fetchAllExactSpots(client);
+
+    expect(spots.map((s) => s.id)).toEqual(['seoul-1']);
+    expect(excludedByRegion).toBe(2); // 부산(남부) + 판별 불가(안전하게 제외)
   });
 });
 

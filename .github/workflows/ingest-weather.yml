@@ -32,6 +32,19 @@ name: Weather Ingestion (KMA 6-Hourly Batch)
 # 공공데이터포털에서 이 API(기상청 단기예보 조회서비스)의 트래픽 한도 증량 신청이
 # 필요할 수 있다(외부 조치, 코드로 해결 불가).
 #
+# [추가 완화 — 북부 지역으로 스팟 범위 축소](2026-09-21 사용자 지시): "api 트래픽
+# 한도 관련 10000건으로 보고 더 줄여보자 스팟을 일단 서울 경기 강원 쪽하고 그
+# 아래까지 해서 북부쪽으로 해봐." 위 잔여 위험(하루 약 15,784건)이 실제로 사용자가
+# 가정한 일일 한도(10,000건)를 넘는다고 판단해, 어댑터에 지역 필터를 추가했다.
+# 실측(운영 DB 직접 조회): 전국 EXACT 스팟 140,757건 중 북부(서울/인천/경기/강원/
+# 충북/충남/대전/세종) 86,667건만 대상으로 하면 고유 5km 격자가 3,946개→1,740개로
+# 줄어 하루 호출량이 약 6,960건(1,740격자×4회)까지 내려간다 — 10,000건에 여유 있게
+# 들어온다. 상세: `scripts/ingest/lib/province-region.mjs`,
+# `implementation/2026-09-21-weather-batch-northern-region-scope.md` 참고.
+# `WEATHER_BATCH_REGION_SCOPE=nationwide`로 env var 하나만 바꾸면 코드 수정 없이
+# 전국 범위로 되돌릴 수 있다(공공데이터포털 한도 증량이 승인되는 등 사정이 바뀔 경우
+# 대비 — 이 축소는 임시 완화 조치이지 영구적인 제품 범위 결정이 아니다).
+#
 # [docs/pipeline-log.md에 기록하지 않는 이유]: 기존 recordBatchRun()/splitTableCounts()는
 # "외부 카탈로그를 훑어 events/open_spaces에 신규 행을 upsert"하는 배치를 위해 설계된
 # 표 포맷(RAW 수신 vs events/open_spaces 적재 vs 드롭 검증)이라, 이 배치가 다루는
@@ -74,9 +87,14 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: KMA Weather Batch (전국 EXACT 스팟 → spot_weather_caches)
+      - name: KMA Weather Batch (북부 지역 EXACT 스팟 → spot_weather_caches)
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           PUBLIC_DATA_API_KEY: ${{ secrets.PUBLIC_DATA_API_KEY }}
+          # 'nationwide'로 바꾸면 전국 범위로 되돌아간다(코드 수정 불필요) — 위 "추가
+          # 완화" 주석 참고. 기본값(어댑터의 resolveRegionScope())도 'northern'이라
+          # 이 줄을 지워도 동일하게 동작하지만, 지금의 완화 조치를 워크플로 파일만
+          # 봐도 바로 알 수 있도록 명시적으로 남겨둔다.
+          WEATHER_BATCH_REGION_SCOPE: northern
         run: node scripts/ingest/adapters/kma-weather-adapter.mjs
