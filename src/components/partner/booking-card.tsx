@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { updateBookingStatus, BookingStatus, BOOKING_STATUSES } from '@/actions/partner/bookings';
+import { updateBookingStatus } from '@/actions/partner/bookings';
+import { BookingStatus, BOOKING_STATUSES } from '@/lib/partner/booking-status';
 
 // [나드리픽 파트너 PMS — 일간 뷰](2026-09-20 사용자 지시): "채널 구분 뱃지... 색상
 // 분기". 이 코드베이스에 예약 출처를 색으로 구분한 기존 전례가 없어(조사 완료) 이번에

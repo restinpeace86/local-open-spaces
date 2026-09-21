@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
+import { BOOKING_STATUSES, BookingStatus } from '@/lib/partner/booking-status';
 
 // [나드리픽 파트너 PMS — 일간 뷰](2026-09-20 사용자 지시): "예약 상태를 변경할 수
 // 있는 간단한 토글... 즉시 DB 반영(Server Action)". onboarding.ts와 동일한 관례
@@ -9,8 +10,9 @@ import { createClient } from '@/lib/supabase/server';
 // RLS(bookings_update_own, auth.uid() = partner_id)가 그대로 적용되게 한다. 다른
 // 파트너의 예약 id를 넘겨도 RLS가 걸러내 0건 갱신으로 끝난다(별도 소유권 검증 코드
 // 불필요 — DB가 이미 강제).
-export const BOOKING_STATUSES = ['confirmed', 'completed', 'noshow', 'cancelled'] as const;
-export type BookingStatus = (typeof BOOKING_STATUSES)[number];
+// [2026-09-21 버그 수정] BOOKING_STATUSES/BookingStatus는 더 이상 이 파일이 정의/export
+// 하지 않는다 — src/lib/partner/booking-status.ts 참고('use server' 파일은 async 함수만
+// export해야 클라이언트에서 값이 깨지지 않음). 이 파일은 서버 로직에서만 값을 쓴다.
 
 export type UpdateBookingStatusResult = { error: string } | { success: true };
 
