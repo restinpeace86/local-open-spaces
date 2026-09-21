@@ -55,3 +55,46 @@ status (text, 예약 상태: 확정, 취소 등)
 raw_data (jsonb, 파싱된 전체 원본 데이터 보관)
 
 updated_at (timestamptz)
+
+---
+
+### ⏭️ [개선사항 2] 스킵 처리 (2026-09-21)
+
+**① 상세 스킵 사유(구조적/논리적 충돌 2건):**
+
+1. **테이블명 충돌**: 이 작업이 제안한 `reservations` 테이블(컬럼:
+   `business_id`/`naver_reservation_id`/`guest_name`/`reservation_date`/
+   `status`/`raw_data`)은 **이미 존재하는 `public.reservations` 테이블과
+   완전히 다른 스키마로 이름이 충돌**한다. 기존 `reservations`는 스팟/이벤트
+   방문 예약 신청(공공 예약) 기능이 쓰는 테이블로 `spot_id`(FK to
+   `open_spaces`)/`contact`/`visit_date`/`headcount`/`status`(PENDING/
+   CONFIRMED/CANCELLED) 컬럼을 가지며, `/api/reservations`와
+   `src/app/admin/reservations/page.tsx`(어드민 예약 관리 대시보드)가 이미
+   실사용 중이다(실측: `src/types/database.types.ts` 확인). 같은 이름으로
+   또 다른 목적의 테이블을 만들 수 없어 최소한 새 테이블명(예:
+   `naver_reservation_sync`)이 필요하다.
+2. **아키텍처 중복/상충**: 이 작업이 요청한 "네이버 예약 자동 수집 → PMS
+   동기화"는 바로 앞서(2026-09-20~21) 이미 별도 인프라로 구현이 끝났다 —
+   `partners`/`bookings` 테이블(파트너 PMS Phase 1, `source='naver'`),
+   `POST /api/webhook/naver-booking`(구조화 JSON 웹훅), `POST /api/webhook/
+   email-inbound`(클라우드플레어 인바운드 메일 + 정규식 파싱, `partners.
+   inbound_token`으로 파트너 식별). 이 작업이 요청하는 Playwright 스태프
+   계정 스크래핑 봇은 **같은 문제(네이버 예약 데이터를 우리 시스템에
+   반영)를 완전히 다른 방식(수동/웹훅 수신이 아닌 능동 스크래핑, 다른
+   테이블, 다른 식별자 체계인 `business_id`/`bizes_id`)으로 다시 푸는
+   것**이라, 두 파이프라인이 병존하면 같은 예약 건이 서로 다른 테이블에
+   중복 기록되거나(식별자 체계가 달라 자동 병합 불가) 어느 쪽이 진실
+   소스(source of truth)인지 불명확해진다.
+
+**② 재개 전 선행 작업(사용자 결정 필요):**
+- 이 스크래핑 봇이 기존 `bookings`/웹훅 인프라를 **대체**하는 것인지(→ 그렇다면
+  `bookings.source='naver'` 행을 이 봇이 채우도록 스키마를 맞춰 재설계),
+  아니면 **완전히 별개 목적**(예: 파트너 PMS와 무관하게 네이버 예약 현황
+  자체를 실시간 미러링하는 별도 대시보드)인지 먼저 결정해야 한다.
+- 대체가 아니라면, 새 테이블명(기존 `reservations`와 충돌하지 않는 이름)과
+  `bizes_id`/`business_id` ↔ 기존 `partners.id`(또는 `partners.spot_id`)
+  매핑 방식을 확정해야 한다.
+- "공용 스태프 계정 세션 쿠키 주입" 방식 자체(`implementation/TODO LIST
+  UP.md`의 제안서 초안이 설명하는 네이버 공식 스태프 권한 위임 기능 활용)는
+  기술적으로 이견 없음 — 위 스키마/아키텍처 결정만 선행되면 이후 실제
+  Playwright 스크립트 구현은 문제없이 진행 가능하다.
