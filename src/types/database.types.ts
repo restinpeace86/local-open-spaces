@@ -82,9 +82,11 @@ export type Database = {
           headcount: number
           id: string
           memo: string | null
+          naver_reservation_id: string | null
           partner_id: string
           source: string
           status: string
+          updated_at: string
         }
         Insert: {
           booking_date: string
@@ -95,9 +97,11 @@ export type Database = {
           headcount?: number
           id?: string
           memo?: string | null
+          naver_reservation_id?: string | null
           partner_id: string
           source: string
           status?: string
+          updated_at?: string
         }
         Update: {
           booking_date?: string
@@ -108,9 +112,11 @@ export type Database = {
           headcount?: number
           id?: string
           memo?: string | null
+          naver_reservation_id?: string | null
           partner_id?: string
           source?: string
           status?: string
+          updated_at?: string
         }
         Relationships: [
           {
@@ -795,6 +801,7 @@ export type Database = {
           id: string
           image_url: string | null
           inbound_token: string
+          naver_bizes_id: string | null
           owner_name: string
           phone: string
           spot_id: string | null
@@ -806,6 +813,7 @@ export type Database = {
           id: string
           image_url?: string | null
           inbound_token?: string
+          naver_bizes_id?: string | null
           owner_name: string
           phone: string
           spot_id?: string | null
@@ -817,6 +825,7 @@ export type Database = {
           id?: string
           image_url?: string | null
           inbound_token?: string
+          naver_bizes_id?: string | null
           owner_name?: string
           phone?: string
           spot_id?: string | null
