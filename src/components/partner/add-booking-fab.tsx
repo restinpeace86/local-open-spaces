@@ -29,6 +29,10 @@ export function AddBookingFab({ defaultDate }: { defaultDate: string }) {
   const [bookingTime, setBookingTime] = useState(TIME_OPTIONS[0]);
   const [headcount, setHeadcount] = useState(1);
   const [memo, setMemo] = useState('');
+  // [2026-09-21 필드 확장] "네이버 예약 호환 수동 예약 등록 폼" 요청이 추가한
+  // 상품명/결제 금액 — 둘 다 선택 입력이라 빈 문자열을 허용한다.
+  const [productName, setProductName] = useState('');
+  const [totalPrice, setTotalPrice] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -40,6 +44,8 @@ export function AddBookingFab({ defaultDate }: { defaultDate: string }) {
     setBookingTime(TIME_OPTIONS[0]);
     setHeadcount(1);
     setMemo('');
+    setProductName('');
+    setTotalPrice('');
     setFormError(null);
   }
 
@@ -62,6 +68,8 @@ export function AddBookingFab({ defaultDate }: { defaultDate: string }) {
         booking_time: bookingTime,
         headcount,
         memo: memo || null,
+        product_name: productName || null,
+        total_price: totalPrice === '' ? null : Number(totalPrice),
       });
       if ('error' in result) {
         // [유효성 검사 및 에러 핸들링](요구사항 4): "필수값 누락 시 폼 에러 표시 /
@@ -164,6 +172,16 @@ export function AddBookingFab({ defaultDate }: { defaultDate: string }) {
                 </label>
               </div>
 
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-700">
+                상품명/객실명(선택)
+                <input
+                  type="text"
+                  value={productName}
+                  onChange={(e) => setProductName(e.target.value)}
+                  className="rounded-xl border border-gray-300 px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </label>
+
               <div className="flex flex-col gap-1.5 text-sm font-medium text-gray-700">
                 방문 인원
                 <div className="flex items-center gap-3">
@@ -188,6 +206,20 @@ export function AddBookingFab({ defaultDate }: { defaultDate: string }) {
                   <span className="text-sm text-gray-500">명</span>
                 </div>
               </div>
+
+              <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-700">
+                결제 금액(선택)
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  step={1}
+                  value={totalPrice}
+                  onChange={(e) => setTotalPrice(e.target.value)}
+                  placeholder="0"
+                  className="rounded-xl border border-gray-300 px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </label>
 
               <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-700">
                 메모(선택)

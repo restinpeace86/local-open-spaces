@@ -23,6 +23,8 @@ const BASE_BOOKING: BookingCardData = {
   source: 'naver',
   status: 'confirmed',
   memo: '유모차 있어요',
+  product_name: null,
+  total_price: null,
 };
 
 // [나드리픽 파트너 PMS — 일간 뷰](2026-09-20 사용자 지시): 채널 뱃지, 핵심 정보
@@ -42,12 +44,23 @@ describe('BookingCard', () => {
     expect(screen.getByText('유모차 있어요')).toBeInTheDocument();
   });
 
-  it('source가 naver면 "네이버 예약" 뱃지를, nadripik이면 "나드리픽 직접" 뱃지를 보여준다', () => {
+  it('source가 naver면 "네이버 예약" 뱃지를, manual이면 "수기 등록" 뱃지를 보여준다', () => {
     const { rerender } = render(<BookingCard booking={BASE_BOOKING} />);
     expect(screen.getByText('네이버 예약')).toBeInTheDocument();
 
-    rerender(<BookingCard booking={{ ...BASE_BOOKING, source: 'nadripik' }} />);
-    expect(screen.getByText('나드리픽 직접')).toBeInTheDocument();
+    rerender(<BookingCard booking={{ ...BASE_BOOKING, source: 'manual' }} />);
+    expect(screen.getByText('수기 등록')).toBeInTheDocument();
+  });
+
+  it('product_name/total_price가 있으면 상품명과 결제 금액을 표시한다', () => {
+    render(<BookingCard booking={{ ...BASE_BOOKING, product_name: '스탠다드룸', total_price: 50000 }} />);
+    expect(screen.getByText('스탠다드룸')).toBeInTheDocument();
+    expect(screen.getByText('50,000원')).toBeInTheDocument();
+  });
+
+  it('product_name/total_price가 없으면 해당 영역을 표시하지 않는다', () => {
+    render(<BookingCard booking={BASE_BOOKING} />);
+    expect(screen.queryByText(/원$/)).not.toBeInTheDocument();
   });
 
   it('전화번호는 tel: 링크로 연결된다', () => {

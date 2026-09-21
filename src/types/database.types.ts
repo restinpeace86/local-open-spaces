@@ -84,8 +84,10 @@ export type Database = {
           memo: string | null
           naver_reservation_id: string | null
           partner_id: string
+          product_name: string | null
           source: string
           status: string
+          total_price: number | null
           updated_at: string
         }
         Insert: {
@@ -99,8 +101,10 @@ export type Database = {
           memo?: string | null
           naver_reservation_id?: string | null
           partner_id: string
+          product_name?: string | null
           source: string
           status?: string
+          total_price?: number | null
           updated_at?: string
         }
         Update: {
@@ -114,8 +118,10 @@ export type Database = {
           memo?: string | null
           naver_reservation_id?: string | null
           partner_id?: string
+          product_name?: string | null
           source?: string
           status?: string
+          total_price?: number | null
           updated_at?: string
         }
         Relationships: [

@@ -23,7 +23,7 @@ export default async function PartnerTodayPage({ searchParams }: { searchParams:
   const supabase = await createClient();
   const { data: bookings } = await supabase
     .from('bookings')
-    .select('id, customer_name, customer_phone, booking_time, headcount, source, status, memo')
+    .select('id, customer_name, customer_phone, booking_time, headcount, source, status, memo, product_name, total_price')
     .eq('booking_date', date)
     .order('booking_time', { ascending: true });
 

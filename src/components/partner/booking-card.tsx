@@ -6,11 +6,13 @@ import { updateBookingStatus, BookingStatus, BOOKING_STATUSES } from '@/actions/
 
 // [나드리픽 파트너 PMS — 일간 뷰](2026-09-20 사용자 지시): "채널 구분 뱃지... 색상
 // 분기". 이 코드베이스에 예약 출처를 색으로 구분한 기존 전례가 없어(조사 완료) 이번에
-// 새로 정한다 — 네이버는 네이버 브랜드 그린 계열, 나드리픽 직계약은 이 프로젝트가
-// 이미 기본 강조색으로 쓰는 파랑(bg-blue-600 등)과 어울리는 톤으로 맞춘다.
+// 새로 정한다 — 네이버는 네이버 브랜드 그린 계열, 수기 등록은 이 프로젝트가 이미
+// 기본 강조색으로 쓰는 파랑(bg-blue-600 등)과 어울리는 톤으로 맞춘다.
+// [2026-09-21] source 값 'nadripik'→'manual' 이름 변경(actions/partner/bookings.ts
+// 주석 참고) — 같은 의미(파트너 수기 등록)를 그대로 유지, 라벨/색상도 동일.
 const SOURCE_META: Record<string, { label: string; className: string }> = {
   naver: { label: '네이버 예약', className: 'bg-emerald-100 text-emerald-700' },
-  nadripik: { label: '나드리픽 직접', className: 'bg-blue-100 text-blue-700' },
+  manual: { label: '수기 등록', className: 'bg-blue-100 text-blue-700' },
 };
 
 const STATUS_LABEL: Record<BookingStatus, string> = {
@@ -29,7 +31,15 @@ export type BookingCardData = {
   source: string;
   status: string;
   memo: string | null;
+  product_name: string | null;
+  total_price: number | null;
 };
+
+// [2026-09-21] "결제 금액" 표시 — 이 프로젝트의 다른 가격 표시(deals/event-tickets)와
+// 동일하게 원화 콤마 구분만 하고 소수점은 다루지 않는다(정수 KRW 컬럼).
+function formatPrice(price: number): string {
+  return `${price.toLocaleString('ko-KR')}원`;
+}
 
 // booking_time은 Postgres "time" 컬럼이라 "14:30:00" 형태로 온다 — 사장님이 보기엔
 // 초 단위까지 필요 없어 "HH:MM"만 자른다.
@@ -78,10 +88,16 @@ export function BookingCard({ booking }: { booking: BookingCardData }) {
         </div>
       </div>
 
+      {booking.product_name && <p className="mt-1.5 text-sm font-medium text-gray-700">{booking.product_name}</p>}
+
       {/* [빠른 연락](요구사항 3): 전화번호 클릭 시 tel: 링크 */}
       <a href={`tel:${booking.customer_phone}`} className="mt-2 flex items-center gap-1.5 text-base text-blue-600">
         📞 {booking.customer_phone}
       </a>
+
+      {booking.total_price != null && (
+        <p className="mt-1.5 text-sm font-semibold text-gray-900">{formatPrice(booking.total_price)}</p>
+      )}
 
       {booking.memo && <p className="mt-2 rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-600">{booking.memo}</p>}
 

@@ -74,7 +74,27 @@ describe('AddBookingFab', () => {
         booking_time: '00:00',
         headcount: 1,
         memo: null,
+        product_name: null,
+        total_price: null,
       })
+    );
+  });
+
+  it('상품명/결제 금액을 입력하면 createBooking에 함께 전달한다', async () => {
+    createBookingMock.mockResolvedValue({ success: true });
+    openSheet();
+
+    const nameInput = document.querySelector('input[type="text"]') as HTMLInputElement;
+    fireEvent.change(nameInput, { target: { value: '김손님' } });
+    fireEvent.change(screen.getByPlaceholderText('010-0000-0000'), { target: { value: '01012345678' } });
+    fireEvent.change(screen.getByLabelText('상품명/객실명(선택)'), { target: { value: '스탠다드룸' } });
+    fireEvent.change(screen.getByLabelText('결제 금액(선택)'), { target: { value: '50000' } });
+    fireEvent.click(screen.getByText('예약 등록'));
+
+    await waitFor(() =>
+      expect(createBookingMock).toHaveBeenCalledWith(
+        expect.objectContaining({ product_name: '스탠다드룸', total_price: 50000 })
+      )
     );
   });
 

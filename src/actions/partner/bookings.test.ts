@@ -70,11 +70,14 @@ const VALID_BOOKING_INPUT = {
   booking_time: '14:30',
   headcount: 4,
   memo: '유모차 있어요',
+  product_name: null,
+  total_price: null,
 };
 
-// [나드리픽 파트너 PMS — 수기 예약 등록](2026-09-20 사용자 지시): 필수값 검증,
-// 로그인 확인, partner_id 자동 주입(auth.uid()), source='nadripik'/status='confirmed'
-// 고정, 성공 시 /partner/today revalidate를 검증한다.
+// [나드리픽 파트너 PMS — 수기 예약 등록](2026-09-20 사용자 지시, 2026-09-21 필드
+// 확장): 필수값 검증, 로그인 확인, partner_id 자동 주입(auth.uid()),
+// source='manual'/status='confirmed' 고정, 성공 시 /partner/today revalidate를
+// 검증한다.
 describe('createBooking', () => {
   afterEach(() => {
     getUserMock.mockReset();
@@ -85,11 +88,14 @@ describe('createBooking', () => {
 
   it.each([
     ['customer_name', { ...VALID_BOOKING_INPUT, customer_name: '  ' }, '예약자명을 입력해 주세요.'],
-    ['customer_phone', { ...VALID_BOOKING_INPUT, customer_phone: '' }, '연락처를 입력해 주세요.'],
+    ['customer_phone(빈값)', { ...VALID_BOOKING_INPUT, customer_phone: '' }, '연락처를 입력해 주세요.'],
+    ['customer_phone(형식 오류)', { ...VALID_BOOKING_INPUT, customer_phone: '01012345678' }, '연락처 형식이 올바르지 않아요. 010-0000-0000 형식으로 입력해 주세요.'],
     ['booking_date', { ...VALID_BOOKING_INPUT, booking_date: '2026/09/20' }, '예약 날짜를 선택해 주세요.'],
     ['booking_time', { ...VALID_BOOKING_INPUT, booking_time: '14시30분' }, '예약 시간을 선택해 주세요.'],
     ['headcount(0)', { ...VALID_BOOKING_INPUT, headcount: 0 }, '방문 인원은 1명 이상이어야 합니다.'],
     ['headcount(소수)', { ...VALID_BOOKING_INPUT, headcount: 1.5 }, '방문 인원은 1명 이상이어야 합니다.'],
+    ['total_price(음수)', { ...VALID_BOOKING_INPUT, total_price: -1000 }, '결제 금액은 0 이상의 숫자로 입력해 주세요.'],
+    ['total_price(소수)', { ...VALID_BOOKING_INPUT, total_price: 1000.5 }, '결제 금액은 0 이상의 숫자로 입력해 주세요.'],
   ])('%s가 유효하지 않으면 로그인 확인 없이 검증 에러를 반환한다', async (_field, input, expectedError) => {
     const result = await createBooking(input);
     expect(result).toEqual({ error: expectedError });
@@ -118,9 +124,11 @@ describe('createBooking', () => {
       booking_date: '2026-09-20',
       booking_time: '14:30:00',
       headcount: 4,
-      source: 'nadripik',
+      source: 'manual',
       status: 'confirmed',
       memo: '유모차 있어요',
+      product_name: null,
+      total_price: null,
     });
   });
 
@@ -130,6 +138,14 @@ describe('createBooking', () => {
 
     await createBooking({ ...VALID_BOOKING_INPUT, memo: null });
     expect(insertMock).toHaveBeenCalledWith(expect.objectContaining({ memo: null }));
+  });
+
+  it('상품명/결제 금액을 입력하면 그대로 저장한다', async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
+    insertMock.mockResolvedValue({ error: null });
+
+    await createBooking({ ...VALID_BOOKING_INPUT, product_name: '  스탠다드룸  ', total_price: 50000 });
+    expect(insertMock).toHaveBeenCalledWith(expect.objectContaining({ product_name: '스탠다드룸', total_price: 50000 }));
   });
 
   it('저장에 성공하면 /partner/today를 revalidate한다', async () => {

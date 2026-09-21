@@ -31,9 +31,14 @@ export async function updateBookingStatus(bookingId: string, status: BookingStat
   return { success: true };
 }
 
-// [나드리픽 파트너 PMS — 수기 예약 등록](2026-09-20 사용자 지시): "파트너가 직접
-// 전화/방문 예약을 등록할 수 있는 기능". source는 항상 'nadripik'(수기 등록 자체가
-// 네이버 예약이 아니라는 뜻), status는 항상 'confirmed'로 고정한다(요구사항 원문).
+// [나드리픽 파트너 PMS — 수기 예약 등록](2026-09-20 사용자 지시, 2026-09-21
+// "네이버 예약 호환 수동 예약 등록 폼" 요청으로 필드 확장): "파트너가 직접
+// 전화/방문 예약을 등록할 수 있는 기능". source는 항상 'manual'(수기 등록 자체가
+// 네이버 예약이 아니라는 뜻 — 2026-09-21 요청 전까지는 'nadripik'이라는 이름을
+// 썼으나, 같은 개념에 두 이름이 남는 걸 피하려고 이번 요청이 명시한 'manual'로
+// 통일했다. 기존 데이터/체크 제약도 함께 마이그레이션함:
+// scripts/migrations/2026-09-21-bookings-manual-fields-and-source-rename.sql),
+// status는 항상 'confirmed'로 고정한다(요구사항 원문).
 export type CreateBookingInput = {
   customer_name: string;
   customer_phone: string;
@@ -41,6 +46,11 @@ export type CreateBookingInput = {
   booking_time: string; // "HH:MM"
   headcount: number;
   memo: string | null;
+  // [2026-09-21 필드 확장] 네이버 예약 표준 매핑에 맞춰 추가 — 둘 다 선택 입력
+  // (요구사항에 필수 표시가 없고, 전화로 대략적인 예약만 먼저 잡는 경우 상품명/
+  // 금액을 나중에 채우는 흐름도 자연스럽다).
+  product_name: string | null;
+  total_price: number | null;
 };
 
 export type CreateBookingResult = { error: string } | { success: true };
@@ -49,12 +59,25 @@ function isBlank(value: string): boolean {
   return value.trim().length === 0;
 }
 
+// [2026-09-21] "010-XXXX-XXXX 형식 검증" 요구사항 — formatPhoneNumber가 입력
+// 중 자동으로 하이픈을 넣어주긴 하지만(3-3-4/3-4-4), 서버 액션은 클라이언트를
+// 신뢰하지 않고 최종 형태를 다시 검증한다. 서울 02 등 지역번호(2~3자리)도 있어
+// 010 고정이 아니라 일반적인 국내 전화번호 하이픈 형식으로 검증한다(완전한
+// 국번 규칙까지는 다루지 않음 — format-phone.ts와 동일하게 추측 금지).
+const PHONE_FORMAT_REGEX = /^\d{2,3}-\d{3,4}-\d{4}$/;
+
 export async function createBooking(input: CreateBookingInput): Promise<CreateBookingResult> {
   if (isBlank(input.customer_name)) return { error: '예약자명을 입력해 주세요.' };
   if (isBlank(input.customer_phone)) return { error: '연락처를 입력해 주세요.' };
+  if (!PHONE_FORMAT_REGEX.test(input.customer_phone.trim())) {
+    return { error: '연락처 형식이 올바르지 않아요. 010-0000-0000 형식으로 입력해 주세요.' };
+  }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.booking_date)) return { error: '예약 날짜를 선택해 주세요.' };
   if (!/^\d{2}:\d{2}$/.test(input.booking_time)) return { error: '예약 시간을 선택해 주세요.' };
   if (!Number.isInteger(input.headcount) || input.headcount < 1) return { error: '방문 인원은 1명 이상이어야 합니다.' };
+  if (input.total_price != null && (!Number.isInteger(input.total_price) || input.total_price < 0)) {
+    return { error: '결제 금액은 0 이상의 숫자로 입력해 주세요.' };
+  }
 
   const supabase = await createClient();
   const {
@@ -71,9 +94,11 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
     booking_date: input.booking_date,
     booking_time: `${input.booking_time}:00`,
     headcount: input.headcount,
-    source: 'nadripik',
+    source: 'manual',
     status: 'confirmed',
     memo: input.memo?.trim() || null,
+    product_name: input.product_name?.trim() || null,
+    total_price: input.total_price,
   });
   if (error) return { error: error.message };
 
