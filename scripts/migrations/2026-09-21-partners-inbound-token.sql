@@ -1,5 +1,5 @@
 -- [나드리픽 파트너 PMS — 클라우드플레어 인바운드 메일 연동](2026-09-21 사용자 지시):
--- 각 파트너에게 고유한 인바운드 메일 주소(예: {inbound_token}@inbound.nadripik.com)를
+-- 각 파트너에게 고유한 인바운드 메일 주소(예: {inbound_token}@inbound.nadri-pick.com)를
 -- 부여하기 위한 토큰. "신규 파트너 온보딩 시 자동으로 고유 토큰이 생성" 요구사항을
 -- DB Default로 만족한다(요구사항이 명시한 두 방법 중 하나) — 이렇게 하면
 -- src/actions/partner/onboarding.ts가 이 컬럼을 upsert 페이로드에 아예 포함하지

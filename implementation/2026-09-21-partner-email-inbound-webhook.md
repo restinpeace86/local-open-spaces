@@ -61,7 +61,7 @@ naver-booking 웹훅과 동일한 계층 구조(제5장 제4조):
    페이로드 계약도 naver-booking 웹훅과 마찬가지로 이번에 새로 정의했다
    (클라우드플레어 Worker 스크립트 자체는 범위 밖):
    ```json
-   { "to": "abc123def456@inbound.nadripik.com", "token"?: "abc123def456",
+   { "to": "abc123def456@inbound.nadri-pick.com", "token"?: "abc123def456",
      "text"?: "...", "html"?: "..." }
    ```
 
@@ -84,7 +84,7 @@ naver-booking 웹훅과 동일한 계층 구조(제5장 제4조):
 ## 특이 사항 / 다음 단계
 - **실제 사용을 위해 필요한 작업**(사용자 몫): (1) `.env.local`(및 배포
   환경)에 `EMAIL_INBOUND_WEBHOOK_SECRET` 값 설정. (2) 클라우드플레어 Email
-  Routing에서 인바운드 도메인(예: inbound.nadripik.com)을 등록하고, 수신
+  Routing에서 인바운드 도메인(예: inbound.nadri-pick.com)을 등록하고, 수신
   주소 패턴을 이 Worker로 라우팅하도록 설정. (3) Worker 스크립트가 위
   페이로드 계약 형태로 이 엔드포인트에 POST하도록 작성(이번 범위 밖).
 - **정확도를 높이려면**: 실제 네이버 예약 알림 메일 원문(개인정보 제거)을

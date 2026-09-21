@@ -11,7 +11,7 @@ import { stripHtml } from '@/lib/partner/strip-html';
 // [페이로드 계약도 새로 정의함] naver-booking 웹훅과 동일한 이유(제3장 제5조
 // 추측 금지, 하지만 검증할 실제 외부 스펙이 없음) — 클라우드플레어 Worker 스크립트
 // 자체는 이번 범위 밖이라 그 스크립트가 이 형태로 POST한다고 전제한다:
-//   { "to": "abc123@inbound.nadripik.com", "token"?: "abc123",
+//   { "to": "abc123@inbound.nadri-pick.com", "token"?: "abc123",
 //     "text"?: "...", "html"?: "..." }
 // token이 직접 오면 그걸 우선하고, 없으면 to의 로컬파트(@ 앞)를 토큰으로 쓴다.
 //

@@ -25,6 +25,15 @@
 
 수정이 필요한 파일 경로와 구체적인 수정 방향을 리스트업해 줘.
 
+### ✅ [개선사항 1] 완료 (2026-09-21)
+전체 코드베이스 감사 결과 및 적용한 변경 사항: `implementation/2026-09-21-
+custom-domain-migration-audit.md` 참고. 요약 — 하드코딩된 `.vercel.app`/
+`localhost`는 없었고(OAuth 리다이렉트도 이미 `window.location.origin` 기반이라
+도메인 독립적), 유일한 실제 갭은 `metadataBase` 부재였다. `NEXT_PUBLIC_SITE_URL`
+env var 추가 + `src/app/layout.tsx`에 `metadataBase` 반영 완료. Vercel 프로젝트
+커스텀 도메인 등록/DNS/Vercel 프로덕션 env 등록은 코드 범위 밖(사용자 몫)으로
+남아 있다. `npx tsc --noEmit`/`npm run test`/`npm run build` 모두 통과.
+
 [개선사항 2] 
 네이버 예약 데이터를 자동 수집하여 우리 PMS(Supabase + PostgreSQL) DB에 동기화하는 백그라운드 봇을 구현하려고해. 아래 조건과 DB 구조를 반영해서 코드를 작성해줘.
 
