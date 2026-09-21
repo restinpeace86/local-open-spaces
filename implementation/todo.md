@@ -38,3 +38,57 @@ Next.js App Router 환경(`app/api/webhooks/email/route.ts`)에 맞게 POST API 
 4. 그 외에 API 라우트나 백엔드 로직 중 도메인 주소에 의존하는 코드가 있는지 검토해 줘.
 
 수정이 필요한 파일 경로와 구체적인 수정 방향을 리스트업해 줘.
+
+[개선사항 3] Next.js App Router 환경에서 클라우드플레어 이메일 워커(Cloudflare Email Worker)가 보내는 웹훅(POST 요청)을 받아 처리할 API 엔드포인트(`app/api/webhooks/email/route.ts`)를 개발해 주세요.
+
+### 📋 요구사항 및 명세:
+1. **파일 경로:** `app/api/webhooks/email/route.ts` (TypeScript 사용)
+2. **요청 처리 (POST):**
+   - 클라우드플레어 워커가 보내는 JSON payload를 안전하게 파싱합니다.
+   - 페이로드에 포함될 주요 필드: `from` (보낸사람), `to` (수신자/농장주소, 예: `farm-test@nadri-pick.com`), `subject` (제목), `text` 또는 `html` (본문)
+3. **핵심 기능:**
+   - 수신된 `to` 주소를 파싱하여 어떤 농장(또는 테스트 계정)인지 식별합니다.
+   - 현재 진행 중인 구글 지메일 전달 인증 메일인 경우, 본문에서 **인증 코드(숫자)**를 정규식 등으로 추출해 콘솔에 눈에 띄게 로그를 남깁니다.
+   - 일반 예약 메일인 경우, '네이버 예약' 키워드와 본문 내용을 확인하고 추후 DB(Supabase 등)에 저장할 수 있는 형태로 구조화합니다.
+4. **응답 (Response):**
+   - 클라우드플레어 워커가 실패로 인식하지 않도록 정상 수신 시 무조건 `200 OK`와 `{ success: true }`를 반환합니다.
+   - 에러 발생 시 try-catch로 감싸서 500 에러와 함께 로그를 남깁니다.
+   - 
+이 API 라우트 코드와 함께, 테스트로 이메일 페이로드를 모의(Mock) 전송해 볼 수 있는 간단한 curl 명령어 예시도 함께 작성해 주세요.
+
+하기 소스코드는 CloudFlare에 배포된 것으로, 웹훅 url 주소를 포함하고 있으니 참고하세요.
+export default {
+  async email(message, env, ctx) {
+    const rawStream = message.raw;
+    const reader = rawStream.getReader();
+    let rawEmail = "";
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      rawEmail += new TextDecoder().decode(value);
+    }
+
+    const webhookUrl = "https://nadri-pick.com/api/webhooks/email";
+
+    try {
+      const response = await fetch(webhookUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          from: message.from,
+          to: message.to,
+          raw: rawEmail
+        })
+      });
+
+      if (!response.ok) {
+        console.error(`Webhook failed with status: ${response.status}`);
+      }
+    } catch (err) {
+      console.error("Error sending email webhook:", err);
+    }
+  }
+};
