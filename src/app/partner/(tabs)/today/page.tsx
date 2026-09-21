@@ -27,6 +27,18 @@ export default async function PartnerTodayPage({ searchParams }: { searchParams:
     .eq('booking_date', date)
     .order('booking_time', { ascending: true });
 
+  // [입력 간편화](2026-09-21 사용자 지시): 이 파트너가 최근에 등록한 상품명을
+  // 수기 예약 폼의 자동완성 제안으로 쓴다. RLS가 이미 본인 것만 걸러주므로
+  // 별도 partner_id 필터 없이 최근 순으로 넉넉히(50건) 가져와 중복만 제거한다
+  // — 상품 종류가 몇 개 안 되는 소규모 업체 특성상 이 정도로 충분하다.
+  const { data: recentProductRows } = await supabase
+    .from('bookings')
+    .select('product_name')
+    .not('product_name', 'is', null)
+    .order('created_at', { ascending: false })
+    .limit(50);
+  const recentProductNames = [...new Set((recentProductRows ?? []).map((r) => r.product_name).filter(Boolean))] as string[];
+
   return (
     <div className="flex flex-col">
       <DailyDateNav date={date} todayDate={todayDate} />
@@ -40,7 +52,7 @@ export default async function PartnerTodayPage({ searchParams }: { searchParams:
       {/* [수기 예약 등록](2026-09-20 사용자 지시): 기본 날짜는 "일간 뷰에서 현재
           보고 있던 날짜"(요구사항 2) — 지금 이 페이지가 보여주는 date를 그대로
           넘긴다. */}
-      <AddBookingFab defaultDate={date} />
+      <AddBookingFab defaultDate={date} recentProductNames={recentProductNames} />
     </div>
   );
 }

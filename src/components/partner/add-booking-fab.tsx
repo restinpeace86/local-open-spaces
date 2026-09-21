@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createBooking } from '@/actions/partner/bookings';
 import { formatPhoneNumber } from '@/lib/partner/format-phone';
+import { formatPriceInput, parsePriceInput } from '@/lib/partner/format-price';
 import { Toast } from '@/components/map/toast';
 
 // [나드리픽 파트너 PMS — 수기 예약 등록](2026-09-20 사용자 지시): "일간 뷰 화면
@@ -20,7 +21,11 @@ const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => {
   return `${hour}:${minute}`;
 });
 
-export function AddBookingFab({ defaultDate }: { defaultDate: string }) {
+// [입력 간편화](2026-09-21 사용자 지시) "이 필드들을 간편하게 입력하는 법이
+// 없나" — 상품명은 매번 새로 치기보다, 이 파트너가 예전에 등록했던 이름 중
+// 고르는 게 훨씬 빠르다. 별도 검색 UI 없이 네이티브 <datalist>만으로 자동완성
+// 제안을 붙인다(제5장 제4조 — 새 컴포넌트/라이브러리 없이 HTML 표준 기능만 사용).
+export function AddBookingFab({ defaultDate, recentProductNames = [] }: { defaultDate: string; recentProductNames?: string[] }) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [customerName, setCustomerName] = useState('');
@@ -69,7 +74,7 @@ export function AddBookingFab({ defaultDate }: { defaultDate: string }) {
         headcount,
         memo: memo || null,
         product_name: productName || null,
-        total_price: totalPrice === '' ? null : Number(totalPrice),
+        total_price: parsePriceInput(totalPrice),
       });
       if ('error' in result) {
         // [유효성 검사 및 에러 핸들링](요구사항 4): "필수값 누락 시 폼 에러 표시 /
@@ -176,10 +181,18 @@ export function AddBookingFab({ defaultDate }: { defaultDate: string }) {
                 상품명/객실명(선택)
                 <input
                   type="text"
+                  list="product-name-suggestions"
                   value={productName}
                   onChange={(e) => setProductName(e.target.value)}
                   className="rounded-xl border border-gray-300 px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+                {recentProductNames.length > 0 && (
+                  <datalist id="product-name-suggestions">
+                    {recentProductNames.map((name) => (
+                      <option key={name} value={name} />
+                    ))}
+                  </datalist>
+                )}
               </label>
 
               <div className="flex flex-col gap-1.5 text-sm font-medium text-gray-700">
@@ -207,19 +220,25 @@ export function AddBookingFab({ defaultDate }: { defaultDate: string }) {
                 </div>
               </div>
 
-              <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-700">
-                결제 금액(선택)
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  step={1}
-                  value={totalPrice}
-                  onChange={(e) => setTotalPrice(e.target.value)}
-                  placeholder="0"
-                  className="rounded-xl border border-gray-300 px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-              </label>
+              {/* [입력 간편화] "원" 단위 표시를 라벨이 감싸는 구조로 넣으면(다른 필드들처럼
+                  <label>텍스트<input/></label>) 라벨의 접근성 이름에 "원"까지 섞여
+                  들어가 다른 필드와 동일한 방식(라벨 텍스트만으로 매칭)이 깨진다 — 이
+                  필드만 htmlFor/id로 명시적으로 연결해 라벨 텍스트를 깨끗하게 유지한다. */}
+              <div className="flex flex-col gap-1.5 text-sm font-medium text-gray-700">
+                <label htmlFor="add-booking-total-price">결제 금액(선택)</label>
+                <div className="relative">
+                  <input
+                    id="add-booking-total-price"
+                    type="text"
+                    inputMode="numeric"
+                    value={totalPrice}
+                    onChange={(e) => setTotalPrice(formatPriceInput(e.target.value))}
+                    placeholder="0"
+                    className="w-full rounded-xl border border-gray-300 px-4 py-3 pr-10 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                  <span aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400">원</span>
+                </div>
+              </div>
 
               <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-700">
                 메모(선택)

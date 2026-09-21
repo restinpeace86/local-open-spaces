@@ -46,6 +46,23 @@ describe('AddBookingFab', () => {
     expect(phoneInput).toHaveValue('010-1234-5678');
   });
 
+  it('결제 금액 입력에 천 단위 콤마가 자동으로 붙는다', () => {
+    openSheet();
+    const priceInput = screen.getByLabelText('결제 금액(선택)');
+    fireEvent.change(priceInput, { target: { value: '50000' } });
+    expect(priceInput).toHaveValue('50,000');
+  });
+
+  it('recentProductNames를 전달하면 상품명 입력에 자동완성 후보가 보인다', () => {
+    render(<AddBookingFab defaultDate="2026-09-20" recentProductNames={['스탠다드룸', '디럭스룸']} />);
+    fireEvent.click(screen.getByText('+ 예약 추가'));
+
+    const options = Array.from(document.querySelectorAll('#product-name-suggestions option')).map(
+      (el) => (el as HTMLOptionElement).value
+    );
+    expect(options).toEqual(['스탠다드룸', '디럭스룸']);
+  });
+
   it('+/- 버튼으로 방문 인원을 조절하고, 1명 미만으로는 못 내려간다', () => {
     openSheet();
     expect(screen.getByText('1')).toBeInTheDocument();
