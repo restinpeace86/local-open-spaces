@@ -113,3 +113,23 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
 
   return { success: true };
 }
+
+// [파트너 예약 삭제](2026-09-22 사용자 지시): "각 계정 파트너 사장님도 자기꺼는 앱에서
+// 삭제할수 있어야하고" — updateBookingStatus와 동일하게 세션 기반 클라이언트를 써서
+// RLS(bookings_delete_own, auth.uid() = partner_id)가 소유권을 강제하게 한다. 다른
+// 파트너의 예약 id를 넘겨도 RLS가 걸러내 0건 삭제로 끝난다.
+export type DeleteBookingResult = { error: string } | { success: true };
+
+export async function deleteBooking(bookingId: string): Promise<DeleteBookingResult> {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return { error: '로그인이 필요합니다.' };
+
+  const { error } = await supabase.from('bookings').delete().eq('id', bookingId);
+  if (error) return { error: error.message };
+
+  revalidatePath('/partner/today');
+  return { success: true };
+}

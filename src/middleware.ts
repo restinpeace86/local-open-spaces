@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr';
 import { NextResponse, type NextRequest } from 'next/server';
+import { isHqStaffEmail } from '@/lib/hq/is-hq-staff';
 
 // [실사용 버그 발견 및 수정](2026-09-20, 파트너 PMS Phase 1 작업 중 실측 확인): 이
 // 파일은 원래 프로젝트 "진짜 루트"(D:\workspace\local-open-spaces\middleware.ts)에
@@ -86,11 +87,17 @@ export async function middleware(request: NextRequest) {
   }
 
   if (pathname.startsWith('/hq') && pathname !== HQ_LOGIN_PATH) {
-    // [본사 운영진 라우트 뼈대](spec.md 2절/9절): 현재는 로그인 여부만 확인한다 — "본사
-    // 운영진 계정"을 식별할 테이블/방식이 아직 정해지지 않아(추측 금지) 역할 검증은
-    // HQ 대시보드 기능을 실제로 붙이는 다음 단계에서 별도로 설계한다.
     if (!user) {
       return redirectPreservingCookies(new URL(HQ_LOGIN_PATH, request.url), response);
+    }
+    // [HQ 전체 파트너 데이터 열람/삭제 권한](2026-09-22 사용자 지시): "관리자에 대하여는
+    // 기존 데이터 다 보여야하고 삭제할 수 있는 권한도 있어야돼" — 이전까지는 로그인
+    // 여부만 확인해, 로그인만 하면 아무 계정이나(예: 일반 파트너 사장님 본인 계정으로도)
+    // /hq에 들어와 전체 고객 데이터를 볼 수 있는 상태였다. 이메일 화이트리스트로
+    // 역할을 확정한다(사용자 확인 — 별도 테이블 대신 env var, 상세 사유는
+    // src/lib/hq/is-hq-staff.ts 참고).
+    if (!isHqStaffEmail(user.email)) {
+      return redirectPreservingCookies(new URL(`${HQ_LOGIN_PATH}?forbidden=1`, request.url), response);
     }
   }
 

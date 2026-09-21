@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createBooking, updateBookingStatus } from './bookings';
+import { createBooking, deleteBooking, updateBookingStatus } from './bookings';
 
 const getUserMock = vi.fn();
 const eqMock = vi.fn();
 const updateMock = vi.fn(() => ({ eq: eqMock }));
 const insertMock = vi.fn();
-const fromMock = vi.fn(() => ({ update: updateMock, insert: insertMock }));
+const deleteEqMock = vi.fn();
+const deleteMock = vi.fn(() => ({ eq: deleteEqMock }));
+const fromMock = vi.fn(() => ({ update: updateMock, insert: insertMock, delete: deleteMock }));
 const revalidatePathMock = vi.fn();
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -161,6 +163,54 @@ describe('createBooking', () => {
     insertMock.mockResolvedValue({ error: { message: 'DB 오류' } });
 
     const result = await createBooking(VALID_BOOKING_INPUT);
+    expect(result).toEqual({ error: 'DB 오류' });
+    expect(revalidatePathMock).not.toHaveBeenCalled();
+  });
+});
+
+// [파트너 예약 삭제](2026-09-22 사용자 지시): "각 계정 파트너 사장님도 자기꺼는 앱에서
+// 삭제할수 있어야하고" — updateBookingStatus와 동일하게 RLS(bookings_delete_own)에
+// 위임한 삭제(수동 partner_id 필터 없이 .eq('id', bookingId)만 호출하는지)를 검증한다.
+describe('deleteBooking', () => {
+  afterEach(() => {
+    getUserMock.mockReset();
+    deleteEqMock.mockReset();
+    deleteMock.mockClear();
+    fromMock.mockClear();
+    revalidatePathMock.mockReset();
+  });
+
+  it('로그인하지 않았으면 에러를 반환하고 bookings를 건드리지 않는다', async () => {
+    getUserMock.mockResolvedValue({ data: { user: null } });
+    const result = await deleteBooking('booking-1');
+    expect(result).toEqual({ error: '로그인이 필요합니다.' });
+    expect(fromMock).not.toHaveBeenCalled();
+  });
+
+  it('로그인했으면 bookings.id로만 delete를 호출한다(RLS가 소유권을 강제)', async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
+    deleteEqMock.mockResolvedValue({ error: null });
+
+    const result = await deleteBooking('booking-1');
+
+    expect(result).toEqual({ success: true });
+    expect(fromMock).toHaveBeenCalledWith('bookings');
+    expect(deleteEqMock).toHaveBeenCalledWith('id', 'booking-1');
+  });
+
+  it('성공하면 /partner/today를 revalidate한다', async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
+    deleteEqMock.mockResolvedValue({ error: null });
+
+    await deleteBooking('booking-1');
+    expect(revalidatePathMock).toHaveBeenCalledWith('/partner/today');
+  });
+
+  it('DB 삭제가 실패하면 에러 메시지를 반환하고 revalidate하지 않는다', async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
+    deleteEqMock.mockResolvedValue({ error: { message: 'DB 오류' } });
+
+    const result = await deleteBooking('booking-1');
     expect(result).toEqual({ error: 'DB 오류' });
     expect(revalidatePathMock).not.toHaveBeenCalled();
   });

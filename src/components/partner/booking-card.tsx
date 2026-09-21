@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { updateBookingStatus } from '@/actions/partner/bookings';
+import { updateBookingStatus, deleteBooking } from '@/actions/partner/bookings';
 import { BookingStatus, BOOKING_STATUSES } from '@/lib/partner/booking-status';
 
 // [나드리픽 파트너 PMS — 일간 뷰](2026-09-20 사용자 지시): "채널 구분 뱃지... 색상
@@ -53,6 +53,8 @@ export function BookingCard({ booking }: { booking: BookingCardData }) {
   const [status, setStatus] = useState<string>(booking.status);
   const [isUpdating, setIsUpdating] = useState<BookingStatus | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeleted, setIsDeleted] = useState(false);
 
   const sourceMeta = SOURCE_META[booking.source] ?? { label: booking.source, className: 'bg-gray-100 text-gray-600' };
 
@@ -73,6 +75,27 @@ export function BookingCard({ booking }: { booking: BookingCardData }) {
     }
     setIsUpdating(null);
   }
+
+  // [파트너 예약 삭제](2026-09-22 사용자 지시): "각 계정 파트너 사장님도 자기꺼는
+  // 앱에서 삭제할수 있어야하고" — 상태를 '취소'로 바꾸는 것과 달리 행 자체를
+  // 영구히 지운다. window.confirm으로 실수 클릭을 막는다(이 코드베이스의 기존
+  // 삭제 확인 관례 — raw-data-modal.tsx/category-mapping-panel.tsx와 동일 패턴).
+  async function handleDelete() {
+    if (isDeleting) return;
+    if (!window.confirm('이 예약을 삭제할까요? 삭제하면 되돌릴 수 없어요.')) return;
+    setIsDeleting(true);
+    setErrorMessage(null);
+    const result = await deleteBooking(booking.id);
+    if ('error' in result) {
+      setErrorMessage(result.error);
+      setIsDeleting(false);
+    } else {
+      setIsDeleted(true);
+      router.refresh();
+    }
+  }
+
+  if (isDeleted) return null;
 
   return (
     <div className={`rounded-2xl border p-4 ${status === 'cancelled' ? 'border-gray-200 bg-gray-50 opacity-60' : 'border-gray-200 bg-white'}`}>
@@ -121,6 +144,15 @@ export function BookingCard({ booking }: { booking: BookingCardData }) {
         })}
       </div>
       {errorMessage && <p className="mt-2 text-xs text-red-600">{errorMessage}</p>}
+
+      <button
+        type="button"
+        onClick={handleDelete}
+        disabled={isDeleting}
+        className="mt-3 w-full text-center text-xs font-medium text-red-500 hover:text-red-600 disabled:opacity-50"
+      >
+        {isDeleting ? '삭제 중...' : '예약 삭제'}
+      </button>
     </div>
   );
 }

@@ -3,11 +3,16 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BookingCard, BookingCardData } from './booking-card';
 
 const updateBookingStatusMock = vi.fn();
+const deleteBookingMock = vi.fn();
 const refreshMock = vi.fn();
 
 vi.mock('@/actions/partner/bookings', async () => {
   const actual = await vi.importActual<typeof import('@/actions/partner/bookings')>('@/actions/partner/bookings');
-  return { ...actual, updateBookingStatus: (id: string, status: string) => updateBookingStatusMock(id, status) };
+  return {
+    ...actual,
+    updateBookingStatus: (id: string, status: string) => updateBookingStatusMock(id, status),
+    deleteBooking: (id: string) => deleteBookingMock(id),
+  };
 });
 
 vi.mock('next/navigation', () => ({
@@ -32,7 +37,9 @@ const BASE_BOOKING: BookingCardData = {
 describe('BookingCard', () => {
   afterEach(() => {
     updateBookingStatusMock.mockReset();
+    deleteBookingMock.mockReset();
     refreshMock.mockReset();
+    vi.restoreAllMocks();
   });
 
   it('예약자명/전화번호/시간/인원/메모를 표시한다', () => {
@@ -95,5 +102,39 @@ describe('BookingCard', () => {
     render(<BookingCard booking={BASE_BOOKING} />);
     fireEvent.click(screen.getByText('확정'));
     expect(updateBookingStatusMock).not.toHaveBeenCalled();
+  });
+
+  // [파트너 예약 삭제](2026-09-22 사용자 지시): "각 계정 파트너 사장님도 자기꺼는
+  // 앱에서 삭제할수 있어야하고" — window.confirm 취소/확인 분기와 성공/실패 처리를
+  // 검증한다.
+  it('삭제 확인(confirm)에서 취소하면 삭제 액션을 호출하지 않는다', () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    render(<BookingCard booking={BASE_BOOKING} />);
+    fireEvent.click(screen.getByText('예약 삭제'));
+    expect(deleteBookingMock).not.toHaveBeenCalled();
+  });
+
+  it('삭제를 확인하면 삭제 액션을 호출하고 성공 시 카드가 사라지며 router.refresh()된다', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    deleteBookingMock.mockResolvedValue({ success: true });
+    render(<BookingCard booking={BASE_BOOKING} />);
+
+    fireEvent.click(screen.getByText('예약 삭제'));
+
+    await waitFor(() => expect(deleteBookingMock).toHaveBeenCalledWith('booking-1'));
+    await waitFor(() => expect(screen.queryByText('김손님')).not.toBeInTheDocument());
+    expect(refreshMock).toHaveBeenCalled();
+  });
+
+  it('삭제 액션이 실패하면 에러 메시지를 보여주고 카드를 유지한다', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    deleteBookingMock.mockResolvedValue({ error: '삭제 실패' });
+    render(<BookingCard booking={BASE_BOOKING} />);
+
+    fireEvent.click(screen.getByText('예약 삭제'));
+
+    expect(await screen.findByText('삭제 실패')).toBeInTheDocument();
+    expect(screen.getByText('김손님')).toBeInTheDocument();
+    expect(refreshMock).not.toHaveBeenCalled();
   });
 });
