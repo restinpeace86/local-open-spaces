@@ -223,8 +223,22 @@ const SAFE_MERGE_UPSERT_BATCH_SIZE = 200;
 // 않는다(포함하면 관리자의 수동 분류 작업이 재수집 때마다 사라짐).
 // open_spaces는 이런 "회차성" 시간 필드 자체가 없어(상시 시설 전제) 대상에서 제외했다
 // (project/database_schema.md 실측 확인 — start_date/end_date/booking_status 등 없음).
+// [예약 오픈 알림 자동 동기화](2026-09-22 사용자 지시): seoul-yeyak-adapter.mjs가
+// 이제 next_reservation_open_at을 실제 접수 시작 시각(reservation_start_date)으로
+// 채워 보내는데(그 외 어댑터는 계속 null만 넘김), 이 필드도 reservation_start_date와
+// 동일한 이유로 "최신 수집 결과가 항상 이겨야" 매일 갱신되는 실제 예약 시각을 반영할
+// 수 있다. null로 넘어오면(값을 알 수 없거나 이미 지난 시각) 기존 값을 보존하므로
+// 관리자가 서울형키즈카페 등에 수동 입력해 둔 값은 그대로 유지된다.
 const ALWAYS_REFRESH_FIELDS = {
-  events: ['start_date', 'end_date', 'reservation_start_date', 'reservation_end_date', 'is_active', 'booking_status'],
+  events: [
+    'start_date',
+    'end_date',
+    'reservation_start_date',
+    'reservation_end_date',
+    'is_active',
+    'booking_status',
+    'next_reservation_open_at',
+  ],
 };
 
 export async function upsertRowsSafeMerge(client, table, rows) {

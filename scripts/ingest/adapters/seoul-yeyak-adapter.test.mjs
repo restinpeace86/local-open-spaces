@@ -258,6 +258,70 @@ describe('SeoulYeyakAdapter', () => {
     });
   });
 
+  // [타임존 버그 수정 + 예약 오픈 알림 자동 동기화](2026-09-22 사용자 지시로 검토 중
+  // 발견): RCPTBGNDT/RCPTENDDT는 시간대 표시 없는 KST 문자열인데 그동안 UTC로 잘못
+  // 해석되고 있었다(실측: 9시간 밀림). kstNaiveDatetimeToUtcIso로 명시적으로 KST
+  // 해석하도록 고치고, 이미 실제 접수 시작 시각이 있는 이 소스는 관리자 수동 입력
+  // 없이 next_reservation_open_at을 그 값으로 자동 동기화한다(미래 시각일 때만).
+  describe('transformSplit — RCPTBGNDT/RCPTENDDT 타임존 보정 + 예약 오픈 알림 자동 동기화(2026-09-22)', () => {
+    it('RCPTBGNDT/RCPTENDDT를 KST로 해석해 9시간을 빼 UTC로 저장한다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const [row] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '문화체험' }]).events;
+      // RCPTBGNDT: '2026-07-22 10:00:00.0'(KST) → UTC 2026-07-22T01:00:00.000Z
+      expect(row.reservation_start_date).toBe('2026-07-22T01:00:00.000Z');
+      // RCPTENDDT: '2026-07-31 18:00:00.0'(KST) → UTC 2026-07-31T09:00:00.000Z
+      expect(row.reservation_end_date).toBe('2026-07-31T09:00:00.000Z');
+    });
+
+    it('보정된 접수 시작 시각이 미래면 next_reservation_open_at을 그 값으로 채운다', () => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date('2026-07-01T00:00:00.000Z')); // RCPTBGNDT보다 과거 시점
+        const adapter = new SeoulYeyakAdapter();
+        const [row] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '문화체험' }]).events;
+        expect(row.next_reservation_open_at).toBe('2026-07-22T01:00:00.000Z');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('보정된 접수 시작 시각이 이미 과거면(예약이 이미 열림) next_reservation_open_at을 채우지 않는다', () => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date('2026-09-01T00:00:00.000Z')); // RCPTBGNDT보다 미래 시점
+        const adapter = new SeoulYeyakAdapter();
+        const [row] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '문화체험' }]).events;
+        expect(row.next_reservation_open_at).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('서울형키즈카페/공공키즈카페는 접수 시작 시각이 미래여도 자동 동기화 대상에서 제외한다(수동 입력 체계 유지)', () => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date('2026-07-01T00:00:00.000Z'));
+        const adapter = new SeoulYeyakAdapter();
+        // SVCNM이 여기저기 30개소 명단에 없어 categoryMin='공공키즈카페'로 분류됨.
+        const [row] = adapter.transformSplit([{ ...BASE_ITEM, MAXCLASSNM: '체육시설', MINCLASSNM: '서울형키즈카페' }]).events;
+        expect(row.category_min).toBe('공공키즈카페');
+        expect(row.next_reservation_open_at).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('RCPTBGNDT/RCPTENDDT가 없거나 형식이 다르면 추측하지 않고 null로 적재한다', () => {
+      const adapter = new SeoulYeyakAdapter();
+      const [row] = adapter.transformSplit([
+        { ...BASE_ITEM, MAXCLASSNM: '문화체험', RCPTBGNDT: '', RCPTENDDT: undefined },
+      ]).events;
+      expect(row.reservation_start_date).toBeNull();
+      expect(row.reservation_end_date).toBeNull();
+      expect(row.next_reservation_open_at).toBeNull();
+    });
+  });
+
   // [여기저기/일반 서울형키즈카페 구분](2026-09-20 사용자 지시): "여기저기 서울형키즈카페랑
   // 일반키즈카페랑 기준 다른건 알지?" — MINCLASSNM만으로는 두 서브타입을 구분할 수 없어
   // (둘 다 '서울형키즈카페'로 동일, 실측 확인) 사용자가 제시한 공식 30개소 명단으로

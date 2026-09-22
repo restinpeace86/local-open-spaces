@@ -22,6 +22,7 @@ import { deriveParentalTags, deriveSpaceKidsFriendly } from '../lib/ai-tagging.m
 import { bumpError } from '../lib/error-counts.mjs';
 import { extractYeyakDescription } from '../lib/seoul-yeyak-description.mjs';
 import { parsePriceFromText } from './lib/price-parser.mjs';
+import { kstNaiveDatetimeToUtcIso } from '../lib/kst-date-range.mjs';
 
 const BASE_URL = 'http://openapi.seoul.go.kr:8088';
 const SERVICE_NAME = 'tvYeyakCOllect';
@@ -295,6 +296,37 @@ export class SeoulYeyakAdapter extends BaseCollectorAdapter {
             continue;
           }
 
+          // [타임존 버그 수정](2026-09-22 사용자 지시로 검토 중 발견): RCPTBGNDT/
+          // RCPTENDDT("2026-08-25 09:00:00.0")는 시간대 표시가 없는 한국시간(KST)
+          // 문자열인데, 그동안 이걸 그대로 timestamptz 컬럼에 넣어 Postgres가 UTC로
+          // 잘못 해석하고 있었다(실측: 9시간 밀림 확인) — kstNaiveDatetimeToUtcIso로
+          // 명시적으로 KST임을 밝혀 변환한다.
+          const reservationStartDateIso = kstNaiveDatetimeToUtcIso(item.RCPTBGNDT);
+          const reservationEndDateIso = kstNaiveDatetimeToUtcIso(item.RCPTENDDT);
+          // [예약 오픈 알림 자동 동기화](2026-09-22 사용자 지시): "seoul_reservation쪽은
+          // 예약 시간 있는걸로 아는데 넣는건 좀 그렇나?" — 검토 결과 이 소스는 이미
+          // 실제 접수 시작 시각을 갖고 있어(위에서 막 시간대까지 바로잡음), 관리자가
+          // 수동으로 다시 입력할 필요 없이 그 값을 그대로 예약 오픈 알림
+          // (next_reservation_open_at)에 반영한다 — "규칙을 추측"하는 게 아니라 이미
+          // 확인된 실제 데이터를 재사용하는 것이라 제3장 제5조(추측 금지)에 저촉되지
+          // 않는다고 판단했다(사용자 확인). 이미 지난 시각이면(예약이 이미 열렸음)
+          // 알릴 "다음" 시점이 없으므로 null로 둔다 — buildEventRow가 이 값을
+          // ALWAYS_REFRESH_FIELDS로 다루므로(scripts/ingest/lib/supabase-admin.mjs),
+          // null이면 기존 값을 보존하고(다른 소스가 수동으로 채워둔 값을 지우지
+          // 않음) 미래 값이면 매일 최신 값으로 갱신된다.
+          //
+          // [서울형키즈카페/공공키즈카페는 이 자동 동기화 대상에서 제외] 이 두
+          // 카테고리는 별도 사용자 지시(2026-09-20)로 "자치구별 시차를 두는 공지
+          // 기반 규칙"을 관리자가 수동 입력하도록 이미 확정돼 있고(1회성 시드
+          // 스크립트로 채워둠), RCPTBGNDT가 이 카테고리에서도 그 규칙과 같은
+          // 의미인지 확인된 바 없다(추측 금지) — 기존 결정과 충돌하지 않도록 이
+          // 두 카테고리만 그대로 수동 입력 체계를 유지한다.
+          const isManualOnlyKidsCafeCategory = categoryMin === '서울형키즈카페' || categoryMin === '공공키즈카페';
+          const nextReservationOpenAt =
+            !isManualOnlyKidsCafeCategory && reservationStartDateIso && new Date(reservationStartDateIso).getTime() > Date.now()
+              ? reservationStartDateIso
+              : null;
+
           const row = buildEventRow({
             externalId: `SEOUL_YEYAK_${item.SVCID}`,
             title: item.SVCNM,
@@ -313,8 +345,9 @@ export class SeoulYeyakAdapter extends BaseCollectorAdapter {
             locationPrecision,
             isReservationRequired: true, // SEOUL_YEYAK 소스는 전건 "사전 예약 필수" 뱃지 기본 부여
             reservationUrl,
-            reservationStartDate: item.RCPTBGNDT || null,
-            reservationEndDate: item.RCPTENDDT || null,
+            reservationStartDate: reservationStartDateIso,
+            reservationEndDate: reservationEndDateIso,
+            nextReservationOpenAt,
             isFree: item.PAYATNM === '무료',
             thumbnailUrl: item.IMGURL || null,
             isActive: isActiveStatus(item.SVCSTATNM),

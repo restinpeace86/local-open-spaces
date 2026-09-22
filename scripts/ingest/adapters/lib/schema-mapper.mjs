@@ -184,6 +184,11 @@ export function buildEventRow({
   reservationUrl = null,
   reservationStartDate = null,
   reservationEndDate = null,
+  // [예약 오픈 알림 자동 동기화](2026-09-22 사용자 지시, seoul-yeyak-adapter.mjs만
+  // 실제로 값을 넘김): 소스가 실제 예약 오픈 시각을 갖고 있을 때만 채운다. null이면
+  // (다른 모든 어댑터의 기본값 포함) ALWAYS_REFRESH_FIELDS의 "값 없으면 기존 보존"
+  // 규칙에 따라 관리자가 수동 입력해둔 값이 있어도 지우지 않는다.
+  nextReservationOpenAt = null,
   isFree = null,
   thumbnailUrl = null,
   isKidsFriendly = false,
@@ -245,6 +250,7 @@ export function buildEventRow({
     is_reservation_required: isReservationRequired,
     reservation_start_date: reservationStartDate,
     reservation_end_date: reservationEndDate,
+    next_reservation_open_at: nextReservationOpenAt,
     reservation_url: reservationUrl,
     is_free: isFree,
     thumbnail_url: thumbnailUrl,
