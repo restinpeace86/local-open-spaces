@@ -1,5 +1,5 @@
+import Link from 'next/link';
 import { createAdminClient } from '@/lib/supabase/admin';
-import { HqBookingRow, HqBookingRowData } from '@/components/hq/hq-booking-row';
 
 // [빌드 시 정적 프리렌더링 버그 발견 및 수정](2026-09-22, npm run build 결과 확인 중
 // 실측): 이 페이지는 세션 쿠키를 쓰는 createClient()가 아니라 createAdminClient()
@@ -19,31 +19,35 @@ export const dynamic = 'force-dynamic';
 // 필요는 없다(다만 데이터를 실제로 지우는 deleteBookingAsHq 액션 쪽은 별개로 한 번 더
 // 확인한다, 그 파일 주석 참고).
 //
+// [대시보드를 요약 목록으로 재구성](2026-09-23 사용자 지시): "대시보드에서부터 이렇게
+// 하지말고 대시보드는 리스트 형태라던가 혹은 요약형태로.. 그거 누르면 지금
+// 대시보드에 나오는 형태로 좀 나오게 하던가" — 원래는 파트너마다 예약 표 전체를
+// 이 화면 하나에 다 펼쳐놨는데(스크롤 버그와 별개로도), 파트너가 늘어날수록 한
+// 화면에 모든 파트너의 모든 예약이 쌓여 탐색이 어려워진다. 파트너별 예약 건수만
+// 보여주는 요약 목록으로 바꾸고, 실제 예약 표(기존 형태)는 각 파트너를 눌렀을 때
+// 이동하는 상세 페이지(/hq/partners/[id])로 옮겼다.
+//
 // [집계를 JS에서 처리](제5장 제4조 기존 구조 우선): monthly/page.tsx가 이미 같은
 // 이유로 GROUP BY 대신 JS 집계를 쓰고 있다 — 파트너 수/예약 수가 아직 복잡한 SQL
-// 집계 쿼리를 새로 만들 규모가 아니다.
+// 집계 쿼리를 새로 만들 규모가 아니다. bookings는 건수 집계에만 쓰이므로
+// partner_id만 select해 페이로드를 줄인다(상세 화면에서 나머지 컬럼을 조회).
 export default async function HqDashboardPage() {
   const admin = createAdminClient();
 
   const { data: partners } = await admin.from('partners').select('id, farm_name').order('farm_name', { ascending: true });
-  const { data: bookings } = await admin
-    .from('bookings')
-    .select('id, partner_id, customer_name, customer_phone, booking_date, booking_time, headcount, source, status, product_name, total_price')
-    .order('booking_date', { ascending: false })
-    .order('booking_time', { ascending: false });
+  const { data: bookingPartnerIds } = await admin.from('bookings').select('partner_id');
 
-  const bookingsByPartner = new Map<string, HqBookingRowData[]>();
-  for (const booking of bookings ?? []) {
-    if (!bookingsByPartner.has(booking.partner_id)) bookingsByPartner.set(booking.partner_id, []);
-    bookingsByPartner.get(booking.partner_id)!.push(booking);
+  const countByPartner = new Map<string, number>();
+  for (const row of bookingPartnerIds ?? []) {
+    countByPartner.set(row.partner_id, (countByPartner.get(row.partner_id) ?? 0) + 1);
   }
 
   return (
-    <div className="flex flex-col gap-6 p-4 pb-12">
+    <div className="flex flex-col gap-4 p-4 pb-12">
       <div>
         <h1 className="text-lg font-bold text-gray-900">HQ 대시보드</h1>
         <p className="text-sm text-gray-500">
-          전체 파트너 {partners?.length ?? 0}곳 · 예약 {bookings?.length ?? 0}건
+          전체 파트너 {partners?.length ?? 0}곳 · 예약 {bookingPartnerIds?.length ?? 0}건
         </p>
       </div>
 
@@ -51,42 +55,21 @@ export default async function HqDashboardPage() {
         <p className="py-10 text-center text-sm text-gray-400">등록된 파트너가 없어요.</p>
       )}
 
-      {partners?.map((partner) => {
-        const partnerBookings = bookingsByPartner.get(partner.id) ?? [];
-        return (
-          <section key={partner.id} className="rounded-2xl border border-gray-200 bg-white p-4">
-            <h2 className="mb-3 text-base font-bold text-gray-900">
-              {partner.farm_name} <span className="font-normal text-gray-400">— 예약 {partnerBookings.length}건</span>
-            </h2>
-            {partnerBookings.length === 0 ? (
-              <p className="text-sm text-gray-400">등록된 예약이 없어요.</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[720px] border-collapse">
-                  <thead>
-                    <tr className="border-b border-gray-200 text-left text-xs font-medium text-gray-400">
-                      <th className="px-3 py-2">일시</th>
-                      <th className="px-3 py-2">예약자</th>
-                      <th className="px-3 py-2">연락처</th>
-                      <th className="px-3 py-2">인원</th>
-                      <th className="px-3 py-2">상품</th>
-                      <th className="px-3 py-2">금액</th>
-                      <th className="px-3 py-2">출처</th>
-                      <th className="px-3 py-2">상태</th>
-                      <th className="px-3 py-2" />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {partnerBookings.map((booking) => (
-                      <HqBookingRow key={booking.id} booking={booking} />
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </section>
-        );
-      })}
+      <div className="flex flex-col gap-2">
+        {partners?.map((partner) => (
+          <Link
+            key={partner.id}
+            href={`/hq/partners/${partner.id}`}
+            className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white p-4 hover:border-gray-300 hover:bg-gray-50"
+          >
+            <span className="text-base font-bold text-gray-900">{partner.farm_name}</span>
+            <span className="flex items-center gap-1 text-sm text-gray-500">
+              예약 {countByPartner.get(partner.id) ?? 0}건
+              <span aria-hidden>›</span>
+            </span>
+          </Link>
+        ))}
+      </div>
     </div>
   );
 }
