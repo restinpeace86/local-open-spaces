@@ -732,12 +732,21 @@ describe('BlogCurationModal', () => {
       expect(screen.getByLabelText('수유실 있음')).not.toBeChecked();
     });
 
-    it('기존 큐레이션을 수정하는 경우, 이미 저장된 뱃지 선택을 본문 자동 체크가 덮어쓰지 않는다', async () => {
+    // [개선사항 3 버그 수정](2026-09-22 사용자 지시, todo.md): "스팟 큐레이션 →
+    // 블로그로 큐레이션 순서로 하면 블로그 키워드 기반 뱃지 추가가 정상 동작하지
+    // 않음" — 예전엔 기존 큐레이션이 있으면(순서 무관) 자동 체크 전체를 건너뛰어
+    // 이미 저장된 뱃지만 남고 새 뱃지는 절대 추가되지 않았다. 이제는 기존
+    // 큐레이션이 있어도 자동 체크가 실행되되, 기존 선택을 지우지 않고 새로
+    // 매칭된 것만 합집합으로 더한다.
+    it('기존 큐레이션이 있어도 본문 자동 체크가 실행되어, 기존 뱃지는 유지한 채 새로 매칭된 뱃지를 합집합으로 추가한다', async () => {
+      // sigungu_name이 없는 SPOT을 쓴다 — 지역명 하이라이팅/미스매치 판정
+      // (regionKeywords)은 이 테스트의 관심사가 아니고, 지역명이 없으면
+      // hasRegionMismatch가 항상 false라 뱃지 병합 로직만 순수하게 검증된다.
       const fetchMock = mockFetchByUrl({
         blogSearch: { items: [makeBlogItem()], hasRecentReview: true, hasNoResults: false },
         existingCuration: {
           id: 'curation-1',
-          spot_id: SPOT_WITH_REGION.id,
+          spot_id: SPOT.id,
           blog_url_1: null,
           blog_url_2: null,
           blog_url_3: null,
@@ -747,22 +756,13 @@ describe('BlogCurationModal', () => {
         blogBodyText: '주차 가능하고 수유실도 있어요.',
       });
       vi.stubGlobal('fetch', fetchMock);
-      render(
-        <BlogCurationModal
-          spot={SPOT_WITH_REGION}
-          serviceCategories={SERVICE_CATEGORIES}
-          onClose={vi.fn()}
-          onServiceCategoryUpdated={vi.fn()}
-        />
-      );
+      render(<BlogCurationModal spot={SPOT} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />);
 
-      await waitFor(() => {
-        const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/blog-body'));
-        expect(call).toBeDefined();
-      });
+      // 기존에 저장돼 있던 뱃지는 그대로 유지된다.
       await waitFor(() => expect(screen.getByLabelText('유모차 가능')).toBeChecked());
-      expect(screen.getByLabelText('주차 완비')).not.toBeChecked();
-      expect(screen.getByLabelText('수유실 있음')).not.toBeChecked();
+      // 이번 블로그 본문에서 새로 매칭된 뱃지도 함께 체크된다(덮어쓰기가 아니라 합집합).
+      await waitFor(() => expect(screen.getByLabelText('주차 완비')).toBeChecked());
+      expect(screen.getByLabelText('수유실 있음')).toBeChecked();
     });
   });
 

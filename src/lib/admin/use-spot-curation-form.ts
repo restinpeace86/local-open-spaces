@@ -308,13 +308,27 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
   // [멀티 블로그 키워드 종합 분석 및 워닝 필터링](2026-09-08 사용자 지시, todo.md
   // 개선사항2-3): "블로그 1의 키워드만 참고하는 구조를 수정하여.. 블로그 1,2,3
   // 등 연결된 전체 블로그의 키워드 및 본문을 종합.. 단, 워닝이 걸린 블로그는
-  // 키워드 분석 대상에서 제외" — 신규 등록(기존 큐레이션 없음)일 때만, 그리고
-  // 3개 블로그 본문 fetch가 모두 정착(성공/실패 무관)된 뒤 딱 한 번만 자동
-  // 체크한다(탭 전환 등으로 재실행되어 관리자가 수동 해제한 뱃지를 되살리지
-  // 않기 위함 — 기존 단일 탭 버전과 동일한 안전장치). 워닝 판정(지역 키워드
-  // 불일치)이 걸린 블로그는 hasRegionMismatch로 걸러 집계에서 제외한다.
+  // 키워드 분석 대상에서 제외" — 3개 블로그 본문 fetch가 모두 정착(성공/실패
+  // 무관)된 뒤 딱 한 번만 자동 체크한다(탭 전환 등으로 재실행되어 관리자가
+  // 수동 해제한 뱃지를 되살리지 않기 위함 — hasAutoCheckedBadges 가드).
+  // 워닝 판정(지역 키워드 불일치)이 걸린 블로그는 hasRegionMismatch로 걸러
+  // 집계에서 제외한다.
+  //
+  // [개선사항 3 버그 수정](2026-09-22 사용자 지시, todo.md): "스팟 큐레이션 →
+  // 블로그로 큐레이션 순서로 하면 블로그 키워드 기반 뱃지 추가가 정상 동작하지
+  // 않음(반대 순서는 됨)" — 원래는 `existingCuration`이 있으면(이미 저장된
+  // 큐레이션이 있으면, 순서 무관하게) 이 자동 체크 전체를 건너뛰었다("신규
+  // 등록일 때만"이라는 의도적 설계였지만, 그 결과 스팟 큐레이션 화면에서
+  // 수동으로 뱃지를 먼저 저장해두면 블로그 자동 체크 기능 자체가 영원히
+  // 죽어버렸다). 이 코드베이스의 다른 자동 체크들(spot-curations-panel.tsx의
+  // handleCrawlNaverPlace 편의시설 뱃지 자동 체크 — "매칭된 것만 추가하고
+  // (합집합), 기존에 체크돼 있던 건 절대 건드리지 않는다")과 동일한 패턴으로
+  // 통일한다: existingCuration 유무와 무관하게 자동 체크를 실행하되, 결과를
+  // 덮어쓰지 않고 기존 selectedBadges에 합집합으로 병합한다(아래
+  // setSelectedBadges 참고) — 수동으로 저장된 뱃지는 그대로 유지되면서, 블로그
+  // 본문에서 새로 매칭된 뱃지만 추가된다.
   useEffect(() => {
-    if (!hasCheckedExistingCuration || existingCuration || hasAutoCheckedBadges || !blogItems || blogItems.length === 0) return;
+    if (!hasCheckedExistingCuration || hasAutoCheckedBadges || !blogItems || blogItems.length === 0) return;
     const allSettled = blogItems.every((item) => {
       const body = bodyByLink[item.link];
       return body && !body.isLoading;
@@ -337,7 +351,10 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
       usableTexts.push(text);
       for (const key of matchBadgeKeysFromText(text, curationCategoryId)) aggregated.add(key);
     }
-    setSelectedBadges(aggregated);
+    // 기존에 선택돼 있던(수동 입력이든 이전에 저장된 것이든) 뱃지는 절대
+    // 지우지 않고, 새로 매칭된 것만 합집합으로 더한다(위 [개선사항 3 버그
+    // 수정] 주석 참고).
+    setSelectedBadges((prev) => new Set([...prev, ...aggregated]));
     setHasAutoCheckedBadges(true);
 
     // [동적 연령 추천 시스템](2026-09-10 개선사항1): 워닝 없는 블로그 본문들을
