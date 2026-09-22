@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { AdminTable, AdminRow, AdminOpenSpaceRow, AdminEventRow, AdminRawIngestRow, extractLngLat } from '@/components/admin/data-grid-client';
-import { MigrateToEventModal } from '@/components/admin/migrate-to-event-modal';
 import { ServiceCategory } from '@/lib/admin/service-category';
 import { BlogCurationModal } from '@/components/admin/blog-curation-modal';
 import { EventBlogCurationModal } from '@/components/admin/event-blog-curation-modal';
+import { EventOperatingScheduleModal } from '@/components/admin/event-operating-schedule-modal';
 import { EventPriceCurationModal } from '@/components/admin/event-price-curation-modal';
 import { SpotPicker, SpotOption } from '@/components/community/spot-picker';
 import { SpotCurationQuickModal } from '@/components/admin/spot-curation-quick-modal';
@@ -840,7 +840,6 @@ export function RawDataModal({
   onServiceCategoryUpdated,
   onDisplayNameUpdated,
   onNaverPlaceIdUpdated,
-  onMigratedToEvent,
   onDeleted,
 }: {
   table: AdminTable;
@@ -860,9 +859,8 @@ export function RawDataModal({
   onTitleUpdated?: (id: string, nextTitle: string) => void;
   // [예약 오픈 알림](2026-09-20 사용자 지시): events 탭 전용, 다음 예약 오픈 시각 수동 입력.
   onReservationOpenAtUpdated?: (id: string, nextOpenAt: string | null) => void;
-  // [운영 요일/반복 규칙](2026-09-12 사용자 지시): events 탭 전용. 편집기 자체는
-  // [블로그 큐레이션 모달로 이동](2026-09-12 사용자 지시)에 따라 EventBlogCurationModal
-  // 안으로 옮겨졌고, 이 콜백은 그 모달에 그대로 전달돼 저장 결과를 이 화면의 행
+  // [운영 요일/반복 규칙](2026-09-12 사용자 지시, 2026-09-22 독립 모달로 재분리):
+  // events 탭 전용. EventOperatingScheduleModal에 전달돼 저장 결과를 이 화면의 행
   // state까지 반영한다.
   onOperatingScheduleUpdated?: OperatingScheduleUpdatedHandler;
   onLocationUpdated?: (id: string, nextLocation: unknown, nextPrecision: string) => void;
@@ -875,9 +873,6 @@ export function RawDataModal({
   // 전용. SpotCurationQuickModal이 저장한 최신 naver_place_id를 부모(그리드 상태)에
   // 즉시 반영하기 위한 콜백 — onDisplayNameUpdated와 동일한 스테일 상태 방지 목적.
   onNaverPlaceIdUpdated?: (id: string, nextNaverPlaceId: string | null) => void;
-  // [todo.md 개선사항 5](2026-09-03): open_spaces 탭에서만 전달된다 — 이관 성공 시 부모가
-  // 목록에서 이 행을 제거하고 상세 모달을 닫는다(원본이 실제로 삭제됐으므로).
-  onMigratedToEvent?: (id: string) => void;
   // [open_spaces 삭제 기능](2026-09-06 사용자 지시): open_spaces 탭에서만 전달된다 —
   // 삭제 성공 시 부모가 목록에서 이 행을 제거하고 상세 모달을 닫는다.
   onDeleted?: (id: string) => void;
@@ -890,10 +885,11 @@ export function RawDataModal({
   // 해당 없음(raw_payload는 undefined가 될 일이 없음).
   const isRawDataLoading = table !== 'raw_ingest_data' && raw === undefined;
   const prettyJson = JSON.stringify(raw ?? null, null, 2);
-  const [isMigrateModalOpen, setIsMigrateModalOpen] = useState(false);
   const [isBlogCurationModalOpen, setIsBlogCurationModalOpen] = useState(false);
   // [이벤트픽 관리자 블로그 큐레이션](2026-09-11 사용자 지시, todo.md 개선사항7-2)
   const [isEventBlogCurationModalOpen, setIsEventBlogCurationModalOpen] = useState(false);
+  // [운영 요일/반복 규칙을 독립 버튼/모달로 재분리](2026-09-22 사용자 지시)
+  const [isEventOperatingScheduleModalOpen, setIsEventOperatingScheduleModalOpen] = useState(false);
   // [이벤트/체험 다중 소스 가격 수집 및 관리자 검증 UI](2026-09-15 사용자 지시,
   // implementation/todo.md 개선사항6): "블로그 큐레이션 버튼과 동일 레벨로 가격
   // 큐레이션 버튼이 존재하여야 함".
@@ -1056,6 +1052,21 @@ export function RawDataModal({
             </button>
           )}
 
+          {/* [운영 요일/반복 규칙을 독립 버튼/모달로 재분리](2026-09-22 사용자 지시):
+              "블로그로 큐레이션인가 이벤트쪽에 거기에.. 그거 한단계 밖으로 빼.. 상세
+              팝업에서 블로그로 큐레이션 진입하는 버튼이랑 같은곳으로 빼줘" — 2026-09-12에
+              블로그 큐레이션 모달 안으로 옮겼던 편집기를 블로그 큐레이션 버튼과 같은
+              레벨의 독립 버튼으로 다시 분리한다. */}
+          {table === 'events' && onOperatingScheduleUpdated && (
+            <button
+              type="button"
+              onClick={() => setIsEventOperatingScheduleModalOpen(true)}
+              className="mt-2 w-full rounded-xl border border-purple-200 bg-purple-50/60 px-3 py-2.5 text-xs font-semibold text-purple-800 hover:bg-purple-100"
+            >
+              📅 운영 요일/반복 규칙 (특정 요일·날짜 지정)
+            </button>
+          )}
+
           {/* [이벤트/체험 다중 소스 가격 수집 및 관리자 검증 UI](2026-09-15 사용자
               지시, todo.md 개선사항6): "블로그 큐레이션버튼과 동일 레벨로 가격
               큐레이션 버튼이 존재하여야 함". */}
@@ -1137,24 +1148,6 @@ export function RawDataModal({
             >
               🔗 병합된 원본 데이터 보기
             </button>
-          )}
-
-          {/* [todo.md 개선사항 5](2026-09-03): 스팟픽에 잘못 분류돼 있던 데이터(예: 실제로는
-              기간이 있는 행사·체험 프로그램)를 이벤트픽 테이블로 옮기는 액션. open_spaces
-              탭에서만 의미가 있다. */}
-          {table === 'open_spaces' && onMigratedToEvent && (
-            <div className="mt-3 rounded-xl border border-purple-200 bg-purple-50/60 p-3 flex items-center justify-between gap-3">
-              <p className="text-xs text-purple-800">
-                이 데이터가 사실은 시작/종료가 있는 행사·체험 프로그램인가요?
-              </p>
-              <button
-                type="button"
-                onClick={() => setIsMigrateModalOpen(true)}
-                className="shrink-0 rounded-full bg-purple-600 text-white text-xs font-semibold px-3 py-1.5 hover:bg-purple-700"
-              >
-                🚚 이벤트픽으로 이동
-              </button>
-            </div>
           )}
 
           {/* [스팟 상세 → 마이리얼트립 자동 매칭](2026-09-16 사용자 지시) */}
@@ -1291,17 +1284,6 @@ export function RawDataModal({
         <CleanedTextPreviewModal field={cleanedTextPreviewField} onClose={() => setCleanedTextPreviewField(null)} />
       )}
 
-      {isMigrateModalOpen && table === 'open_spaces' && onMigratedToEvent && (
-        <MigrateToEventModal
-          row={row as AdminOpenSpaceRow}
-          onClose={() => setIsMigrateModalOpen(false)}
-          onMigrated={(id) => {
-            setIsMigrateModalOpen(false);
-            onMigratedToEvent(id);
-          }}
-        />
-      )}
-
       {isBlogCurationModalOpen && table === 'open_spaces' && onServiceCategoryUpdated && (
         <BlogCurationModal
           spot={{
@@ -1328,16 +1310,24 @@ export function RawDataModal({
             id: (row as AdminEventRow).id,
             title: (row as AdminEventRow).title,
             sigunguName: (row as AdminEventRow).sigungu_name,
-            // [블로그 큐레이션 모달로 이동](2026-09-12 사용자 지시): "RAW_DATA는
-            // 기간으로만 나와있어서.. 블로그 보고 파악하는데" — 운영 요일/반복
-            // 규칙 편집기가 필요로 하는 필드를 함께 전달한다.
+          }}
+          onClose={() => setIsEventBlogCurationModalOpen(false)}
+        />
+      )}
+
+      {isEventOperatingScheduleModalOpen && table === 'events' && onOperatingScheduleUpdated && (
+        <EventOperatingScheduleModal
+          event={{
+            id: (row as AdminEventRow).id,
+            title: (row as AdminEventRow).title,
             start_date: (row as AdminEventRow).start_date,
             end_date: (row as AdminEventRow).end_date,
             operating_weekdays: (row as AdminEventRow).operating_weekdays,
             excluded_weekdays: (row as AdminEventRow).excluded_weekdays,
             operating_nth_weekdays: (row as AdminEventRow).operating_nth_weekdays,
+            operating_specific_dates: (row as AdminEventRow).operating_specific_dates,
           }}
-          onClose={() => setIsEventBlogCurationModalOpen(false)}
+          onClose={() => setIsEventOperatingScheduleModalOpen(false)}
           onOperatingScheduleUpdated={onOperatingScheduleUpdated}
         />
       )}

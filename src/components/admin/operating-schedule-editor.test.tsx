@@ -15,6 +15,7 @@ function buildRow(overrides: Partial<OperatingScheduleRow> = {}): OperatingSched
     operating_weekdays: null,
     excluded_weekdays: null,
     operating_nth_weekdays: null,
+    operating_specific_dates: null,
     ...overrides,
   };
 }
@@ -36,7 +37,13 @@ describe('OperatingScheduleEditor', () => {
         ok: true,
         json: () =>
           Promise.resolve({
-            row: { id: 'row-1', operating_weekdays: ['SAT', 'SUN'], excluded_weekdays: null, operating_nth_weekdays: null },
+            row: {
+              id: 'row-1',
+              operating_weekdays: ['SAT', 'SUN'],
+              excluded_weekdays: null,
+              operating_nth_weekdays: null,
+              operating_specific_dates: null,
+            },
           }),
       } as Response)
     );
@@ -47,7 +54,7 @@ describe('OperatingScheduleEditor', () => {
     fireEvent.click(screen.getByRole('button', { name: '주말만 운영(토·일)' }));
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
 
-    await waitFor(() => expect(onUpdated).toHaveBeenCalledWith('row-1', ['SAT', 'SUN'], null, null));
+    await waitFor(() => expect(onUpdated).toHaveBeenCalledWith('row-1', ['SAT', 'SUN'], null, null, null));
     const patchCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/events/operating-schedule'));
     expect(patchCall).toBeDefined();
     expect(JSON.parse((patchCall![1] as RequestInit).body as string)).toEqual({
@@ -55,6 +62,7 @@ describe('OperatingScheduleEditor', () => {
       operating_weekdays: ['SAT', 'SUN'],
       excluded_weekdays: null,
       operating_nth_weekdays: null,
+      operating_specific_dates: null,
     });
   });
 
@@ -64,7 +72,13 @@ describe('OperatingScheduleEditor', () => {
         ok: true,
         json: () =>
           Promise.resolve({
-            row: { id: 'row-1', operating_weekdays: ['TUE', 'THU'], excluded_weekdays: null, operating_nth_weekdays: null },
+            row: {
+              id: 'row-1',
+              operating_weekdays: ['TUE', 'THU'],
+              excluded_weekdays: null,
+              operating_nth_weekdays: null,
+              operating_specific_dates: null,
+            },
           }),
       } as Response)
     );
@@ -84,6 +98,7 @@ describe('OperatingScheduleEditor', () => {
         operating_weekdays: ['TUE', 'THU'],
         excluded_weekdays: null,
         operating_nth_weekdays: null,
+        operating_specific_dates: null,
       });
     });
   });
@@ -95,7 +110,13 @@ describe('OperatingScheduleEditor', () => {
         ok: true,
         json: () =>
           Promise.resolve({
-            row: { id: 'row-1', operating_weekdays: null, excluded_weekdays: ['MON'], operating_nth_weekdays: null },
+            row: {
+              id: 'row-1',
+              operating_weekdays: null,
+              excluded_weekdays: ['MON'],
+              operating_nth_weekdays: null,
+              operating_specific_dates: null,
+            },
           }),
       } as Response)
     );
@@ -114,6 +135,7 @@ describe('OperatingScheduleEditor', () => {
         operating_weekdays: null,
         excluded_weekdays: ['MON'],
         operating_nth_weekdays: null,
+        operating_specific_dates: null,
       });
     });
   });
@@ -134,7 +156,13 @@ describe('OperatingScheduleEditor', () => {
         ok: true,
         json: () =>
           Promise.resolve({
-            row: { id: 'row-1', operating_weekdays: null, excluded_weekdays: null, operating_nth_weekdays: ['2-SAT', '4-SAT'] },
+            row: {
+              id: 'row-1',
+              operating_weekdays: null,
+              excluded_weekdays: null,
+              operating_nth_weekdays: ['2-SAT', '4-SAT'],
+              operating_specific_dates: null,
+            },
           }),
       } as Response)
     );
@@ -148,7 +176,7 @@ describe('OperatingScheduleEditor', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: '4주차' }));
     fireEvent.click(screen.getByRole('button', { name: '저장' }));
 
-    await waitFor(() => expect(onUpdated).toHaveBeenCalledWith('row-1', null, null, ['2-SAT', '4-SAT']));
+    await waitFor(() => expect(onUpdated).toHaveBeenCalledWith('row-1', null, null, ['2-SAT', '4-SAT'], null));
     const patchCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/events/operating-schedule'));
     expect(patchCall).toBeDefined();
     expect(JSON.parse((patchCall![1] as RequestInit).body as string)).toEqual({
@@ -156,6 +184,7 @@ describe('OperatingScheduleEditor', () => {
       operating_weekdays: null,
       excluded_weekdays: null,
       operating_nth_weekdays: ['2-SAT', '4-SAT'],
+      operating_specific_dates: null,
     });
   });
 
@@ -168,5 +197,56 @@ describe('OperatingScheduleEditor', () => {
     expect(screen.getByRole('checkbox', { name: '2주차' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: '4주차' })).toBeChecked();
     expect(screen.getByRole('checkbox', { name: '1주차' })).not.toBeChecked();
+  });
+
+  // [특정 날짜 지정](2026-09-22 사용자 지시): "17일 20일 이런식으로 운영하는경우가
+  // 있어서"
+  it('"특정 날짜 지정"을 고르고 날짜 2개를 추가해 저장하면 operating_specific_dates로 PATCH한다', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) =>
+      Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            row: {
+              id: 'row-1',
+              operating_weekdays: null,
+              excluded_weekdays: null,
+              operating_nth_weekdays: null,
+              operating_specific_dates: ['2026-09-17', '2026-09-20'],
+            },
+          }),
+      } as Response)
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const onUpdated = vi.fn();
+    render(<OperatingScheduleEditor row={buildRow()} onUpdated={onUpdated} />);
+
+    fireEvent.click(screen.getByRole('button', { name: '특정 날짜 지정' }));
+    fireEvent.change(screen.getByDisplayValue(''), { target: { value: '2026-09-20' } });
+    fireEvent.click(screen.getByRole('button', { name: '추가' }));
+    fireEvent.change(screen.getByDisplayValue(''), { target: { value: '2026-09-17' } });
+    fireEvent.click(screen.getByRole('button', { name: '추가' }));
+    fireEvent.click(screen.getByRole('button', { name: '저장' }));
+
+    await waitFor(() =>
+      expect(onUpdated).toHaveBeenCalledWith('row-1', null, null, null, ['2026-09-17', '2026-09-20'])
+    );
+    const patchCall = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/events/operating-schedule'));
+    expect(patchCall).toBeDefined();
+    expect(JSON.parse((patchCall![1] as RequestInit).body as string)).toEqual({
+      id: 'row-1',
+      operating_weekdays: null,
+      excluded_weekdays: null,
+      operating_nth_weekdays: null,
+      operating_specific_dates: ['2026-09-17', '2026-09-20'],
+    });
+  });
+
+  it('저장된 특정 날짜 지정(2026-09-17)을 다시 열면 프리셋과 날짜가 복원된다', () => {
+    const row = buildRow({ operating_specific_dates: ['2026-09-17'] });
+    render(<OperatingScheduleEditor row={row} onUpdated={vi.fn()} />);
+
+    expect(screen.getByRole('button', { name: '특정 날짜 지정' })).toHaveClass('bg-purple-600');
+    expect(screen.getByText('2026-09-17')).toBeInTheDocument();
   });
 });

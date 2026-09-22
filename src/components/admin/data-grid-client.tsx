@@ -164,6 +164,9 @@ export type AdminEventRow = {
   // [매월 N번째 요일 패턴 추가](2026-09-12 사용자 지시): "매월 2번째 4번째 토요일"
   // 같은 패턴("2-SAT" 형식 토큰 배열) — operating_weekdays와 상호 배타적 대안.
   operating_nth_weekdays?: string[] | null;
+  // [특정 날짜 지정](2026-09-22 사용자 지시): "17일 20일 이런식으로 운영하는경우가
+  // 있어서" — 요일 기반 규칙 대신 실제 달력 날짜 목록으로 지정하는 모드.
+  operating_specific_dates?: string[] | null;
   // [실내/야외 분류 LLM 파이프라인](2026-09-17 사용자 지시): 상세 팝업의
   // FacilityTypeEditor가 LLM에 넘길 상세 설명 텍스트. events 테이블에는 이미
   // description 컬럼이 있지만(공개 홈 피드 API가 써 왔음, get-home-feed.ts) 이
@@ -1878,7 +1881,13 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
               prev && 'id' in prev && prev.id === id ? { ...prev, next_reservation_open_at: nextOpenAt } : prev
             );
           }}
-          onOperatingScheduleUpdated={(id, nextOperatingWeekdays, nextExcludedWeekdays, nextOperatingNthWeekdays) => {
+          onOperatingScheduleUpdated={(
+            id,
+            nextOperatingWeekdays,
+            nextExcludedWeekdays,
+            nextOperatingNthWeekdays,
+            nextOperatingSpecificDates
+          ) => {
             setRows((prev) =>
               prev.map((row) =>
                 'id' in row && row.id === id
@@ -1887,6 +1896,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                       operating_weekdays: nextOperatingWeekdays,
                       excluded_weekdays: nextExcludedWeekdays,
                       operating_nth_weekdays: nextOperatingNthWeekdays,
+                      operating_specific_dates: nextOperatingSpecificDates,
                     }
                   : row
               )
@@ -1898,6 +1908,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                     operating_weekdays: nextOperatingWeekdays,
                     excluded_weekdays: nextExcludedWeekdays,
                     operating_nth_weekdays: nextOperatingNthWeekdays,
+                    operating_specific_dates: nextOperatingSpecificDates,
                   }
                 : prev
             );
@@ -1947,13 +1958,6 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
             setSelectedRow((prev) =>
               prev && 'id' in prev && prev.id === id ? { ...prev, naver_place_id: nextNaverPlaceId } : prev
             );
-          }}
-          onMigratedToEvent={(id) => {
-            // [todo.md 개선사항 5](2026-09-03): 이관 성공 시 원본 open_spaces 행은 서버에서
-            // 실제로 삭제됐으므로(중복 노출 방지) 목록/총건수/상세 모달에서도 즉시 제거한다.
-            setRows((prev) => prev.filter((row) => !('id' in row) || row.id !== id));
-            setTotal((prev) => Math.max(0, prev - 1));
-            setSelectedRow(null);
           }}
           onDeleted={(id) => {
             // [open_spaces 삭제 기능](2026-09-06 사용자 지시): 삭제 성공 시 목록/총건수/

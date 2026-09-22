@@ -189,7 +189,7 @@ const OPEN_SPACES_COLUMNS_WITH_RAW_DATA = `${OPEN_SPACES_COLUMNS}, raw_data`;
 // [예약 오픈 알림](2026-09-20 사용자 지시): 관리자가 상세 팝업에서 next_reservation_open_at을
 // 직접 입력할 수 있으려면 그리드가 현재 값을 먼저 select해서 내려줘야 한다.
 const EVENTS_COLUMNS =
-  "id, external_id, source, title, description, event_type, category_maj, category_min, category_min_source, target_audience, target_audience_source, venue_name, sigungu_name, start_date, end_date, location, location_precision, is_reservation_required, reservation_url, reservation_start_date, reservation_end_date, is_free, thumbnail_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, is_active, created_at, updated_at, space_id, operating_weekdays, excluded_weekdays, operating_nth_weekdays, source_url, next_reservation_open_at, max_class:raw_data->>MAXCLASSNM, min_class:raw_data->>MINCLASSNM, svc_stat:raw_data->>SVCSTATNM";
+  "id, external_id, source, title, description, event_type, category_maj, category_min, category_min_source, target_audience, target_audience_source, venue_name, sigungu_name, start_date, end_date, location, location_precision, is_reservation_required, reservation_url, reservation_start_date, reservation_end_date, is_free, thumbnail_url, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, is_active, created_at, updated_at, space_id, operating_weekdays, excluded_weekdays, operating_nth_weekdays, operating_specific_dates, source_url, next_reservation_open_at, max_class:raw_data->>MAXCLASSNM, min_class:raw_data->>MINCLASSNM, svc_stat:raw_data->>SVCSTATNM";
 
 const RAW_INGEST_COLUMNS = 'source, source_id, fetched_at, raw_payload';
 

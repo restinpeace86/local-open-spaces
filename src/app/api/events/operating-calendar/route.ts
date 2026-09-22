@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     const [{ data: event, error: eventError }, { data: exceptions, error: exceptionError }] = await Promise.all([
       admin
         .from('events')
-        .select('start_date, end_date, operating_weekdays, excluded_weekdays, operating_nth_weekdays')
+        .select('start_date, end_date, operating_weekdays, excluded_weekdays, operating_nth_weekdays, operating_specific_dates')
         .eq('id', eventId)
         .single(),
       admin.from('event_operating_exceptions').select('exception_date, note').eq('event_id', eventId),
@@ -36,6 +36,7 @@ export async function GET(request: NextRequest) {
         operating_weekdays: event.operating_weekdays,
         excluded_weekdays: event.excluded_weekdays,
         operating_nth_weekdays: event.operating_nth_weekdays,
+        operating_specific_dates: event.operating_specific_dates,
       },
       exceptionDates: (exceptions ?? []).map((row) => row.exception_date),
       startDate: event.start_date,

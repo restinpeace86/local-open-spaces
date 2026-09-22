@@ -34,19 +34,23 @@ export type OperatingScheduleRow = {
   operating_weekdays?: string[] | null;
   excluded_weekdays?: string[] | null;
   operating_nth_weekdays?: string[] | null;
+  // [특정 날짜 지정](2026-09-22 사용자 지시): "17일 20일 이런식으로 운영하는경우가
+  // 있어서" — 실제 달력 날짜(YYYY-MM-DD) 목록을 직접 고르는 새 모드.
+  operating_specific_dates?: string[] | null;
 };
 
 export type OperatingScheduleUpdatedHandler = (
   id: string,
   nextOperatingWeekdays: string[] | null,
   nextExcludedWeekdays: string[] | null,
-  nextOperatingNthWeekdays: string[] | null
+  nextOperatingNthWeekdays: string[] | null,
+  nextOperatingSpecificDates: string[] | null
 ) => void;
 
 const WEEKDAY_LABELS: Record<string, string> = { SUN: '일', MON: '월', TUE: '화', WED: '수', THU: '목', FRI: '금', SAT: '토' };
 const WEEKDAY_DISPLAY_ORDER: WeekdayCode[] = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
-type OperatingPreset = 'DAILY' | 'WEEKEND' | 'CUSTOM' | 'MONTHLY_NTH';
+type OperatingPreset = 'DAILY' | 'WEEKEND' | 'CUSTOM' | 'MONTHLY_NTH' | 'SPECIFIC_DATES';
 
 function sameDaySet(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
@@ -61,13 +65,17 @@ function sameDaySet(a: string[], b: string[]): boolean {
 // 조합뿐이라 이 정도로 충분하다).
 function detectOperatingPreset(
   operatingWeekdays: string[] | null | undefined,
-  operatingNthWeekdays: string[] | null | undefined
+  operatingNthWeekdays: string[] | null | undefined,
+  operatingSpecificDates: string[] | null | undefined
 ): {
   preset: OperatingPreset;
   customDays: string[];
   monthlyWeekdays: string[];
   monthlyOccurrences: number[];
 } {
+  if ((operatingSpecificDates ?? []).length > 0) {
+    return { preset: 'SPECIFIC_DATES', customDays: [], monthlyWeekdays: [], monthlyOccurrences: [] };
+  }
   const nthTokens = operatingNthWeekdays ?? [];
   if (nthTokens.length > 0) {
     const parsed = nthTokens.map(parseNthWeekdayToken).filter((v): v is { nth: number; weekday: WeekdayCode } => v !== null);
@@ -126,11 +134,15 @@ export function OperatingScheduleEditor({
   row: OperatingScheduleRow;
   onUpdated: OperatingScheduleUpdatedHandler;
 }) {
-  const initial = detectOperatingPreset(row.operating_weekdays, row.operating_nth_weekdays);
+  const initial = detectOperatingPreset(row.operating_weekdays, row.operating_nth_weekdays, row.operating_specific_dates);
   const [preset, setPreset] = useState<OperatingPreset>(initial.preset);
   const [customDays, setCustomDays] = useState<string[]>(initial.customDays);
   const [monthlyWeekdays, setMonthlyWeekdays] = useState<string[]>(initial.monthlyWeekdays);
   const [monthlyOccurrences, setMonthlyOccurrences] = useState<number[]>(initial.monthlyOccurrences);
+  const [specificDates, setSpecificDates] = useState<string[]>(
+    [...(row.operating_specific_dates ?? [])].sort()
+  );
+  const [specificDateInput, setSpecificDateInput] = useState('');
   const [excludeEnabled, setExcludeEnabled] = useState((row.excluded_weekdays ?? []).length > 0);
   const [excludedDays, setExcludedDays] = useState<string[]>(row.excluded_weekdays ?? []);
   const [isSaving, setIsSaving] = useState(false);
@@ -152,12 +164,22 @@ export function OperatingScheduleEditor({
     setExcludedDays((prev) => (prev.includes(code) ? prev.filter((d) => d !== code) : [...prev, code]));
   }
 
+  function addSpecificDate() {
+    if (!specificDateInput) return;
+    setSpecificDates((prev) => (prev.includes(specificDateInput) ? prev : [...prev, specificDateInput].sort()));
+    setSpecificDateInput('');
+  }
+
+  function removeSpecificDate(date: string) {
+    setSpecificDates((prev) => prev.filter((d) => d !== date));
+  }
+
   const handleSave = async () => {
     setIsSaving(true);
     setErrorMessage(null);
     try {
       const operatingWeekdays =
-        preset === 'DAILY' || preset === 'MONTHLY_NTH'
+        preset === 'DAILY' || preset === 'MONTHLY_NTH' || preset === 'SPECIFIC_DATES'
           ? null
           : preset === 'WEEKEND'
             ? ['SAT', 'SUN']
@@ -171,6 +193,7 @@ export function OperatingScheduleEditor({
               monthlyOccurrences.map((nth) => buildNthWeekdayToken(nth as 1 | 2 | 3 | 4 | 5, weekday as WeekdayCode))
             )
           : null;
+      const operatingSpecificDates = preset === 'SPECIFIC_DATES' && specificDates.length > 0 ? specificDates : null;
       const excludedWeekdaysToSave = excludeEnabled && excludedDays.length > 0 ? excludedDays : null;
 
       const res = await fetch('/api/admin/events/operating-schedule', {
@@ -181,11 +204,18 @@ export function OperatingScheduleEditor({
           operating_weekdays: operatingWeekdays,
           excluded_weekdays: excludedWeekdaysToSave,
           operating_nth_weekdays: operatingNthWeekdays,
+          operating_specific_dates: operatingSpecificDates,
         }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error ?? '운영 요일/반복 규칙 저장 실패');
-      onUpdated(row.id, json.row.operating_weekdays, json.row.excluded_weekdays, json.row.operating_nth_weekdays);
+      onUpdated(
+        row.id,
+        json.row.operating_weekdays,
+        json.row.excluded_weekdays,
+        json.row.operating_nth_weekdays,
+        json.row.operating_specific_dates
+      );
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : '운영 요일/반복 규칙 저장 실패');
     } finally {
@@ -209,6 +239,7 @@ export function OperatingScheduleEditor({
             ['WEEKEND', '주말만 운영(토·일)'],
             ['CUSTOM', '특정 요일 지정'],
             ['MONTHLY_NTH', '매월 특정 주차 요일'],
+            ['SPECIFIC_DATES', '특정 날짜 지정'],
           ] as [OperatingPreset, string][]
         ).map(([value, label]) => (
           <button
@@ -235,11 +266,61 @@ export function OperatingScheduleEditor({
         </div>
       )}
 
-      <label className="mt-3 flex items-center gap-1.5 text-[11px] font-semibold text-gray-600 cursor-pointer">
-        <input type="checkbox" checked={excludeEnabled} onChange={(e) => setExcludeEnabled(e.target.checked)} />
-        정기 휴무일 지정(예: 매주 월요일 휴무)
-      </label>
-      {excludeEnabled && <WeekdayCheckboxGrid selected={excludedDays} onToggle={toggleExcludedDay} />}
+      {preset === 'SPECIFIC_DATES' && (
+        <div className="mt-1.5 rounded-lg bg-gray-50 p-2">
+          <p className="text-[11px] text-gray-500 mb-1">운영하는 날짜를 하나씩 추가하세요(예: 17일, 20일)</p>
+          <div className="flex items-center gap-1.5">
+            <input
+              type="date"
+              value={specificDateInput}
+              min={row.start_date}
+              max={row.end_date}
+              onChange={(e) => setSpecificDateInput(e.target.value)}
+              className="flex-1 rounded-lg border border-gray-300 px-2 py-1 text-xs"
+            />
+            <button
+              type="button"
+              onClick={addSpecificDate}
+              disabled={!specificDateInput}
+              className="shrink-0 rounded-full border border-purple-300 px-2.5 py-1 text-[11px] font-semibold text-purple-700 hover:bg-purple-50 disabled:opacity-40"
+            >
+              추가
+            </button>
+          </div>
+          {specificDates.length > 0 ? (
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {specificDates.map((date) => (
+                <span
+                  key={date}
+                  className="flex items-center gap-1 rounded-full border border-purple-300 bg-purple-50 px-2 py-1 text-[11px] text-purple-700"
+                >
+                  {date}
+                  <button
+                    type="button"
+                    onClick={() => removeSpecificDate(date)}
+                    aria-label={`${date} 삭제`}
+                    className="text-purple-400 hover:text-purple-700"
+                  >
+                    ✕
+                  </button>
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-1.5 text-[11px] text-gray-400">아직 추가된 날짜가 없어요.</p>
+          )}
+        </div>
+      )}
+
+      {preset !== 'SPECIFIC_DATES' && (
+        <>
+          <label className="mt-3 flex items-center gap-1.5 text-[11px] font-semibold text-gray-600 cursor-pointer">
+            <input type="checkbox" checked={excludeEnabled} onChange={(e) => setExcludeEnabled(e.target.checked)} />
+            정기 휴무일 지정(예: 매주 월요일 휴무)
+          </label>
+          {excludeEnabled && <WeekdayCheckboxGrid selected={excludedDays} onToggle={toggleExcludedDay} />}
+        </>
+      )}
 
       <div className="mt-3 flex justify-end">
         <button

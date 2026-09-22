@@ -9,8 +9,6 @@ import {
   PRICE_AMOUNT_PATTERN,
   PRICE_HINT_KEYWORDS,
 } from '@/lib/admin/curation-badges';
-import { OperatingScheduleEditor, OperatingScheduleUpdatedHandler } from '@/components/admin/operating-schedule-editor';
-import { OperatingExceptionsEditor } from '@/components/admin/operating-exceptions-editor';
 
 // [이벤트픽 관리자 블로그 큐레이션](2026-09-11 사용자 지시, implementation/todo.md
 // 개선사항7-2): "관리자 화면 Events 탭 개별 이벤트 항목의 상세 팝업 내부에 블로그
@@ -25,31 +23,18 @@ import { OperatingExceptionsEditor } from '@/components/admin/operating-exceptio
 // 이 키워드/패턴만으로 하이라이트한다(highlightKeywordsOnly).
 const EVENT_HIGHLIGHT_KEYWORDS = [...AGE_HINT_KEYWORDS, ...PRICE_HINT_KEYWORDS, ...KID_APPEAL_HINT_KEYWORDS];
 const EVENT_HIGHLIGHT_PATTERNS = [PRICE_AMOUNT_PATTERN];
-// [블로그 큐레이션 모달로 이동](2026-09-12 사용자 지시): "운영 요일/반복 규칙으로
-// 예외일자 설정하는거.. 블로그 큐레이션 안으로 집어넣어줄수 있어? 보통 RAW_DATA는
-// 기간으로만 나와있어서.. 블로그 보고 파악하는데" — 원천 데이터가 시작~종료일만
-// 줄 뿐 실제 반복 패턴(정기 휴무·특정 요일만 운영 등)은 관리자가 블로그를 읽어야
-// 알 수 있어, 운영 요일 편집기를 상세 팝업의 독립 섹션에서 이 모달 안으로
-// 옮겼다(raw-data-modal.tsx → operating-schedule-editor.tsx 공유 컴포넌트).
 export function EventBlogCurationModal({
   event,
   onClose,
   onSaved,
-  onOperatingScheduleUpdated,
 }: {
   event: {
     id: string;
     title: string;
     sigunguName?: string | null;
-    start_date: string;
-    end_date: string;
-    operating_weekdays?: string[] | null;
-    excluded_weekdays?: string[] | null;
-    operating_nth_weekdays?: string[] | null;
   };
   onClose: () => void;
   onSaved?: (eventId: string, urls: string[]) => void;
-  onOperatingScheduleUpdated?: OperatingScheduleUpdatedHandler;
 }) {
   const form = useEventBlogCurationForm(event);
   const [autoFillNotice, setAutoFillNotice] = useState<string | null>(null);
@@ -184,35 +169,6 @@ export function EventBlogCurationModal({
             })}
           </div>
         </div>
-
-        {/* [운영 요일/반복 규칙을 블로그 큐레이션 안으로](2026-09-12 사용자 지시):
-            "RAW_DATA는 기간으로만 나와있어서.. 블로그 보고 파악하는데" — 이 편집기는
-            /api/admin/events/operating-schedule로 자체 저장되므로(다른 필드처럼
-            "저장 및 완료" 버튼을 기다리지 않음), 저장 즉시 onOperatingScheduleUpdated로
-            부모(raw-data-modal.tsx)의 행 state를 갱신한다. */}
-        {onOperatingScheduleUpdated && (
-          <OperatingScheduleEditor
-            row={{
-              id: event.id,
-              start_date: event.start_date,
-              end_date: event.end_date,
-              operating_weekdays: event.operating_weekdays,
-              excluded_weekdays: event.excluded_weekdays,
-              operating_nth_weekdays: event.operating_nth_weekdays,
-            }}
-            onUpdated={onOperatingScheduleUpdated}
-          />
-        )}
-
-        {/* [실제 운영일 하이라이트 캘린더](2026-09-16 사용자 지시, todo.md [개선사항 2]):
-            정기 요일 규칙만으로 표현할 수 없는 단발성 예외(예: 올해 설날 당일만
-            휴무)를 관리한다 — 위 OperatingScheduleEditor와 같은 조건(운영 요일 편집을
-            지원하는 호출부인지)으로 함께 묶는다: 이 조건이 없는 호출부는 event에
-            start_date/end_date가 없을 수 있어(타입상으로는 필수지만 라우트별로 느슨한
-            테스트 픽스처가 있음) 같은 위치·같은 이유로 게이팅한다. */}
-        {onOperatingScheduleUpdated && (
-          <OperatingExceptionsEditor eventId={event.id} startDate={event.start_date} endDate={event.end_date} />
-        )}
 
         {form.saveError && <p className="text-xs text-red-600">{form.saveError}</p>}
 

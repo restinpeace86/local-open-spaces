@@ -50,11 +50,22 @@ export type OperatingSchedule = {
   // 매월 N번째 요일 패턴("2-SAT" = 매월 2번째 토요일). null/undefined/빈 배열 =
   // 이 규칙 없음. 채워져 있으면 operating_weekdays보다 우선한다.
   operating_nth_weekdays?: string[] | null;
+  // [특정 날짜 지정](2026-09-22 사용자 지시): "17일 20일 이런식으로 운영하는경우가
+  // 있어서" — 실제 달력 날짜(YYYY-MM-DD) 목록. null/undefined/빈 배열 = 이 규칙 없음.
+  // 채워져 있으면 다른 요일 기반 규칙(operating_weekdays/excluded_weekdays/
+  // operating_nth_weekdays)을 전부 무시하고 이 목록만 절대적으로 따른다 — "17일만
+  // 운영"으로 지정했는데 정기 휴무 요일 규칙에 다시 걸려 막히는 것 같은 헷갈리는
+  // 이중 부정을 피하기 위함(전적으로 이 값만 신뢰).
+  operating_specific_dates?: string[] | null;
 };
 
 // [테스트에서 날짜를 고정할 수 있도록] date를 인자로 받는다(내부에서 new Date()를
 // 직접 만들지 않음) — 호출부(스팟 연결 이벤트 API 등)가 "오늘"을 넘긴다.
 export function isEventOperatingOn(schedule: OperatingSchedule, date: Date): boolean {
+  if (schedule.operating_specific_dates && schedule.operating_specific_dates.length > 0) {
+    return schedule.operating_specific_dates.includes(toDateKey(date));
+  }
+
   const code = WEEKDAY_CODES[date.getDay()];
 
   if (schedule.excluded_weekdays && schedule.excluded_weekdays.includes(code)) {

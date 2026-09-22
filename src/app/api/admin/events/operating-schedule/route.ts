@@ -18,6 +18,12 @@ function isNthWeekdayTokenArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.every(isNthWeekdayToken);
 }
 
+const DATE_KEY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function isDateKeyArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((v) => typeof v === 'string' && DATE_KEY_RE.test(v));
+}
+
 function normalizeArray(value: unknown): string[] | null {
   if (value === null || value === undefined) return null;
   if (!Array.isArray(value) || value.length === 0) return null;
@@ -32,11 +38,13 @@ export async function PATCH(request: NextRequest) {
       operating_weekdays: operatingWeekdays,
       excluded_weekdays: excludedWeekdays,
       operating_nth_weekdays: operatingNthWeekdays,
+      operating_specific_dates: operatingSpecificDates,
     } = body as {
       id?: unknown;
       operating_weekdays?: unknown;
       excluded_weekdays?: unknown;
       operating_nth_weekdays?: unknown;
+      operating_specific_dates?: unknown;
     };
 
     if (typeof id !== 'string' || !id) {
@@ -64,6 +72,16 @@ export async function PATCH(request: NextRequest) {
         { status: 400 }
       );
     }
+    if (
+      operatingSpecificDates !== null &&
+      operatingSpecificDates !== undefined &&
+      !isDateKeyArray(operatingSpecificDates)
+    ) {
+      return NextResponse.json(
+        { error: 'operating_specific_dates는 "YYYY-MM-DD" 형식의 배열이거나 null이어야 합니다.' },
+        { status: 400 }
+      );
+    }
 
     const admin = createAdminClient();
     const { data, error } = await admin
@@ -72,9 +90,10 @@ export async function PATCH(request: NextRequest) {
         operating_weekdays: normalizeArray(operatingWeekdays),
         excluded_weekdays: normalizeArray(excludedWeekdays),
         operating_nth_weekdays: normalizeArray(operatingNthWeekdays),
+        operating_specific_dates: normalizeArray(operatingSpecificDates),
       })
       .eq('id', id)
-      .select('id, operating_weekdays, excluded_weekdays, operating_nth_weekdays')
+      .select('id, operating_weekdays, excluded_weekdays, operating_nth_weekdays, operating_specific_dates')
       .single();
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });

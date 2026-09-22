@@ -92,6 +92,40 @@ describe('isEventOperatingOn', () => {
       expect(isEventOperatingOn(withExclusion, new Date('2026-09-12T00:00:00'))).toBe(false);
     });
   });
+
+  // [특정 날짜 지정](2026-09-22 사용자 지시): "17일 20일 이런식으로 운영하는경우가
+  // 있어서"
+  describe('특정 날짜 지정(operating_specific_dates)', () => {
+    const schedule = { operating_specific_dates: ['2026-09-17', '2026-09-20'] };
+
+    it('지정된 날짜에는 운영한다', () => {
+      expect(isEventOperatingOn(schedule, new Date('2026-09-17T00:00:00'))).toBe(true);
+      expect(isEventOperatingOn(schedule, new Date('2026-09-20T00:00:00'))).toBe(true);
+    });
+
+    it('지정되지 않은 날짜에는 운영하지 않는다', () => {
+      expect(isEventOperatingOn(schedule, new Date('2026-09-18T00:00:00'))).toBe(false);
+    });
+
+    it('다른 요일 기반 규칙(operating_weekdays/excluded_weekdays/operating_nth_weekdays)을 전부 무시한다', () => {
+      // 2026-09-17은 목요일. operating_weekdays로는 화요일만 허용하고
+      // excluded_weekdays로 목요일을 정기 휴무로 지정했더라도, 특정 날짜 지정이
+      // 우선이라 그대로 운영한다.
+      const combined = {
+        operating_specific_dates: ['2026-09-17'],
+        operating_weekdays: ['TUE'],
+        excluded_weekdays: ['THU'],
+        operating_nth_weekdays: ['1-MON'],
+      };
+      expect(isEventOperatingOn(combined, new Date('2026-09-17T00:00:00'))).toBe(true);
+    });
+
+    it('빈 배열이면 이 규칙이 없는 것으로 취급해 기존 요일 기반 규칙을 그대로 따른다', () => {
+      const schedule = { operating_specific_dates: [], excluded_weekdays: ['MON'] };
+      const monday = new Date('2026-09-14T00:00:00');
+      expect(isEventOperatingOn(schedule, monday)).toBe(false);
+    });
+  });
 });
 
 // [실제 운영일 하이라이트 캘린더](2026-09-16 사용자 지시, implementation/todo.md

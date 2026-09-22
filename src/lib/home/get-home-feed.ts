@@ -59,9 +59,6 @@ export const DEFAULT_HOME_REGION: HomeRegion = { sigunguName: '성남시 분당�
 // 4종만 노출한다(ALL/TEEN/YOUTH/ADULT/SENIOR/FACILITY/OTHER 전부 제외). 실측 확인
 // (2026-08-27): is_active=true 3,463건 중 노출 대상이 1,947건(5종 허용)→939건(4종만
 // 허용)으로 줄어든다 — 데이터 자체는 그대로 두고 노출 필터만 좁힌 것이다.
-// [todo.md 개선사항 5](2026-09-03): 어드민 마이그레이션 폼(스팟픽→이벤트픽)에서도 "이관 직후
-// 즉시 노출"을 보장하려면 이 4종 중 하나로만 target_audience를 지정해야 한다 — export해
-// migrate-to-event API 라우트/모달이 그대로 재사용한다(제5장 제4조 기존 구조 우선).
 export const EVENT_PICK_TARGET_AUDIENCES = ['INFANT', 'KIDS_PRE', 'KIDS_SCHOOL', 'FAMILY'] as const;
 
 // [행사 데이터 수집/정제 파이프라인 및 홈 피드 필터링 개선](2026-08-27) 사용자 지시 3번 및
@@ -102,7 +99,7 @@ function extractCoords(location: unknown): { lng: number; lat: number } {
 // 걸러내려면 이 세 컬럼이 모든 이벤트 조회에 공통으로 실려야 한다(EVENT_COLUMNS를
 // 쓰는 모든 함수가 대상).
 export const EVENT_COLUMNS =
-  'id, title, description, event_type, category_min, target_audience, location, location_precision, thumbnail_url, start_date, end_date, reservation_start_date, reservation_end_date, reservation_url, is_reservation_required, is_free, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, venue_name, sigungu_name, price_text, source_url, operating_weekdays, excluded_weekdays, operating_nth_weekdays, space_id';
+  'id, title, description, event_type, category_min, target_audience, location, location_precision, thumbnail_url, start_date, end_date, reservation_start_date, reservation_end_date, reservation_url, is_reservation_required, is_free, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, venue_name, sigungu_name, price_text, source_url, operating_weekdays, excluded_weekdays, operating_nth_weekdays, operating_specific_dates, space_id';
 
 export type EventRow = {
   id: string;
@@ -134,6 +131,7 @@ export type EventRow = {
   operating_weekdays: string[] | null;
   excluded_weekdays: string[] | null;
   operating_nth_weekdays: string[] | null;
+  operating_specific_dates: string[] | null;
   // [이벤트픽 카드 — 동일 스팟 예약 옵션 그룹핑](2026-09-19 사용자 지시): getCategoryMinFeed가
   // 캠핑장처럼 검증된 중분류에 한해 같은 스팟의 여러 예약 옵션을 대표 1건+개수로 묶을 때 쓴다.
   space_id: string | null;
