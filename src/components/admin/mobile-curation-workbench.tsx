@@ -44,6 +44,9 @@ type WorkbenchSpot = {
   address: string | null;
   service_category_id: string | null;
   sigungu_name?: string | null;
+  // [개선사항 1](2026-09-22 사용자 지시, todo.md): use-spot-curation-form.ts와
+  // 동일한 이유 — 있으면 블로그 검색어로 이 값을 쓴다.
+  display_name?: string | null;
 };
 
 export function MobileCurationWorkbench({

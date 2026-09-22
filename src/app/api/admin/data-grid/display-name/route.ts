@@ -18,10 +18,17 @@ export async function PATCH(request: NextRequest) {
     }
     const nextDisplayName = typeof displayName === 'string' && displayName.trim() ? displayName.trim() : null;
 
+    // [개선사항 1 버그 수정](2026-09-22 사용자 지시, todo.md): "노출 이름 수동
+    // 수정.. 쪽도 변경 반영되지 않고 있음" — 원인 중 하나는 /api/spot-blog-reviews가
+    // 10일 TTL로 캐시해 둔 blog_review_urls가 옛 이름 기준 검색 결과 그대로
+    // 남아있던 것이었다. blog_review_updated_at을 비워 캐시를 "오래됨"으로
+    // 만들면(isBlogCacheFresh가 null이면 항상 false) 다음 조회 때 새 이름으로
+    // 다시 검색한다 — blog_review_urls 자체는 NOT NULL 컬럼이라 지우지 않고
+    // 그대로 둔다(재검색이 외부 API 실패로 막히면 이 값이 안전한 폴백으로 쓰임).
     const admin = createAdminClient();
     const { data, error } = await admin
       .from('open_spaces')
-      .update({ display_name: nextDisplayName })
+      .update({ display_name: nextDisplayName, blog_review_updated_at: null })
       .eq('id', id)
       .select('id, name, display_name')
       .single();

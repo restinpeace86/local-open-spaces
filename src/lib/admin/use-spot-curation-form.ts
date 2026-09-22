@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { buildSmartBlogQuery, buildFallbackBlogQuery, extractAllSigunguCoreNames } from './naver-blog-search';
+import { extractAllSigunguCoreNames } from './naver-blog-search';
 import {
   aggregateMinAgeFromTexts,
   clampMinAgeRecommended,
@@ -60,10 +60,15 @@ export type SpotForCuration = {
   address: string | null;
   service_category_id: string | null;
   // [스마트 검색 쿼리 조합](2026-09-07 사용자 지시): "서울시 노원구라고 하면 상호명 +
-  // 노원 이런식으로" — 1차 검색 쿼리와 지역명 하이라이팅에 쓴다. 옵셔널로 둔 이유는
+  // 노원 이런식으로" — 지역명 하이라이팅(regionKeywords)에 쓴다. 옵셔널로 둔 이유는
   // 호출부(SpotCurationsPanel 등)가 아직 이 필드를 안 넘겨도 기존처럼 상호명만으로
   // 동작해야 하기 때문(점진적 적용, 기존 호출부 깨짐 방지).
   sigungu_name?: string | null;
+  // [개선사항 1](2026-09-22 사용자 지시, todo.md): "스팟 노출 이름 변경 시 블로그
+  // 검색어 연동 버그 수정" — 관리자가 "노출 이름 수동 수정"으로 바꾼 최신 이름이나
+  // 네이버 플레이스 크롤링으로 채운 더 정확한 이름이 있으면 그걸 검색어로 써야
+  // 한다. 없으면(옵셔널) 기존처럼 name으로 폴백한다(호출부 깨짐 방지).
+  display_name?: string | null;
 };
 
 // [블로그 큐레이션 전체 본문 보기](2026-09-05 사용자 지시): "가져온 내용자체도
@@ -97,7 +102,7 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
   // 관리자가 직접 수정 후 다시 검색할 수 있게 편집 가능한 입력으로 둔다(요구사항에
   // 명시되진 않았지만, "정확도순 상위 3개"가 실제로 이 스팟을 가리키게 하려면
   // 필요한 최소한의 보조 장치 — 저장 데이터 구조에는 영향 없음).
-  const [searchQuery, setSearchQuery] = useState(spot.name);
+  const [searchQuery, setSearchQuery] = useState(spot.display_name ?? spot.name);
   // [정렬 기준 전환](2026-09-06 사용자 지시): 기본값 date.
   const [sortOption, setSortOptionState] = useState<BlogSortOption>('date');
   const [blogItems, setBlogItems] = useState<BlogSearchItem[] | null>(null);
@@ -220,22 +225,21 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
   // [On-Demand](사용자 지시 원문): 모달/워크벤치를 여는 것 자체가 "버튼을 누른"
   // 시점 — 스팟이 바뀔 때마다(마운트 시 1회) 검색한다. 기존 큐레이션(재편집 시
   // 뱃지/블로그 URL 프리필용)도 함께 조회한다.
-  // [스마트 검색 쿼리 조합](2026-09-07 사용자 지시): 상호명만이 아니라
-  // buildSmartBlogQuery로 "상호명 + 시군구 핵심 지역명"을 1차 검색어로 쓴다.
-  // [지역명 접미사 폴백 재검색](2026-09-07 사용자 지시): "모심갈비.. 남동으로
-  // 찾으면 안나와.. 모심갈비 남동구는 나오고" — 지역명 접미사(구/시/군)를 뗀
-  // 1차 쿼리가 결과 없음(hasNoResults)이면, 접미사를 그대로 둔 폴백 쿼리로
-  // 딱 한 번만 자동 재검색한다(무한 재시도 방지 — 폴백은 이 한 번뿐).
+  // [개선사항 1 — 시군구 접미사 붙이기 제거](2026-09-22 사용자 지시, todo.md):
+  // "블로그로 큐레이션에서 검색시 뒤에 시군구를 넣고 있는데 해당 로직은 제외해주고
+  // 정확히 스팟의 노출 이름 반영되면 해당 노출 이름으로 검색하도록 할 것" —
+  // 2026-09-07에 도입했던 buildSmartBlogQuery/buildFallbackBlogQuery(시군구 핵심
+  // 지역명 부착 + 결과 없을 때 폴백 재검색)를 이 화면에서는 더 이상 쓰지 않는다.
+  // 대신 spot.display_name(관리자가 수동 수정했거나 네이버 플레이스에서 가져온
+  // 더 정확한 이름) 우선, 없으면 spot.name으로 폴백해 그 값을 가공 없이 그대로
+  // 검색어로 쓴다. (이 두 함수는 이벤트 블로그 큐레이션(use-event-blog-curation-
+  // form.ts)과 사용자 화면 블로그 후기(spot-blog-reviews/route.ts)에서는 여전히
+  // 쓰이므로 naver-blog-search.ts에서 삭제하지 않는다 — 이번 요청은 "블로그로
+  // 큐레이션" 화면 한정.)
   useEffect(() => {
-    const smartQuery = buildSmartBlogQuery(spot.name, spot.sigungu_name);
-    setSearchQuery(smartQuery);
-    runSearch(smartQuery).then((result) => {
-      if (!result.hasNoResults) return;
-      const fallbackQuery = buildFallbackBlogQuery(spot.name, spot.sigungu_name);
-      if (!fallbackQuery || fallbackQuery === smartQuery) return;
-      setSearchQuery(fallbackQuery);
-      runSearch(fallbackQuery);
-    });
+    const query = (spot.display_name ?? spot.name).trim();
+    setSearchQuery(query);
+    runSearch(query);
     fetch(`/api/admin/spot-curations?spot_id=${encodeURIComponent(spot.id)}`)
       .then(async (res) => {
         const data = await res.json();

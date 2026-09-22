@@ -1310,6 +1310,11 @@ export function RawDataModal({
             address: (row as AdminOpenSpaceRow).address,
             service_category_id: (row as AdminOpenSpaceRow).service_category_id,
             sigungu_name: (row as AdminOpenSpaceRow).sigungu_name,
+            // [개선사항 1 버그 수정](2026-09-22 사용자 지시, todo.md): 이전엔 이 필드를
+            // 넘기지 않아 BlogCurationModal이 항상 원본 name으로만 검색했다 —
+            // "노출 이름 수동 수정"/네이버 플레이스 크롤링으로 갱신된 display_name이
+            // 있으면 그걸로 검색해야 한다.
+            display_name: (row as AdminOpenSpaceRow).display_name,
           }}
           serviceCategories={serviceCategories}
           onClose={() => setIsBlogCurationModalOpen(false)}

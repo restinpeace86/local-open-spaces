@@ -509,7 +509,11 @@ describe('BlogCurationModal', () => {
   describe('스마트 검색 쿼리 + 지역명 하이라이팅/경고 + 뱃지 자동 체크(개선사항3)', () => {
     const SPOT_WITH_REGION = { ...SPOT, sigungu_name: '서울시 노원구' };
 
-    it('sigungu_name이 있으면 "상호명 + 시군구 핵심 지역명"으로 1차 검색한다', async () => {
+    // [개선사항 1](2026-09-22 사용자 지시, todo.md): "블로그로 큐레이션에서
+    // 검색시 뒤에 시군구를 넣고 있는데 해당 로직은 제외해주고 정확히 스팟의
+    // 노출 이름 반영되면 해당 노출 이름으로 검색하도록 할 것" — sigungu_name이
+    // 있어도 더 이상 뒤에 붙이지 않고 상호명(또는 display_name) 그대로 검색한다.
+    it('sigungu_name이 있어도 뒤에 붙이지 않고 상호명 그대로 검색한다', async () => {
       const fetchMock = mockFetchByUrl({
         blogSearch: { items: [makeBlogItem()], hasRecentReview: true, hasNoResults: false },
       });
@@ -526,7 +530,29 @@ describe('BlogCurationModal', () => {
       await waitFor(() => {
         const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/blog-search'));
         expect(call).toBeDefined();
-        expect(decodeURIComponent(call![0] as string)).toContain('query=행복키즈카페 노원');
+        expect(decodeURIComponent(call![0] as string)).toContain('query=행복키즈카페');
+        expect(decodeURIComponent(call![0] as string)).not.toContain('노원');
+      });
+    });
+
+    it('display_name이 있으면 name 대신 display_name으로 검색한다(노출 이름 수동 수정 반영)', async () => {
+      const fetchMock = mockFetchByUrl({
+        blogSearch: { items: [makeBlogItem()], hasRecentReview: true, hasNoResults: false },
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      render(
+        <BlogCurationModal
+          spot={{ ...SPOT, name: '조마루감자탕', display_name: '조마루왕뼈감자탕' }}
+          serviceCategories={SERVICE_CATEGORIES}
+          onClose={vi.fn()}
+          onServiceCategoryUpdated={vi.fn()}
+        />
+      );
+
+      await waitFor(() => {
+        const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/blog-search'));
+        expect(call).toBeDefined();
+        expect(decodeURIComponent(call![0] as string)).toContain('query=조마루왕뼈감자탕');
       });
     });
 
@@ -615,49 +641,6 @@ describe('BlogCurationModal', () => {
       expect(screen.getByText('남동')).toBeInTheDocument();
       // 본문엔 없지만 제목에는 있으므로 미스매치 경고는 뜨지 않는다.
       expect(screen.queryByText(/지역명을 찾지 못했습니다/)).not.toBeInTheDocument();
-    });
-
-    // [지역명 접미사 제거가 오히려 검색을 실패시키는 사례](2026-09-07 사용자
-    // 지시): "모심갈비가 지역명이 인천광역시 남동구인데 모심갈비에 남동을
-    // 붙여서 모심갈비 남동으로 찾으면 안나와.. 모심갈비 남동구는 나오고"
-    it('1차 쿼리(접미사 제거)가 결과 없음이면 접미사를 유지한 폴백 쿼리로 자동 재검색한다', async () => {
-      const SPOT_INCHEON = { ...SPOT, name: '모심갈비', sigungu_name: '인천시 남동구' };
-      const fetchMock = vi.fn((url: string) => {
-        if (url.includes('/api/admin/spot-curations/blog-search')) {
-          const query = decodeURIComponent(url);
-          if (query.includes('query=모심갈비 남동구')) {
-            return Promise.resolve({
-              ok: true,
-              json: () => Promise.resolve({ items: [makeBlogItem({ title: '모심갈비 후기' })], hasRecentReview: true, hasNoResults: false }),
-            } as Response);
-          }
-          // 1차 쿼리("모심갈비 남동")는 결과 없음.
-          return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [], hasRecentReview: false, hasNoResults: true }) } as Response);
-        }
-        if (url.includes('/api/admin/spot-curations/blog-body')) {
-          return Promise.resolve({ ok: false, json: () => Promise.resolve({ error: '네이버 블로그가 아닙니다.' }) } as Response);
-        }
-        if (url.includes('/api/admin/spot-curations')) {
-          return Promise.resolve({ ok: true, json: () => Promise.resolve({ item: null }) } as Response);
-        }
-        return Promise.reject(new Error(`unexpected fetch: ${url}`));
-      });
-      vi.stubGlobal('fetch', fetchMock);
-      render(
-        <BlogCurationModal spot={SPOT_INCHEON} serviceCategories={SERVICE_CATEGORIES} onClose={vi.fn()} onServiceCategoryUpdated={vi.fn()} />
-      );
-
-      // 1차 쿼리 호출 확인.
-      await waitFor(() => {
-        const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/blog-search'));
-        expect(call).toBeDefined();
-        expect(decodeURIComponent(call![0] as string)).toContain('query=모심갈비 남동');
-      });
-      // 폴백 쿼리로 자동 재검색돼 결과가 나타난다.
-      expect(await screen.findByText('모심갈비 후기')).toBeInTheDocument();
-      const searchCalls = fetchMock.mock.calls.filter((c) => (c[0] as string).includes('/blog-search'));
-      expect(searchCalls).toHaveLength(2);
-      expect(decodeURIComponent(searchCalls[1][0] as string)).toContain('query=모심갈비 남동구');
     });
 
     it('신규 등록(기존 큐레이션 없음)일 때 본문에서 매칭된 키워드에 해당하는 뱃지가 자동 체크된다', async () => {

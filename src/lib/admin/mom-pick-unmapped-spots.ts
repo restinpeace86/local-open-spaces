@@ -20,4 +20,8 @@ export type MomPickUnmappedSpot = {
   service_category_id: string | null;
   posts: MomPickUnmappedSpotPost[];
   curatedBlogUrls: string[];
+  // [개선사항 1 버그 수정](2026-09-22 사용자 지시, todo.md): 이 목록에서 곧바로
+  // 워크벤치(MobileCurationWorkbench)로 들어가는데, 워크벤치의 블로그 검색이
+  // 노출 이름(display_name)을 우선 쓰도록 수정됐다 — 이 타입도 함께 넓힌다.
+  display_name: string | null;
 };

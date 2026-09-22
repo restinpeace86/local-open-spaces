@@ -31,7 +31,7 @@ export async function GET() {
     // 2. 그중 노출 중분류가 아직 없는 스팟만.
     const { data: spotRows, error: spotsError } = await admin
       .from('open_spaces')
-      .select('id, name, address, category_min, sigungu_name, service_category_id')
+      .select('id, name, display_name, address, category_min, sigungu_name, service_category_id')
       .in('id', spotIds)
       .is('service_category_id', null);
     if (spotsError) return NextResponse.json({ error: spotsError.message }, { status: 500 });
@@ -78,6 +78,7 @@ export async function GET() {
       .map((s) => ({
         id: s.id,
         name: s.name,
+        display_name: s.display_name,
         address: s.address,
         category_min: s.category_min,
         sigungu_name: s.sigungu_name,

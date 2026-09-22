@@ -39,7 +39,17 @@ export function BlogCurationModal({
   onClose,
   onServiceCategoryUpdated,
 }: {
-  spot: { id: string; name: string; address: string | null; service_category_id: string | null; sigungu_name?: string | null };
+  spot: {
+    id: string;
+    name: string;
+    address: string | null;
+    service_category_id: string | null;
+    sigungu_name?: string | null;
+    // [개선사항 1](2026-09-22 사용자 지시, todo.md): 관리자가 "노출 이름 수동
+    // 수정"으로 바꿨거나 네이버 플레이스 크롤링으로 채운 더 정확한 이름 —
+    // 있으면 이 이름으로 블로그 검색을 한다(use-spot-curation-form.ts 참고).
+    display_name?: string | null;
+  };
   serviceCategories: ServiceCategory[];
   onClose: () => void;
   onServiceCategoryUpdated: (id: string, nextServiceCategoryId: string | null) => void;

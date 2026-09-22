@@ -33,6 +33,10 @@ type AdminOpenSpaceRowLite = {
   // "상호명 + 시군구 핵심 지역명"을 쓰려면 필요 — 새 조회 없이 타입만 넓힌다
   // (OPEN_SPACES_COLUMNS에 이미 포함돼 있는 컬럼).
   sigungu_name: string | null;
+  // [개선사항 1 버그 수정](2026-09-22 사용자 지시, todo.md): 워크벤치의 블로그
+  // 검색이 노출 이름(display_name)을 우선 쓰도록 수정 — 이 필드도 이미
+  // OPEN_SPACES_COLUMNS에 포함돼 있어 새 조회 없이 타입만 넓힌다.
+  display_name: string | null;
 };
 const ROW_PICKER_PAGE_SIZE = 50;
 

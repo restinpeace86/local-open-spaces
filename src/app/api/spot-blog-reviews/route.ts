@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 
     const { data: spot, error: spotError } = await admin
       .from('open_spaces')
-      .select('id, name, address, sigungu_name, blog_review_urls, blog_review_updated_at')
+      .select('id, name, display_name, address, sigungu_name, blog_review_urls, blog_review_updated_at')
       .eq('id', spotId)
       .maybeSingle();
     if (spotError) return NextResponse.json({ error: spotError.message }, { status: 500 });
@@ -57,7 +57,16 @@ export async function GET(request: NextRequest) {
     }
 
     // 3) 재조회.
-    const query = buildSmartBlogQuery(spot.name, spot.sigungu_name);
+    // [개선사항 1 버그 수정](2026-09-22 사용자 지시, todo.md): "스팟 노출 이름
+    // 변경 시 블로그 검색어 연동 버그" — 이 화면도 관리자가 "노출 이름 수동
+    // 수정"으로 바꿨거나 네이버 플레이스에서 가져온 더 정확한 이름
+    // (display_name)이 있으면 원본 name 대신 그 이름으로 검색하고 신뢰도
+    // 검증도 그 이름 기준으로 한다 — 이전엔 name만 읽어 이름을 바꿔도 이
+    // 사용자 화면(블로그 후기 링크)에는 예전 이름 기준 검색 결과가 계속
+    // 캐시됐다. (이 화면은 "블로그로 큐레이션" 관리자 화면과 달리 시군구
+    // 접미사 로직 제거 요청 대상이 아니라 그대로 유지한다.)
+    const effectiveName = spot.display_name ?? spot.name;
+    const query = buildSmartBlogQuery(effectiveName, spot.sigungu_name);
     const regionCoreNames = extractAllSigunguCoreNames(spot.sigungu_name);
     const result = await fetchNaverBlogItems(query, { sort: 'date', display: 10 });
 
@@ -66,7 +75,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ item: { urls: cachedUrls, source: cachedUrls.length > 0 ? 'stale' : 'none' } });
     }
 
-    const trustedUrls = selectTrustedBlogUrls(result.items, regionCoreNames, spot.name);
+    const trustedUrls = selectTrustedBlogUrls(result.items, regionCoreNames, effectiveName);
 
     // 결과가 0건이어도 updated_at을 갱신해 10일간 재호출을 막는다.
     const { error: updateError } = await admin
