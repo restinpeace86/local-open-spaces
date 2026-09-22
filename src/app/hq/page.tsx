@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { todayKstDateString } from '@/lib/partner/date';
 
 // [빌드 시 정적 프리렌더링 버그 발견 및 수정](2026-09-22, npm run build 결과 확인 중
 // 실측): 이 페이지는 세션 쿠키를 쓰는 createClient()가 아니라 createAdminClient()
@@ -27,19 +28,34 @@ export const dynamic = 'force-dynamic';
 // 보여주는 요약 목록으로 바꾸고, 실제 예약 표(기존 형태)는 각 파트너를 눌렀을 때
 // 이동하는 상세 페이지(/hq/partners/[id])로 옮겼다.
 //
+// [일별/월별/전체 건수 표시](2026-09-23 사용자 지시): "이게 일별 / 월별 / 전체로
+// 몇건들어왔는지를 알 수 있게 해줘" — 파트너별 예약 총건수 하나만 보여주던 것을
+// 오늘/이번달/전체 3가지로 나눠 보여준다. "일별"은 여러 날짜를 다 나열하는 게
+// 아니라 "오늘 며칠 건" — 날짜별 상세 내역은 상세 페이지(/hq/partners/[id])의
+// 일자별 접기/펼치기 섹션에서 이미 확인 가능하므로, 요약 목록에서는 "오늘"
+// 하루치 숫자만 대표로 보여주는 것으로 해석했다(그 이상 세분화하면 요약이라는
+// 목적과 어긋남).
 // [집계를 JS에서 처리](제5장 제4조 기존 구조 우선): monthly/page.tsx가 이미 같은
 // 이유로 GROUP BY 대신 JS 집계를 쓰고 있다 — 파트너 수/예약 수가 아직 복잡한 SQL
-// 집계 쿼리를 새로 만들 규모가 아니다. bookings는 건수 집계에만 쓰이므로
-// partner_id만 select해 페이로드를 줄인다(상세 화면에서 나머지 컬럼을 조회).
+// 집계 쿼리를 새로 만들 규모가 아니다. booking_date는 "YYYY-MM-DD" 문자열이라
+// 오늘/이번달 여부를 날짜 연산 없이 문자열 비교(정확히 일치/접두어 일치)만으로
+// 판정할 수 있다.
 export default async function HqDashboardPage() {
   const admin = createAdminClient();
 
   const { data: partners } = await admin.from('partners').select('id, farm_name').order('farm_name', { ascending: true });
-  const { data: bookingPartnerIds } = await admin.from('bookings').select('partner_id');
+  const { data: bookingRows } = await admin.from('bookings').select('partner_id, booking_date');
 
-  const countByPartner = new Map<string, number>();
-  for (const row of bookingPartnerIds ?? []) {
-    countByPartner.set(row.partner_id, (countByPartner.get(row.partner_id) ?? 0) + 1);
+  const todayDate = todayKstDateString();
+  const thisMonthPrefix = todayDate.slice(0, 7);
+
+  const statsByPartner = new Map<string, { today: number; month: number; total: number }>();
+  for (const row of bookingRows ?? []) {
+    const stats = statsByPartner.get(row.partner_id) ?? { today: 0, month: 0, total: 0 };
+    stats.total += 1;
+    if (row.booking_date.startsWith(thisMonthPrefix)) stats.month += 1;
+    if (row.booking_date === todayDate) stats.today += 1;
+    statsByPartner.set(row.partner_id, stats);
   }
 
   return (
@@ -47,7 +63,7 @@ export default async function HqDashboardPage() {
       <div>
         <h1 className="text-lg font-bold text-gray-900">HQ 대시보드</h1>
         <p className="text-sm text-gray-500">
-          전체 파트너 {partners?.length ?? 0}곳 · 예약 {bookingPartnerIds?.length ?? 0}건
+          전체 파트너 {partners?.length ?? 0}곳 · 예약 {bookingRows?.length ?? 0}건
         </p>
       </div>
 
@@ -56,19 +72,24 @@ export default async function HqDashboardPage() {
       )}
 
       <div className="flex flex-col gap-2">
-        {partners?.map((partner) => (
-          <Link
-            key={partner.id}
-            href={`/hq/partners/${partner.id}`}
-            className="flex items-center justify-between rounded-2xl border border-gray-200 bg-white p-4 hover:border-gray-300 hover:bg-gray-50"
-          >
-            <span className="text-base font-bold text-gray-900">{partner.farm_name}</span>
-            <span className="flex items-center gap-1 text-sm text-gray-500">
-              예약 {countByPartner.get(partner.id) ?? 0}건
-              <span aria-hidden>›</span>
-            </span>
-          </Link>
-        ))}
+        {partners?.map((partner) => {
+          const stats = statsByPartner.get(partner.id) ?? { today: 0, month: 0, total: 0 };
+          return (
+            <Link
+              key={partner.id}
+              href={`/hq/partners/${partner.id}`}
+              className="flex items-center justify-between gap-3 rounded-2xl border border-gray-200 bg-white p-4 hover:border-gray-300 hover:bg-gray-50"
+            >
+              <span className="text-base font-bold text-gray-900">{partner.farm_name}</span>
+              <span className="flex items-center gap-3 text-xs text-gray-500">
+                <span>오늘 {stats.today}건</span>
+                <span>이번달 {stats.month}건</span>
+                <span className="font-semibold text-gray-700">전체 {stats.total}건</span>
+                <span aria-hidden>›</span>
+              </span>
+            </Link>
+          );
+        })}
       </div>
     </div>
   );
