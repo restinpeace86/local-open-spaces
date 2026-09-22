@@ -84,6 +84,56 @@ describe('DetailModal (외부 지도 앱 연동 제거 및 인앱 위치 보기)
   });
 });
 
+// [개선사항 2](2026-09-22 사용자 지시, todo.md): "events나 open_spaces의 상세
+// 팝업에서 address 컬럼 및 제목에 대하여 원클릭으로 복사". jsdom은 클립보드 API를
+// 기본 구현하지 않아 명시적으로 스텁한다.
+describe('DetailModal 원클릭 복사(주소/제목)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('스팟 상세에서 주소 복사 버튼을 누르면 클립보드에 주소가 복사되고 "복사됨"으로 바뀐다', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    render(<DetailModal item={makeSpaceItem({ address: '경기도 성남시 분당구 어딘가' })} onClose={() => {}} />);
+
+    const button = screen.getByRole('button', { name: '복사' });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('경기도 성남시 분당구 어딘가'));
+    await waitFor(() => expect(screen.getByRole('button', { name: '복사됨' })).toBeInTheDocument());
+  });
+
+  it('스팟 상세에서 제목 복사 버튼을 누르면 제목이 클립보드에 복사된다', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    render(<DetailModal item={makeSpaceItem({ name: '율동공원' })} onClose={() => {}} />);
+
+    fireEvent.click(screen.getByLabelText('제목 복사'));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('율동공원'));
+  });
+
+  it('이벤트 상세에서도 제목 복사 버튼이 동작한다', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT', name: '가을 축제' })} onClose={() => {}} />);
+
+    fireEvent.click(screen.getByLabelText('제목 복사'));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('가을 축제'));
+  });
+
+  it('주소가 없으면 주소 복사 버튼이 보이지 않는다', () => {
+    render(<DetailModal item={makeSpaceItem({ address: null })} onClose={() => {}} />);
+    expect(screen.queryByRole('button', { name: '복사' })).not.toBeInTheDocument();
+  });
+});
+
 describe('DetailModal 조건부 CTA 3분류 (Task 9-6-11, Decision 011)', () => {
   afterEach(() => {
     vi.unstubAllGlobals();

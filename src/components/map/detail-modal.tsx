@@ -155,7 +155,11 @@ export function DetailModal({
   // 보여준다. map-explorer.tsx만 넘긴다.
   deal?: { title: string; bookingUrl: string } | null;
 }) {
-  const [copied, setCopied] = useState(false);
+  // [개선사항 2](2026-09-22 사용자 지시, todo.md): "events나 open_spaces의 상세
+  // 팝업에서 address 컬럼 및 제목에 대하여 원클릭으로 복사할 수 있도록" — 기존에는
+  // 주소만 복사 가능했다(아래 handleCopyAddress). 복사 대상이 둘로 늘어 어느 쪽이
+  // 방금 복사됐는지 구분해야 해서 boolean 대신 어떤 필드인지 담는다.
+  const [copiedField, setCopiedField] = useState<'address' | 'title' | null>(null);
   const [isMapPreviewOpen, setIsMapPreviewOpen] = useState(false);
   // [실제 운영일 하이라이트 캘린더](2026-09-16 사용자 지시, todo.md [개선사항 2])
   const [isOperatingCalendarOpen, setIsOperatingCalendarOpen] = useState(false);
@@ -539,12 +543,11 @@ export function DetailModal({
         label: item.is_free === true ? '예약 필요 없음 · 상시 무료 입장' : '예약 관련 정보가 없습니다',
       };
 
-  async function handleCopyAddress() {
-    if (!item.address) return;
+  async function handleCopy(text: string, field: 'address' | 'title') {
     try {
-      await navigator.clipboard.writeText(item.address);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      await navigator.clipboard.writeText(text);
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 1500);
     } catch {
       // 클립보드 접근이 차단된 환경에서는 조용히 무시한다.
     }
@@ -668,7 +671,17 @@ export function DetailModal({
                   인앱 지도(MapPreviewModal, 내부에 실제 길찾기 기능 포함)를 곧바로 연다. */}
               <div className="mt-2 flex items-start justify-between gap-2">
                 <h2 className="text-lg font-bold text-gray-900 flex-1">{item.name}</h2>
-                <BookmarkButton target={{ kind: 'event', eventId: item.id }} />
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(item.name, 'title')}
+                    aria-label="제목 복사"
+                    className="text-xs px-2 py-0.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
+                  >
+                    {copiedField === 'title' ? '복사됨' : '복사'}
+                  </button>
+                  <BookmarkButton target={{ kind: 'event', eventId: item.id }} />
+                </div>
               </div>
               {item.distance_meters >= 0 &&
                 (hasExactLocation ? (
@@ -973,7 +986,17 @@ export function DetailModal({
 
             <div className="mt-2 flex items-start justify-between gap-2">
               <h2 className="text-lg font-bold text-gray-900">{item.name}</h2>
-              <BookmarkButton target={{ kind: 'spot', spotId: item.id }} />
+              <div className="flex shrink-0 items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleCopy(item.name, 'title')}
+                  aria-label="제목 복사"
+                  className="text-xs px-2 py-0.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
+                >
+                  {copiedField === 'title' ? '복사됨' : '복사'}
+                </button>
+                <BookmarkButton target={{ kind: 'spot', spotId: item.id }} />
+              </div>
             </div>
             {/* [스팟픽 상세 카드 인터랙티브 거리/길찾기](2026-09-10 사용자 지시, todo.md
                 개선사항3-3·2-4): "현재 거리 클릭 시 서비스 내에 구현되어 있는 인앱 길찾기
@@ -1045,10 +1068,10 @@ export function DetailModal({
                   {item.address && (
                     <button
                       type="button"
-                      onClick={handleCopyAddress}
+                      onClick={() => handleCopy(item.address as string, 'address')}
                       className="shrink-0 text-xs px-2 py-0.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-50"
                     >
-                      {copied ? '복사됨' : '복사'}
+                      {copiedField === 'address' ? '복사됨' : '복사'}
                     </button>
                   )}
                 </dd>
