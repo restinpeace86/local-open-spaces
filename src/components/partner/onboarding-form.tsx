@@ -84,7 +84,11 @@ export function OnboardingForm() {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-5 p-5">
+    // [개선사항 4](2026-09-22 사용자 지시, todo.md): "모바일/반응형 여백 확보..
+    // 폼 상하단에 적절한 패딩을 주어 맨 아래에 꽉 껴서 잘리지 않고" — 스크롤
+    // 가능해진 뒤에도(위 page.tsx 수정) 등록 버튼이 화면/기기 하단 안전 영역에
+    // 바짝 붙지 않도록, add-booking-fab.tsx의 기존 안전영역 패딩 관례를 재사용한다.
+    <form onSubmit={handleSubmit} className="flex flex-col gap-5 p-5 pb-[calc(env(safe-area-inset-bottom)+2rem)]">
       <div className="flex flex-col items-center gap-2">
         <div
           className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-2xl bg-gray-100 text-3xl"
