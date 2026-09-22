@@ -7,9 +7,18 @@ import { createClient } from '@/lib/supabase/client';
 // [개선사항 5](2026-09-22 사용자 지시, todo.md): "카카오/구글 소셜 로그인만
 // 지원하는 PMS 로그인 화면에 이메일/비밀번호 로그인·회원가입 추가". Supabase
 // Auth 프로젝트 실제 설정을 확인했다(Management API로 직접 조회, 추측 금지):
-// `password_min_length: 6`, `mailer_autoconfirm: false`(가입 즉시 세션이 오지
-// 않고 확인 이메일을 눌러야 로그인 가능) — 아래 로직은 이 두 가지를 그대로
-// 반영한다.
+// `password_min_length: 6`.
+//
+// [이메일 확인 절차 생략 결정](2026-09-22 사용자 지시): 처음엔
+// `mailer_autoconfirm: false`(가입 직후 세션 없음, 확인 이메일의 링크를
+// 눌러야 로그인 가능)였는데, 커스텀 SMTP 미설정 상태의 Supabase 기본 메일
+// 발송 한도(실측 시간당 2건)에 실제로 걸리는 것을 확인한 뒤 — "이메일 확인
+// 없이 가입 즉시 로그인되게 바꿀까요?"에 "확인 없이 즉시 가입(지금 규모에는
+// 충분)"으로 답해, Management API로 `mailer_autoconfirm: true`로 변경했다
+// (트레이드오프: 본인이 소유하지 않은 이메일로도 가입은 가능해짐 — 사용자가
+// 인지하고 선택함). 아래 signUp 분기는 `data.session` 유무로 실제 동작을
+// 판단하므로, 이 설정이 나중에 다시 바뀌어도(예: 커스텀 SMTP 연결 후 다시
+// 이메일 확인을 요구하는 방향으로) 코드 수정 없이 그대로 동작한다.
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 6;
 
@@ -82,10 +91,10 @@ export function PartnerEmailAuthForm() {
           setErrorMessage(translateAuthError(error.message));
           return;
         }
-        // [이메일 확인 필요] mailer_autoconfirm=false라 signUp 직후에는 세션이
-        // 없다(data.session === null) — 사용자가 이메일의 확인 링크를 눌러야
-        // 로그인할 수 있다. 세션이 있으면(프로젝트 설정이 바뀐 경우 대비) 곧바로
-        // 온보딩으로 보낸다.
+        // [이메일 확인 절차 생략](위 주석 참고, mailer_autoconfirm=true) — 정상
+        // 경로는 signUp 직후 바로 세션이 온다(data.session 있음). data.session이
+        // 없는 경우(이 설정이 나중에 다시 바뀌는 등)에도 안전하게 안내 문구로
+        // 대체한다 — 어느 쪽이든 화면이 멈추지 않는다.
         if (!data.session) {
           setInfoMessage('가입 확인 이메일을 보냈어요. 메일함에서 확인 링크를 누른 뒤 로그인해 주세요.');
           setMode('login');
