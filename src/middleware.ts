@@ -31,6 +31,19 @@ const PARTNER_ONBOARDING_PATH = '/partner/onboarding';
 const PARTNER_PUBLIC_PATHS = [PARTNER_LOGIN_PATH, '/partner/auth/callback'];
 const HQ_LOGIN_PATH = '/hq/login';
 
+// [성능](2026-09-23 사용자 지시): "/partner 쪽 너무 반응이 느린거 같은데? 데이터가
+// 거의 없는데도 그래" — 실측(Playwright/curl로 실제 세션 붙여 왕복 시간 측정)
+// 결과, 개별 Supabase 호출 자체는 빠른데(수십~백여 ms) /partner/* 페이지마다
+// 미들웨어가 매번 이 partners 존재 여부 조회를 왕복하고 있어(온보딩 완료 여부는
+// 한 번 확정되면 이 계정이 존재하는 한 절대 바뀌지 않는데도) 탐색할 때마다 그
+// 왕복이 매번 더해지고 있었다. 한 번 확인되면 쿠키에 캐시해 다음 탐색부터는
+// DB 왕복 자체를 건너뛴다 — partners 삭제 기능이 이 코드베이스에 아예 없어서
+// (HQ도 예약만 삭제 가능, 파트너 행 자체는 삭제 불가) "한 번 확인된 사실이
+// 나중에 뒤집힐 가능성"이 없다는 게 전제다. 쿠키 값은 user.id 자체로 둬서,
+// 다른 계정으로 다시 로그인해도(세션 쿠키가 바뀌면 user.id도 바뀌므로) 캐시가
+// 자동으로 무효화된다.
+const PARTNER_VERIFIED_COOKIE = 'partner_verified';
+
 // 리다이렉트 응답은 NextResponse.redirect()로 새로 만들어야 하는데, 그러면 위
 // setAll 콜백이 `response`에 실어둔 갱신된 세션 쿠키가 함께 안 딸려간다(별개의
 // 응답 객체이므로) — 방치하면 토큰이 막 갱신된 시점에 로그인 화면으로 튕겨나가는
@@ -79,9 +92,17 @@ export async function middleware(request: NextRequest) {
     // 확인하면 된다. 온보딩 화면 자체로 가는 요청은 이 체크에서 제외해야(무한 리다이렉트
     // 방지) partners 행이 아직 없는 신규 로그인 사용자가 그 화면에 도달할 수 있다.
     if (!pathname.startsWith(PARTNER_ONBOARDING_PATH)) {
-      const { data: partner } = await supabase.from('partners').select('id').eq('id', user.id).maybeSingle();
-      if (!partner) {
-        return redirectPreservingCookies(new URL(PARTNER_ONBOARDING_PATH, request.url), response);
+      const isAlreadyVerified = request.cookies.get(PARTNER_VERIFIED_COOKIE)?.value === user.id;
+      if (!isAlreadyVerified) {
+        const { data: partner } = await supabase.from('partners').select('id').eq('id', user.id).maybeSingle();
+        if (!partner) {
+          return redirectPreservingCookies(new URL(PARTNER_ONBOARDING_PATH, request.url), response);
+        }
+        response.cookies.set(PARTNER_VERIFIED_COOKIE, user.id, {
+          path: '/',
+          maxAge: 60 * 60 * 24 * 7,
+          sameSite: 'lax',
+        });
       }
     }
   }

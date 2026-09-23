@@ -20,23 +20,29 @@ export default async function PartnerTodayPage({ searchParams }: { searchParams:
   // (추측해서 보정하지 않고, 안전한 기본값으로만 대체 — 제5장 제11조).
   const date = rawDate && /^\d{4}-\d{2}-\d{2}$/.test(rawDate) ? rawDate : todayDate;
 
+  // [성능](2026-09-23 사용자 지시): "/partner 쪽 너무 반응이 느린거 같은데?" —
+  // 아래 두 쿼리는 서로 결과에 의존하지 않는 독립 조회인데 순차 await로 짜여 있어
+  // 매 페이지 로드마다 네트워크 왕복이 그대로 더해지고 있었다(실측: Vercel
+  // 서버리스 함수에서 Supabase로의 각 왕복이 개별로는 빨라도 순차로 쌓이면
+  // 체감 지연이 컸다). 서로 독립적이므로 Promise.all로 병렬 실행한다.
   const supabase = await createClient();
-  const { data: bookings } = await supabase
-    .from('bookings')
-    .select('id, customer_name, customer_phone, booking_time, headcount, source, status, memo, product_name, total_price')
-    .eq('booking_date', date)
-    .order('booking_time', { ascending: true });
-
-  // [입력 간편화](2026-09-21 사용자 지시): 이 파트너가 최근에 등록한 상품명을
-  // 수기 예약 폼의 자동완성 제안으로 쓴다. RLS가 이미 본인 것만 걸러주므로
-  // 별도 partner_id 필터 없이 최근 순으로 넉넉히(50건) 가져와 중복만 제거한다
-  // — 상품 종류가 몇 개 안 되는 소규모 업체 특성상 이 정도로 충분하다.
-  const { data: recentProductRows } = await supabase
-    .from('bookings')
-    .select('product_name')
-    .not('product_name', 'is', null)
-    .order('created_at', { ascending: false })
-    .limit(50);
+  const [{ data: bookings }, { data: recentProductRows }] = await Promise.all([
+    supabase
+      .from('bookings')
+      .select('id, customer_name, customer_phone, booking_time, headcount, source, status, memo, product_name, total_price')
+      .eq('booking_date', date)
+      .order('booking_time', { ascending: true }),
+    // [입력 간편화](2026-09-21 사용자 지시): 이 파트너가 최근에 등록한 상품명을
+    // 수기 예약 폼의 자동완성 제안으로 쓴다. RLS가 이미 본인 것만 걸러주므로
+    // 별도 partner_id 필터 없이 최근 순으로 넉넉히(50건) 가져와 중복만 제거한다
+    // — 상품 종류가 몇 개 안 되는 소규모 업체 특성상 이 정도로 충분하다.
+    supabase
+      .from('bookings')
+      .select('product_name')
+      .not('product_name', 'is', null)
+      .order('created_at', { ascending: false })
+      .limit(50),
+  ]);
   const recentProductNames = [...new Set((recentProductRows ?? []).map((r) => r.product_name).filter(Boolean))] as string[];
 
   return (
