@@ -3,9 +3,20 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createBooking } from '@/actions/partner/bookings';
+import { PricingUnit } from '@/actions/partner/products';
 import { formatPhoneNumber } from '@/lib/partner/format-phone';
 import { formatPriceInput, parsePriceInput } from '@/lib/partner/format-price';
 import { Toast } from '@/components/map/toast';
+
+export type AddBookingProduct = { id: string; name: string; price: number; pricing_unit: PricingUnit };
+
+// 선택된 상품과 인원수로 결제 금액을 계산한다. "팀당"은 인원수와 무관하게 가격
+// 그대로, "인당"은 가격 * 인원수 — 2026-09-23 사용자 지시("상품에 대하여 팀당
+// 1개인지 아니면 인당 1개인지.. 두가지 다 성립하도록") 그대로 반영.
+function computeTotalPrice(product: AddBookingProduct | undefined, headcount: number): number | null {
+  if (!product) return null;
+  return product.pricing_unit === 'per_person' ? product.price * headcount : product.price;
+}
 
 // [나드리픽 파트너 PMS — 수기 예약 등록](2026-09-20 사용자 지시): "일간 뷰 화면
 // 우측 하단에 눈에 띄는 [+ 예약 추가] 플로팅 액션 버튼(FAB)... 클릭 시 화면을 덮는
@@ -21,11 +32,13 @@ const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => {
   return `${hour}:${minute}`;
 });
 
-// [입력 간편화](2026-09-21 사용자 지시) "이 필드들을 간편하게 입력하는 법이
-// 없나" — 상품명은 매번 새로 치기보다, 이 파트너가 예전에 등록했던 이름 중
-// 고르는 게 훨씬 빠르다. 별도 검색 UI 없이 네이티브 <datalist>만으로 자동완성
-// 제안을 붙인다(제5장 제4조 — 새 컴포넌트/라이브러리 없이 HTML 표준 기능만 사용).
-export function AddBookingFab({ defaultDate, recentProductNames = [] }: { defaultDate: string; recentProductNames?: string[] }) {
+// [파트너 상품 관리](2026-09-23 사용자 지시): "상품명/객실명을.. 그냥 상품명으로
+// 통일하고 콤보박스로 선택하게 해.. 상품(가격)이 보이고 인원선택하면 끝이잖아" —
+// 자유 텍스트+최근 이력 자동완성 대신, 더보기 > 상품 관리에서 등록한 상품
+// 카탈로그(이름/가격/가격 기준)를 그대로 선택지로 쓴다. 선택 시 결제 금액을
+// 자동 계산해 채우되(computeTotalPrice), 이후에도 직접 고쳐 쓸 수 있게 둔다
+// (스팟 연동이 주소를 자동으로 채우되 잠그지 않는 것과 동일한 관례, 제5장 제4조).
+export function AddBookingFab({ defaultDate, products = [] }: { defaultDate: string; products?: AddBookingProduct[] }) {
   const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
   const [customerName, setCustomerName] = useState('');
@@ -36,11 +49,32 @@ export function AddBookingFab({ defaultDate, recentProductNames = [] }: { defaul
   const [memo, setMemo] = useState('');
   // [2026-09-21 필드 확장] "네이버 예약 호환 수동 예약 등록 폼" 요청이 추가한
   // 상품명/결제 금액 — 둘 다 선택 입력이라 빈 문자열을 허용한다.
-  const [productName, setProductName] = useState('');
+  const [selectedProductId, setSelectedProductId] = useState('');
   const [totalPrice, setTotalPrice] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const selectedProduct = products.find((p) => p.id === selectedProductId);
+
+  function applyComputedPrice(product: AddBookingProduct | undefined, nextHeadcount: number) {
+    const computed = computeTotalPrice(product, nextHeadcount);
+    setTotalPrice(computed != null ? computed.toLocaleString('ko-KR') : '');
+  }
+
+  function handleProductChange(id: string) {
+    setSelectedProductId(id);
+    applyComputedPrice(
+      products.find((p) => p.id === id),
+      headcount
+    );
+  }
+
+  function changeHeadcount(next: number) {
+    const clamped = Math.max(1, next);
+    setHeadcount(clamped);
+    if (selectedProduct) applyComputedPrice(selectedProduct, clamped);
+  }
 
   function resetForm() {
     setCustomerName('');
@@ -49,7 +83,7 @@ export function AddBookingFab({ defaultDate, recentProductNames = [] }: { defaul
     setBookingTime(TIME_OPTIONS[0]);
     setHeadcount(1);
     setMemo('');
-    setProductName('');
+    setSelectedProductId('');
     setTotalPrice('');
     setFormError(null);
   }
@@ -73,7 +107,7 @@ export function AddBookingFab({ defaultDate, recentProductNames = [] }: { defaul
         booking_time: bookingTime,
         headcount,
         memo: memo || null,
-        product_name: productName || null,
+        product_name: selectedProduct?.name ?? null,
         total_price: parsePriceInput(totalPrice),
       });
       if ('error' in result) {
@@ -178,20 +212,24 @@ export function AddBookingFab({ defaultDate, recentProductNames = [] }: { defaul
               </div>
 
               <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-700">
-                상품명/객실명(선택)
-                <input
-                  type="text"
-                  list="product-name-suggestions"
-                  value={productName}
-                  onChange={(e) => setProductName(e.target.value)}
+                상품명(선택)
+                <select
+                  value={selectedProductId}
+                  onChange={(e) => handleProductChange(e.target.value)}
                   className="rounded-xl border border-gray-300 px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
-                />
-                {recentProductNames.length > 0 && (
-                  <datalist id="product-name-suggestions">
-                    {recentProductNames.map((name) => (
-                      <option key={name} value={name} />
-                    ))}
-                  </datalist>
+                >
+                  <option value="">선택 안 함</option>
+                  {products.map((product) => (
+                    <option key={product.id} value={product.id}>
+                      {product.name} ({product.price.toLocaleString('ko-KR')}원
+                      {product.pricing_unit === 'per_person' ? '/인' : ''})
+                    </option>
+                  ))}
+                </select>
+                {products.length === 0 && (
+                  <span className="text-xs text-gray-400">
+                    등록된 상품이 없어요 — 더보기 &gt; 상품 관리에서 먼저 등록해 주세요.
+                  </span>
                 )}
               </label>
 
@@ -200,7 +238,7 @@ export function AddBookingFab({ defaultDate, recentProductNames = [] }: { defaul
                 <div className="flex items-center gap-3">
                   <button
                     type="button"
-                    onClick={() => setHeadcount((n) => Math.max(1, n - 1))}
+                    onClick={() => changeHeadcount(headcount - 1)}
                     disabled={headcount <= 1}
                     aria-label="인원 줄이기"
                     className="flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-xl font-bold text-gray-700 disabled:opacity-40"
@@ -210,7 +248,7 @@ export function AddBookingFab({ defaultDate, recentProductNames = [] }: { defaul
                   <span className="w-10 text-center text-lg font-bold text-gray-900">{headcount}</span>
                   <button
                     type="button"
-                    onClick={() => setHeadcount((n) => n + 1)}
+                    onClick={() => changeHeadcount(headcount + 1)}
                     aria-label="인원 늘리기"
                     className="flex h-11 w-11 items-center justify-center rounded-full bg-gray-100 text-xl font-bold text-gray-700"
                   >
@@ -238,6 +276,13 @@ export function AddBookingFab({ defaultDate, recentProductNames = [] }: { defaul
                   />
                   <span aria-hidden="true" className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-400">원</span>
                 </div>
+                {selectedProduct && (
+                  <span className="text-xs text-gray-400">
+                    {selectedProduct.pricing_unit === 'per_person'
+                      ? `${selectedProduct.price.toLocaleString('ko-KR')}원 × ${headcount}명으로 자동 계산했어요 — 필요하면 고쳐 쓸 수 있어요.`
+                      : '선택한 상품 가격을 그대로 채웠어요 — 필요하면 고쳐 쓸 수 있어요.'}
+                  </span>
+                )}
               </div>
 
               <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-700">

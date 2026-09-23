@@ -2,7 +2,7 @@ import { createClient } from '@/lib/supabase/server';
 import { todayKstDateString } from '@/lib/partner/date';
 import { DailyDateNav } from '@/components/partner/daily-date-nav';
 import { BookingCard } from '@/components/partner/booking-card';
-import { AddBookingFab } from '@/components/partner/add-booking-fab';
+import { AddBookingFab, AddBookingProduct } from '@/components/partner/add-booking-fab';
 
 // [나드리픽 파트너 PMS — 일간 뷰](2026-09-20 사용자 지시, docs/partner_spec.md 5절):
 // "[⏰ 오늘(일간)] (기본 홈 디폴트: 시간대별 타임스케줄)". Phase 1 스텁을 실제 데이터
@@ -25,25 +25,20 @@ export default async function PartnerTodayPage({ searchParams }: { searchParams:
   // 매 페이지 로드마다 네트워크 왕복이 그대로 더해지고 있었다(실측: Vercel
   // 서버리스 함수에서 Supabase로의 각 왕복이 개별로는 빨라도 순차로 쌓이면
   // 체감 지연이 컸다). 서로 독립적이므로 Promise.all로 병렬 실행한다.
+  //
+  // [파트너 상품 관리](2026-09-23 사용자 지시): "상품명/객실명을.. 그냥 상품명으로
+  // 통일하고 콤보박스로 선택하게 해" — 예전 예약의 상품명 이력을 자동완성으로
+  // 제안하던 방식(recentProductRows) 대신, 파트너가 더보기 > 상품 관리에서
+  // 직접 등록해둔 상품 카탈로그(이름/가격/가격 기준)를 그대로 선택지로 쓴다.
   const supabase = await createClient();
-  const [{ data: bookings }, { data: recentProductRows }] = await Promise.all([
+  const [{ data: bookings }, { data: products }] = await Promise.all([
     supabase
       .from('bookings')
       .select('id, customer_name, customer_phone, booking_time, headcount, source, status, memo, product_name, total_price')
       .eq('booking_date', date)
       .order('booking_time', { ascending: true }),
-    // [입력 간편화](2026-09-21 사용자 지시): 이 파트너가 최근에 등록한 상품명을
-    // 수기 예약 폼의 자동완성 제안으로 쓴다. RLS가 이미 본인 것만 걸러주므로
-    // 별도 partner_id 필터 없이 최근 순으로 넉넉히(50건) 가져와 중복만 제거한다
-    // — 상품 종류가 몇 개 안 되는 소규모 업체 특성상 이 정도로 충분하다.
-    supabase
-      .from('bookings')
-      .select('product_name')
-      .not('product_name', 'is', null)
-      .order('created_at', { ascending: false })
-      .limit(50),
+    supabase.from('partner_products').select('id, name, price, pricing_unit').order('created_at', { ascending: true }),
   ]);
-  const recentProductNames = [...new Set((recentProductRows ?? []).map((r) => r.product_name).filter(Boolean))] as string[];
 
   return (
     <div className="flex flex-col">
@@ -58,7 +53,10 @@ export default async function PartnerTodayPage({ searchParams }: { searchParams:
       {/* [수기 예약 등록](2026-09-20 사용자 지시): 기본 날짜는 "일간 뷰에서 현재
           보고 있던 날짜"(요구사항 2) — 지금 이 페이지가 보여주는 date를 그대로
           넘긴다. */}
-      <AddBookingFab defaultDate={date} recentProductNames={recentProductNames} />
+      {/* [pricing_unit 캐스팅] DB 컬럼이 text + check 제약이라 codegen 타입은
+          좁은 리터럴 유니언이 아닌 string으로 나온다 — DB가 이미 값 범위를
+          강제하므로 여기서 안전하게 좁혀도 된다. */}
+      <AddBookingFab defaultDate={date} products={(products ?? []) as AddBookingProduct[]} />
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import Link from 'next/link';
 import { SignOutButton } from '@/components/auth/sign-out-button';
 
 // [나드리픽 파트너 PMS Phase 1](2026-09-20 사용자 지시, docs/partner_spec.md 5절):
@@ -17,8 +18,23 @@ const COMING_SOON_ITEMS = [
 
 export default function PartnerMorePage() {
   return (
-    <div className="flex flex-col gap-1 p-4">
-      <h1 className="px-2 pb-2 text-base font-bold text-gray-900">더보기</h1>
+    <div className="flex flex-col gap-3 p-4">
+      <h1 className="px-2 text-base font-bold text-gray-900">더보기</h1>
+
+      {/* [파트너 상품 관리](2026-09-23 사용자 지시): "더보기에서 화면 하나 만들어서
+          세팅할 수 있게" — 실제로 동작하는 화면이라 위 준비 중 목록과 달리 링크로
+          둔다. */}
+      <Link
+        href="/partner/more/products"
+        className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3.5 text-sm hover:bg-gray-50"
+      >
+        <span aria-hidden>🛍️</span>
+        <span className="flex-1 font-medium text-gray-900">상품 관리(이름/가격 등록)</span>
+        <span aria-hidden className="text-gray-300">
+          ›
+        </span>
+      </Link>
+
       <ul className="flex flex-col divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
         {COMING_SOON_ITEMS.map((item) => (
           <li key={item.label} className="flex items-center gap-3 px-4 py-3.5 text-sm text-gray-400">
@@ -28,7 +44,7 @@ export default function PartnerMorePage() {
           </li>
         ))}
       </ul>
-      <div className="mt-4 flex justify-center">
+      <div className="mt-1 flex justify-center">
         <SignOutButton />
       </div>
     </div>

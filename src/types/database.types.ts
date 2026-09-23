@@ -773,6 +773,41 @@ export type Database = {
           },
         ]
       }
+      partner_products: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          partner_id: string
+          price: number
+          pricing_unit: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          partner_id: string
+          price?: number
+          pricing_unit?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          partner_id?: string
+          price?: number
+          pricing_unit?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "partner_products_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partners"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       partner_settings: {
         Row: {
           auto_reminder_enabled: boolean
