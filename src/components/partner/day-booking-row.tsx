@@ -6,7 +6,12 @@ import { formatMonthDayWithWeekday } from '@/lib/partner/date';
 // 표기". 상태 변경 등 조작은 이 화면의 몫이 아니다(그건 일간 뷰) — 터치하면
 // 통째로 일간 뷰로 점프하므로 순수 표시 전용, 클라이언트 컴포넌트일 필요가
 // 없다(Link 하나로 충분 — 제5장 제4조 불필요한 상태 없이 가장 단순하게).
-export type WeeklyBookingSummary = {
+// [주간 뷰를 월간으로 흡수](2026-09-23 사용자 지시): "월간쪽을 주간과
+// 같이해줘 한달치에 대하여... 주간처럼" — 독립 주간 탭/페이지는 없어졌지만,
+// 이 "하루 한 줄" 행 컴포넌트 자체는 요일 개념과 무관해 그대로 재사용할 수
+// 있어(제5장 제4조) `weekly-day-row.tsx`에서 이름만 일반화해 옮겨왔다. 월간
+// 뷰의 모바일 리스트가 이 컴포넌트를 그 달의 모든 날짜에 대해 반복 렌더링한다.
+export type DayBookingSummary = {
   id: string;
   booking_time: string;
   customer_name: string;
@@ -18,13 +23,13 @@ function formatTime(time: string): string {
   return time.slice(0, 5);
 }
 
-export function WeeklyDayRow({
+export function DayBookingRow({
   date,
   bookings,
   isToday,
 }: {
   date: string;
-  bookings: WeeklyBookingSummary[];
+  bookings: DayBookingSummary[];
   isToday: boolean;
 }) {
   const totalHeadcount = bookings.reduce((sum, b) => sum + b.headcount, 0);

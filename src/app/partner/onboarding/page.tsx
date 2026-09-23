@@ -18,9 +18,14 @@ import { OnboardingForm } from '@/components/partner/onboarding-form';
 // 주므로 건드리지 않고(다른 모든 화면의 스크롤 동작에 영향), 이 페이지 자신을
 // my-page-view.tsx와 동일한 `flex-1 overflow-y-auto`로 바꿔 body의 남은 공간을
 // 채우면서 내부적으로 스크롤 가능하게 한다.
+//
+// [PC 화면 반응형 프레임](2026-09-23 사용자 지시): "화면이 pc 사이즈처럼되어있어
+// 반응형으로 해야할텐데" — 폼 입력란(onboarding-form.tsx)이 자체 너비 제약이 없어
+// 넓은 화면에서 그대로 늘어난다. (tabs)/layout.tsx와 동일한 폭(max-w-2xl)으로
+// 맞춰 일관된 프레임을 준다.
 export default function PartnerOnboardingPage() {
   return (
-    <div className="flex flex-1 flex-col overflow-y-auto bg-white">
+    <div className="flex flex-1 flex-col overflow-y-auto bg-white md:mx-auto md:w-full md:max-w-2xl md:border-x md:border-gray-200">
       <div className="px-5 pt-8 pb-2 text-center">
         <span className="text-3xl" aria-hidden>
           🌾
