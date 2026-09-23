@@ -2,12 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import {
-  createPartnerProduct,
-  deletePartnerProduct,
-  updatePartnerProduct,
-  PricingUnit,
-} from '@/actions/partner/products';
+import { createPartnerProduct, deletePartnerProduct, updatePartnerProduct } from '@/actions/partner/products';
+import { PricingUnit } from '@/lib/partner/pricing-unit';
 import { formatPriceInput, parsePriceInput } from '@/lib/partner/format-price';
 import { Toast } from '@/components/map/toast';
 

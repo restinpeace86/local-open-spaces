@@ -53,14 +53,31 @@ price, pricing_unit('flat'|'per_person'), created_at`. partners/bookings와
   add-booking-fab.test.tsx의 콤보박스/자동 계산/재계산/수동 override 케이스
   추가) / `npm run build` 모두 통과. `/partner/more/products` 라우트가
   `ƒ`(Dynamic)로 정상 등록됨을 빌드 출력에서 확인.
-- 배포 후 실제 파트너 계정(goodguy0515@gmail.com, "괴산 서울농장") 세션으로
-  end-to-end 확인 예정: 상품 관리에서 팀당/인당 상품 등록 → 목록 표시 확인
-  → 예약 추가 화면 콤보박스에 반영 확인 → 인당 상품 선택 후 인원 변경 시
-  결제 금액 재계산 확인 → 테스트 상품 정리(실사용 계정 데이터 오염 방지)
-  (이 기록 갱신 예정).
+- **실제 브라우저 검증에서 발견/수정한 배포 후 버그**: 실제 파트너 계정
+  (goodguy0515@gmail.com, "괴산 서울농장") 세션을 주입해 상품 등록을
+  시도하자 500 에러(React 미니파이드 에러 #441)로 크래시했다 — 원인은
+  2026-09-21에 이미 한 번 겪었던 것과 정확히 같은 버그였다:
+  `src/actions/partner/products.ts`('use server')가 `PRICING_UNITS`(순수
+  배열 상수)를 함께 export하고 있어서, Next.js가 이 값을 서버 액션 참조로
+  치환해버렸다. `booking-status.ts`와 동일한 방식으로
+  `src/lib/partner/pricing-unit.ts`(신규)로 `PRICING_UNITS`/`PricingUnit`을
+  완전히 분리해 액션 파일이 async 함수만 export하게 고쳤다. tsc/vitest 둘 다
+  이 버그를 못 잡는다(Next.js의 서버 액션 번들러 변환을 안 거치는 환경이라) —
+  이번에도 실제 프로덕션에 Playwright로 세션을 주입해 실제로 제출해보고서야
+  드러났다.
+- 위 수정을 배포한 뒤 동일한 방식으로 재검증 예정(이 기록 갱신 예정): 상품
+  관리에서 팀당/인당 상품 등록 → 목록 표시 확인 → 예약 추가 화면 콤보박스
+  반영 확인 → 인당 상품 선택 후 인원 변경 시 결제 금액 재계산 확인 → 테스트
+  상품 정리(실사용 계정 데이터 오염 방지).
 
 ## 특이 사항
 - 상품 삭제 기능은 있지만, 이미 과거 예약(`bookings.product_name`)에 쓰인
   상품명 텍스트 자체는 그대로 남는다(예약은 상품 id가 아니라 이름 문자열을
   스냅샷으로 저장 — 상품을 나중에 삭제/이름 변경해도 과거 예약 기록이
   깨지지 않는다는 뜻이자, 의도된 동작).
+- 이번 세션에서 이 'use server' export 제약 버그가 두 번째로 발생했다
+  (첫 번째: BOOKING_STATUSES, 2026-09-21). 새 Server Action 파일을 만들
+  때마다 "async 함수 외 다른 export가 있는지" 직접 점검하는 습관이 필요해
+  보인다 — 정적 분석(tsc/lint)으로 걸러지지 않고 실제 브라우저 제출
+  시점에만 드러나는 종류의 실수라, 이번에도 실측(Playwright 세션 주입)이
+  아니었다면 배포된 채로 남아있었을 것이다.

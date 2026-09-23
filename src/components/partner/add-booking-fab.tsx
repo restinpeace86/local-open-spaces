@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createBooking } from '@/actions/partner/bookings';
-import { PricingUnit } from '@/actions/partner/products';
+import { PricingUnit } from '@/lib/partner/pricing-unit';
 import { formatPhoneNumber } from '@/lib/partner/format-phone';
 import { formatPriceInput, parsePriceInput } from '@/lib/partner/format-price';
 import { Toast } from '@/components/map/toast';
