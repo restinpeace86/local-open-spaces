@@ -30,6 +30,7 @@ function stubProfile(profile: Record<string, unknown> | null) {
 describe('ProfileCompletionGuard', () => {
   afterEach(() => {
     getUserMock.mockReset();
+    onAuthStateChangeMock.mockClear();
     fromMock.mockReset();
     replaceMock.mockReset();
     mockPathname = '/';
@@ -101,5 +102,26 @@ describe('ProfileCompletionGuard', () => {
     await new Promise((r) => setTimeout(r, 0));
     expect(fromMock).not.toHaveBeenCalled();
     expect(replaceMock).not.toHaveBeenCalled();
+  });
+
+  // [성능](2026-09-23 사용자 지시): "/partner 쪽 너무 반응이 느린거 같은데.. 프론트엔드
+  // 랜더링이라던가에서 찾아봐" — exempt 경로에서는 profiles 조회뿐 아니라
+  // useUser()의 getUser() 호출/구독 자체가 아예 안 일어나야 한다(하위 컴포넌트가
+  // 마운트되지 않으므로). 이전엔 useEffect 안에서만 걸러 exempt 경로에서도
+  // getUser()가 매번 불필요하게 호출되고 있었다.
+  it('/partner, /hq 경로에서는 useUser()의 getUser() 호출 자체가 일어나지 않는다', async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
+
+    mockPathname = '/partner/today';
+    render(<ProfileCompletionGuard />);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(getUserMock).not.toHaveBeenCalled();
+    expect(onAuthStateChangeMock).not.toHaveBeenCalled();
+
+    mockPathname = '/hq';
+    render(<ProfileCompletionGuard />);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(getUserMock).not.toHaveBeenCalled();
+    expect(onAuthStateChangeMock).not.toHaveBeenCalled();
   });
 });

@@ -17,9 +17,24 @@ import { getMyProfile } from '@/lib/auth/profile';
 // 테이블) 이 가드가 개입하면 안 된다 — "기존 코드베이스와 오염되지 않도록" 요구사항.
 const EXEMPT_PATH_PREFIXES = ['/auth/complete-profile', '/auth/callback', '/partner', '/hq'];
 
+// [성능](2026-09-23 사용자 지시): "/partner 쪽 너무 반응이 느린거 같은데.. 프론트엔드
+// 랜더링이라던가에서 찾아봐" — 이 가드는 root layout에 전역 마운트돼 /partner, /hq
+// 에서도 항상 렌더링됐다. 기존엔 exempt 경로 판정을 useEffect 안에서만 했는데,
+// 그 안에서 걸러지기 전에 이미 useUser() 훅이 무조건 호출돼 매 페이지 로드마다
+// 브라우저에서 Supabase Auth로의 불필요한 네트워크 호출(getUser) +
+// onAuthStateChange 구독을 만들고 있었다(exempt 경로에서는 애초에 아무 것도
+// 안 하는데도). 훅은 조건부로 호출할 수 없으므로(Rules of Hooks), exempt 여부를
+// 먼저 판정하는 얇은 래퍼로 분리해 실제 로직(및 useUser())을 별도 컴포넌트로
+// 옮겼다 — exempt 경로에서는 그 컴포넌트 자체가 마운트되지 않아 훅 호출 자체가
+// 일어나지 않는다.
 export function ProfileCompletionGuard() {
-  const { user, isLoading: isUserLoading } = useUser();
   const pathname = usePathname();
+  if (EXEMPT_PATH_PREFIXES.some((prefix) => pathname?.startsWith(prefix))) return null;
+  return <ProfileCompletionGuardActive pathname={pathname} />;
+}
+
+function ProfileCompletionGuardActive({ pathname }: { pathname: string | null }) {
+  const { user, isLoading: isUserLoading } = useUser();
   const router = useRouter();
   // 한 번 "완료됨"을 확인하면 세션 내내 다시 조회하지 않는다 — 페이지를 이동할 때마다
   // profiles를 매번 다시 조회하는 낭비를 막는다(완성 여부는 이 화면 자체에서 저장할
@@ -29,7 +44,6 @@ export function ProfileCompletionGuard() {
   useEffect(() => {
     if (isUserLoading || !user) return;
     if (verifiedCompleteRef.current) return;
-    if (EXEMPT_PATH_PREFIXES.some((prefix) => pathname?.startsWith(prefix))) return;
 
     let cancelled = false;
     getMyProfile()
