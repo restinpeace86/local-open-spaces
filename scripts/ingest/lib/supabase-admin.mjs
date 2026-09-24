@@ -204,11 +204,37 @@ const SELECT_LOOKUP_BATCH_SIZE = 200;
 //   3) 가장 직접적이고 안전한 완화책은 "한 번의 UPSERT 문이 처리하는 행 수"를
 //      줄이는 것이다 — 문 하나가 statement_timeout 안에 끝나기만 하면 되므로,
 //      500건씩 보내던 것을 이미 검증된 SELECT_LOOKUP_BATCH_SIZE(200)와 동일한
-//      값으로 낮춰 트리거/인덱스 비용이 실리는 단일 SQL 문의 크기 자체를
-//      줄인다. upsertRows()(SafeMerge를 쓰지 않는 나머지 25개 단일 테이블
-//      어댑터)는 이 트리거 비용 문제가 없는 open_spaces 등에도 쓰이므로
-//      그대로 500을 유지한다 — SafeMerge 경로에만 적용해 영향 범위를 좁힌다.
-const SAFE_MERGE_UPSERT_BATCH_SIZE = 200;
+//      값으로 낮췄다.
+//
+// [LOCALDATA_PLAYGROUND 대량 upsert 타임아웃 수정](2026-09-25 사용자 지시):
+// "이것만 upsert를 나눠서 할 수는 없어? 10000건씩 upsert한다던가" — 실측 확인
+// 결과 이 위 문단(2026-09-13)의 전제("upsertRows()가 SafeMerge를 쓰지 않는
+// 나머지 25개 단일 테이블 어댑터를 담당하고, 그쪽은 500을 그대로 유지한다")가
+// 이미 사실과 어긋나 있었다 — base-collector-adapter.mjs가 실제로는 'multi'가
+// 아닌 모든 단일 테이블 어댑터(open_spaces 포함, PlaygroundAdapter도 여기
+// 해당)를 예외 없이 upsertRowsSafeMerge()로만 처리하도록 이미 통합돼 있어(주석
+// "COALESCE Safe UPSERT를 모든 소스 공통 기본값으로 승격한다" 참고), open_spaces
+// 도 200건 배치를 그대로 쓰고 있었다. 82,431건 ÷ 200 = 약 412번의 UPSERT
+// 왕복(+같은 수의 SELECT 조회 왕복)이 필요해, 10분(600초) 하드 타임아웃을
+// 넘겨 매번 중간에 끊기는 것을 오늘 실측으로 확인했다.
+// events가 200으로 낮아진 이유(updated_at 트리거의 전체 행 jsonb 직렬화 +
+// trigram 인덱스 3개 유지 비용)를 open_spaces에 그대로 적용할 근거가 없어
+// (실측: `select * from pg_trigger where tgrelid='public.open_spaces'::
+// regclass and not tgisinternal`가 0건 — 커스텀 트리거 자체가 없음), 테이블별로
+// 값을 분리한다. open_spaces는 2026-08-22에 이미 검증된 UPSERT_BATCH_SIZE(500,
+// 바로 이 playground 82,373건 데이터로 실측 검증된 값 — 위 upsertRows() 관련
+// 주석 참고)와 동일하게 맞춰, 한 번에 너무 커서 응답 없이 멈췄던 예전 실패
+// (그 주석 참고)를 재현하지 않으면서도 UPSERT 왕복 횟수를 412회→165회로
+// 줄인다. events는 statement_timeout 여유가 그대로 필요해 200을 유지한다.
+// SELECT_LOOKUP_BATCH_SIZE(200)는 URL 길이 제한(500건은 fetch 자체가 실패,
+// 2026-08-25 실측)이라 테이블과 무관하게 그대로 둔다 — 이 값을 손대지 않아도
+// 안쪽 루프가 어떤 SAFE_MERGE_UPSERT_BATCH_SIZE든 자동으로 200 단위로 다시
+// 쪼개 조회하므로 이번 변경으로 영향받지 않는다.
+const SAFE_MERGE_UPSERT_BATCH_SIZE_BY_TABLE = {
+  events: 200,
+  open_spaces: UPSERT_BATCH_SIZE,
+};
+const DEFAULT_SAFE_MERGE_UPSERT_BATCH_SIZE = 200;
 
 // [예약/운영 상태 필드는 항상 최신값으로 갱신](2026-09-12 사용자 지시): "서울형 키즈카페"
 // 실측 확인 결과, 위 SafeMerge의 "기존 값이 있으면 보존" 규칙이 events.start_date/
@@ -244,12 +270,13 @@ const ALWAYS_REFRESH_FIELDS = {
 export async function upsertRowsSafeMerge(client, table, rows) {
   if (rows.length === 0) return { count: 0, duplicateWithinBatch: 0, mergedWithExisting: 0 };
 
+  const batchSize = SAFE_MERGE_UPSERT_BATCH_SIZE_BY_TABLE[table] ?? DEFAULT_SAFE_MERGE_UPSERT_BATCH_SIZE;
   const { rows: dedupedRows, duplicateCount } = dedupeByExternalIdMergeNulls(rows);
   let totalCount = 0;
   let mergedWithExisting = 0;
 
-  for (let i = 0; i < dedupedRows.length; i += SAFE_MERGE_UPSERT_BATCH_SIZE) {
-    const batch = dedupedRows.slice(i, i + SAFE_MERGE_UPSERT_BATCH_SIZE);
+  for (let i = 0; i < dedupedRows.length; i += batchSize) {
+    const batch = dedupedRows.slice(i, i + batchSize);
 
     const existingById = new Map();
     for (let j = 0; j < batch.length; j += SELECT_LOOKUP_BATCH_SIZE) {

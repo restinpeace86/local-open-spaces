@@ -63,6 +63,19 @@ const BATCH_NAME = 'Monthly Spaces Batch';
 // 등 지오코딩을 대량으로 쓰는 어댑터가 많아 특히 이 방어선이 중요하다.
 const STEP_TIMEOUT_MS = 10 * 60 * 1000;
 
+// [LOCALDATA_PLAYGROUND 대량 upsert 타임아웃 수정](2026-09-25 사용자 지시): "단독으로
+// 시간 끝나는지 보고.. upsert를 나눠서 할 수는 없어?" — 실측으로 upsert 배치 크기를
+// 200→500(open_spaces용)으로 올려봤지만, 82,431건 규모에서는 500건 단일 UPSERT 문이
+// 이따금 Postgres 자체 statement_timeout에 걸려(재시도로 흡수되긴 함) 총 소요시간이
+// 오히려 늘기도 했다(실측: 200건 배치 12분 vs 500건 배치 14분 45초, 재시도 2회 발생).
+// 두 시도 모두 공통적으로 확인된 사실은 "이 소스는 단독으로도 10분을 넘긴다"는
+// 것이었다 — 이 배치의 다른 모든 소스(수백~수천 건)와 비교해 이 소스만 82,000여 건으로
+// 자릿수가 다르다. 배치 크기 미세조정으로 10분 안에 욱여넣으려 하기보다, 이 소스에만
+// 실측 소요시간(약 12~15분)에 여유를 더한 25분 타임아웃을 별도로 준다 — 다른 모든
+// 소스는 기존 10분을 그대로 유지한다(그 소스들은 이런 규모 문제가 없었음, 실측
+// 파이프라인 로그 기준).
+const LOCALDATA_PLAYGROUND_STEP_TIMEOUT_MS = 25 * 60 * 1000;
+
 // [핵심 events 수집 파이프라인 장애 점검](2026-08-30 사용자 지시): run-daily.mjs와 동일한
 // 이유로, 아래 14개 소스 어댑터의 실제 소스 코드(`throw new Error('... 환경변수가
 // 설정되지 않았습니다.')` 가드)를 조사해 확정한 필수 환경변수 목록이다. 이 조사 과정에서
@@ -90,7 +103,11 @@ export const STEPS = [
   { label: 'GG_KIDSCAFE', run: ({ dryRun }) => new GgKidscafeAdapter().run({ dryRun }) },
   { label: 'GO_CAMPING', run: ({ dryRun }) => new GoCampingAdapter().run({ dryRun }) },
   { label: 'NATIONAL_PARK_ECOTOUR', run: ({ dryRun }) => new NationalParkEcotourAdapter().run({ dryRun }) },
-  { label: 'LOCALDATA_PLAYGROUND', run: ({ dryRun }) => new PlaygroundAdapter().run({ dryRun }) },
+  {
+    label: 'LOCALDATA_PLAYGROUND',
+    run: ({ dryRun }) => new PlaygroundAdapter().run({ dryRun }),
+    timeoutMs: LOCALDATA_PLAYGROUND_STEP_TIMEOUT_MS,
+  },
   { label: 'PUBLIC_FACILITY_OPEN', run: ({ dryRun }) => new PublicFacilityOpenAdapter().run({ dryRun }) },
   { label: 'SWIMMING_POOL', run: ({ dryRun }) => new SwimmingPoolAdapter().run({ dryRun }) },
   { label: 'KOR_TOUR', run: ({ dryRun }) => new KorTourAdapter().run({ dryRun }) },
@@ -337,7 +354,10 @@ export async function runMonthlyBatch({ dryRun = false } = {}) {
   for (const step of STEPS) {
     console.log(`\n=== [${step.label}] ===`);
     try {
-      const result = await withStepTimeout(() => step.run({ dryRun }), { label: step.label, timeoutMs: STEP_TIMEOUT_MS });
+      const result = await withStepTimeout(() => step.run({ dryRun }), {
+        label: step.label,
+        timeoutMs: step.timeoutMs ?? STEP_TIMEOUT_MS,
+      });
       results.push(result);
     } catch (err) {
       console.error(`❌ [${step.label}] 실패: ${err.message}`);

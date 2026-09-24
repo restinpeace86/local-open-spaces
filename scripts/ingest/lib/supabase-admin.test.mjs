@@ -271,11 +271,11 @@ describe('upsertRowsSafeMerge', () => {
     );
   });
 
-  it('행이 200건을 넘으면 upsert도 200건 단위로 나눈다', async () => {
+  it('events는 200건 단위로 upsert를 나눈다(트리거/trigram 인덱스 비용 때문에 그대로 유지)', async () => {
     const { client, upsert, inFn } = makeSafeMergeMockClient({ existingRows: [] });
     const rows = Array.from({ length: 1200 }, (_, i) => ({ external_id: `id-${i}` }));
 
-    const result = await upsertRowsSafeMerge(client, 'open_spaces', rows);
+    const result = await upsertRowsSafeMerge(client, 'events', rows);
 
     // [SEOUL_YEYAK events upsert 간헐적 statement timeout 수정](2026-09-13 사용자 지시):
     // "왜 쿼리가 타임아웃나는지 원인 진단해서 고쳐줘" — SafeMerge upsert 배치 크기를
@@ -288,6 +288,32 @@ describe('upsertRowsSafeMerge', () => {
     // SELECT_LOOKUP_BATCH_SIZE(200)와 같아져 배치당 추가로 쪼갤 필요가 없다 — 6회.
     expect(upsert).toHaveBeenCalledTimes(6);
     expect(inFn).toHaveBeenCalledTimes(6);
+    expect(inFn.mock.calls.every(([, ids]) => ids.length <= 200)).toBe(true);
+    expect(result).toEqual({ count: 1200, duplicateWithinBatch: 0, mergedWithExisting: 0 });
+  });
+
+  // [LOCALDATA_PLAYGROUND 대량 upsert 타임아웃 수정](2026-09-25 사용자 지시): "이것만
+  // upsert를 나눠서 할 수는 없어? 10000건씩 upsert한다던가" — 실측 확인 결과
+  // open_spaces에는 events와 달리 커스텀 트리거가 전혀 없어(pg_trigger 직접 조회로
+  // 확인) 200으로 낮출 근거가 없었는데도 공용 상수를 그대로 썼다. 82,431건 기준
+  // 200건 배치는 약 412회 UPSERT 왕복(+같은 수의 SELECT 왕복)이 필요해 10분 하드
+  // 타임아웃을 넘겼다 — open_spaces만 2026-08-22에 이미 이 정확한 playground 데이터로
+  // 검증된 UPSERT_BATCH_SIZE(500)로 올려 왕복 횟수를 줄인다.
+  it('open_spaces는 500건 단위로 upsert를 나눈다(트리거 없어 events보다 크게 허용)', async () => {
+    const { client, upsert, inFn } = makeSafeMergeMockClient({ existingRows: [] });
+    const rows = Array.from({ length: 1200 }, (_, i) => ({ external_id: `id-${i}` }));
+
+    const result = await upsertRowsSafeMerge(client, 'open_spaces', rows);
+
+    // upsert(POST 본문): 500+500+200 = 3배치. 조회(.in(), GET)는 여전히
+    // SELECT_LOOKUP_BATCH_SIZE(200) 단위로 별도 쪼개져 500건 배치당 3회씩(200+200+100),
+    // 200건 배치는 1회 — 총 3+3+1 = 7회(URL 길이 제한은 배치 크기와 무관하게 그대로
+    // 지켜진다).
+    expect(upsert).toHaveBeenCalledTimes(3);
+    expect(upsert.mock.calls[0][0]).toHaveLength(500);
+    expect(upsert.mock.calls[1][0]).toHaveLength(500);
+    expect(upsert.mock.calls[2][0]).toHaveLength(200);
+    expect(inFn).toHaveBeenCalledTimes(7);
     expect(inFn.mock.calls.every(([, ids]) => ids.length <= 200)).toBe(true);
     expect(result).toEqual({ count: 1200, duplicateWithinBatch: 0, mergedWithExisting: 0 });
   });
