@@ -19,6 +19,18 @@ function radiusToLevel(radiusMeters: number): number {
   return Math.min(10, Math.max(3, Math.round(level)));
 }
 
+// [클러스터링 건수 기준 자동 분기](2026-09-25 사용자 지시): "노출중분류 매핑으로
+// 보이도록 하고 있는데.. 하나의 중분류에 1000건이 안넘지 않나? 클러스터 On/Off
+// 기능으로 하는게 괜찮은지 검토해줘" → "그렇게 제안한대로 해"(건수 기준 자동
+// 분기, 수동 토글 아님). 실측 결과 전제가 일부 틀렸다(캠핑장/피크닉장 3,227건,
+// 키즈카페/실내놀이터 2,246건 등 1,000건을 넘는 중분류가 실제로 있음) — 그래도
+// 요청한 자동 분기 방향은 여전히 유효하다: 항목 수가 적으면(마커가 겹칠 일이
+// 거의 없음) minLevel(2026-09-25에 10으로 올림, 최상단 광역 뷰 한정) 클러스터링
+// 자체를 건너뛰고 항상 개별 핀으로 보여주고, 많으면(예: 캠핑장) 기존처럼
+// 클러스터러를 쓴다. 임계값 300은 "제안한 300~500건" 범위의 하한(더 보수적으로
+// 일찍 클러스터링) — 정확한 경험적 최적값이 아니라 안전한 초기값이다.
+const CLUSTER_ITEM_COUNT_THRESHOLD = 300;
+
 // spec/map/kakao-map.md 3: 리사이징/회전 시 relayout()+setCenter()로 회색 타일 방지
 // spec/map/kakao-map.md 4.1: 카테고리별 커스텀 마커 + MarkerClusterer 연동
 export function KakaoMapView({
@@ -437,7 +449,16 @@ export function KakaoMapView({
     });
 
     markersRef.current = markers;
-    clustererRef.current.addMarkers(markers);
+    // [클러스터링 건수 기준 자동 분기](2026-09-25 사용자 지시): 항목 수가 적으면
+    // (겹칠 마커가 거의 없어 클러스터링이 딱히 도움이 안 됨) 클러스터러를 아예
+    // 쓰지 않고 지도에 직접 마커를 붙인다 — 위에서 이미 clustererRef.current.clear()를
+    // 호출했으니 클러스터러는 빈 상태로 남는다. 항목이 많으면(예: 캠핑장 3,227건)
+    // 기존처럼 클러스터러(minLevel=10, 최상단 광역 뷰에서만 클러스터링)에 맡긴다.
+    if (items.length >= CLUSTER_ITEM_COUNT_THRESHOLD) {
+      clustererRef.current.addMarkers(markers);
+    } else {
+      markers.forEach((marker) => marker.setMap(mapRef.current));
+    }
     // 마커를 다시 만든 직후, 현재 포커스/호버 대상 마커를 크게 반영한다.
     refreshEmphasis();
     // onSelectItem/onSelectGroup은 ref로 최신값을 읽으므로 의존성에서 제외한다.

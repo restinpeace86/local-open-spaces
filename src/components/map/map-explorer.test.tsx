@@ -11,9 +11,20 @@ const rpcMock = vi.fn(() => Promise.resolve({ data: [] as unknown[], error: null
 // 훅(내부적으로 supabase.auth.getUser/onAuthStateChange 호출)을 쓰게 되면서, 이 목이
 // rpc만 흉내 내던 것으로는 부족해졌다 — auth도 함께 흉내 내 항상 "비로그인" 상태로
 // 렌더링되게 한다(이 파일의 테스트 목적과 무관한 로그인 상태라 비로그인 고정이 맞다).
+// [1,000건 truncation 버그 수정](2026-09-25 사용자 지시): getSpotsByServiceCategory
+// (get-nearby.ts)가 이제 .rpc(...).range(...)로 페이지네이션한다 — rpcMock 자체는
+// 기존 테스트들의 toHaveBeenCalledWith/mockResolvedValueOnce 검증을 그대로 쓸 수
+// 있게 그대로 두고, 실제로 소비 코드에 넘기는 반환값에만 .range()를 얇게 얹어
+// 같은 결과를 그대로 반환하게 한다(페이지네이션 자체의 경계 조건은 get-nearby.test.ts가
+// 전담해서 검증한다).
+function rpcWithRange(...args: Parameters<typeof rpcMock>) {
+  const result = rpcMock(...args);
+  return Object.assign(result, { range: () => result });
+}
+
 vi.mock('@/lib/supabase/client', () => ({
   createClient: () => ({
-    rpc: rpcMock,
+    rpc: rpcWithRange,
     auth: {
       getUser: () => Promise.resolve({ data: { user: null } }),
       onAuthStateChange: () => ({ data: { subscription: { unsubscribe: vi.fn() } } }),

@@ -148,16 +148,38 @@ export async function getSpotGroupMembers(groupId: string): Promise<NearbyItem[]
 // get-home-feed.ts/detail-modal.tsx와 동일한 기존 관례)이다 — 고정된 기준점이
 // 없는 전역 조회라 서버가 거리를 계산할 방법이 없고, 필요하면 호출부(map-
 // explorer.tsx)가 실시간 GPS/설정 위치 기준으로 직접 계산해 덮어쓴다.
+//
+// [1,000건 truncation 버그 수정](2026-09-25 사용자 지시): "1000건 잘리면
+// 안되지... 내 기준에서 1000건만 보여달라는건 없었잖아" — 이 RPC엔 LIMIT이
+// 없는데도 PostgREST 기본 max-rows(1,000)에 걸려 조용히 잘리고 있었다(실측:
+// "캠핑장 / 피크닉장" 3,227건 중 1,000건만 반환, status 206). .range()로
+// 페이지를 반복 요청해 전체를 모은다 — RPC가 이제 s.id로 정렬해(2026-09-25-
+// fix-service-category-rpc-1000-row-truncation.sql) 페이지 간 순서가
+// 안정적이라 중복/누락 없이 안전하게 이어붙일 수 있다. PAGE_SIZE(1,000)는
+// 실측한 PostgREST max-rows와 동일하게 맞췄다 — 이보다 크게 요청해도 서버가
+// 어차피 1,000개로 잘라 보내 의미가 없다. SAFETY_MAX_PAGES는 현재 최대
+// 중분류(3,227건)에 여유를 크게 둔 상한으로, RPC가 어떤 이유로든 계속 꽉 찬
+// 페이지를 반환하는 이상 상황에서 무한 루프를 막는 안전장치일 뿐이다.
 export async function getSpotsByServiceCategory(serviceCategoryId: string): Promise<NearbyItem[]> {
   const supabase = createClient();
+  const PAGE_SIZE = 1000;
+  const SAFETY_MAX_PAGES = 50;
 
-  const { data, error } = await supabase.rpc('get_spots_by_service_category', {
-    p_service_category_id: serviceCategoryId,
-  });
+  const allRows: NearbyItem[] = [];
+  for (let page = 0; page < SAFETY_MAX_PAGES; page++) {
+    const from = page * PAGE_SIZE;
+    const { data, error } = await supabase
+      .rpc('get_spots_by_service_category', { p_service_category_id: serviceCategoryId })
+      .range(from, from + PAGE_SIZE - 1);
 
-  if (error) {
-    throw new Error(`노출 중분류별 공간 조회 실패: ${error.message}`);
+    if (error) {
+      throw new Error(`노출 중분류별 공간 조회 실패: ${error.message}`);
+    }
+
+    const rows = (data ?? []) as NearbyItem[];
+    allRows.push(...rows);
+    if (rows.length < PAGE_SIZE) break;
   }
 
-  return (data ?? []) as NearbyItem[];
+  return allRows;
 }
