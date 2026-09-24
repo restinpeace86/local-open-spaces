@@ -221,18 +221,26 @@ const SELECT_LOOKUP_BATCH_SIZE = 200;
 // trigram 인덱스 3개 유지 비용)를 open_spaces에 그대로 적용할 근거가 없어
 // (실측: `select * from pg_trigger where tgrelid='public.open_spaces'::
 // regclass and not tgisinternal`가 0건 — 커스텀 트리거 자체가 없음), 테이블별로
-// 값을 분리한다. open_spaces는 2026-08-22에 이미 검증된 UPSERT_BATCH_SIZE(500,
-// 바로 이 playground 82,373건 데이터로 실측 검증된 값 — 위 upsertRows() 관련
-// 주석 참고)와 동일하게 맞춰, 한 번에 너무 커서 응답 없이 멈췄던 예전 실패
-// (그 주석 참고)를 재현하지 않으면서도 UPSERT 왕복 횟수를 412회→165회로
-// 줄인다. events는 statement_timeout 여유가 그대로 필요해 200을 유지한다.
+// 값을 분리한다. events는 statement_timeout 여유가 그대로 필요해 200을 유지한다.
 // SELECT_LOOKUP_BATCH_SIZE(200)는 URL 길이 제한(500건은 fetch 자체가 실패,
 // 2026-08-25 실측)이라 테이블과 무관하게 그대로 둔다 — 이 값을 손대지 않아도
 // 안쪽 루프가 어떤 SAFE_MERGE_UPSERT_BATCH_SIZE든 자동으로 200 단위로 다시
 // 쪼개 조회하므로 이번 변경으로 영향받지 않는다.
+//
+// [PostgREST 8초 statement_timeout 실측 확정](2026-09-26): "다 뒤져서
+// 단계별로 찾아봐" 조사 결과, PostgREST를 경유하는 모든 요청(service_role
+// 포함)은 DB 전체 기본값(2분)이 아니라 authenticator 롤에 걸린 8초
+// statement_timeout을 그대로 물려받는다는 것을 진단 함수로 직접 확인했다
+// (`current_setting('statement_timeout')` = "8s"). open_spaces를
+// UPSERT_BATCH_SIZE(500)로 처음 올렸을 때 이따금 이 8초를 넘겨 재시도가
+// 발생하는 것을 실측(LOCALDATA_PLAYGROUND 단독 재실행 2회)으로 확인했다 —
+// "이거 어차피 월 1회 배치 아니야?"(사용자) 라는 지적대로, 왕복 횟수를
+// 조금 늘리더라도(165회→약 275회) 8초를 더 여유 있게 피해가는 쪽이
+// 안전하다고 판단해 300으로 낮춘다. 이미 이 소스만 25분 스텝 타임아웃을
+// 별도로 주고 있어 왕복이 늘어도 문제없다.
 const SAFE_MERGE_UPSERT_BATCH_SIZE_BY_TABLE = {
   events: 200,
-  open_spaces: UPSERT_BATCH_SIZE,
+  open_spaces: 300,
 };
 const DEFAULT_SAFE_MERGE_UPSERT_BATCH_SIZE = 200;
 
