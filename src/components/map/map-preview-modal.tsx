@@ -123,8 +123,18 @@ export function MapPreviewModal({
         <MiniMap lat={lat} lng={lng} name={name} address={address} interactive className="w-full h-full" route={route} />
 
         {/* [인앱 길찾기](2026-09-03 사용자 지시): 지도 하단에 떠 있는 길찾기 액션 —
-            평소엔 버튼만, 경로를 찾으면 거리/소요시간 요약으로 바뀐다. */}
-        <div className="absolute bottom-3 left-3 right-3 z-10 flex justify-center">
+            평소엔 버튼만, 경로를 찾으면 거리/소요시간 요약으로 바뀐다.
+            [실제 경로거리 배지가 안 보이는 문제 수정](2026-09-25 사용자 제보: "실제
+            경로거리는 보여주는데 그 경로거리가 몇km인지에 대하여 안보여지고
+            있는데") — 실측(Playwright) 결과 데이터/렌더링 자체는 정상이었고
+            (routeSummary가 정확히 계산되어 DOM에도 존재), 이 배지가 화면 맨 아래
+            가장자리(bottom-3)에 딱 붙어 있는 게 원인으로 보인다 — 이 모달이
+            `fixed inset-0` 전체화면이라, 실제 모바일 기기의 하단 제스처바/브라우저
+            툴바가 그 몇 픽셀을 가릴 수 있다(이 프로젝트의 다른 고정-하단 UI —
+            bottom-tabs.tsx, add-booking-fab.tsx — 가 이미 이 문제를
+            env(safe-area-inset-bottom)으로 처리해온 것과 동일한 원인). 기존
+            bottom-3(12px)에 안전 영역만큼 더해 항상 화면 안에 들어오게 한다. */}
+        <div className="absolute bottom-[calc(env(safe-area-inset-bottom)+0.75rem)] left-3 right-3 z-10 flex justify-center">
           {findRouteState === 'idle' || findRouteState === 'error' ? (
             <div className="flex flex-col items-center gap-1.5">
               <button
