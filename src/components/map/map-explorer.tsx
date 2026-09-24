@@ -252,19 +252,25 @@ export function MapExplorer() {
 
   // [제휴 상품 ↔ 스팟픽 연동](2026-09-10 사용자 지시, todo.md 개선사항6 + 후속):
   // 노출 활성화된 제휴 상품이 연동된 스팟을 한 번 불러온다.
-  //  - dealBySpotId: 특가 마커/CTA용 요약(spot_id → 제목/링크).
-  //  - dealItems: NearbyItem 형태 — 노출 중분류 필터와 무관하게 지도/바텀시트에
-  //    (반경 내면) 거리순으로 병합해 노출한다("제휴 상품 장소가 안 보인다").
+  //  - dealBySpotId: 특가 마커/CTA용 요약(spot_id → 제목/링크) — 이미 화면에
+  //    떠 있는 스팟에 "🔥 특가" 뱃지를 붙이는 용도라 계속 쓴다.
+  // [노출 중분류 필터를 다시 엄격하게](2026-09-25 사용자 지시): "서울랜드나
+  // 서울대공원도 나오는데.. 이거 안나오게 하자.. 현재 분류에 맞는거만 나오게..
+  // 이전에 티켓같은거 연결된건 그거와 상관없이 다 나오게 하라고 했는데..
+  // 목적별로 나와야할거같아" — 2026-09-10 결정("제휴 상품은 노출 중분류와
+  // 무관하게 노출")을 뒤집는다. 제휴 상품(items, 아래 baseItems/
+  // sheetSourceItems가 쓰던 병합 대상)을 카테고리 필터와 무관하게 끼워넣던
+  // 로직을 제거 — 이제 노출 중분류를 선택하면 그 중분류로 실제 분류된
+  // 스팟만 나온다. 기본(반경) 모드는 원래도 카테고리 무관하게 반경 내 전부
+  // 보여주므로 영향 없다.
   const [dealBySpotId, setDealBySpotId] = useState<Record<string, { title: string; bookingUrl: string }>>({});
-  const [dealItems, setDealItems] = useState<NearbyItem[]>([]);
   useEffect(() => {
     let cancelled = false;
     fetch('/api/nearby/deal-spots')
       .then((res) => res.json())
-      .then((data: { deals?: Record<string, { title: string; bookingUrl: string }>; items?: NearbyItem[] }) => {
+      .then((data: { deals?: Record<string, { title: string; bookingUrl: string }> }) => {
         if (cancelled) return;
         if (data.deals) setDealBySpotId(data.deals);
-        if (Array.isArray(data.items)) setDealItems(data.items);
       })
       .catch(() => {
         // 실패해도 일반 마커로 정상 동작한다(제5장 제11조).
@@ -409,16 +415,6 @@ export function MapExplorer() {
   const isSearchMode = keyword.trim().length > 0;
   // 지도 마커 / 데스크톱 목록: 노출 중분류 선택 시 현재 위치 도(道) 단위로 제한
   // (Decision 023). 반경 컷오프는 없다.
-  // [제휴 상품 연동 스팟은 노출 중분류와 무관하게 노출](2026-09-10 사용자 지시):
-  // "제휴 상품 관련 장소들이 노출 중분류 매핑이 없어 스팟픽에서 안 보인다 → 노출
-  // 중분류와 상관없이 반경 내면 지도/바텀시트에 거리순으로 끼워넣어줘." 지도
-  // 마커는 도(道) 스코프 안의 제휴 스팟을, 바텀시트는 선택 반경 안의 제휴 스팟을
-  // 나머지와 병합한다(id 중복 제거 — 우연히 카테고리 결과에도 있으면 한 번만).
-  const provinceScopedDealItems = useMemo(() => {
-    if (!visibleProvinces) return dealItems;
-    return dealItems.filter((it) => isSpotInProvinces(it.address, it.sigungu_name, visibleProvinces));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dealItems, currentProvince]);
   const mergeById = (base: NearbyItem[], extra: NearbyItem[]): NearbyItem[] => {
     if (extra.length === 0) return base;
     const seen = new Set(base.map((i) => i.id));
@@ -426,21 +422,22 @@ export function MapExplorer() {
   };
 
   const baseItems = useMemo(() => {
+    // [노출 중분류 필터를 다시 엄격하게](2026-09-25 사용자 지시): 노출 중분류를
+    // 골랐으면 그 중분류로 실제 분류된 스팟만(provinceScopedCategoryItems) —
+    // 더는 제휴 스팟을 무관하게 끼워넣지 않는다. 검색 모드는 "콕 짚어 찾기"라
+    // 제외, 기본(반경) 모드는 원래도 카테고리 무관하게 반경 내 전부 보여준다.
     const resolved = isSearchMode
       ? searchResults ?? []
-      : // 노출 중분류를 골랐을 때만 제휴 스팟을 병합한다 — 중분류 필터가 제외한
-        // 제휴 스팟을 되살리는 것이 목적. 기본(반경) 모드는 반경 내 모든 스팟을 이미
-        // 보여주므로(제휴 여부 무관) 병합이 불필요. 검색 모드는 "콕 짚어 찾기"라 제외.
-        !selectedCategoryId
-        ? items
-        : mergeById(provinceScopedCategoryItems, provinceScopedDealItems);
+      : !selectedCategoryId
+      ? items
+      : provinceScopedCategoryItems;
     // [맘스픽 → 스팟픽 임시 마커](2026-09-13 사용자 지시): 제휴 스팟과 동일하게
     // 노출 중분류/검색 모드와 무관하게 항상 끼워 넣는다. MARKER_LIMIT로 잘릴 때
     // 이 스팟까지 잘려나가지 않도록 맨 앞에 둔다(사용자가 이 화면에 들어온 이유
     // 그 자체이므로).
     return linkedSpotItem ? mergeById([linkedSpotItem], resolved) : resolved;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSearchMode, searchResults, selectedCategoryId, provinceScopedCategoryItems, items, provinceScopedDealItems, linkedSpotItem]);
+  }, [isSearchMode, searchResults, selectedCategoryId, provinceScopedCategoryItems, items, linkedSpotItem]);
 
   const visibleItems = useMemo(() => baseItems.slice(0, MARKER_LIMIT), [baseItems]);
   const isOverLimit = baseItems.length > MARKER_LIMIT;
@@ -475,13 +472,13 @@ export function MapExplorer() {
   const sheetSourceItems = useMemo(() => {
     if (isSearchMode) return searchResults ?? [];
     if (!selectedCategoryId) return items;
-    // 노출 중분류 모드에서만 제휴 스팟을 병합한다. 바텀시트는 도 스코프 필터 없이
-    // (Decision 023) 순수 반경 기준이라 제휴 스팟도 광역 필터 없이 통째로 병합 —
-    // 아래 mobileSheetItems의 반경 필터가 "롯데월드가 10km 안이면 거리순으로
-    // 끼워넣기"를 처리한다.
-    return mergeById(categoryItems, dealItems);
+    // [노출 중분류 필터를 다시 엄격하게](2026-09-25 사용자 지시): 바텀시트도
+    // 더는 제휴 스팟을 무관하게 끼워넣지 않는다 — 선택한 중분류로 실제
+    // 분류된 스팟만(categoryItems, Decision 023에 따라 도 스코프 필터 없이
+    // 순수 반경 기준은 그대로 유지).
+    return categoryItems;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isSearchMode, searchResults, selectedCategoryId, categoryItems, items, dealItems]);
+  }, [isSearchMode, searchResults, selectedCategoryId, categoryItems, items]);
   const originLat = liveGpsPosition?.lat ?? effectiveCenter.lat;
   const originLng = liveGpsPosition?.lng ?? effectiveCenter.lng;
   const mobileSheetItems = useMemo(() => {

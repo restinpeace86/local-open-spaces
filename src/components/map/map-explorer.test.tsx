@@ -559,10 +559,12 @@ describe('MapExplorer 노출 중분류 전역 노출(2026-09-08)', () => {
     await waitFor(() => expect(screen.getByText(/주변 2건/)).toBeInTheDocument());
   });
 
-  // [제휴 상품 연동 스팟은 노출 중분류와 무관하게 노출](2026-09-10 사용자 지시):
-  // 키즈친화식당 중분류를 골라도, 노출 중분류 매핑이 없는 제휴 스팟(예: 롯데월드)이
-  // 지도/바텀시트에 (반경 내면) 끼워 노출된다.
-  it('노출 중분류를 골라도 제휴 스팟(deal-spots)이 지도와 바텀시트에 병합 노출된다', async () => {
+  // [노출 중분류 필터를 다시 엄격하게](2026-09-25 사용자 지시): 이전엔(2026-09-10)
+  // 제휴 상품 연동 스팟(예: 롯데월드)을 노출 중분류와 무관하게 끼워 넣었지만,
+  // 실제로 "놀이방식당"을 골랐는데 서울랜드/서울대공원이 같이 나오는 문제가
+  // 생겨 사용자가 되돌리라고 지시했다 — 이제 선택한 중분류로 실제 분류된
+  // 스팟만 나와야 한다.
+  it('노출 중분류를 고르면 제휴 스팟(deal-spots)은 병합되지 않고 실제 분류만 노출된다', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string) => {
@@ -595,9 +597,9 @@ describe('MapExplorer 노출 중분류 전역 노출(2026-09-08)', () => {
     fireEvent.click(screen.getAllByRole('button', { name: '문화시설' })[0]);
     fireEvent.click(await within(screen.getByTestId('spot-category-sheet')).findByText('어린이 도서관'));
 
-    // 노출 중분류 결과 + 제휴 스팟이 지도 마커에 함께.
+    // 노출 중분류 결과만 지도 마커에 남고, 제휴 스팟(롯데월드)은 더 이상 끼어들지 않는다.
     await screen.findByText('simulate-marker-click-어린이도서관A');
-    expect(await screen.findByText('simulate-marker-click-롯데월드')).toBeInTheDocument();
+    expect(screen.queryByText('simulate-marker-click-롯데월드')).not.toBeInTheDocument();
   });
 
   it('현재 위치가 강원이면 강원 데이터만 남는다(인접 도 미포함)', async () => {
