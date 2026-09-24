@@ -72,7 +72,28 @@ type SpotCuration = {
   // badge_labels로 내려준다. min_age_recommended > 0이면 "만 x세 이상" 뱃지.
   badge_labels?: string[];
   min_age_recommended?: number | null;
+  // [네이버 예약 버튼 자동 생성](2026-09-25 사용자 지시): "예약 가능/예약 필수
+  // 뱃지가 있으면 네이버 예약 버튼.. naver_place_id만 바뀌는 URL로 연결" —
+  // open_spaces.naver_place_id를 그대로 전달받는다(관리자가 naver_booking_url을
+  // 따로 입력하지 않아도, 이미 채워둔 naver_place_id만으로 예약 버튼을 자동
+  // 구성하기 위함).
+  naver_place_id?: string | null;
 };
+
+// [네이버 예약 버튼 자동 생성](2026-09-25 사용자 지시): 뱃지 라벨은 카테고리
+// (일반 음식점 vs 키즈카페)에 따라 키가 다르지만(reservation_possible vs
+// kc_reservation_possible) 사람이 읽는 라벨은 항상 "예약 가능"/"예약 필수"로
+// 동일하다(curation-badges.ts 확인) — 라벨 문자열만 검사하면 카테고리
+// 구분 없이 동작한다.
+const RESERVATION_BADGE_LABELS = ['예약 가능', '예약 필수'];
+
+function hasReservationBadge(curation: SpotCuration | null | undefined): boolean {
+  return Array.isArray(curation?.badge_labels) && curation.badge_labels.some((label) => RESERVATION_BADGE_LABELS.includes(label));
+}
+
+function buildNaverPlaceUrl(naverPlaceId: string): string {
+  return `https://map.naver.com/p/entry/place/${naverPlaceId}`;
+}
 
 // 있는 것만 이어붙인다(추측으로 빈 칸을 채우지 않음) — formatCuratedHours와 동일한
 // 원칙.
@@ -524,6 +545,17 @@ export function DetailModal({
   // 버튼이 아니라 아래 상세 정보(dl)에 "홈페이지" 행으로 노출한다.
   // 다른 화면(홈/이벤트픽/캘린더/지역별)은 기존 폴백 체인(공식 홈페이지 → 네이버
   // 예약 → 자체 간편 예약 폼 → 안내 텍스트)을 그대로 유지한다.
+  // [네이버 예약 버튼 자동 생성](2026-09-25 사용자 지시): "놀이방식당들.. 예약
+  // 가능/예약 필수 등의 뱃지가 있으면 네이버 예약 버튼.. naver_place_id만
+  // 바뀌는 URL로 연결" — 관리자가 naver_booking_url을 따로 입력해두지 않은
+  // 스팟도, 뱃지가 예약 관련이고 naver_place_id가 있으면 네이버 플레이스
+  // 페이지로 바로 연결하는 버튼을 자동으로 만든다. naver_booking_url이 이미
+  // 있으면(더 구체적인 관리자 확인 URL) 그쪽을 그대로 우선한다 — 이 자동
+  // 생성은 그 사이의 새 폴백 단계로만 끼워 넣는다.
+  const naverPlaceReservationAction =
+    hasReservationBadge(curation) && curation?.naver_place_id
+      ? { type: 'link' as const, label: '🟢 네이버 예약', href: buildNaverPlaceUrl(curation.naver_place_id) }
+      : null;
   const secondaryAction = isEvent
     ? null
     : spotPickCard
@@ -531,11 +563,15 @@ export function DetailModal({
       ? { type: 'link' as const, label: '📝 예약하기', href: item.reservation_url }
       : curation?.naver_booking_url
       ? { type: 'link' as const, label: '🟢 네이버로 예약하기', href: curation.naver_booking_url }
+      : naverPlaceReservationAction
+      ? naverPlaceReservationAction
       : null
     : item.info_url
     ? { type: 'link' as const, label: '🌐 공식 홈페이지 바로가기', href: item.info_url }
     : curation?.naver_booking_url
     ? { type: 'link' as const, label: '🟢 네이버로 예약하기', href: curation.naver_booking_url }
+    : naverPlaceReservationAction
+    ? naverPlaceReservationAction
     : curation
     ? { type: 'reservation' as const, label: '📝 간편 예약/신청하기' }
     : {

@@ -56,6 +56,40 @@ describe('GET /api/spot-curations', () => {
     expect(data.item.operating_hours_by_day).toEqual([{ day: '월', open: '14:00', close: '22:00' }]);
   });
 
+  // [네이버 예약 버튼 자동 생성](2026-09-25 사용자 지시): open_spaces 조인에서
+  // naver_place_id를 뽑아 응답 최상위 필드로 내려주는지 확인한다.
+  it('open_spaces.naver_place_id를 최상위 naver_place_id 필드로 내려준다', async () => {
+    const { builder, calls } = makeChainable({
+      id: 'c1',
+      spot_id: 'space-1',
+      image_url: null,
+      operating_hours_raw: null,
+      open_time: null,
+      close_time: null,
+      break_start: null,
+      break_end: null,
+      last_order: null,
+      operating_hours_by_day: null,
+      menu_items: [],
+      child_fee: null,
+      guardian_fee: null,
+      naver_booking_url: null,
+      curation_note: null,
+      curation_badges: ['reservation_possible'],
+      min_age_recommended: 0,
+      open_spaces: { naver_place_id: '2095637824', service_categories: { category_name: '음식점' } },
+    });
+    vi.doMock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ from: () => builder }) }));
+
+    const { GET } = await import('./route');
+    const res = await GET(new Request('http://localhost/api/spot-curations?spot_id=space-1') as never);
+    const data = await res.json();
+
+    expect(calls.select).toContain('naver_place_id');
+    expect(data.item.naver_place_id).toBe('2095637824');
+    expect(data.item.open_spaces).toBeUndefined();
+  });
+
   it('spot_id가 없으면 400을 반환한다', async () => {
     const { GET } = await import('./route');
     const res = await GET(new Request('http://localhost/api/spot-curations') as never);

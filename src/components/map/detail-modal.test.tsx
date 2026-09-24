@@ -934,6 +934,63 @@ describe('DetailModal 스팟픽 카드(spotPickCard)', () => {
     expect(link).toHaveAttribute('target', '_blank');
   });
 
+  // [네이버 예약 버튼 자동 생성](2026-09-25 사용자 지시): "놀이방식당들.. 예약
+  // 가능/예약 필수 등의 뱃지가 있으면 네이버 예약 버튼.. naver_place_id만
+  // 바뀌는 URL로 연결".
+  it('예약 관련 뱃지(예약 가능)와 naver_place_id가 있으면 [🟢 네이버 예약] 버튼이 네이버 플레이스 URL로 연결된다', async () => {
+    mockSpotPickFetch({
+      curation: { ...CURATION, badge_labels: ['예약 가능'], naver_place_id: '2095637824' },
+    });
+    render(<DetailModal item={makeSpaceItem({ info_url: null })} onClose={() => {}} spotPickCard hideMapSection />);
+
+    const link = (await screen.findByText('🟢 네이버 예약')).closest('a');
+    expect(link).toHaveAttribute('href', 'https://map.naver.com/p/entry/place/2095637824');
+    expect(link).toHaveAttribute('target', '_blank');
+  });
+
+  it('예약 필수 뱃지에서도 동일하게 [🟢 네이버 예약] 버튼을 보여준다', async () => {
+    mockSpotPickFetch({
+      curation: { ...CURATION, badge_labels: ['예약 필수'], naver_place_id: '111' },
+    });
+    render(<DetailModal item={makeSpaceItem({ info_url: null })} onClose={() => {}} spotPickCard hideMapSection />);
+
+    expect(await screen.findByText('🟢 네이버 예약')).toBeInTheDocument();
+  });
+
+  it('예약 관련 뱃지가 없으면 naver_place_id가 있어도 [🟢 네이버 예약] 버튼을 보여주지 않는다', async () => {
+    mockSpotPickFetch({
+      curation: { ...CURATION, badge_labels: ['트램폴린/방방'], naver_place_id: '2095637824' },
+    });
+    render(<DetailModal item={makeSpaceItem({ info_url: null })} onClose={() => {}} spotPickCard hideMapSection />);
+
+    await screen.findByText('트램폴린/방방');
+    expect(screen.queryByText('🟢 네이버 예약')).not.toBeInTheDocument();
+  });
+
+  it('예약 관련 뱃지가 있어도 naver_place_id가 없으면 [🟢 네이버 예약] 버튼을 보여주지 않는다', async () => {
+    mockSpotPickFetch({ curation: { ...CURATION, badge_labels: ['예약 가능'], naver_place_id: null } });
+    render(<DetailModal item={makeSpaceItem({ info_url: null })} onClose={() => {}} spotPickCard hideMapSection />);
+
+    await screen.findByText('예약 가능');
+    expect(screen.queryByText('🟢 네이버 예약')).not.toBeInTheDocument();
+  });
+
+  it('naver_booking_url이 이미 있으면 naver_place_id가 있어도 기존 [🟢 네이버로 예약하기]를 그대로 우선한다', async () => {
+    mockSpotPickFetch({
+      curation: {
+        ...CURATION,
+        naver_booking_url: 'https://booking.naver.com/x',
+        badge_labels: ['예약 가능'],
+        naver_place_id: '2095637824',
+      },
+    });
+    render(<DetailModal item={makeSpaceItem({ info_url: null })} onClose={() => {}} spotPickCard hideMapSection />);
+
+    const link = (await screen.findByText('🟢 네이버로 예약하기')).closest('a');
+    expect(link).toHaveAttribute('href', 'https://booking.naver.com/x');
+    expect(screen.queryByText('🟢 네이버 예약')).not.toBeInTheDocument();
+  });
+
   it('info_url은 하단 예약 버튼이 아니라 상세 정보의 "홈페이지" 행 링크로만 노출된다', async () => {
     mockSpotPickFetch({ curation: CURATION });
     render(

@@ -31,7 +31,10 @@ export async function GET(request: NextRequest) {
         // [동적 연령 추천 시스템](2026-09-10 사용자 지시, todo.md 개선사항1):
         // min_age_recommended > 0이면 소비자 화면에서 "만 x세 이상" 뱃지로
         // 노출한다(0이면 미노출) — 값만 그대로 내려준다.
-        'id, spot_id, image_url, operating_hours_raw, open_time, close_time, break_start, break_end, last_order, operating_hours_by_day, menu_items, child_fee, guardian_fee, naver_booking_url, curation_note, curation_badges, min_age_recommended, open_spaces(service_categories(category_name))'
+        // [네이버 예약 버튼 자동 생성](2026-09-25 사용자 지시): "예약 가능/예약 필수
+        // 뱃지가 있으면 네이버 예약 버튼.. naver_place_id만 바뀌는 URL로 연결" —
+        // open_spaces.naver_place_id를 같은 조인에서 함께 받아온다(추가 조회 없음).
+        'id, spot_id, image_url, operating_hours_raw, open_time, close_time, break_start, break_end, last_order, operating_hours_by_day, menu_items, child_fee, guardian_fee, naver_booking_url, curation_note, curation_badges, min_age_recommended, open_spaces(naver_place_id, service_categories(category_name))'
       )
       .eq('spot_id', spotId)
       .eq('is_active', true)
@@ -50,7 +53,7 @@ export async function GET(request: NextRequest) {
     // 안 된다 — 여기서 사람이 읽을 라벨로 미리 바꿔서 내려준다. 매핑 안 되는
     // 노출 중분류/큐레이션 없음이면 기본(restaurant) 카테고리로 안전하게
     // 되돌아간다(resolveCurationCategoryId의 기존 규약과 동일).
-    const openSpace = data.open_spaces as { service_categories: { category_name: string } | null } | null;
+    const openSpace = data.open_spaces as { naver_place_id: string | null; service_categories: { category_name: string } | null } | null;
     const curationCategoryId = resolveCurationCategoryId(openSpace?.service_categories?.category_name ?? null);
     const badgeOptions = getBadgeOptionsForCategory(curationCategoryId);
     const badgeKeys = Array.isArray(data.curation_badges) ? data.curation_badges : [];
@@ -58,9 +61,10 @@ export async function GET(request: NextRequest) {
       .map((key) => badgeOptions.find((opt) => opt.key === key)?.label)
       .filter((label): label is string => Boolean(label));
 
-    // open_spaces는 프론트가 필요로 하지 않는 내부 조인 결과라 응답에서 제외한다.
+    // open_spaces는 프론트가 필요로 하지 않는 내부 조인 결과라 응답에서 제외한다
+    // (naver_place_id만 뽑아서 최상위 필드로 남긴다).
     const { open_spaces: _openSpaces, curation_badges: _curationBadges, ...rest } = data;
-    return NextResponse.json({ item: { ...rest, badge_labels: badgeLabels } });
+    return NextResponse.json({ item: { ...rest, badge_labels: badgeLabels, naver_place_id: openSpace?.naver_place_id ?? null } });
   } catch (err) {
     const message = err instanceof Error ? err.message : '스팟 큐레이션 조회 실패';
     return NextResponse.json({ error: message }, { status: 500 });
