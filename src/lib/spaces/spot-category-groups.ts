@@ -93,6 +93,16 @@ export const CORE_SPOT_CATEGORIES: CoreSpotCategory[] = [
     minors: ['체험학습장'],
     major: 'kids-play',
   },
+  // [놀이방찜질방/스파 신규 중분류](2026-09-26 사용자 지시): category-min-groups.ts의
+  // OPEN_SPACES_GROUPS_STATIC과 동기화(spot-category-groups.test.ts가 교차 검증) —
+  // '목욕장업소'로 자동 편입되던 실내 놀이시설 딸린 찜질방/스파를 위한 표준 중분류.
+  {
+    id: 'kids-jjimjilbang-spa',
+    label: '놀이방찜질방/스파',
+    emoji: '♨️',
+    minors: ['놀이방찜질방/스파'],
+    major: 'kids-play',
+  },
 
   // 🌱 농장/체험 — [표준 중분류 동기화](2026-09-05) 어드민 기준 이 대분류는 체험휴양마을/
   // 교육농장 2종뿐이다(캠핑장은 자연/공원으로, 체험학습장은 키즈/놀이시설로 이동).
