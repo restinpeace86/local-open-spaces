@@ -24,9 +24,17 @@ function scoreItem(item: NearbyItem): number {
 
 // 점수 내림차순 정렬 후, 카테고리(category_min)별로 순서대로 하나씩 뽑아 상위 항목이
 // 특정 카테고리에 쏠리지 않게 한다(예: 공원만 8개가 아니라 공원/도서관/박물관 등 골고루).
+// [AI 추천은 노출 중분류 있는 스팟만](2026-09-25 사용자 지시): "노출중분류 없는것도
+// 다나오는데.. 노출중분류 있는것만 나오게 해줘 어린이 아파트 놀이터라던가 다
+// 나오더라" — 기존엔 레거시 category_min(자유 텍스트, 아직 노출 중분류로 정리 안 된
+// 스팟도 다수 채워져 있음, 실측: 130,490건)만 체크해 이런 미분류 스팟까지 추천에
+// 섞여 들어갔다. 실제 노출 중분류 매핑 여부(service_category_id, 실측: 8,198건만
+// 매핑됨)로 걸러야 사용자가 말한 "현재 분류에 맞는 곳만" 원칙과 일치한다. 다양성
+// 라운드로빈 키(category_min)는 그대로 둔다 — 매핑은 있지만 category_min이 없는
+// 경우는 14건뿐이라(실측) 그 소수만 "null" 버킷 하나로 묶여도 영향이 미미하다.
 export function rankAiRecommendedSpots(items: NearbyItem[], limit = DIVERSITY_LIMIT): NearbyItem[] {
   const scored = items
-    .filter((item) => item.category_min)
+    .filter((item) => item.service_category_id)
     .map((item) => ({ item, score: scoreItem(item) }))
     .sort((a, b) => b.score - a.score);
 

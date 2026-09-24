@@ -18,14 +18,13 @@ import { EventReservationReminderHint } from '@/components/common/event-reservat
 
 const NO_INFO_TEXT = '정보 준비 중 (공공 기관 문의)';
 
-// [가격 및 메뉴 '준비 중' 플레이스홀더](2026-09-08 사용자 지시, todo.md
-// 개선사항3-5): "MVP 단계에서 가격이나 메뉴 데이터가 아직 채워지지 않은
-// 스팟의 경우, 빈 화면 대신 아래와 같은 플레이스홀더 문구를 노출하여
-// 신뢰도를 유지합니다" — 주소 등 다른 필드의 기존 NO_INFO_TEXT("공공 기관
-// 문의")와는 다른, 더 친근한 톤의 전용 문구를 그대로 지시받은 원문대로 쓴다.
-const PRICE_PLACEHOLDER = '가격 정보 업데이트 준비 중입니다 ⏳';
-const MENU_PLACEHOLDER = '상세 메뉴 정보는 순차적으로 추가될 예정이에요';
-const HOURS_PLACEHOLDER = '영업시간 정보는 순차적으로 추가될 예정이에요';
+// [정보 없는 영역은 숨김](2026-09-25 사용자 지시): "메뉴, 영업시간, 가격 이거
+// 관련하여 놀이방식당의 경우는 장소에 대한 비용없고 메뉴에 대한 가격있는
+// 경우가 대부분이라 가격란에 뭐 안들어가... 정보가 없는 영역은 그냥 숨겨줘" —
+// 2026-09-08에 "빈 화면 대신 플레이스홀더 문구 노출"로 정했던 결정을 되돌린다.
+// 업종에 따라 애초에 해당 없는 정보(예: 식당형 스팟의 장소 단위 입장료)까지
+// "준비 중"으로 표시하는 게 오히려 혼란을 줬다는 지적 — 아래 가격/메뉴/운영시간
+// 세 행 모두 실제 값이 없으면 행 자체를 렌더링하지 않는다.
 
 // [개선사항6](2026-09-11 사용자 지시, implementation/todo.md): "이벤트 상세카드 8단
 // 구조" 2단(뱃지 영역)의 "현재 진행 상태 뱃지" 색상 — calendar-view.tsx의
@@ -1113,103 +1112,96 @@ export function DetailModal({
                 </dd>
               </div>
 
-              <div className="flex items-start justify-between gap-2">
-                <dt className="text-gray-500 shrink-0">운영시간</dt>
-                {/* [View Fallback](2026-09-01 사용자 지시): 관리자가 구조화한 영업시간
-                    (오픈~마감/브레이크타임/라스트오더)이 있으면 그걸 우선 보여주고,
-                    없으면 원문(operating_hours_raw) → 공공데이터 기본값 순으로
-                    폴백한다 — 추측으로 빈 칸을 만들지 않는다.
-                    [스팟 큐레이션 요일별 영업시간](2026-09-19 사용자 지시): 요일별
-                    데이터가 있으면 그것을 최우선으로 요일별 줄바꿈으로 보여준다 —
-                    없는(이 기능 이전에 저장된) 큐레이션은 기존 단일 값 표시 그대로. */}
-                <dd className="text-right text-gray-900">
-                  {(() => {
-                    const byDay = curation && formatCuratedHoursByDay(curation);
-                    if (byDay) {
-                      return (
+              {/* [View Fallback](2026-09-01 사용자 지시): 관리자가 구조화한 영업시간
+                  (오픈~마감/브레이크타임/라스트오더)이 있으면 그걸 우선 보여주고,
+                  없으면 원문(operating_hours_raw) → 공공데이터 기본값 순으로
+                  폴백한다 — 추측으로 빈 칸을 만들지 않는다.
+                  [스팟 큐레이션 요일별 영업시간](2026-09-19 사용자 지시): 요일별
+                  데이터가 있으면 그것을 최우선으로 요일별 줄바꿈으로 보여준다 —
+                  없는(이 기능 이전에 저장된) 큐레이션은 기존 단일 값 표시 그대로.
+                  [정보 없는 영역은 숨김](2026-09-25 사용자 지시): 위 모든 출처에
+                  값이 없으면(큐레이션 로딩 중이라도 item.operating_hours 같은
+                  공공데이터는 이미 동기로 알 수 있어 기다릴 필요가 없다) 행 자체를
+                  숨긴다(더는 플레이스홀더 문구로 대신하지 않는다). */}
+              {(() => {
+                const byDay = curation && formatCuratedHoursByDay(curation);
+                const singleLine =
+                  (curation && formatCuratedHours(curation)) || curation?.operating_hours_raw || item.operating_hours || null;
+                if (!byDay && !singleLine) return null;
+                return (
+                  <div className="flex items-start justify-between gap-2">
+                    <dt className="text-gray-500 shrink-0">운영시간</dt>
+                    <dd className="text-right text-gray-900">
+                      {byDay ? (
                         <div className="flex flex-col items-end gap-0.5">
                           {byDay.map((line) => (
                             <span key={line}>{line}</span>
                           ))}
                         </div>
-                      );
-                    }
-                    return (
-                      (curation && formatCuratedHours(curation)) ||
-                      curation?.operating_hours_raw ||
-                      item.operating_hours ||
-                      HOURS_PLACEHOLDER
-                    );
-                  })()}
-                </dd>
-              </div>
+                      ) : (
+                        singleLine
+                      )}
+                    </dd>
+                  </div>
+                );
+              })()}
 
-              {/* [가격 및 메뉴 '준비 중' 플레이스홀더](2026-09-08 개선사항3-5): 입장료가
-                  아직 없으면 빈 화면 대신 전용 문구를 보여준다(주소처럼 "이미 공공데이터에
-                  항상 있어야 할 정보"가 아니라 관리자 큐레이션에 의존하는 정보라, 로딩
-                  중(curation === undefined)에는 아직 판단하지 않고 잠시 아무것도 보여주지
-                  않는다 — 로딩 끝나면 즉시 실제 값 또는 플레이스홀더로 확정된다). */}
-              {curation !== undefined && (
-                <div className="flex items-start justify-between gap-2">
-                  <dt className="text-gray-500 shrink-0">가격</dt>
-                  {/* item.is_free===true(공공데이터로 이미 확인된 무료 시설)면 굳이
-                      "준비 중"이라는 오해의 소지가 있는 문구 대신 이미 아는 사실을
-                      그대로 보여준다 — 신뢰도 유지라는 취지에 더 부합한다. */}
-                  <dd className="text-right text-gray-900">
-                    {(curation && formatEntranceFee(curation)) ||
-                      (item.is_free === true ? '무료입장' : PRICE_PLACEHOLDER)}
-                  </dd>
-                </div>
-              )}
+              {/* [정보 없는 영역은 숨김](2026-09-25 사용자 지시): 입장료 정보(관리자
+                  큐레이션 child_fee/guardian_fee, 또는 공공데이터로 이미 확인된
+                  is_free)가 실제로 있을 때만 행을 보여준다 — 놀이방식당처럼 장소
+                  단위 입장료 개념 자체가 없는 업종에 "가격 정보 업데이트 준비
+                  중입니다"라는, 사실 영원히 채워지지 않을 문구를 보여주는 것을
+                  막는다. 로딩 중(curation === undefined)에는 아직 판단하지
+                  않는다. */}
+              {curation !== undefined &&
+                (() => {
+                  const priceValue = (curation && formatEntranceFee(curation)) || (item.is_free === true ? '무료입장' : null);
+                  if (!priceValue) return null;
+                  return (
+                    <div className="flex items-start justify-between gap-2">
+                      <dt className="text-gray-500 shrink-0">가격</dt>
+                      <dd className="text-right text-gray-900">{priceValue}</dd>
+                    </div>
+                  );
+                })()}
 
               {/* [View Fallback](2026-09-01 사용자 지시) "풍성한 뷰": 관리자가 등록한 메뉴가
                   있으면 보여준다. 공공데이터에는 메뉴 개념 자체가 없어 큐레이션 전용 정보다.
-                  [가격 및 메뉴 '준비 중' 플레이스홀더](2026-09-08 개선사항3-5): 메뉴가 없어도
-                  행 자체는 숨기지 않고 전용 문구로 대신한다.
-                  [스팟 상세카드 "메뉴" 노출 범위 정리](2026-09-12 사용자 지시): "메뉴는..
-                  키즈카페라던가도 메뉴가 있을수있어서.. 다른곳은 안하겠지?" — 관리자
+                  [스팟 상세카드 "메뉴" 노출 범위 정리](2026-09-12 사용자 지시): 관리자
                   큐레이션이 애초에 "키즈친화 식당"(category_min='놀이방식당') 후보만
                   검색되도록 설계돼 있어(spot-curations-panel.tsx), 다른 카테고리는
-                  메뉴를 입력할 방법 자체가 없다. 이 행을 모든 스팟에 무조건 보여주면
-                  공원·도서관 등에서 "메뉴 정보는 순차적으로 추가될 예정이에요"라는,
-                  사실은 추가될 일이 없는 문구가 영구히 뜬다 — 사용자 확인(2026-09-12):
-                  "키즈친화식당만(현행 유지)". 운영시간/가격은 공공데이터(operating_hours/
-                  is_free) 폴백이 있어 다른 카테고리에도 유의미하므로 그대로 둔다. */}
-              {curation !== undefined && item.category_min === KIDS_RESTAURANT_CATEGORY_MIN && (
+                  메뉴를 입력할 방법 자체가 없다 — 그래서 이 행 자체를 그 카테고리로
+                  한정한다.
+                  [정보 없는 영역은 숨김](2026-09-25 사용자 지시): 메뉴가 아직
+                  없으면(놀이방식당이라도) 더는 "상세 메뉴 정보는 순차적으로
+                  추가될 예정이에요" 문구로 대신하지 않고 행 자체를 숨긴다. */}
+              {curation !== undefined && item.category_min === KIDS_RESTAURANT_CATEGORY_MIN && curation && curation.menu_items.length > 0 && (
                 <div className="flex items-start justify-between gap-2">
                   <dt className="text-gray-500 shrink-0">메뉴</dt>
                   <dd className="text-right text-gray-900">
-                    {curation && curation.menu_items.length > 0 ? (
-                      <>
-                        {/* [스팟 큐레이션 메뉴 파싱 및 '키즈메뉴' 자동 감지](2026-09-15
-                            사용자 지시, todo.md [개선사항 5]): "[메뉴 정보] 섹션 타이틀
-                            바로 하단"에 은은한 인포 배너로 배치. */}
-                        <p className="mb-1 text-[11px] text-amber-700 bg-amber-50 rounded-md px-2 py-1 text-left">
-                          💡 &quot;아이들이 선호하는 인기 메뉴 데이터를 AI가 분석하여 ⭐️
-                          태그로 추천해드려요!&quot;
-                        </p>
-                        <ul className="flex flex-col gap-0.5">
-                          {curation.menu_items.map((menuItem, i) => (
-                            <li
-                              key={`${menuItem.name}-${i}`}
-                              className={
-                                menuItem.is_kids_menu
-                                  ? 'rounded-md bg-amber-50 px-1.5 py-0.5 text-amber-900'
-                                  : undefined
-                              }
-                            >
-                              {menuItem.is_kids_menu && <span className="mr-1">⭐️</span>}
-                              {menuItem.name} · {menuItem.price.toLocaleString()}원
-                              {menuItem.is_kids_menu && (
-                                <span className="ml-1 text-[11px] font-semibold text-amber-700">[키즈추천]</span>
-                              )}
-                            </li>
-                          ))}
-                        </ul>
-                      </>
-                    ) : (
-                      MENU_PLACEHOLDER
-                    )}
+                    {/* [스팟 큐레이션 메뉴 파싱 및 '키즈메뉴' 자동 감지](2026-09-15
+                        사용자 지시, todo.md [개선사항 5]): "[메뉴 정보] 섹션 타이틀
+                        바로 하단"에 은은한 인포 배너로 배치. */}
+                    <p className="mb-1 text-[11px] text-amber-700 bg-amber-50 rounded-md px-2 py-1 text-left">
+                      💡 &quot;아이들이 선호하는 인기 메뉴 데이터를 AI가 분석하여 ⭐️
+                      태그로 추천해드려요!&quot;
+                    </p>
+                    <ul className="flex flex-col gap-0.5">
+                      {curation.menu_items.map((menuItem, i) => (
+                        <li
+                          key={`${menuItem.name}-${i}`}
+                          className={
+                            menuItem.is_kids_menu ? 'rounded-md bg-amber-50 px-1.5 py-0.5 text-amber-900' : undefined
+                          }
+                        >
+                          {menuItem.is_kids_menu && <span className="mr-1">⭐️</span>}
+                          {menuItem.name} · {menuItem.price.toLocaleString()}원
+                          {menuItem.is_kids_menu && (
+                            <span className="ml-1 text-[11px] font-semibold text-amber-700">[키즈추천]</span>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
                   </dd>
                 </div>
               )}

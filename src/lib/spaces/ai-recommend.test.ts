@@ -28,13 +28,32 @@ function buildItem(overrides: Partial<NearbyItem> & { id: string }): NearbyItem 
     target_age_group: null,
     booking_status: null,
     category_min: '공원',
+    // [AI 추천은 노출 중분류 있는 스팟만](2026-09-25 사용자 지시): 필터 기준이
+    // service_category_id로 바뀌어, 기본값도 채워둔다(오버라이드 없는 나머지
+    // 테스트는 계속 "노출 중분류 있음" 상태로 통과해야 한다).
+    service_category_id: 'svc-park',
     ...overrides,
   };
 }
 
 describe('rankAiRecommendedSpots', () => {
-  it('category_min이 없는 항목은 추천 대상에서 제외한다', () => {
-    const items = [buildItem({ id: '1', category_min: null }), buildItem({ id: '2', category_min: '공원' })];
+  it('service_category_id(노출 중분류)가 없는 항목은 추천 대상에서 제외한다', () => {
+    const items = [
+      buildItem({ id: '1', service_category_id: null }),
+      buildItem({ id: '2', service_category_id: 'svc-park' }),
+    ];
+    const result = rankAiRecommendedSpots(items);
+    expect(result.map((i) => i.id)).toEqual(['2']);
+  });
+
+  // [AI 추천은 노출 중분류 있는 스팟만](2026-09-25 사용자 지시): 레거시
+  // category_min은 채워져 있어도(예: "아파트 놀이터") service_category_id가
+  // 없으면 여전히 제외돼야 한다 — 정확히 사용자가 지적한 실측 사례.
+  it('category_min은 있어도 service_category_id가 없으면(아직 노출 중분류 미매핑) 제외한다', () => {
+    const items = [
+      buildItem({ id: '1', category_min: '아파트 놀이터', service_category_id: null }),
+      buildItem({ id: '2', category_min: '공원', service_category_id: 'svc-park' }),
+    ];
     const result = rankAiRecommendedSpots(items);
     expect(result.map((i) => i.id)).toEqual(['2']);
   });

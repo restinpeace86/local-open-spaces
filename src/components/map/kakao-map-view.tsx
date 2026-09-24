@@ -197,16 +197,20 @@ export function KakaoMapView({
         level: radiusToLevel(radiusRef.current),
       });
       mapRef.current = map;
-      // Task 9-6-10(2026-08-23): minLevel을 6→5로 낮춰 기본 반경(5km, 레벨 6)에서도 클러스터링이
-      // 바로 활성화되도록 했다 — 레벨 5보다 확대(레벨 1~4)해야 개별 핀으로 풀리고, 그 사이
-      // 레벨(5~10)에서는 카카오맵 자체 그리드 알고리즘이 줌에 따라 격자 크기를 다시 계산해
-      // 광역(시/군) 단위의 큰 묶음 → 구/동 단위의 작은 묶음으로 자연스럽게 재편된다(별도의
-      // "여러 단계" 설정 없이 MarkerClusterer 하나가 원래 이렇게 동작함). gridSize를 기본값(60)
-      // 보다 넓혀(80) 저zoom에서 묶임이 더 뚜렷하게 보이도록 했다.
+      // [클러스터링을 최상단 줌 레벨에서만](2026-09-25 사용자 지시): "클러스터링되는거
+      // 한계위쪽만 해.. 맨처음 서울시 + 경기도 다보여줄때만.. 클러스터링 계속 누르고
+      // 들어가니 가독성이 어려워" — 기존 minLevel 5는 기본 반경(5km, 레벨 6)에서부터
+      // 이미 클러스터링이 걸려, 사용자가 확대할 때마다 클러스터를 여러 번 눌러 뚫고
+      // 들어가야 했다. radiusToLevel()은 [3,10]으로 클램프되고 노출 중분류 선택 시
+      // (CATEGORY_WIDE_VIEW_RADIUS_METERS=200km, map-explorer.tsx)의 "서울+경기도급
+      // 광역 뷰"가 정확히 그 최대값(레벨 10)이다 — minLevel을 10으로 올려, 그 최상단
+      // 광역 뷰에서만 클러스터링되고 그보다 확대한 모든 단계(기본 5km 반경 포함)에서는
+      // 바로 개별 핀으로 보이게 한다. gridSize를 기본값(60)보다 넓혀(80) 그 최상단
+      // 레벨에서 묶임이 더 뚜렷하게 보이도록 했다(기존 유지).
       clustererRef.current = new window.kakao.maps.MarkerClusterer({
         map,
         averageCenter: true,
-        minLevel: 5,
+        minLevel: 10,
         gridSize: 80,
         // implementation/todo.md: 클러스터 버블이 지도 배경 위에서 눈에 띄도록 마커와 동일한
         // 코랄-레드오렌지 계열 고대비 스타일을 적용한다.

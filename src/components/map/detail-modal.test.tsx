@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DetailModal } from './detail-modal';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
@@ -444,6 +444,17 @@ describe('DetailModal 스마트 폴백(View/Reservation Fallback, 2026-09-01)', 
     );
   }
 
+  // [정보 없는 영역은 숨김](2026-09-25 사용자 지시): 가격/메뉴/운영시간 행이 이제
+  // "데이터 없으면 완전히 숨김"이라, 큐레이션 로딩(fetch → json → setCuration 3단
+  // 프로미스 체인)이 끝난 뒤에도 화면에 아무 변화가 없는 케이스(모든 값이 없어서
+  // 계속 숨겨진 상태)가 있다 — 그런 경우 findByText로 동기화할 다른 신호가 없어,
+  // act로 감싼 매크로태스크 한 틱으로 그 체인을 명시적으로 흘려보낸다.
+  async function flushCurationFetch() {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+  }
+
   it('큐레이션이 없으면(item: null) 기존처럼 공공데이터 운영시간을 그대로 보여준다', async () => {
     mockCurationResponse(null);
     render(<DetailModal item={makeSpaceItem({ operating_hours: '평일 09:00-18:00' })} onClose={() => {}} />);
@@ -454,10 +465,11 @@ describe('DetailModal 스마트 폴백(View/Reservation Fallback, 2026-09-01)', 
   // [스팟 상세카드 "메뉴" 노출 범위 정리](2026-09-12 사용자 지시): "메뉴는.. 키즈카페
   // 라던가도 메뉴가 있을수있어서.. 다른곳은 안하겠지?" — 키즈친화 식당
   // (category_min='놀이방식당')에서만 "메뉴" 행을 보여준다(관리자 큐레이션도 이
-  // 카테고리만 입력 가능해, 다른 카테고리는 영원히 채워지지 않을 플레이스홀더를
-  // 보여주는 걸 막는다).
-  describe('메뉴 행 노출 범위(2026-09-12)', () => {
-    it('키즈친화 식당이면 메뉴가 없어도 행 자체는 숨기지 않고 전용 문구를 보여준다', async () => {
+  // 카테고리만 입력 가능해, 다른 카테고리는 메뉴를 입력할 방법 자체가 없다).
+  // [정보 없는 영역은 숨김](2026-09-25 사용자 지시): 메뉴가 없으면 이제 전용
+  // 문구 대신 행 자체를 숨긴다.
+  describe('메뉴 행 노출 범위(2026-09-12, 2026-09-25)', () => {
+    it('키즈친화 식당이어도 메뉴가 없으면 행 자체를 숨긴다', async () => {
       mockCurationResponse(null);
       render(
         <DetailModal
@@ -469,8 +481,7 @@ describe('DetailModal 스마트 폴백(View/Reservation Fallback, 2026-09-01)', 
       // curation 조회(비동기)가 끝나 로딩 상태(undefined)를 벗어날 때까지 기다린 뒤
       // 확인한다 — "가격" 행이 뜨는 순간이 곧 curation 로딩 완료 시점이다.
       await screen.findByText('가격');
-      expect(screen.getByText('메뉴')).toBeInTheDocument();
-      expect(screen.getByText('상세 메뉴 정보는 순차적으로 추가될 예정이에요')).toBeInTheDocument();
+      expect(screen.queryByText('메뉴')).not.toBeInTheDocument();
     });
 
     it('키즈친화 식당이 아니면(예: 공원) 메뉴 행 자체를 보여주지 않는다', async () => {
@@ -480,7 +491,6 @@ describe('DetailModal 스마트 폴백(View/Reservation Fallback, 2026-09-01)', 
       // curation 로딩이 끝난 뒤(가격 행이 뜬 뒤)에도 메뉴 행은 계속 없어야 한다.
       await screen.findByText('가격');
       expect(screen.queryByText('메뉴')).not.toBeInTheDocument();
-      expect(screen.queryByText('상세 메뉴 정보는 순차적으로 추가될 예정이에요')).not.toBeInTheDocument();
     });
 
     it('category_min이 아예 없어도(null) 메뉴 행을 보여주지 않는다', async () => {
@@ -643,7 +653,9 @@ describe('DetailModal 스마트 폴백(View/Reservation Fallback, 2026-09-01)', 
     expect(await screen.findByText(/김치찌개/)).toBeInTheDocument();
   });
 
-  // [가격 및 메뉴 '준비 중' 플레이스홀더](2026-09-08 사용자 지시, todo.md 개선사항3-5)
+  // [정보 없는 영역은 숨김](2026-09-25 사용자 지시): 2026-09-08에 도입했던 "준비 중"
+  // 플레이스홀더를 되돌린다 — 입장료 개념 자체가 없는 업종(놀이방식당 등)에 영원히
+  // 채워지지 않을 문구가 뜨는 걸 막는다.
   describe('가격 정보', () => {
     it('큐레이션에 입장료(child_fee/guardian_fee)가 있으면 그대로 보여준다', async () => {
       mockCurationResponse({
@@ -674,11 +686,12 @@ describe('DetailModal 스마트 폴백(View/Reservation Fallback, 2026-09-01)', 
       expect(await screen.findByText('무료입장')).toBeInTheDocument();
     });
 
-    it('입장료도 없고 무료 여부도 모르면 준비중 플레이스홀더를 보여준다', async () => {
+    it('입장료도 없고 무료 여부도 모르면 "가격" 행 자체를 보여주지 않는다', async () => {
       mockCurationResponse(null);
       render(<DetailModal item={makeSpaceItem({ is_free: null })} onClose={() => {}} />);
 
-      expect(await screen.findByText('가격 정보 업데이트 준비 중입니다 ⏳')).toBeInTheDocument();
+      await flushCurationFetch();
+      expect(screen.queryByText('가격')).not.toBeInTheDocument();
     });
   });
 

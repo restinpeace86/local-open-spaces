@@ -85,6 +85,15 @@ export type NearbyItem = {
   // getCategoryMinFeed(캠핑장 등 검증된 중분류에 한해)만 채운다 — 그 외 모든 생성
   // 경로는 undefined로 남는다(추측 금지 — 검증 안 된 카테고리는 절대 묶지 않는다).
   grouped_count?: number;
+  // [AI 추천은 노출 중분류 있는 스팟만](2026-09-25 사용자 지시): "AI 추천 누르면
+  // 노출중분류 없는것도 다나오는데.. 노출중분류 있는것만 나오게 해줘" —
+  // 레거시 category_min(자유 텍스트, 아직 정리 안 된 스팟도 다수 채워짐)과 달리
+  // 실제 노출 중분류 매핑 여부를 판별하려면 이 필드가 필요하다.
+  // get_nearby_spaces_and_events(2026-09-25-nearby-rpc-add-service-category-id.sql
+  // 이후)가 SPACE에는 open_spaces.service_category_id를, EVENT에는 항상
+  // null(이 개념 자체가 없음)을 반환한다. get_spot_group_members 등 이 컬럼을
+  // 아직 반환하지 않는 다른 RPC 경로에서는 undefined로 남는다.
+  service_category_id?: string | null;
 };
 
 // Task 9-6-10(2026-08-23): itemType을 넘기면 RPC가 해당 타입만 반환한다(예: '/nearby' 지도는
