@@ -7,6 +7,14 @@ import {
 import { countRawItems } from '../lib/pipeline-log.mjs';
 import { withRetry } from '../lib/retry.mjs';
 
+// [배치 단위 장애 격리](2026-09-26 사용자 지시): upsertRowsSafeMerge()가 반환하는
+// failedBatches([{batchNumber, range, count, error}])를 사람이 읽을 한 줄로 요약한다 —
+// 단일 테이블 경로(run())와 다중 테이블 경로(runMultiTableUpsert()) 둘 다 같은 형식을
+// 쓴다.
+function describeFailedBatches(failedBatches) {
+  return failedBatches.map((b) => `${b.batchNumber}번째 배치(${b.range}행, ${b.error})`).join(', ');
+}
+
 // 모든 소스 어댑터가 상속받는 추상 베이스 클래스.
 // fetch()/transform()은 서브클래스가 반드시 구현해야 하며, run()이 공통 오케스트레이션
 // (fetch → transform → 검증 로그 → upsert)을 담당한다.
@@ -154,12 +162,20 @@ export class BaseCollectorAdapter {
       // 새 값으로 무조건 덮어썼는데, 재수집 때 원본 API가 일시적으로 일부 필드를 비워 보내면
       // 이미 채워져 있던 실데이터가 NULL로 되돌아가는 문제가 있었다 — upsertRowsSafeMerge()는
       // 기존 행의 컬럼이 NULL일 때만 새 값으로 채우고 이미 값이 있으면 보존한다.
-      const { count, duplicateWithinBatch = 0, mergedWithExisting = 0 } = await upsertRowsSafeMerge(
-        client,
-        this.targetTable,
-        rows
+      const {
+        count,
+        duplicateWithinBatch = 0,
+        mergedWithExisting = 0,
+        failedBatches = [],
+      } = await upsertRowsSafeMerge(client, this.targetTable, rows);
+      // [배치 단위 장애 격리](2026-09-26 사용자 지시): upsertRowsSafeMerge()가 이제 배치
+      // 하나가 완전히 실패해도(재시도 소진) 예외를 던지지 않고 나머지 배치를 계속 진행한다 —
+      // 그 대신 이 소스 결과에 어떤 배치(번호·행 범위)가 빠졌는지 note로 투명하게 남겨야
+      // 한다(runMultiTableUpsert의 테이블별 부분 실패와 동일한 원칙, 제5장 제11조).
+      const failureNote = failedBatches.length > 0 ? `배치 단위 부분 실패: ${describeFailedBatches(failedBatches)}` : undefined;
+      console.log(
+        `${failedBatches.length > 0 ? '⚠️' : '✅'} [${this.sourceKey}] Supabase ${this.targetTable} upsert 완료: ${count}건${failureNote ? ` (${failureNote})` : ''}`
       );
-      console.log(`✅ [${this.sourceKey}] Supabase ${this.targetTable} upsert 완료: ${count}건`);
       // [배치 자동화 및 로깅 체계 확정](2026-08-25): errorCount는 "수신했지만 DB에 적재되지
       // 않은 건수"(유효성 검증 드롭분)다.
       const errorCount = typeof rawCount === 'number' ? Math.max(0, rawCount - count) : 0;
@@ -174,6 +190,8 @@ export class BaseCollectorAdapter {
         safeMergeCount: duplicateWithinBatch + mergedWithExisting,
         errorCount,
         errorCounts,
+        note: failureNote,
+        hasPartialFailure: failedBatches.length > 0,
       };
     } catch (err) {
       throw err;
@@ -249,12 +267,25 @@ export class BaseCollectorAdapter {
 
     const totalCount = (perTableResult.open_spaces?.count ?? 0) + (perTableResult.events?.count ?? 0);
     const failedTables = Object.keys(tableFailures);
-    const failureNote =
-      failedTables.length > 0
-        ? `테이블별 부분 실패: ${failedTables.map((t) => `${t}(${tableFailures[t]})`).join(', ')}`
-        : undefined;
+    // [배치 단위 장애 격리](2026-09-26 사용자 지시): 테이블 자체는 안 던졌어도(예외 없이
+    // 정상 반환) 그 안의 일부 배치만 실패했을 수 있다 — upsertRowsSafeMerge()가 이제
+    // 배치 하나가 실패해도 나머지를 계속 진행하고 failedBatches로 알려준다. 테이블
+    // 통째 실패(tableFailures)와 테이블 내 배치 부분 실패를 모두 note에 합쳐 투명하게
+    // 남긴다.
+    const tableBatchFailureNotes = ['open_spaces', 'events']
+      .map((t) => {
+        const failedBatches = perTableResult[t]?.failedBatches ?? [];
+        return failedBatches.length > 0 ? `${t} 배치 부분 실패: ${describeFailedBatches(failedBatches)}` : null;
+      })
+      .filter(Boolean);
+    const hasBatchFailure = tableBatchFailureNotes.length > 0;
+    const noteParts = [
+      failedTables.length > 0 ? `테이블별 부분 실패: ${failedTables.map((t) => `${t}(${tableFailures[t]})`).join(', ')}` : null,
+      ...tableBatchFailureNotes,
+    ].filter(Boolean);
+    const failureNote = noteParts.length > 0 ? noteParts.join(' / ') : undefined;
     console.log(
-      `${failedTables.length > 0 ? '⚠️' : '✅'} [${this.sourceKey}] 다중 테이블 upsert 완료: open_spaces ${perTableResult.open_spaces?.count ?? 0}건 / ` +
+      `${failureNote ? '⚠️' : '✅'} [${this.sourceKey}] 다중 테이블 upsert 완료: open_spaces ${perTableResult.open_spaces?.count ?? 0}건 / ` +
         `events ${perTableResult.events?.count ?? 0}건${failureNote ? ` (${failureNote})` : ''}`
     );
 
@@ -292,8 +323,9 @@ export class BaseCollectorAdapter {
       // 기록한다 — 부분 실패(예: open_spaces upsert만 실패)도 failed:true와 동일하게
       // 실패로 취급해야 하지만, 이 함수는 그래도 성공한 나머지 테이블 건수(count)를 계속
       // 반환해야 하므로 failed:true 자체는 쓸 수 없다(무중단 원칙 — 실패 사실은 숨기지
-      // 않되 정상 처리된 부분까지 폐기하지 않는다).
-      hasPartialFailure: failedTables.length > 0,
+      // 않되 정상 처리된 부분까지 폐기하지 않는다). 테이블 통째 실패뿐 아니라 테이블 내
+      // 배치 부분 실패(hasBatchFailure)도 동일하게 FAILED로 표시한다.
+      hasPartialFailure: failedTables.length > 0 || hasBatchFailure,
     };
   }
 

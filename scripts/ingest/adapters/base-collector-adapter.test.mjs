@@ -120,7 +120,28 @@ describe('BaseCollectorAdapter.run() — RAW 레이어 opt-in', () => {
       rawArchivedCount: 2,
       safeMergeCount: 4, // duplicateWithinBatch(1) + mergedWithExisting(3)
       errorCount: 0, // rawCount(2) - count(2)
+      note: undefined,
+      hasPartialFailure: false,
     });
+  });
+
+  // [배치 단위 장애 격리](2026-09-26 사용자 지시): "300개로 나눴으면 중간에 실패나면
+  // 그 300건에 대하여서만 실패하고 다음단계 수행하도록 넘어가는게 좋을꺼 같은데" —
+  // upsertRowsSafeMerge()가 이제 배치 부분 실패 시 예외 대신 failedBatches를 반환한다.
+  // run()이 이를 hasPartialFailure/note로 그대로 옮겨 담는지 확인한다.
+  it('upsertRowsSafeMerge가 failedBatches를 반환하면 note와 hasPartialFailure:true로 옮겨 담는다', async () => {
+    upsertRowsSafeMergeMock.mockResolvedValueOnce({
+      count: 1,
+      duplicateWithinBatch: 0,
+      mergedWithExisting: 0,
+      failedBatches: [{ batchNumber: 2, range: '301~600', count: 300, error: 'events upsert 실패: boom' }],
+    });
+    const adapter = new RawOptInAdapter();
+
+    const result = await adapter.run();
+
+    expect(result.hasPartialFailure).toBe(true);
+    expect(result.note).toBe('배치 단위 부분 실패: 2번째 배치(301~600행, events upsert 실패: boom)');
   });
 
   // [배치 안정성 진단](2026-09-18 사용자 지시, implementation/todo.md 개선사항 2): 단일
@@ -416,5 +437,29 @@ describe("BaseCollectorAdapter — targetTable: 'multi' (Decision 017 다중 테
       hasPartialFailure: true,
       note: expect.stringContaining('open_spaces'),
     });
+  });
+
+  // [배치 단위 장애 격리](2026-09-26 사용자 지시): 테이블 자체는 예외를 던지지 않아도
+  // (upsertRowsSafeMerge가 정상 반환) 그 안의 일부 배치만 실패했을 수 있다 — 이 경우도
+  // hasPartialFailure:true로 표시돼야 한다(테이블 통째 실패와 동일한 무중단 원칙).
+  it('테이블은 성공했지만 그 안의 일부 배치만 실패했으면(failedBatches) hasPartialFailure:true와 배치 상세를 담는다', async () => {
+    upsertRowsSafeMergeMock.mockImplementation((_client, table) =>
+      Promise.resolve(
+        table === 'open_spaces'
+          ? {
+              count: 1,
+              duplicateWithinBatch: 0,
+              mergedWithExisting: 0,
+              failedBatches: [{ batchNumber: 1, range: '1~300', count: 300, error: 'open_spaces upsert 실패: boom' }],
+            }
+          : { count: 1, duplicateWithinBatch: 0, mergedWithExisting: 0, failedBatches: [] }
+      )
+    );
+    const adapter = new MultiTableAdapter();
+    const result = await adapter.run();
+
+    expect(result.hasPartialFailure).toBe(true);
+    expect(result.note).toContain('open_spaces 배치 부분 실패');
+    expect(result.note).toContain('1번째 배치(1~300행');
   });
 });

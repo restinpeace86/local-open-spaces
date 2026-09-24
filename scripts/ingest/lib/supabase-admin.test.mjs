@@ -101,7 +101,7 @@ describe('upsertRowsSafeMerge', () => {
     const result = await upsertRowsSafeMerge(client, 'events', []);
     expect(select).not.toHaveBeenCalled();
     expect(upsert).not.toHaveBeenCalled();
-    expect(result).toEqual({ count: 0, duplicateWithinBatch: 0, mergedWithExisting: 0 });
+    expect(result).toEqual({ count: 0, duplicateWithinBatch: 0, mergedWithExisting: 0, failedBatches: [] });
   });
 
   it('기존 행이 없으면(신규) incoming 행을 그대로 upsert한다', async () => {
@@ -110,7 +110,7 @@ describe('upsertRowsSafeMerge', () => {
 
     const [sentRows] = upsert.mock.calls[0];
     expect(sentRows).toEqual([{ external_id: 'A', title: '새 행', venue_name: null }]);
-    expect(result).toEqual({ count: 1, duplicateWithinBatch: 0, mergedWithExisting: 0 });
+    expect(result).toEqual({ count: 1, duplicateWithinBatch: 0, mergedWithExisting: 0, failedBatches: [] });
   });
 
   it('기존 행의 컬럼이 NULL이 아니면 incoming 값으로 덮어쓰지 않고 기존 값을 보존한다', async () => {
@@ -226,7 +226,7 @@ describe('upsertRowsSafeMerge', () => {
 
     const [sentRows] = upsert.mock.calls[0];
     expect(sentRows).toEqual([{ external_id: 'A', title: '첫 번째(실데이터)', venue_name: '두 번째에만 있는 장소명' }]);
-    expect(result).toEqual({ count: 1, duplicateWithinBatch: 1, mergedWithExisting: 0 });
+    expect(result).toEqual({ count: 1, duplicateWithinBatch: 1, mergedWithExisting: 0, failedBatches: [] });
   });
 
   it("배치 내 중복 시 빈 문자열('')도 '값 없음'으로 취급해 다른 항목의 실데이터로 채운다", async () => {
@@ -250,25 +250,60 @@ describe('upsertRowsSafeMerge', () => {
     expect(inFn).toHaveBeenCalledWith('external_id', ['A', 'B']);
   });
 
-  it('기존 행 조회 중 에러가 나면 테이블명을 포함한 에러를 던진다', async () => {
+  // [배치 단위 장애 격리](2026-09-26 사용자 지시): "300개로 나눴으면 중간에 실패나면
+  // 그 300건에 대하여서만 실패하고 다음단계 수행하도록 넘어가는게 좋을꺼 같은데" —
+  // 이제 조회/upsert 에러는 함수 전체를 던지지 않고, 그 배치만 failedBatches에
+  // 기록한 채 계속 진행한다(아래는 단일 배치라 "계속 진행"이 곧바로 종료되는
+  // 경계 케이스 — 여러 배치에 걸친 경우는 "실패한 배치만 건너뛰고 나머지는
+  // 계속 upsert된다" 테스트에서 별도로 검증한다).
+  it('기존 행 조회 중 에러가 나면 그 배치를 failedBatches에 기록하고(던지지 않고) 계속 진행한다', async () => {
     const inFn = vi.fn(() => Promise.resolve({ data: null, error: { message: 'select boom' } }));
     const select = vi.fn(() => ({ in: inFn }));
     const client = { from: vi.fn(() => ({ select, upsert: vi.fn() })) };
 
-    await expect(upsertRowsSafeMerge(client, 'events', [{ external_id: 'A' }])).rejects.toThrow(
-      'events 기존 행 조회 실패: select boom'
-    );
+    const result = await upsertRowsSafeMerge(client, 'events', [{ external_id: 'A' }]);
+
+    expect(result.count).toBe(0);
+    expect(result.failedBatches).toEqual([
+      { batchNumber: 1, range: '1~1', count: 1, error: 'events 기존 행 조회 실패: select boom' },
+    ]);
   });
 
-  it('upsert가 에러를 반환하면 테이블명을 포함한 에러를 던진다', async () => {
+  it('upsert가 에러를 반환하면 그 배치를 failedBatches에 기록하고(던지지 않고) 계속 진행한다', async () => {
     const inFn = vi.fn(() => Promise.resolve({ data: [], error: null }));
     const select = vi.fn(() => ({ in: inFn }));
     const upsert = vi.fn(() => Promise.resolve({ error: { message: 'upsert boom' } }));
     const client = { from: vi.fn(() => ({ select, upsert })) };
 
-    await expect(upsertRowsSafeMerge(client, 'events', [{ external_id: 'A' }])).rejects.toThrow(
-      'events upsert 실패: upsert boom'
-    );
+    const result = await upsertRowsSafeMerge(client, 'events', [{ external_id: 'A' }]);
+
+    expect(result.count).toBe(0);
+    expect(result.failedBatches).toEqual([
+      { batchNumber: 1, range: '1~1', count: 1, error: 'events upsert 실패: upsert boom' },
+    ]);
+  });
+
+  // 여러 배치에 걸친 실제 시나리오: 중간 배치 하나만 실패해도 앞뒤 배치는 정상
+  // upsert되고, 실패한 배치의 번호/행 범위가 정확히 기록된다.
+  it('여러 배치 중 하나가 완전히 실패해도(재시도 소진) 나머지 배치는 계속 upsert되고, 실패한 배치의 번호/행 범위가 기록된다', async () => {
+    const inFn = vi.fn(() => Promise.resolve({ data: [], error: null }));
+    const select = vi.fn(() => ({ in: inFn }));
+    // 2번째 배치(행 301~600)의 upsert만 매번 실패하도록 external_id로 분기한다.
+    const upsert = vi.fn((rows) => {
+      const isSecondBatch = rows[0]?.external_id === 'id-300';
+      return Promise.resolve({ error: isSecondBatch ? { message: 'upsert boom' } : null });
+    });
+    const client = { from: vi.fn(() => ({ select, upsert })) };
+    const rows = Array.from({ length: 900 }, (_, i) => ({ external_id: `id-${i}` }));
+
+    const result = await upsertRowsSafeMerge(client, 'open_spaces', rows);
+
+    // open_spaces 배치 크기 300 기준: 1~300(성공) / 301~600(실패) / 601~900(성공).
+    expect(upsert).toHaveBeenCalledTimes(3);
+    expect(result.count).toBe(600); // 실패한 300건은 count에서 빠진다.
+    expect(result.failedBatches).toEqual([
+      { batchNumber: 2, range: '301~600', count: 300, error: 'open_spaces upsert 실패: upsert boom' },
+    ]);
   });
 
   it('events는 200건 단위로 upsert를 나눈다(트리거/trigram 인덱스 비용 때문에 그대로 유지)', async () => {
@@ -289,7 +324,7 @@ describe('upsertRowsSafeMerge', () => {
     expect(upsert).toHaveBeenCalledTimes(6);
     expect(inFn).toHaveBeenCalledTimes(6);
     expect(inFn.mock.calls.every(([, ids]) => ids.length <= 200)).toBe(true);
-    expect(result).toEqual({ count: 1200, duplicateWithinBatch: 0, mergedWithExisting: 0 });
+    expect(result).toEqual({ count: 1200, duplicateWithinBatch: 0, mergedWithExisting: 0, failedBatches: [] });
   });
 
   // [LOCALDATA_PLAYGROUND 대량 upsert 타임아웃 수정](2026-09-25 사용자 지시): "이것만
@@ -319,7 +354,7 @@ describe('upsertRowsSafeMerge', () => {
     expect(upsert.mock.calls[3][0]).toHaveLength(300);
     expect(inFn).toHaveBeenCalledTimes(8);
     expect(inFn.mock.calls.every(([, ids]) => ids.length <= 200)).toBe(true);
-    expect(result).toEqual({ count: 1200, duplicateWithinBatch: 0, mergedWithExisting: 0 });
+    expect(result).toEqual({ count: 1200, duplicateWithinBatch: 0, mergedWithExisting: 0, failedBatches: [] });
   });
 
   // [GG_CULTURE_EVENTS 반복 upsert 실패 수정](2026-09-07): 실제 운영에서 반복 재현된

@@ -275,74 +275,101 @@ const ALWAYS_REFRESH_FIELDS = {
   ],
 };
 
+// [배치 단위 장애 격리](2026-09-26 사용자 지시): "300개로 나눴으면 중간에 실패나면
+// 그 300건에 대하여서만 실패하고 다음단계 수행하도록 넘어가는게 좋을꺼 같은데..
+// 오더링 해서.. 어디에서 실패했는지 파악 가능하잖아" — 실측 확인 결과 이 루프는
+// 배치별 try/catch가 없어서, 한 배치가 재시도(withRetry, 초기 1회+재시도 3회)까지
+// 전부 실패하면 그 예외가 루프 밖으로 그대로 던져져 남은 배치(예: 82,431건 ÷ 300 ≈
+// 275개 중 나머지 전부)가 아예 시도되지 않았다 — 8초 statement_timeout에 이따금
+// 걸리는 게 확인된 이상(2026-09-26 조사), 한 배치의 일시적 실패가 그 실행 전체를
+// 무산시키면 안 된다(제5장 제11조 무중단 원칙 — runMultiTableUpsert의 테이블별
+// try/catch와 동일한 원칙을 배치 단위로 한 단계 더 깊이 적용). 1-기준 배치 번호와
+// 원본 행 범위(예: "301~600")를 실패 기록에 남겨 어디가 빠졌는지 바로 알 수 있게
+// 한다.
 export async function upsertRowsSafeMerge(client, table, rows) {
-  if (rows.length === 0) return { count: 0, duplicateWithinBatch: 0, mergedWithExisting: 0 };
+  if (rows.length === 0) return { count: 0, duplicateWithinBatch: 0, mergedWithExisting: 0, failedBatches: [] };
 
   const batchSize = SAFE_MERGE_UPSERT_BATCH_SIZE_BY_TABLE[table] ?? DEFAULT_SAFE_MERGE_UPSERT_BATCH_SIZE;
   const { rows: dedupedRows, duplicateCount } = dedupeByExternalIdMergeNulls(rows);
+  const alwaysRefreshFields = ALWAYS_REFRESH_FIELDS[table] ?? [];
   let totalCount = 0;
   let mergedWithExisting = 0;
+  const failedBatches = [];
+  let batchNumber = 0;
 
   for (let i = 0; i < dedupedRows.length; i += batchSize) {
+    batchNumber += 1;
     const batch = dedupedRows.slice(i, i + batchSize);
+    const range = `${i + 1}~${i + batch.length}`;
 
-    const existingById = new Map();
-    for (let j = 0; j < batch.length; j += SELECT_LOOKUP_BATCH_SIZE) {
-      const idsChunk = batch.slice(j, j + SELECT_LOOKUP_BATCH_SIZE).map((row) => row.external_id);
-      const existingRows = await withRetry(
-        async () => {
-          const { data, error: selectError } = await client.from(table).select('*').in('external_id', idsChunk);
-          if (selectError) throw new Error(`${table} 기존 행 조회 실패: ${selectError.message}`);
-          return data;
-        },
-        { label: `${table} 기존 행 조회` }
-      );
-      for (const existingRow of existingRows ?? []) {
-        existingById.set(existingRow.external_id, existingRow);
+    try {
+      const existingById = new Map();
+      for (let j = 0; j < batch.length; j += SELECT_LOOKUP_BATCH_SIZE) {
+        const idsChunk = batch.slice(j, j + SELECT_LOOKUP_BATCH_SIZE).map((row) => row.external_id);
+        const existingRows = await withRetry(
+          async () => {
+            const { data, error: selectError } = await client.from(table).select('*').in('external_id', idsChunk);
+            if (selectError) throw new Error(`${table} 기존 행 조회 실패: ${selectError.message}`);
+            return data;
+          },
+          { label: `${table} 기존 행 조회 (배치 ${batchNumber}, ${range}번째)` }
+        );
+        for (const existingRow of existingRows ?? []) {
+          existingById.set(existingRow.external_id, existingRow);
+        }
       }
-    }
 
-    const alwaysRefreshFields = ALWAYS_REFRESH_FIELDS[table] ?? [];
-    const mergedBatch = batch.map((row) => {
-      const existing = existingById.get(row.external_id);
-      if (!existing) return row;
+      // 이 배치가 실패하면 카운터를 오염시키면 안 되므로(실제로 upsert되지 않은
+      // 행을 병합 건수에 잡으면 안 됨) 배치 로컬 변수에 모았다가 upsert 성공 후에만
+      // 전체 합계에 더한다.
+      let batchMergedWithExisting = 0;
+      const mergedBatch = batch.map((row) => {
+        const existing = existingById.get(row.external_id);
+        if (!existing) return row;
 
-      mergedWithExisting += 1;
-      const merged = { ...row };
-      for (const key of Object.keys(row)) {
-        if (alwaysRefreshFields.includes(key)) {
-          // 최신 수집 결과를 우선하되, 이번 재가공이 일시적으로 이 필드를 못 채웠을
-          // 때(null/undefined)만 예외적으로 기존 값을 보존한다 — "항상 최신화"의
-          // 목적은 원본이 실제로 바뀐 걸 반영하는 것이지, 일시적 파싱 실패로 멀쩡한
-          // 기존 값을 지우는 것이 아니다.
-          if (row[key] === null || row[key] === undefined) {
+        batchMergedWithExisting += 1;
+        const merged = { ...row };
+        for (const key of Object.keys(row)) {
+          if (alwaysRefreshFields.includes(key)) {
+            // 최신 수집 결과를 우선하되, 이번 재가공이 일시적으로 이 필드를 못 채웠을
+            // 때(null/undefined)만 예외적으로 기존 값을 보존한다 — "항상 최신화"의
+            // 목적은 원본이 실제로 바뀐 걸 반영하는 것이지, 일시적 파싱 실패로 멀쩡한
+            // 기존 값을 지우는 것이 아니다.
+            if (row[key] === null || row[key] === undefined) {
+              merged[key] = existing[key];
+            }
+            continue;
+          }
+          if (existing[key] !== null && existing[key] !== undefined) {
             merged[key] = existing[key];
           }
-          continue;
         }
-        if (existing[key] !== null && existing[key] !== undefined) {
-          merged[key] = existing[key];
+        // location/location_precision 쌍 정합성 보호 — dedupeByExternalIdMergeNulls
+        // 위쪽의 상세 주석 참고. 여기서도 동일하게 두 컬럼을 절대 따로 병합하지 않는다.
+        if (hasLocationPrecisionPair(existing) && hasLocationPrecisionPair(row)) {
+          Object.assign(merged, pickBetterLocationPair(existing, row));
         }
-      }
-      // location/location_precision 쌍 정합성 보호 — dedupeByExternalIdMergeNulls
-      // 위쪽의 상세 주석 참고. 여기서도 동일하게 두 컬럼을 절대 따로 병합하지 않는다.
-      if (hasLocationPrecisionPair(existing) && hasLocationPrecisionPair(row)) {
-        Object.assign(merged, pickBetterLocationPair(existing, row));
-      }
-      return merged;
-    });
+        return merged;
+      });
 
-    await withRetry(
-      async () => {
-        const { error } = await client.from(table).upsert(mergedBatch, { onConflict: 'external_id' });
-        if (error) throw new Error(`${table} upsert 실패: ${error.message}`);
-      },
-      { label: `${table} upsert` }
-    );
-    totalCount += mergedBatch.length;
+      await withRetry(
+        async () => {
+          const { error } = await client.from(table).upsert(mergedBatch, { onConflict: 'external_id' });
+          if (error) throw new Error(`${table} upsert 실패: ${error.message}`);
+        },
+        { label: `${table} upsert (배치 ${batchNumber}, ${range}번째)` }
+      );
+      totalCount += mergedBatch.length;
+      mergedWithExisting += batchMergedWithExisting;
+    } catch (err) {
+      console.error(
+        `❌ [${table} SafeMerge 배치 ${batchNumber}] ${range}번째(${batch.length}건) 실패 — 다음 배치로 계속 진행: ${err.message}`
+      );
+      failedBatches.push({ batchNumber, range, count: batch.length, error: err.message });
+    }
   }
 
-  return { count: totalCount, duplicateWithinBatch: duplicateCount, mergedWithExisting };
+  return { count: totalCount, duplicateWithinBatch: duplicateCount, mergedWithExisting, failedBatches };
 }
 
 // [open_spaces 성능 최적화 및 타임아웃 재발 방지](2026-08-28): 대량 배치(예: playground
