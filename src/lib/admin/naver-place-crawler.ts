@@ -6,6 +6,7 @@
 // 크롤링이 "동적 로딩이라 헤드리스 브라우저 없이는 불가능해 미구현"했던 것과는 다른 케이스).
 // 이 파일은 순수 파싱/포맷 함수만 담아(네트워크 호출은 API 라우트가 담당) 단위 테스트가
 // 쉽도록 한다(llm-blog-verification.ts와 동일한 관례).
+import { NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY } from './curation-badges';
 
 export type NaverPlaceBusinessHourDay = {
   day: string;
@@ -80,6 +81,13 @@ export function buildNaverPlaceUrls(placeId: string): { homeUrl: string; menuUrl
 // (헤드리스 브라우저 불필요).
 export function buildNaverPlaceFeedUrl(placeId: string): string {
   return `https://pcmap.place.naver.com/restaurant/${placeId}/feed`;
+}
+
+// [찜질방/스파 뱃지 — 네이버 리뷰 투표 근거](2026-09-26 사용자 지시): 방문자 리뷰
+// 탭도 home/menu/feed와 동일하게 __APOLLO_STATE__ 정적 파싱으로 접근 가능함을
+// 실측 확인했다(아뮤즈스파&피트니스 남악점, naver_place_id 1683390650).
+export function buildNaverPlaceReviewUrl(placeId: string): string {
+  return `https://pcmap.place.naver.com/restaurant/${placeId}/review/visitor`;
 }
 
 // Apollo Client 정규화 캐시 — 값이 { __ref: "TypeName:id" } 형태면 실제 객체로 치환해야
@@ -337,4 +345,60 @@ export function extractNaverPlaceFeedItems(html: string | null): NaverPlaceFeedI
     });
   }
   return items;
+}
+
+// [찜질방/스파 뱃지 — 네이버 리뷰 투표 근거](2026-09-26 사용자 지시): "네이버 투표
+// 코드로 안전하게 자동 매핑 가능한.. 10건 이상인건 자동 매핑해놓고.. 몇위에 몇건이고
+// 보여줘 뱃지 바로 아래에.. 그거 보고 사용자가 뺄껀 빼고" — 방문자 리뷰
+// 통계(VisitorReviewStatsResult:{placeId})의 votedKeyword.details[]에서 우리
+// 뱃지와 매칭되는 코드(NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY, curation-badges.ts)만
+// 골라 순위·득표수와 함께 반환한다. 최종 체크 여부는 관리자 몫이라(세미오토) 여기서는
+// "근거"만 만든다 — curation_badges를 직접 갱신하지 않는다.
+export type NaverPlaceReviewVoteHint = {
+  code: string;
+  badgeKey: string;
+  displayName: string;
+  count: number;
+  // 이 스팟의 전체 투표 키워드(뱃지로 안 쓰는 것 포함) 중 득표수 기준 순위 —
+  // "4위 · 302건"처럼 득표수만이 아니라 상대적 비중까지 보여주기 위함.
+  rank: number;
+};
+
+const MIN_NAVER_REVIEW_VOTE_COUNT = 10;
+
+export function extractNaverPlaceReviewVoteHints(html: string | null): NaverPlaceReviewVoteHint[] {
+  if (!html) return [];
+  const state = parseApolloState(html);
+  if (!state) return [];
+
+  const statsKey = Object.keys(state).find((k) => k.startsWith('VisitorReviewStatsResult:'));
+  if (!statsKey) return [];
+  const stats = denormalizeApolloValue(state, state[statsKey]) as Record<string, unknown>;
+  const analysis = stats.analysis as Record<string, unknown> | null;
+  const votedKeyword = analysis?.votedKeyword as Record<string, unknown> | null;
+  const details = votedKeyword?.details as Array<Record<string, unknown>> | null;
+  if (!Array.isArray(details)) return [];
+
+  // 실측(아뮤즈스파 사례)으로는 이미 득표수 내림차순이었지만, API가 순서를 보장한다고
+  // 추측하지 않고(제3장 제5조) 직접 정렬해 순위를 계산한다.
+  const sorted = details
+    .filter(
+      (d): d is { code: string; count: number; displayName?: string } =>
+        typeof d.code === 'string' && typeof d.count === 'number'
+    )
+    .sort((a, b) => b.count - a.count);
+
+  const hints: NaverPlaceReviewVoteHint[] = [];
+  sorted.forEach((detail, index) => {
+    const badgeKey = NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY[detail.code];
+    if (!badgeKey || detail.count < MIN_NAVER_REVIEW_VOTE_COUNT) return;
+    hints.push({
+      code: detail.code,
+      badgeKey,
+      displayName: detail.displayName ?? detail.code,
+      count: detail.count,
+      rank: index + 1,
+    });
+  });
+  return hints;
 }

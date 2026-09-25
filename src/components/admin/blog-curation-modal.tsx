@@ -49,6 +49,10 @@ export function BlogCurationModal({
     // 수정"으로 바꿨거나 네이버 플레이스 크롤링으로 채운 더 정확한 이름 —
     // 있으면 이 이름으로 블로그 검색을 한다(use-spot-curation-form.ts 참고).
     display_name?: string | null;
+    // [표준중분류 기준 뱃지 연결](2026-09-26 사용자 지시): 노출중분류가 아직
+    // 없어도(관리자가 나중에 수동 매핑 예정) category_min만으로 뱃지 세트를
+    // 고를 수 있게 한다(use-spot-curation-form.ts의 resolveCurationCategoryId 참고).
+    category_min?: string | null;
   };
   serviceCategories: ServiceCategory[];
   onClose: () => void;
@@ -154,6 +158,7 @@ export function BlogCurationModal({
           selectedBadges={form.selectedBadges}
           savedBadgeKeys={form.savedBadgeKeys}
           onToggleBadge={form.toggleBadge}
+          voteHints={form.voteHints}
           minAgeRecommended={form.minAgeRecommended}
           onMinAgeChange={form.setMinAgeRecommended}
           ageSuggestion={form.ageSuggestion}

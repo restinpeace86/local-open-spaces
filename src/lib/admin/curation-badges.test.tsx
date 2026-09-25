@@ -9,6 +9,7 @@ import {
   highlightKeywordsOnly,
   isKnownCurationBadgeKey,
   matchBadgeKeysFromText,
+  NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY,
   PRICE_AMOUNT_PATTERN,
   PRICE_HINT_KEYWORDS,
   resolveCurationCategoryId,
@@ -273,6 +274,71 @@ describe('education_farm(체험농장·농원) 카테고리 뱃지', () => {
   it('단일 음절 키워드("양")는 오검출 방지를 위해 "양떼"로 구체화되어 있다', () => {
     expect(matchBadgeKeysFromText('수량이 많고 다양한 프로그램', 'education_farm')).toEqual(new Set());
     expect(matchBadgeKeysFromText('양떼 목장 체험', 'education_farm')).toEqual(new Set(['EDU_ANIMAL_EXPERIENCE']));
+  });
+});
+
+// [키즈/놀이시설 > 놀이방찜질방/스파](2026-09-26 사용자 지시): "찜질방과 스파관련
+// 중분류 만들었고.. 여기에 대하여 우리 뱃지 어떤거 가져가면 좋을까?" — 실제
+// 네이버 크롤링/방문자 리뷰 투표 데이터로 검증한 16개 뱃지. 노출중분류가 아직
+// 없어도(관리자가 나중에 수동 매핑 예정) category_min만으로 활성화된다.
+describe('spa_jjimjilbang(놀이방찜질방/스파) 카테고리 뱃지', () => {
+  it('표준중분류 "놀이방찜질방/스파"는 category_min 인자로 spa_jjimjilbang에 매핑된다', () => {
+    expect(resolveCurationCategoryId(null, '놀이방찜질방/스파')).toBe('spa_jjimjilbang');
+    expect(resolveCurationCategoryId(undefined, '놀이방찜질방/스파')).toBe('spa_jjimjilbang');
+  });
+
+  it('노출중분류가 있어도 category_min 매칭이 우선한다', () => {
+    expect(resolveCurationCategoryId('키즈친화 식당(놀이시설 포함)', '놀이방찜질방/스파')).toBe('spa_jjimjilbang');
+  });
+
+  it('category_min이 없거나 매칭되지 않으면 기존처럼 노출중분류 기준으로 판정한다(기존 카테고리 영향 없음)', () => {
+    expect(resolveCurationCategoryId('키즈카페 / 실내놀이터', null)).toBe('kids_cafe');
+    expect(resolveCurationCategoryId('키즈카페 / 실내놀이터', '목욕장업소')).toBe('kids_cafe');
+    expect(resolveCurationCategoryId(null, null)).toBe('restaurant');
+  });
+
+  it('16개 뱃지가 6개 그룹으로 나뉜다', () => {
+    const options = getBadgeOptionsForCategory('spa_jjimjilbang');
+    expect(options).toHaveLength(16);
+    const groupCounts = options.reduce<Record<string, number>>((acc, o) => {
+      acc[o.group] = (acc[o.group] ?? 0) + 1;
+      return acc;
+    }, {});
+    expect(groupCounts).toEqual({ '이동/편의': 2, '놀이/오락': 2, 식음료: 2, 목욕시설: 5, '휴게/청결': 4, '주의/제한': 1 });
+  });
+
+  it('블로그 키워드가 정확히 매칭된다', () => {
+    expect(matchBadgeKeysFromText('토굴방도 있고 편백방에서 땀 빼기 좋아요', 'spa_jjimjilbang')).toEqual(
+      new Set(['jj_unique_room', 'jj_low_temp_room'])
+    );
+    expect(matchBadgeKeysFromText('족욕장에서 쉬다가 코인노래방도 갔어요', 'spa_jjimjilbang')).toEqual(
+      new Set(['jj_foot_bath', 'jj_arcade'])
+    );
+  });
+
+  it('NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY는 구체적인 8개 코드만 뱃지로 매핑하고, 뭉뚱그려진 코드는 제외한다', () => {
+    expect(NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY).toEqual({
+      parking_easy: 'jj_parking',
+      water_quality: 'jj_water_quality',
+      baths_various: 'jj_various_baths',
+      baths_various_heart: 'jj_various_baths',
+      sleeping_room: 'jj_sleeping_room',
+      outdoor_bath: 'jj_outdoor_bath',
+      scrubber_good: 'jj_scrubber',
+      shower_good: 'jj_shower',
+      saunas_unique: 'jj_unique_room',
+    });
+    // 뭉뚱그려진 코드(사용자 지적: "휴게공간이 어떤 휴게공간인지 모른다")는 없어야 한다.
+    expect(NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY['rest_area']).toBeUndefined();
+    expect(NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY['facility_equipped']).toBeUndefined();
+    expect(NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY['play_var']).toBeUndefined();
+    expect(NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY['foodplace_var']).toBeUndefined();
+  });
+
+  it('매핑된 뱃지 키는 전부 실제 배지 옵션에 존재한다', () => {
+    for (const badgeKey of Object.values(NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY)) {
+      expect(isKnownCurationBadgeKey('spa_jjimjilbang', badgeKey)).toBe(true);
+    }
   });
 });
 

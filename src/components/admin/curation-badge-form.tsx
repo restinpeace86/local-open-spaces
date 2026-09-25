@@ -2,6 +2,7 @@
 
 import { ServiceCategory } from '@/lib/admin/service-category';
 import { CurationBadgeOption } from '@/lib/admin/curation-badges';
+import type { NaverPlaceReviewVoteHint } from '@/lib/admin/naver-place-crawler';
 
 // [All-in-One 모바일 큐레이션 워크벤치](2026-09-05 사용자 지시)를 만들면서
 // BlogCurationModal의 "노출 중분류 선택 + 뱃지 다중 선택" 폼을 이 프레젠테이션
@@ -23,6 +24,11 @@ export function CurationBadgeForm({
   // 상태는 파란색" — 이 Set에 들어있는 키만 "이미 저장됨"으로 판정한다.
   savedBadgeKeys,
   onToggleBadge,
+  // [찜질방/스파 뱃지 — 네이버 리뷰 투표 근거](2026-09-26 사용자 지시): "결국 최종
+  // 저장은 관리자가 하니깐.. 몇위에 몇건이고 몇위에 해당하는지 작게 보여줘 뱃지
+  // 바로 아래에.. 그거 보고 사용자가 뺄껀 빼고" — 없으면(대부분의 카테고리) 기존
+  // 화면과 완전히 동일하게 아무것도 표시하지 않는다.
+  voteHints,
   // [동적 연령 추천 시스템](2026-09-10 사용자 지시, todo.md 개선사항1): "만 x세 이상
   // 뱃지 / 기본값 0(미지정 시 뱃지 미노출) / 관리자가 후기를 검수하며 기준에 맞춰
   // 수동으로 숫자를 변경입력가능해야 함". onMinAgeChange가 없으면(기존 호출부
@@ -41,6 +47,7 @@ export function CurationBadgeForm({
   selectedBadges: Set<string>;
   savedBadgeKeys: Set<string>;
   onToggleBadge: (key: string) => void;
+  voteHints?: NaverPlaceReviewVoteHint[];
   minAgeRecommended?: number;
   onMinAgeChange?: (value: number) => void;
   ageSuggestion?: number | null;
@@ -85,14 +92,25 @@ export function CurationBadgeForm({
                   : isUnsaved
                     ? 'bg-green-600 text-white border-green-600'
                     : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50';
+                const voteHint = voteHints?.find((h) => h.badgeKey === opt.key);
                 return (
-                  <label
-                    key={opt.key}
-                    className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs cursor-pointer ${colorClass}`}
-                  >
-                    <input type="checkbox" checked={checked} onChange={() => onToggleBadge(opt.key)} className="sr-only" />
-                    {opt.label}
-                  </label>
+                  <div key={opt.key} className="flex flex-col items-start gap-0.5">
+                    <label
+                      className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs cursor-pointer ${colorClass}`}
+                    >
+                      <input type="checkbox" checked={checked} onChange={() => onToggleBadge(opt.key)} className="sr-only" />
+                      {opt.label}
+                    </label>
+                    {/* [네이버 리뷰 투표 근거](2026-09-26 사용자 지시): "몇위에 몇건이고
+                        보여줘 뱃지 바로 아래에.. 그거 보고 사용자가 뺄껀 빼고" —
+                        최종 체크 여부 판단 근거만 제공, curation_badges 자체를
+                        바꾸지는 않는다(관리자가 직접 체크박스로 결정). */}
+                    {voteHint && (
+                      <span className="pl-1 text-[10px] text-gray-400">
+                        네이버 리뷰 {voteHint.rank}위 · {voteHint.count}건
+                      </span>
+                    )}
+                  </div>
                 );
               })}
             </div>

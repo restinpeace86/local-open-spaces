@@ -11,8 +11,8 @@ import {
   OperatingHoursByDay,
 } from '@/lib/admin/spot-curation-parsers';
 import { KIDS_RESTAURANT_CATEGORY_MIN } from '@/lib/spaces/spot-category-groups';
-import { getBadgeGroupsForCategory, getBadgeOptionsForCategory, matchBadgeKeysFromText } from '@/lib/admin/curation-badges';
-import type { NaverPlaceBusinessHourDay } from '@/lib/admin/naver-place-crawler';
+import { getBadgeGroupsForCategory, getBadgeOptionsForCategory, matchBadgeKeysFromText, resolveCurationCategoryId } from '@/lib/admin/curation-badges';
+import type { NaverPlaceBusinessHourDay, NaverPlaceReviewVoteHint } from '@/lib/admin/naver-place-crawler';
 
 // [개발 종합 요청] 스팟픽 MVP 스마트 폴백, 관리자 큐레이션 및 배치 안정화 고도화(2026-09-01)
 // 섹션 2: 관리자 전용 "스팟 큐레이션" 탭. curated_items(제휴 상품, booking_url 외부 링크
@@ -49,6 +49,12 @@ export type SpotCurationItem = {
   // 해서 이 화면도 curation_badges를 알아야 한다 — API는 이미 select('*')로 이
   // 필드를 내려주고 있었다(신규 백엔드 작업 불필요).
   curation_badges: string[];
+  // [찜질방/스파 뱃지 — 네이버 리뷰 투표 근거](2026-09-26 사용자 지시): "결국 최종
+  // 저장은 관리자가 하니깐.. 몇위에 몇건이고 보여줘 뱃지 바로 아래에" — 이 화면
+  // (⚡ 데이터 가져오기)이 계산해 저장하고, 뱃지 전용 화면(blog-curation-modal 등)
+  // 이 읽어서 순위/득표수를 보여준다. 옵션 필드 — 이 컬럼 이전에 저장된 큐레이션에는
+  // 없을 수 있다.
+  naver_review_vote_hints?: NaverPlaceReviewVoteHint[] | null;
   created_at: string;
   updated_at: string;
   open_spaces: {
@@ -59,6 +65,10 @@ export type SpotCurationItem = {
     // [스팟 큐레이션 네이버 플레이스 ID 저장](2026-09-19 최초 도입, 2026-09-20 저장
     // 경로 완성): 이 스팟에 이미 연동해 크롤링한 네이버 플레이스가 있으면 그 ID.
     naver_place_id: string | null;
+    // [표준중분류 기준 뱃지 연결](2026-09-26 사용자 지시): 노출중분류가 아직 없어도
+    // (관리자가 나중에 수동 매핑 예정) category_min만으로 올바른 뱃지 세트를 고를 수
+    // 있게 한다(resolveCurationCategoryId 참고).
+    category_min: string | null;
   } | null;
 };
 
@@ -68,6 +78,7 @@ export type SpotSearchResult = {
   display_name: string | null;
   naver_place_id: string | null;
   address: string | null;
+  category_min: string | null;
 };
 
 // [관리자 페이지 스팟 큐레이션 URL 크롤링 기능](2026-09-18): /api/admin/spot-curations/
@@ -98,10 +109,12 @@ const KIDS_MENU_BADGE_KEY = 'kids_menu';
 // [스팟 큐레이션 URL 크롤링 — 편의시설 뱃지 자동 체크](2026-09-19 사용자 지시):
 // "편의시설: 유아시설(놀이방)이라던가 아기의자라던가 이런거 가져오는데.. 우리쪽
 // 뱃지에 대하여.. 편의시설 가져온거랑 정합성 맞으면 체크해주는거.. 다만 이미
-// 체크되어있는건 해제하지 말고" — 이 화면은 이미 restaurant(키즈친화 식당) 노출
-// 중분류로 고정돼 있으므로(위 KIDS_RESTAURANT_CATEGORY_MIN 참고) 그 config의
-// categoryId 문자열 그대로 쓴다(curation-badges.ts RESTAURANT_CONFIG.categoryId).
-const RESTAURANT_CURATION_CATEGORY_ID = 'restaurant';
+// 체크되어있는건 해제하지 말고" — [2026-09-26 버그 수정] 이전엔 이 화면의 후보
+// 목록이 항상 놀이방식당(restaurant config)만 보여주던 시절의 흔적으로 뱃지
+// 카테고리가 'restaurant'로 하드코딩돼 있어, open_spaces 상세팝업으로 들어오는
+// 다른 category_min(예: 놀이방찜질방/스파)의 스팟도 항상 식당 뱃지만 보였다.
+// CurationFormModal 안에서 스팟의 실제 category_min으로 계산한
+// curationCategoryId를 대신 쓴다(resolveCurationCategoryId, 아래 참고).
 
 // [스팟 큐레이션 요일별 영업시간](2026-09-19 사용자 지시): 크롤링 데이터가 없거나
 // 특정 요일이 빠져 있어도 화면에는 항상 월~일 7행이 보이도록 고정 순서로 둔다.
@@ -187,6 +200,13 @@ export function CurationFormModal({
   const spotDisplay = isEdit
     ? { name: initial!.open_spaces?.name ?? '(이름 없음)', address: initial!.open_spaces?.address ?? null }
     : { name: presetSpot!.name, address: presetSpot!.address };
+  // [표준중분류 기준 뱃지 연결](2026-09-26 사용자 지시): "노출중분류 매핑도 내가
+  // 수동으로 할 거니깐.. 표준중분류가.. 놀이방찜질방/스파 쪽에 대하여 이 뱃지들
+  // 나오게끔" — 노출중분류를 몰라도(아직 관리자가 매핑하기 전) category_min만으로
+  // 이 화면에 맞는 뱃지 세트를 고른다. 기존 카테고리(식당 등)는 categoryMinNames가
+  // 없어 그대로 restaurant로 되돌아가므로 기존 동작은 전혀 바뀌지 않는다.
+  const spotCategoryMin = isEdit ? (initial!.open_spaces?.category_min ?? null) : (presetSpot!.category_min ?? null);
+  const curationCategoryId = resolveCurationCategoryId(null, spotCategoryMin);
   // [OPEN_SPACES 노출 이름 수동 수정](2026-09-20 사용자 지시): "스팟큐레이션으로
   // 데이터 가져올때 상호명도 가져오는데.. 자동적으로 상호명도 들어가도록" — 이
   // 화면(네이버 플레이스 크롤링)이 open_spaces.name을 대체할 노출 이름을 채우는
@@ -269,8 +289,8 @@ export function CurationFormModal({
   // 관례를 그대로 재사용한다(제5장 제4조).
   const [selectedBadges, setSelectedBadges] = useState<Set<string>>(() => new Set(otherBadges));
   const [savedBadgeKeys] = useState<Set<string>>(() => new Set(otherBadges));
-  const badgeGroups = getBadgeGroupsForCategory(RESTAURANT_CURATION_CATEGORY_ID);
-  const badgeOptions = getBadgeOptionsForCategory(RESTAURANT_CURATION_CATEGORY_ID).filter(
+  const badgeGroups = getBadgeGroupsForCategory(curationCategoryId);
+  const badgeOptions = getBadgeOptionsForCategory(curationCategoryId).filter(
     (opt) => opt.key !== KIDS_MENU_BADGE_KEY
   );
 
@@ -316,6 +336,11 @@ export function CurationFormModal({
   const [isCrawling, setIsCrawling] = useState(false);
   const [crawlError, setCrawlError] = useState<string | null>(null);
   const [crawlPreview, setCrawlPreview] = useState<NaverPlaceCrawlPreview | null>(null);
+  // [찜질방/스파 뱃지 — 네이버 리뷰 투표 근거](2026-09-26 사용자 지시): 크롤링
+  // 결과의 순위/득표수를 그대로 저장해뒀다가 저장 시 함께 반영한다 — 이 화면
+  // 자체는 해당 순위/득표수를 보여주지 않고(뱃지 전용 화면의 몫), 근거 데이터만
+  // 만들어 전달한다.
+  const [badgeVoteHints, setBadgeVoteHints] = useState<NaverPlaceReviewVoteHint[]>(initial?.naver_review_vote_hints ?? []);
 
   // [관리자 페이지 스팟 큐레이션 URL 크롤링 기능](2026-09-18 사용자 지시): "곧바로 기존의
   // '영업시간 자동 파싱 버튼' 로직을 연동해서 정형화까지 원클릭으로 완료되게 함" — 크롤링
@@ -349,6 +374,7 @@ export function CurationFormModal({
         businessHourDays?: NaverPlaceBusinessHourDay[];
         menuText?: string | null;
         imageUrl?: string | null;
+        badgeVoteHints?: NaverPlaceReviewVoteHint[];
         error?: string;
       } = await res.json();
       if (!res.ok) throw new Error(data.error ?? '네이버 플레이스 데이터를 가져오지 못했습니다.');
@@ -377,10 +403,20 @@ export function CurationFormModal({
       // 동일한 함수)에 그대로 통과시킨다 — 매칭된 것만 추가하고(합집합), 기존에
       // 체크돼 있던 건 절대 건드리지 않는다(handleToggleBadge와 동일한 안전장치).
       if (data.conveniences && data.conveniences.length > 0) {
-        const matched = matchBadgeKeysFromText(data.conveniences.join(' '), RESTAURANT_CURATION_CATEGORY_ID);
+        const matched = matchBadgeKeysFromText(data.conveniences.join(' '), curationCategoryId);
         if (matched.size > 0) {
           setSelectedBadges((prev) => new Set([...prev, ...matched]));
         }
+      }
+
+      // [찜질방/스파 뱃지 — 네이버 리뷰 투표 근거 자동 체크](2026-09-26 사용자 지시):
+      // "10건 이상인건 자동 매핑해놓고.. 결국 최종 저장은 관리자가 하니깐" — 위
+      // 편의시설 매칭과 동일한 안전장치(추가만, 기존 체크 해제 안 함)로 자동 반영하고,
+      // 근거(순위/득표수)는 별도로 보관해뒀다가 저장 시 함께 반영한다(이 화면 자체는
+      // 순위/득표수를 보여주지 않음 — 뱃지 전용 화면의 몫).
+      if (data.badgeVoteHints && data.badgeVoteHints.length > 0) {
+        setBadgeVoteHints(data.badgeVoteHints);
+        setSelectedBadges((prev) => new Set([...prev, ...data.badgeVoteHints!.map((h) => h.badgeKey)]));
       }
 
       if (data.imageUrl) setImageUrl(data.imageUrl);
@@ -534,6 +570,7 @@ export function CurationFormModal({
         naver_booking_url: naverBookingUrl.trim() || null,
         curation_note: curationNote || null,
         curation_badges: hasKidsMenuBadge ? [...selectedBadges, KIDS_MENU_BADGE_KEY] : [...selectedBadges],
+        naver_review_vote_hints: badgeVoteHints,
       };
       const res = isEdit
         ? await fetch('/api/admin/spot-curations', {
@@ -1195,6 +1232,9 @@ export function SpotCurationsPanel() {
           display_name: spot.display_name,
           naver_place_id: spot.naver_place_id,
           address: spot.address,
+          // 이 후보 목록 자체가 항상 category_min=KIDS_RESTAURANT_CATEGORY_MIN
+          // ('놀이방식당')만 보여주므로(위 useEffect 참고) 고정값으로 채운다.
+          category_min: KIDS_RESTAURANT_CATEGORY_MIN ?? null,
         },
       }
     );

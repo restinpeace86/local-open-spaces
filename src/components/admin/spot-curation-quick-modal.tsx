@@ -20,6 +20,7 @@ export function SpotCurationQuickModal({
   spotDisplayName,
   spotNaverPlaceId,
   spotAddress,
+  spotCategoryMin,
   onClose,
   onSaved,
   onDisplayNameUpdated,
@@ -36,6 +37,10 @@ export function SpotCurationQuickModal({
   // 동일한 이유).
   spotNaverPlaceId: string | null;
   spotAddress: string | null;
+  // [표준중분류 기준 뱃지 연결](2026-09-26 사용자 지시): CurationFormModal이
+  // 노출중분류와 무관하게 category_min만으로도 올바른 뱃지 세트(예: 놀이방찜질방/
+  // 스파)를 고를 수 있게 신규 등록 모드에도 프리필해야 한다.
+  spotCategoryMin: string | null;
   onClose: () => void;
   onSaved: (item: SpotCurationItem) => void;
   // [실사용 버그 제보](2026-09-20 사용자 지시, "편백회관 장곡점" 사례): 이 모달이
@@ -91,6 +96,7 @@ export function SpotCurationQuickModal({
               display_name: spotDisplayName,
               naver_place_id: spotNaverPlaceId,
               address: spotAddress,
+              category_min: spotCategoryMin,
             }
       }
       onClose={onClose}

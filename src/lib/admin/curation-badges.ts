@@ -34,6 +34,13 @@ type CurationCategoryConfig = {
   // service_categories.category_name과 정확히 일치하는 값들 — 이 목록에 속한
   // 노출 중분류를 고르면 이 config가 활성화된다.
   exposureCategoryNames: string[];
+  // [표준중분류 기준 뱃지 연결](2026-09-26 사용자 지시): "노출중분류 매핑도 내가
+  // 수동으로 할 거니깐 따로 고려 안 해도 돼.. 표준중분류가.. 놀이방찜질방/스파
+  // 쪽에 대하여 이 뱃지들 나오게끔 하면 될 것 같아" — 노출중분류(관리자가 나중에
+  // 수동으로 채움)와 무관하게, open_spaces.category_min 값만으로도 뱃지 config를
+  // 고를 수 있게 하는 대안 경로. exposureCategoryNames와 달리 선택 필드이며,
+  // resolveCurationCategoryId가 노출중분류보다 먼저 확인한다.
+  categoryMinNames?: string[];
   badgeGroups: string[];
   badgeOptions: CurationBadgeOption[];
   // 뱃지 키 → 하이라이트/자동 체크용 키워드 목록.
@@ -300,6 +307,95 @@ const EDUCATION_FARM_CONFIG: CurationCategoryConfig = {
   },
 };
 
+// [키즈/놀이시설 > 놀이방찜질방/스파](2026-09-26 사용자 지시): "찜질방과 스파관련
+// 중분류 만들었고.. 여기에 놀이시설있는 목욕탕업소로 된것들 다 있잖아.. 여기에
+// 대하여 우리 뱃지 어떤거 가져가면 좋을까?" — 실제 네이버 플레이스 크롤링 3건
+// (벽계수스파/아뮤즈스파 등)과 방문자 리뷰 투표 데이터로 여러 차례 검증하며
+// 확정했다. 목욕탕/사우나 특유의 "있다/없다" 확인 가능한 구체적 시설만 담았고,
+// "시설이 깔끔해요"/"친절해요"류의 만족도성 리뷰 키워드는 뱃지가 아니라 별점
+// 성격이라 제외했다.
+//
+// [표준중분류 기준 연결](2026-09-26 사용자 지시): 노출중분류는 관리자가 나중에
+// 수동으로 매핑할 예정이라, 이 config는 exposureCategoryNames가 아니라
+// categoryMinNames(open_spaces.category_min='놀이방찜질방/스파')로 활성화된다.
+//
+// [네이버 리뷰 투표 데이터 기반 8개](실측: 아뮤즈스파&피트니스 남악점, naver_place_id
+// 1683390650, VisitorReviewStatsResult.analysis.votedKeyword.details[]) — 이
+// 8개는 blog 키워드 매칭이 아니라 naver-place-crawler.ts의 리뷰 투표 크롤링이
+// 채운다(count>=10인 것만, NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY 매핑 참고). "휴게
+// 공간이 잘 되어있어요"/"부대시설이 잘 되어있어요"/"놀거리가 많아요"/"먹거리가
+// 풍부해요"/"규모가 커요" 같은 코드는 값이 커도 뭉뚱그려진 항목이라(사용자 지적:
+// "이 휴게공간이 어떤 휴게공간인지 모른단 말이야") 뱃지 자동 매핑에서 제외했다 —
+// 구체적인 코드(수질관리/탕종류/수면실/노천탕/세신/샤워실/특이한찜질방/주차)만
+// 채택했다.
+//
+// [블로그 키워드 매칭 기반 7개 + 1개(24시간)] — 네이버 리뷰 투표 코드가 없어
+// (또는 있어도 너무 뭉뚱그려져서) 기존 방식(블로그 후기 본문 키워드 매칭,
+// matchBadgeKeysFromText)으로만 채운다: 놀이방/키즈존, 오락실·코인노래방·PC방,
+// 매점, 식당(키즈메뉴), 저온 힐링방, 야외 족욕탕/휴게공간, 이성 혼탕 나이 제한,
+// 24시간 운영.
+const SPA_JJIMJILBANG_CONFIG: CurationCategoryConfig = {
+  categoryId: 'spa_jjimjilbang',
+  exposureCategoryNames: [],
+  categoryMinNames: ['놀이방찜질방/스파'],
+  badgeGroups: ['이동/편의', '놀이/오락', '식음료', '목욕시설', '휴게/청결', '주의/제한'],
+  badgeOptions: [
+    { key: 'jj_parking', label: '주차 완비', group: '이동/편의' },
+    { key: 'jj_24h', label: '24시간 운영', group: '이동/편의' },
+    { key: 'jj_kids_zone', label: '놀이방/키즈존', group: '놀이/오락' },
+    { key: 'jj_arcade', label: '오락실/코인노래방/PC방', group: '놀이/오락' },
+    { key: 'jj_snack_bar', label: '매점(식혜·구운계란 등)', group: '식음료' },
+    { key: 'jj_restaurant', label: '식당(키즈 메뉴)', group: '식음료' },
+    { key: 'jj_various_baths', label: '탕 종류 다양함', group: '목욕시설' },
+    { key: 'jj_outdoor_bath', label: '노천탕 있음', group: '목욕시설' },
+    { key: 'jj_unique_room', label: '특이한 찜질방(테마방)', group: '목욕시설' },
+    { key: 'jj_low_temp_room', label: '저온 힐링방(편백·소금방 등)', group: '목욕시설' },
+    { key: 'jj_scrubber', label: '세신 서비스 우수', group: '목욕시설' },
+    { key: 'jj_sleeping_room', label: '수면실 있음', group: '휴게/청결' },
+    { key: 'jj_water_quality', label: '수질 관리 우수', group: '휴게/청결' },
+    { key: 'jj_shower', label: '샤워실 잘 되어있음', group: '휴게/청결' },
+    { key: 'jj_foot_bath', label: '야외 족욕탕/휴게공간', group: '휴게/청결' },
+    { key: 'jj_mixed_bath_age_limit', label: '이성 혼탕 나이 제한 있음', group: '주의/제한' },
+  ],
+  keywordGroups: {
+    jj_parking: ['주차', '주차장', '주차 편리', '주차 널찍', '지하주차장', '주차 완비'],
+    jj_24h: ['24시간', '24시간 운영', '심야영업', '밤새'],
+    jj_kids_zone: ['놀이방', '키즈존', '볼풀장', '미끄럼틀', '어린이 놀이터', '키카페급', '키즈플레이존', '유아시설'],
+    jj_arcade: ['오락실', '오락기', '코인노래방', '노래방', 'PC방', '게임기', '뽑기방', '오락존'],
+    jj_snack_bar: ['매점', '식혜', '맥반석 계란', '구운계란', '구운감자', '매점 간식'],
+    jj_restaurant: ['구내식당', '찜질방 식당', '키즈메뉴', '어린이메뉴', '미역국', '돈까스', '아기식판'],
+    jj_various_baths: ['탕종류', '다양한 탕', '냉탕', '온탕', '열탕', '탕 종류가 다양'],
+    jj_outdoor_bath: ['노천탕', '야외탕', '야외온천'],
+    jj_unique_room: ['토굴방', '굴방', '토굴', '수면굴', '테마방', '특이한 찜질방', '히말라야', '보석방', '맥반석방', '황토방'],
+    jj_low_temp_room: ['저온방', '편백방', '편백나무실', '소금방', '아기 찜질방', '키즈 편백룸', '힐링룸'],
+    jj_scrubber: ['세신', '세신사', '때밀이'],
+    jj_sleeping_room: ['수면실', '수면방', '만화방'],
+    jj_water_quality: ['수질', '수질관리', '수질 관리'],
+    jj_shower: ['샤워실', '샤워부스'],
+    jj_foot_bath: ['족욕탕', '족욕장', '야외 테라스', '야외 휴게실', '야외 쉼터'],
+    jj_mixed_bath_age_limit: ['혼탕', '이성탕', '동반입욕', '혼욕', '이성 보호자'],
+  },
+};
+
+// [네이버 리뷰 투표 코드 → 뱃지 키 매핑](2026-09-26): naver-place-crawler.ts의
+// 방문자 리뷰 투표 크롤링이 이 맵을 사용한다. 코드가 여러 개(baths_various/
+// baths_various_heart)로 나뉘어도 같은 뱃지로 합친다(실측: 네이버가 같은 의미를
+// 아이콘/문구만 다르게 두 코드로 내려보냄). 이 목록에 없는 코드(예: rest_area,
+// facility_equipped, play_var, foodplace_var, scale)는 의도적으로 제외했다 —
+// 사용자 지적대로 "어떤 휴게공간인지/부대시설인지 모른다"는 뭉뚱그려진 코드라
+// 특정 뱃지로 자동 확정하면 근거 없는 단정이 된다(제3장 제5조).
+export const NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY: Record<string, string> = {
+  parking_easy: 'jj_parking',
+  water_quality: 'jj_water_quality',
+  baths_various: 'jj_various_baths',
+  baths_various_heart: 'jj_various_baths',
+  sleeping_room: 'jj_sleeping_room',
+  outdoor_bath: 'jj_outdoor_bath',
+  scrubber_good: 'jj_scrubber',
+  shower_good: 'jj_shower',
+  saunas_unique: 'jj_unique_room',
+};
+
 // [보편 임시 뱃지](위 파일 상단 설명 참고) — 아직 전용 콘텐츠가 확정되지 않은
 // 나머지 8개 노출 중분류에 공통으로 적용하는 최소 항목. venue별 특화 뱃지가
 // 아니라 "어느 공공장소든 있을 법한" 편의시설만 담았다 — 임의로 지어낸 특화
@@ -357,6 +453,7 @@ const CURATION_CATEGORIES: CurationCategoryConfig[] = [
   CAMPING_CONFIG,
   RURAL_VILLAGE_CONFIG,
   EDUCATION_FARM_CONFIG,
+  SPA_JJIMJILBANG_CONFIG,
   ...GENERIC_CONFIGS,
 ];
 
@@ -365,7 +462,19 @@ const CURATION_CATEGORIES: CurationCategoryConfig[] = [
 // 실사용 중인 카테고리라 기존 동작과 호환된다.
 const DEFAULT_CATEGORY_ID = RESTAURANT_CONFIG.categoryId;
 
-export function resolveCurationCategoryId(exposureCategoryName: string | null | undefined): string {
+// [표준중분류 우선 확인](2026-09-26 사용자 지시): categoryMin이 주어지고 그걸로
+// 활성화되는 config가 있으면(현재는 SPA_JJIMJILBANG_CONFIG뿐) 노출중분류보다
+// 우선한다 — 노출중분류가 아직 비어 있어도(관리자가 나중에 수동 매핑 예정)
+// 뱃지가 바로 나오게 하기 위함이다. categoryMin이 없거나 매칭되는 config가
+// 없으면 기존처럼 노출중분류 기준으로 판정한다(기존 카테고리는 전혀 영향 없음).
+export function resolveCurationCategoryId(
+  exposureCategoryName: string | null | undefined,
+  categoryMin?: string | null
+): string {
+  if (categoryMin) {
+    const foundByMin = CURATION_CATEGORIES.find((c) => c.categoryMinNames?.includes(categoryMin));
+    if (foundByMin) return foundByMin.categoryId;
+  }
   if (!exposureCategoryName) return DEFAULT_CATEGORY_ID;
   const found = CURATION_CATEGORIES.find((c) => c.exposureCategoryNames.includes(exposureCategoryName));
   return found ? found.categoryId : DEFAULT_CATEGORY_ID;

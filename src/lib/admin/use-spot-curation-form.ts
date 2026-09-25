@@ -11,6 +11,7 @@ import {
   resolveCurationCategoryId,
 } from './curation-badges';
 import { ServiceCategory } from './service-category';
+import type { NaverPlaceReviewVoteHint } from './naver-place-crawler';
 
 // [All-in-One 모바일 큐레이션 워크벤치](2026-09-05 사용자 지시)를 만들면서
 // BlogCurationModal(작은 팝업)이 이미 갖고 있던 "블로그 검색 + 뱃지/노출 중분류
@@ -52,6 +53,11 @@ export type SpotCurationItem = {
   // [동적 연령 추천 시스템](2026-09-10 사용자 지시, todo.md 개선사항1): 이 스팟을
   // 추천하는 최소 만 나이. 0/null = 미지정(소비자 화면 "만 x세 이상" 뱃지 미노출).
   min_age_recommended: number | null;
+  // [찜질방/스파 뱃지 — 네이버 리뷰 투표 근거](2026-09-26 사용자 지시): 스팟
+  // 큐레이션 탭(⚡ 데이터 가져오기)이 저장해둔 값을 그대로 읽어 뱃지 아래에
+  // 순위/득표수를 보여준다("최종 저장은 관리자가 하니깐.. 몇위에 몇건이고
+  // 보여줘"). 이 컬럼 이전에 저장된 큐레이션에는 없을 수 있다.
+  naver_review_vote_hints?: NaverPlaceReviewVoteHint[] | null;
 };
 
 export type SpotForCuration = {
@@ -69,6 +75,13 @@ export type SpotForCuration = {
   // 네이버 플레이스 크롤링으로 채운 더 정확한 이름이 있으면 그걸 검색어로 써야
   // 한다. 없으면(옵셔널) 기존처럼 name으로 폴백한다(호출부 깨짐 방지).
   display_name?: string | null;
+  // [표준중분류 기준 뱃지 연결](2026-09-26 사용자 지시): "노출중분류 매핑도 내가
+  // 수동으로 할 거니깐.. 표준중분류가.. 놀이방찜질방/스파 쪽에 대하여 이 뱃지들
+  // 나오게끔" — 노출중분류가 아직 없어도(관리자가 나중에 수동 매핑 예정)
+  // category_min만으로 뱃지 세트를 고를 수 있게 한다. 옵셔널로 둔 이유는 기존
+  // 호출부가 아직 이 필드를 안 넘겨도 기존처럼 노출중분류 기준으로만 동작해야
+  // 하기 때문(점진적 적용, 기존 호출부 깨짐 방지).
+  category_min?: string | null;
 };
 
 // [블로그 큐레이션 전체 본문 보기](2026-09-05 사용자 지시): "가져온 내용자체도
@@ -151,7 +164,7 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
   // 가리키는 category_name으로 현재 활성 뱃지 config를 찾는다. 순수 파생값이라 별도
   // state 없이 매 렌더마다 계산한다.
   const activeExposureCategoryName = serviceCategories.find((c) => c.id === serviceCategoryId)?.category_name ?? null;
-  const curationCategoryId = resolveCurationCategoryId(activeExposureCategoryName);
+  const curationCategoryId = resolveCurationCategoryId(activeExposureCategoryName, spot.category_min);
   const badgeGroups = getBadgeGroupsForCategory(curationCategoryId);
   const badgeOptions = getBadgeOptionsForCategory(curationCategoryId);
 
@@ -166,7 +179,7 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
   function setServiceCategoryId(nextServiceCategoryId: string) {
     setServiceCategoryIdState(nextServiceCategoryId);
     const nextCategoryName = serviceCategories.find((c) => c.id === nextServiceCategoryId)?.category_name ?? null;
-    const nextCurationCategoryId = resolveCurationCategoryId(nextCategoryName);
+    const nextCurationCategoryId = resolveCurationCategoryId(nextCategoryName, spot.category_min);
     const validKeys = new Set(getBadgeOptionsForCategory(nextCurationCategoryId).map((opt) => opt.key));
     setSelectedBadges((prev) => new Set([...prev].filter((key) => validKeys.has(key))));
   }
@@ -520,6 +533,10 @@ export function useSpotCurationForm(spot: SpotForCuration, serviceCategories: Se
     curationCategoryId,
     badgeGroups,
     badgeOptions,
+    // [찜질방/스파 뱃지 — 네이버 리뷰 투표 근거](2026-09-26 사용자 지시): 스팟
+    // 큐레이션 탭이 저장해둔 순위/득표수. existingCuration이 아직 없으면(신규
+    // 등록 또는 로딩 중) 빈 배열.
+    voteHints: existingCuration?.naver_review_vote_hints ?? [],
     isSaving,
     saveError,
     save,

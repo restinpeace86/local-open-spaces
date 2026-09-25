@@ -2,7 +2,14 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { resizeImageForStorage } from '@/lib/images/resize-for-storage';
 import { fetchWithTimeout } from '@/lib/http/fetch-with-timeout';
-import { extractNaverPlaceId, buildNaverPlaceUrls, extractNaverPlaceCrawlResult, formatMenuText } from '@/lib/admin/naver-place-crawler';
+import {
+  extractNaverPlaceId,
+  buildNaverPlaceUrls,
+  buildNaverPlaceReviewUrl,
+  extractNaverPlaceCrawlResult,
+  extractNaverPlaceReviewVoteHints,
+  formatMenuText,
+} from '@/lib/admin/naver-place-crawler';
 
 // [관리자 페이지 스팟 큐레이션 URL 크롤링 기능](2026-09-18 사용자 지시): "네이버 플레이스
 // 주소 입력 → [데이터 가져오기] → 영업시간/메뉴/기본정보/뱃지/대표이미지 자동 채움" —
@@ -77,7 +84,12 @@ export async function POST(request: NextRequest) {
     }
 
     const { homeUrl, menuUrl } = buildNaverPlaceUrls(placeId);
-    const [homeHtml, menuHtml] = await Promise.all([fetchHtmlOrNull(homeUrl), fetchHtmlOrNull(menuUrl)]);
+    const reviewUrl = buildNaverPlaceReviewUrl(placeId);
+    const [homeHtml, menuHtml, reviewHtml] = await Promise.all([
+      fetchHtmlOrNull(homeUrl),
+      fetchHtmlOrNull(menuUrl),
+      fetchHtmlOrNull(reviewUrl),
+    ]);
 
     if (!homeHtml && !menuHtml) {
       return NextResponse.json(
@@ -88,6 +100,11 @@ export async function POST(request: NextRequest) {
 
     const result = extractNaverPlaceCrawlResult(placeId, homeHtml, menuHtml);
     const imageUrl = result.representativeImageUrl ? await rehostImage(result.representativeImageUrl) : null;
+    // [찜질방/스파 뱃지 — 네이버 리뷰 투표 근거](2026-09-26 사용자 지시): 리뷰 페이지
+    // 조회가 실패해도(느린 응답, 페이지 구조 변경 등) 나머지 크롤링 결과는 그대로
+    // 반환한다 — 무중단 원칙(제5장 제11조), extractNaverPlaceReviewVoteHints는
+    // html이 null이면 빈 배열을 반환하므로 별도 분기 불필요.
+    const badgeVoteHints = extractNaverPlaceReviewVoteHints(reviewHtml);
 
     return NextResponse.json({
       placeId: result.placeId,
@@ -105,6 +122,7 @@ export async function POST(request: NextRequest) {
       businessHourDays: result.businessHourDays,
       menuText: formatMenuText(result.menuItems),
       imageUrl,
+      badgeVoteHints,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : '네이버 플레이스 크롤링 실패';

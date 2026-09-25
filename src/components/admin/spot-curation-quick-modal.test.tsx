@@ -57,6 +57,7 @@ describe('SpotCurationQuickModal — 노출 이름 변경 알림(2026-09-20)', (
         spotDisplayName={null}
         spotNaverPlaceId={null}
         spotAddress={null}
+        spotCategoryMin={null}
         onClose={vi.fn()}
         onSaved={vi.fn()}
         onDisplayNameUpdated={onDisplayNameUpdated}

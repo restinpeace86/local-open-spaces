@@ -3,12 +3,14 @@ import {
   extractNaverPlaceId,
   buildNaverPlaceUrls,
   buildNaverPlaceFeedUrl,
+  buildNaverPlaceReviewUrl,
   denormalizeApolloValue,
   parseApolloState,
   formatBusinessHoursText,
   formatMenuText,
   extractNaverPlaceCrawlResult,
   extractNaverPlaceFeedItems,
+  extractNaverPlaceReviewVoteHints,
   type NaverPlaceBusinessHourDay,
 } from './naver-place-crawler';
 
@@ -412,5 +414,113 @@ describe('extractNaverPlaceFeedItems', () => {
 
   it('html이 null이면 빈 배열을 반환한다', () => {
     expect(extractNaverPlaceFeedItems(null)).toEqual([]);
+  });
+});
+
+describe('buildNaverPlaceReviewUrl', () => {
+  it('placeId로 방문자 리뷰 URL을 만든다', () => {
+    expect(buildNaverPlaceReviewUrl('1683390650')).toBe('https://pcmap.place.naver.com/restaurant/1683390650/review/visitor');
+  });
+});
+
+// [찜질방/스파 뱃지 — 네이버 리뷰 투표 근거](2026-09-26 사용자 지시): 실측 스키마
+// (어뮤즈스파&피트니스 남악점, naver_place_id 1683390650, VisitorReviewStatsResult
+// 엔티티) 그대로의 픽스처로 검증한다 — 사용자가 직접 페이지 소스에서 붙여넣어 확인한
+// 실제 코드/득표수 값이다.
+describe('extractNaverPlaceReviewVoteHints', () => {
+  function toReviewHtml(state: Record<string, unknown>): string {
+    return `<script>window.__APOLLO_STATE__ = ${JSON.stringify(state)};window.__OTHER__ = {};</script>`;
+  }
+
+  function makeDetail(code: string, displayName: string, count: number) {
+    return { __typename: 'VisitorReviewStatsAnalysisVoteKeywordDetail', category: null, code, displayName, count, previousRank: null };
+  }
+
+  it('구체적인 뱃지 매핑 코드만, 10건 이상인 것만, 득표수 내림차순 순위와 함께 뽑는다', () => {
+    const state = {
+      'VisitorReviewStatsResult:1683390650': {
+        __typename: 'VisitorReviewStatsResult',
+        id: '1683390650',
+        analysis: {
+          __typename: 'VisitorReviewStatsAnalysis',
+          themes: [],
+          menus: [],
+          votedKeyword: {
+            __typename: 'VisitorReviewStatsAnalysisVoteKeyword',
+            totalCount: 3912,
+            reviewCount: 1314,
+            userCount: 1032,
+            details: [
+              makeDetail('facility_good', '시설이 깔끔해요', 881), // 뱃지 매핑 없음 — 제외
+              makeDetail('rest_area', '휴게공간이 잘 되어있어요', 512), // 뭉뚱그려진 코드 — 제외
+              makeDetail('kind', '친절해요', 331), // 뱃지 매핑 없음 — 제외
+              makeDetail('parking_easy', '주차하기 편해요', 302),
+              makeDetail('water_quality', '수질 관리가 잘돼요', 301),
+              makeDetail('baths_various', '탕 종류가 다양해요', 149),
+              makeDetail('baths_various_heart', '탕 종류가 다양해요', 88),
+              makeDetail('sleeping_room', '수면실이 잘 되어있어요', 25),
+              makeDetail('shower_good', '샤워실이 잘 되어있어요', 23),
+              makeDetail('saunas_unique', '특이한 찜질방이 있어요', 14),
+              makeDetail('outdoor_bath', '노천탕이 잘 되어있어요', 10),
+              makeDetail('scrubber_good', '세신사의 실력이 좋아요', 10),
+              makeDetail('gxprograms_var', 'GX프로그램이 다양해요', 1), // 10건 미만 — 제외
+            ],
+          },
+        },
+        visitorReviewsTotal: 1388,
+        ratingReviewsTotal: 429,
+        apolloCacheId: null,
+      },
+    };
+
+    const hints = extractNaverPlaceReviewVoteHints(toReviewHtml(state));
+    expect(hints).toEqual([
+      { code: 'parking_easy', badgeKey: 'jj_parking', displayName: '주차하기 편해요', count: 302, rank: 4 },
+      { code: 'water_quality', badgeKey: 'jj_water_quality', displayName: '수질 관리가 잘돼요', count: 301, rank: 5 },
+      { code: 'baths_various', badgeKey: 'jj_various_baths', displayName: '탕 종류가 다양해요', count: 149, rank: 6 },
+      { code: 'baths_various_heart', badgeKey: 'jj_various_baths', displayName: '탕 종류가 다양해요', count: 88, rank: 7 },
+      { code: 'sleeping_room', badgeKey: 'jj_sleeping_room', displayName: '수면실이 잘 되어있어요', count: 25, rank: 8 },
+      { code: 'shower_good', badgeKey: 'jj_shower', displayName: '샤워실이 잘 되어있어요', count: 23, rank: 9 },
+      { code: 'saunas_unique', badgeKey: 'jj_unique_room', displayName: '특이한 찜질방이 있어요', count: 14, rank: 10 },
+      { code: 'outdoor_bath', badgeKey: 'jj_outdoor_bath', displayName: '노천탕이 잘 되어있어요', count: 10, rank: 11 },
+      { code: 'scrubber_good', badgeKey: 'jj_scrubber', displayName: '세신사의 실력이 좋아요', count: 10, rank: 12 },
+    ]);
+  });
+
+  it('API 응답 순서가 득표수 순이 아니어도 직접 정렬해 순위를 계산한다', () => {
+    const state = {
+      'VisitorReviewStatsResult:123': {
+        __typename: 'VisitorReviewStatsResult',
+        id: '123',
+        analysis: {
+          __typename: 'VisitorReviewStatsAnalysis',
+          themes: [],
+          menus: [],
+          votedKeyword: {
+            __typename: 'VisitorReviewStatsAnalysisVoteKeyword',
+            totalCount: 100,
+            reviewCount: 50,
+            userCount: 40,
+            details: [makeDetail('outdoor_bath', '노천탕이 잘 되어있어요', 10), makeDetail('parking_easy', '주차하기 편해요', 50)],
+          },
+        },
+      },
+    };
+    const hints = extractNaverPlaceReviewVoteHints(toReviewHtml(state));
+    expect(hints.map((h) => h.code)).toEqual(['parking_easy', 'outdoor_bath']);
+    expect(hints[0].rank).toBe(1);
+    expect(hints[1].rank).toBe(2);
+  });
+
+  it('VisitorReviewStatsResult 엔티티가 없으면 빈 배열을 반환한다', () => {
+    expect(extractNaverPlaceReviewVoteHints(toReviewHtml({}))).toEqual([]);
+  });
+
+  it('__APOLLO_STATE__를 찾을 수 없으면 빈 배열을 반환한다', () => {
+    expect(extractNaverPlaceReviewVoteHints('<html></html>')).toEqual([]);
+  });
+
+  it('html이 null이면 빈 배열을 반환한다', () => {
+    expect(extractNaverPlaceReviewVoteHints(null)).toEqual([]);
   });
 });

@@ -1211,6 +1211,7 @@ export type Database = {
           menu_items: Json
           min_age_recommended: number
           naver_booking_url: string | null
+          naver_review_vote_hints: Json | null
           open_time: string | null
           operating_hours_by_day: Json | null
           operating_hours_raw: string | null
@@ -1237,6 +1238,7 @@ export type Database = {
           menu_items?: Json
           min_age_recommended?: number
           naver_booking_url?: string | null
+          naver_review_vote_hints?: Json | null
           open_time?: string | null
           operating_hours_by_day?: Json | null
           operating_hours_raw?: string | null
@@ -1263,6 +1265,7 @@ export type Database = {
           menu_items?: Json
           min_age_recommended?: number
           naver_booking_url?: string | null
+          naver_review_vote_hints?: Json | null
           open_time?: string | null
           operating_hours_by_day?: Json | null
           operating_hours_raw?: string | null

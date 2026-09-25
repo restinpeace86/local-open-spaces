@@ -40,6 +40,9 @@ type SpotCurationRow = {
   // [동적 연령 추천 시스템](2026-09-10 사용자 지시, todo.md 개선사항1): 이 스팟을
   // 추천하는 최소 만 나이(0 = 미지정). 관리자가 후기 검수로 채우는 세미오토 값.
   min_age_recommended: number;
+  // [찜질방/스파 뱃지 — 네이버 리뷰 투표 근거](2026-09-26 사용자 지시): 방문자 리뷰
+  // 투표 키워드 중 우리 뱃지와 매칭된 것만 [{code, badgeKey, displayName, count, rank}].
+  naver_review_vote_hints: unknown;
   created_at: string;
   updated_at: string;
   open_spaces: {
@@ -48,6 +51,9 @@ type SpotCurationRow = {
     address: string | null;
     category: string;
     naver_place_id: string | null;
+    // [표준중분류 기준 뱃지 연결](2026-09-26 사용자 지시): 노출중분류 없이도
+    // category_min만으로 뱃지 세트를 고를 수 있게 함께 내려준다.
+    category_min: string | null;
   } | null;
 };
 
@@ -58,6 +64,16 @@ function normalizeUrl(value: unknown): string | null {
 
 function normalizeBadges(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
+}
+
+// [찜질방/스파 뱃지 — 네이버 리뷰 투표 근거](2026-09-26 사용자 지시): 형태를
+// 엄격히 검증하지는 않는다(스팟 큐레이션 크롤링 화면이 만든 값을 그대로 저장하는
+// 참고용 데이터라, 필수 입력 값처럼 엄격히 막을 이유가 없다 — 잘못된 모양이 와도
+// 화면 표시만 이상해질 뿐 다른 데이터에 영향 없음). 배열이 아니면 빈 배열로 저장.
+// Supabase의 Json 컬럼 타입과 맞추기 위해 값을 string|number 필드만 있는 평평한
+// 객체 배열로 취급한다(실제 모양: {code, badgeKey, displayName, count, rank}).
+function normalizeVoteHints(value: unknown): Array<Record<string, string | number>> {
+  return Array.isArray(value) ? (value as Array<Record<string, string | number>>) : [];
 }
 
 // [가격 및 입장료 스마트 파싱](2026-09-08 개선사항1-3): 숫자가 아니거나 없으면
@@ -82,7 +98,7 @@ export async function GET(request: NextRequest) {
     if (spotId) {
       const { data, error } = await admin
         .from('spot_curations')
-        .select('*, open_spaces(name, display_name, address, category, naver_place_id)')
+        .select('*, open_spaces(name, display_name, address, category, naver_place_id, category_min)')
         .eq('spot_id', spotId)
         .maybeSingle();
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -91,7 +107,7 @@ export async function GET(request: NextRequest) {
 
     let query = admin
       .from('spot_curations')
-      .select('*, open_spaces!inner(name, display_name, address, category, naver_place_id)', { count: 'exact' })
+      .select('*, open_spaces!inner(name, display_name, address, category, naver_place_id, category_min)', { count: 'exact' })
       .order('updated_at', { ascending: false });
 
     // 검색어는 조인된 open_spaces.name/address를 대상으로 한다 — 관리자가 스팟 이름으로
@@ -173,8 +189,9 @@ export async function POST(request: NextRequest) {
         blog_url_3: normalizeUrl(body.blog_url_3),
         curation_badges: normalizeBadges(body.curation_badges),
         min_age_recommended: clampMinAgeRecommended(body.min_age_recommended),
+        naver_review_vote_hints: normalizeVoteHints(body.naver_review_vote_hints),
       })
-      .select('*, open_spaces(name, display_name, address, category, naver_place_id)')
+      .select('*, open_spaces(name, display_name, address, category, naver_place_id, category_min)')
       .single();
 
     if (error) {
@@ -224,6 +241,7 @@ export async function PATCH(request: NextRequest) {
       blog_url_3: string | null;
       curation_badges: string[];
       min_age_recommended: number;
+      naver_review_vote_hints: Array<Record<string, string | number>>;
     }> = { updated_at: new Date().toISOString() };
     if (typeof body.is_active === 'boolean') updates.is_active = body.is_active;
     if ('image_url' in body) updates.image_url = typeof body.image_url === 'string' && body.image_url.trim() ? body.image_url.trim() : null;
@@ -248,6 +266,7 @@ export async function PATCH(request: NextRequest) {
     if ('blog_url_3' in body) updates.blog_url_3 = normalizeUrl(body.blog_url_3);
     if ('curation_badges' in body) updates.curation_badges = normalizeBadges(body.curation_badges);
     if ('min_age_recommended' in body) updates.min_age_recommended = clampMinAgeRecommended(body.min_age_recommended);
+    if ('naver_review_vote_hints' in body) updates.naver_review_vote_hints = normalizeVoteHints(body.naver_review_vote_hints);
 
     if (Object.keys(updates).length === 1) {
       return NextResponse.json({ error: '수정할 필드가 없습니다.' }, { status: 400 });
@@ -258,7 +277,7 @@ export async function PATCH(request: NextRequest) {
       .from('spot_curations')
       .update(updates)
       .eq('id', id)
-      .select('*, open_spaces(name, display_name, address, category, naver_place_id)')
+      .select('*, open_spaces(name, display_name, address, category, naver_place_id, category_min)')
       .single();
 
     if (error) {

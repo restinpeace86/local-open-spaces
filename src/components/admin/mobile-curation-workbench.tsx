@@ -47,6 +47,9 @@ type WorkbenchSpot = {
   // [개선사항 1](2026-09-22 사용자 지시, todo.md): use-spot-curation-form.ts와
   // 동일한 이유 — 있으면 블로그 검색어로 이 값을 쓴다.
   display_name?: string | null;
+  // [표준중분류 기준 뱃지 연결](2026-09-26 사용자 지시): use-spot-curation-form.ts와
+  // 동일한 이유 — 노출중분류가 아직 없어도 category_min만으로 뱃지 세트를 고른다.
+  category_min?: string | null;
 };
 
 export function MobileCurationWorkbench({
@@ -284,6 +287,7 @@ export function MobileCurationWorkbench({
             selectedBadges={form.selectedBadges}
             savedBadgeKeys={form.savedBadgeKeys}
             onToggleBadge={form.toggleBadge}
+            voteHints={form.voteHints}
             minAgeRecommended={form.minAgeRecommended}
             onMinAgeChange={form.setMinAgeRecommended}
             ageSuggestion={form.ageSuggestion}

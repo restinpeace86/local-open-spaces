@@ -1297,6 +1297,9 @@ export function RawDataModal({
             // "노출 이름 수동 수정"/네이버 플레이스 크롤링으로 갱신된 display_name이
             // 있으면 그걸로 검색해야 한다.
             display_name: (row as AdminOpenSpaceRow).display_name,
+            // [표준중분류 기준 뱃지 연결](2026-09-26 사용자 지시): 노출중분류가
+            // 아직 없어도 category_min만으로 뱃지 세트를 고를 수 있게 넘긴다.
+            category_min: (row as AdminOpenSpaceRow).category_min,
           }}
           serviceCategories={serviceCategories}
           onClose={() => setIsBlogCurationModalOpen(false)}
@@ -1346,6 +1349,7 @@ export function RawDataModal({
           spotDisplayName={(row as AdminOpenSpaceRow).display_name}
           spotNaverPlaceId={(row as AdminOpenSpaceRow).naver_place_id}
           spotAddress={(row as AdminOpenSpaceRow).address}
+          spotCategoryMin={(row as AdminOpenSpaceRow).category_min}
           onClose={() => setIsSpotCurationModalOpen(false)}
           onSaved={() => setIsSpotCurationModalOpen(false)}
           onDisplayNameUpdated={onDisplayNameUpdated}
