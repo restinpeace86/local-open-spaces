@@ -2,12 +2,17 @@ import { createClient } from '@/lib/supabase/server';
 import { todayKstDateString } from '@/lib/partner/date';
 import { DailyDateNav } from '@/components/partner/daily-date-nav';
 import { BookingCard } from '@/components/partner/booking-card';
+import { DailyTimelineStrip } from '@/components/partner/daily-timeline-strip';
 import { AddBookingFab, AddBookingProduct } from '@/components/partner/add-booking-fab';
 
 // [나드리픽 파트너 PMS — 일간 뷰](2026-09-20 사용자 지시, docs/partner_spec.md 5절):
 // "[⏰ 오늘(일간)] (기본 홈 디폴트: 시간대별 타임스케줄)". Phase 1 스텁을 실제 데이터
 // 조회 화면으로 교체한다. Next.js 16 규칙상 searchParams는 Promise다(이 코드베이스
 // 최초의 searchParams 사용 — 기존 전례 없음, 프레임워크 규칙을 그대로 따름).
+// [타임라인 추가](2026-09-25 사용자 지시): "단순히 리스트로 보여지면 뭔가 매력이
+// 부족" → "기존 기능 안버리면서 한눈에 보는 느낌" — 위 v1 스펙이 원래 의도했던
+// "시간대별 타임스케줄"을 DailyTimelineStrip으로 보완한다. 기존 BookingCard
+// 리스트는 그대로 두고(임의 UI 변경 금지, 제5장 제2조) 그 위에 추가만 한다.
 //
 // [RLS로 데이터 격리](요구사항 2): service_role이 아닌 세션 기반 클라이언트를 써서
 // bookings_select_own(auth.uid() = partner_id) 정책이 그대로 작동하게 한다 — 이 쿼리는
@@ -37,17 +42,22 @@ export default async function PartnerTodayPage({ searchParams }: { searchParams:
       .select('id, customer_name, customer_phone, booking_time, headcount, source, status, memo, product_name, total_price')
       .eq('booking_date', date)
       .order('booking_time', { ascending: true }),
-    supabase.from('partner_products').select('id, name, price, pricing_unit').order('created_at', { ascending: true }),
+    supabase.from('partner_products').select('id, name, price, pricing_unit, time_mode').order('created_at', { ascending: true }),
   ]);
 
   return (
     <div className="flex flex-col">
       <DailyDateNav date={date} todayDate={todayDate} />
+      {bookings && bookings.length > 0 && <DailyTimelineStrip bookings={bookings} />}
       <div className="flex flex-col gap-3 p-4">
         {!bookings || bookings.length === 0 ? (
           <p className="py-10 text-center text-sm text-gray-400">이 날짜에 예약된 일정이 없어요.</p>
         ) : (
-          bookings.map((booking) => <BookingCard key={booking.id} booking={booking} />)
+          bookings.map((booking) => (
+            <div key={booking.id} id={`booking-${booking.id}`}>
+              <BookingCard booking={booking} />
+            </div>
+          ))
         )}
       </div>
       {/* [수기 예약 등록](2026-09-20 사용자 지시): 기본 날짜는 "일간 뷰에서 현재

@@ -295,6 +295,16 @@ alter table public.partners
 > 추가한다(`OnboardingForm`/`submitPartnerOnboarding`의 다른 필수 필드와
 > 동일하게 처리).
 
+> **구현 완료(2026-09-25)**: 아래 `product_sessions` 테이블(단, `status` 컬럼은
+> 이번 구현 범위에 넣지 않음 — 관리 UI 없이 컬럼만 두면 죽은 컬럼이라 제5장
+> 제4조 취지에 맞지 않아 뺐다), `partner_products.time_mode`(이 스펙 최초
+> 작성 시점에는 없던 필드 — "상품에 대하여 시간도 세팅가능하게 하는건?"
+> 사용자 지시로 이번에 추가됨, free/session 중 선택), `bookings.session_id`만
+> 먼저 구현했다(`scripts/migrations/2026-09-26-partner-product-sessions.sql`).
+> `age_breakdown`/`deposit_due_at`/`reminder_sent_at`/`status` CHECK 확장/
+> `source` CHECK 확장(4.4)과 `age_options`(4.5)는 이번 구현 범위 밖(별도 논의
+> 필요, 아래 표에서도 그대로 "예정"으로 남겨둔다).
+
 ### 4.3 `product_sessions` (신규)
 ```sql
 create table public.product_sessions (

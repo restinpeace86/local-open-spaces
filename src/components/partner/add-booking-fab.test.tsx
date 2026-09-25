@@ -4,17 +4,23 @@ import { AddBookingFab, AddBookingProduct } from './add-booking-fab';
 
 const createBookingMock = vi.fn();
 const refreshMock = vi.fn();
+const listAvailableSessionsMock = vi.fn();
 
 vi.mock('@/actions/partner/bookings', () => ({
   createBooking: (input: unknown) => createBookingMock(input),
+}));
+
+vi.mock('@/actions/partner/sessions', () => ({
+  listAvailableSessionsForProduct: (productId: string) => listAvailableSessionsMock(productId),
 }));
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ refresh: refreshMock }),
 }));
 
-const FLAT_PRODUCT: AddBookingProduct = { id: 'p1', name: '캠핑사이트 A형', price: 50000, pricing_unit: 'flat' };
-const PER_PERSON_PRODUCT: AddBookingProduct = { id: 'p2', name: '입장권', price: 15000, pricing_unit: 'per_person' };
+const FLAT_PRODUCT: AddBookingProduct = { id: 'p1', name: '캠핑사이트 A형', price: 50000, pricing_unit: 'flat', time_mode: 'free' };
+const PER_PERSON_PRODUCT: AddBookingProduct = { id: 'p2', name: '입장권', price: 15000, pricing_unit: 'per_person', time_mode: 'free' };
+const SESSION_PRODUCT: AddBookingProduct = { id: 'p3', name: '체험 클래스', price: 30000, pricing_unit: 'per_person', time_mode: 'session' };
 
 // [나드리픽 파트너 PMS — 수기 예약 등록](2026-09-20 사용자 지시): FAB 클릭으로
 // 시트가 열리고, 기본 날짜가 프리필되며, 제출 시 createBooking을 올바른 값으로
@@ -28,6 +34,7 @@ describe('AddBookingFab', () => {
   afterEach(() => {
     createBookingMock.mockReset();
     refreshMock.mockReset();
+    listAvailableSessionsMock.mockReset();
   });
 
   function openSheet(products?: AddBookingProduct[]) {
@@ -121,6 +128,7 @@ describe('AddBookingFab', () => {
         customer_phone: '010-1234-5678',
         booking_date: '2026-09-20',
         booking_time: '00:00',
+        session_id: null,
         headcount: 1,
         memo: null,
         product_name: null,
@@ -188,5 +196,71 @@ describe('AddBookingFab', () => {
     expect(await screen.findAllByText('예약자명을 입력해 주세요.')).toHaveLength(2);
     expect(screen.getByText('예약 추가')).toBeInTheDocument();
     expect(refreshMock).not.toHaveBeenCalled();
+  });
+
+  // [고정 회차 선택](2026-09-25 사용자 지시): "상품에 대하여 시간도 세팅가능하게
+  // 하는건?" → "이 방식으로 구현들어가고" — time_mode='session' 상품을 고르면
+  // 자유 날짜/시간 입력 대신 회차를 선택하고, 잔여석이 없는 회차는 고를 수 없다.
+  describe('고정 회차 상품', () => {
+    it('회차 상품을 선택하면 자유 날짜/시간 입력이 사라지고 회차 목록을 보여준다', async () => {
+      listAvailableSessionsMock.mockResolvedValue({
+        success: true,
+        sessions: [
+          { id: 's1', session_date: '2026-10-01', start_time: '10:00:00', end_time: '11:00:00', capacity: 5, remaining: 3 },
+          { id: 's2', session_date: '2026-10-01', start_time: '14:00:00', end_time: '15:00:00', capacity: 2, remaining: 0 },
+        ],
+      });
+      openSheet([SESSION_PRODUCT]);
+
+      fireEvent.change(screen.getByLabelText('상품명(선택)'), { target: { value: 'p3' } });
+
+      await waitFor(() => expect(listAvailableSessionsMock).toHaveBeenCalledWith('p3'));
+      expect(screen.queryByLabelText('예약 날짜')).not.toBeInTheDocument();
+      expect(await screen.findByText('잔여 3명')).toBeInTheDocument();
+      expect(screen.getByText('마감')).toBeInTheDocument();
+    });
+
+    it('회차를 고르지 않고 제출하면 에러를 보여주고 createBooking을 호출하지 않는다', async () => {
+      listAvailableSessionsMock.mockResolvedValue({
+        success: true,
+        sessions: [{ id: 's1', session_date: '2026-10-01', start_time: '10:00:00', end_time: null, capacity: 5, remaining: 3 }],
+      });
+      openSheet([SESSION_PRODUCT]);
+
+      fireEvent.change(screen.getByLabelText('상품명(선택)'), { target: { value: 'p3' } });
+      await screen.findByText('잔여 3명');
+
+      const nameInput = document.querySelector('input[type="text"]') as HTMLInputElement;
+      fireEvent.change(nameInput, { target: { value: '김손님' } });
+      fireEvent.change(screen.getByPlaceholderText('010-0000-0000'), { target: { value: '01012345678' } });
+      fireEvent.click(screen.getByText('예약 등록'));
+
+      expect(await screen.findByText('회차를 선택해 주세요.')).toBeInTheDocument();
+      expect(createBookingMock).not.toHaveBeenCalled();
+    });
+
+    it('회차를 골라 제출하면 session_id를 채우고 booking_date/booking_time은 null로 보낸다', async () => {
+      listAvailableSessionsMock.mockResolvedValue({
+        success: true,
+        sessions: [{ id: 's1', session_date: '2026-10-01', start_time: '10:00:00', end_time: null, capacity: 5, remaining: 3 }],
+      });
+      createBookingMock.mockResolvedValue({ success: true });
+      openSheet([SESSION_PRODUCT]);
+
+      fireEvent.change(screen.getByLabelText('상품명(선택)'), { target: { value: 'p3' } });
+      await screen.findByText('잔여 3명');
+      fireEvent.click(screen.getByLabelText(/2026-10-01 10:00/));
+
+      const nameInput = document.querySelector('input[type="text"]') as HTMLInputElement;
+      fireEvent.change(nameInput, { target: { value: '김손님' } });
+      fireEvent.change(screen.getByPlaceholderText('010-0000-0000'), { target: { value: '01012345678' } });
+      fireEvent.click(screen.getByText('예약 등록'));
+
+      await waitFor(() =>
+        expect(createBookingMock).toHaveBeenCalledWith(
+          expect.objectContaining({ session_id: 's1', booking_date: null, booking_time: null })
+        )
+      );
+    });
   });
 });

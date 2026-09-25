@@ -11,7 +11,7 @@ export default async function PartnerProductsPage() {
   const supabase = await createClient();
   const { data: products } = await supabase
     .from('partner_products')
-    .select('id, name, price, pricing_unit')
+    .select('id, name, price, pricing_unit, time_mode')
     .order('created_at', { ascending: true });
 
   return (

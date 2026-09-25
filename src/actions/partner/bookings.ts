@@ -44,8 +44,14 @@ export async function updateBookingStatus(bookingId: string, status: BookingStat
 export type CreateBookingInput = {
   customer_name: string;
   customer_phone: string;
-  booking_date: string; // "YYYY-MM-DD"
-  booking_time: string; // "HH:MM"
+  // [session_id 추가](2026-09-25 사용자 지시): "상품에 대하여 시간도 세팅가능하게
+  // 하는건?" — time_mode='session' 상품을 고르면 booking_date/booking_time을
+  // 자유 입력하지 않고 회차(session_id)를 선택한다. 둘 중 하나만 채워진다
+  // (session_id가 있으면 booking_date/booking_time은 무시하고 회차에서 그대로
+  // 가져온다) — free 모드는 기존과 동일하게 booking_date/booking_time을 쓴다.
+  booking_date: string | null; // "YYYY-MM-DD", free 모드에서만 사용
+  booking_time: string | null; // "HH:MM", free 모드에서만 사용
+  session_id: string | null; // session 모드에서만 사용
   headcount: number;
   memo: string | null;
   // [2026-09-21 필드 확장] 네이버 예약 표준 매핑에 맞춰 추가 — 둘 다 선택 입력
@@ -74,11 +80,17 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
   if (!PHONE_FORMAT_REGEX.test(input.customer_phone.trim())) {
     return { error: '연락처 형식이 올바르지 않아요. 010-0000-0000 형식으로 입력해 주세요.' };
   }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(input.booking_date)) return { error: '예약 날짜를 선택해 주세요.' };
-  if (!/^\d{2}:\d{2}$/.test(input.booking_time)) return { error: '예약 시간을 선택해 주세요.' };
   if (!Number.isInteger(input.headcount) || input.headcount < 1) return { error: '방문 인원은 1명 이상이어야 합니다.' };
   if (input.total_price != null && (!Number.isInteger(input.total_price) || input.total_price < 0)) {
     return { error: '결제 금액은 0 이상의 숫자로 입력해 주세요.' };
+  }
+  // [회차 예약 시 형식 검증 순서](2026-09-25 사용자 지시 반영): free 모드의 날짜/시간
+  // 형식 검증은 로그인 확인보다 먼저 한다(기존 검증 순서 유지) — session 모드는
+  // 날짜/시간을 회차에서 가져오므로 여기서 검증하지 않고 로그인 이후 회차 조회
+  // 단계에서 존재 여부를 확인한다.
+  if (!input.session_id) {
+    if (!input.booking_date || !/^\d{4}-\d{2}-\d{2}$/.test(input.booking_date)) return { error: '예약 날짜를 선택해 주세요.' };
+    if (!input.booking_time || !/^\d{2}:\d{2}$/.test(input.booking_time)) return { error: '예약 시간을 선택해 주세요.' };
   }
 
   const supabase = await createClient();
@@ -87,14 +99,52 @@ export async function createBooking(input: CreateBookingInput): Promise<CreateBo
   } = await supabase.auth.getUser();
   if (!user) return { error: '로그인이 필요합니다.' };
 
+  let bookingDate: string;
+  let bookingTime: string;
+
+  if (input.session_id) {
+    // [회차 예약](2026-09-25 사용자 지시): time_mode='session' 상품은 선택된 회차의
+    // 날짜/시작 시간을 그대로 booking_date/booking_time으로 채운다 — BookingCard/
+    // today 페이지의 리스트 정렬·표시 로직이 이 두 컬럼만 보고 동작하므로, 회차를
+    // 도입해도 기존 화면 코드를 전혀 바꾸지 않아도 된다(제5장 제4조 기존 구조 우선).
+    const { data: session, error: sessionError } = await supabase
+      .from('product_sessions')
+      .select('session_date, start_time, capacity')
+      .eq('id', input.session_id)
+      .single();
+    if (sessionError || !session) return { error: '선택한 회차를 찾을 수 없어요.' };
+
+    // [정원 검증](2026-09-25 사용자 지시 반영): 예약 등록 폼을 열어둔 사이 다른
+    // 예약이 먼저 들어와 정원이 찼을 수 있어, 저장 직전에 서버에서 다시 확인한다
+    // — UI가 미리 보여준 잔여석은 참고용이고 최종 검증은 여기서 한다.
+    const { data: bookedRows, error: bookedError } = await supabase
+      .from('bookings')
+      .select('headcount')
+      .eq('session_id', input.session_id)
+      .neq('status', 'cancelled');
+    if (bookedError) return { error: bookedError.message };
+    const booked = (bookedRows ?? []).reduce((sum, row) => sum + row.headcount, 0);
+    if (booked + input.headcount > session.capacity) {
+      return { error: `이 회차는 ${Math.max(session.capacity - booked, 0)}자리만 남아 있어요.` };
+    }
+
+    bookingDate = session.session_date;
+    bookingTime = session.start_time;
+  } else {
+    // input.booking_date/booking_time 형식은 위에서 이미 검증했다.
+    bookingDate = input.booking_date as string;
+    bookingTime = `${input.booking_time}:00`;
+  }
+
   const { error } = await supabase.from('bookings').insert({
     // [멀티 테넌시](spec.md 4절): "세션의 auth.uid()를 추출하여 partner_id로 자동
     // 주입" — 클라이언트가 partner_id를 보낼 수 없게 애초에 입력 타입에서 뺐다.
     partner_id: user.id,
     customer_name: input.customer_name.trim(),
     customer_phone: input.customer_phone.trim(),
-    booking_date: input.booking_date,
-    booking_time: `${input.booking_time}:00`,
+    booking_date: bookingDate,
+    booking_time: bookingTime,
+    session_id: input.session_id,
     headcount: input.headcount,
     source: 'manual',
     status: 'confirmed',

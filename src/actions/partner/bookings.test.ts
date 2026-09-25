@@ -7,7 +7,21 @@ const updateMock = vi.fn(() => ({ eq: eqMock }));
 const insertMock = vi.fn();
 const deleteEqMock = vi.fn();
 const deleteMock = vi.fn(() => ({ eq: deleteEqMock }));
-const fromMock = vi.fn(() => ({ update: updateMock, insert: insertMock, delete: deleteMock }));
+
+// [회차 예약](2026-09-25 사용자 지시): session_id가 있으면 product_sessions에서
+// 회차를 조회하고(select().eq().single()), bookings에서 정원 검증용 예약 합계를
+// 조회한다(select().eq().neq()) — 두 조회 모두 fromMock이 테이블명으로 분기한다.
+const sessionSingleMock = vi.fn();
+const sessionEqMock = vi.fn(() => ({ single: sessionSingleMock }));
+const sessionSelectMock = vi.fn(() => ({ eq: sessionEqMock }));
+const bookedNeqMock = vi.fn();
+const bookedEqMock = vi.fn(() => ({ neq: bookedNeqMock }));
+const bookedSelectMock = vi.fn(() => ({ eq: bookedEqMock }));
+
+const fromMock = vi.fn((table: string) => {
+  if (table === 'product_sessions') return { select: sessionSelectMock };
+  return { update: updateMock, insert: insertMock, delete: deleteMock, select: bookedSelectMock };
+});
 const revalidatePathMock = vi.fn();
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -70,6 +84,7 @@ const VALID_BOOKING_INPUT = {
   customer_phone: '010-1234-5678',
   booking_date: '2026-09-20',
   booking_time: '14:30',
+  session_id: null,
   headcount: 4,
   memo: '유모차 있어요',
   product_name: null,
@@ -86,6 +101,12 @@ describe('createBooking', () => {
     insertMock.mockReset();
     fromMock.mockClear();
     revalidatePathMock.mockReset();
+    sessionSingleMock.mockReset();
+    sessionEqMock.mockClear();
+    sessionSelectMock.mockClear();
+    bookedNeqMock.mockReset();
+    bookedEqMock.mockClear();
+    bookedSelectMock.mockClear();
   });
 
   it.each([
@@ -125,6 +146,7 @@ describe('createBooking', () => {
       customer_phone: '010-1234-5678',
       booking_date: '2026-09-20',
       booking_time: '14:30:00',
+      session_id: null,
       headcount: 4,
       source: 'manual',
       status: 'confirmed',
@@ -165,6 +187,69 @@ describe('createBooking', () => {
     const result = await createBooking(VALID_BOOKING_INPUT);
     expect(result).toEqual({ error: 'DB 오류' });
     expect(revalidatePathMock).not.toHaveBeenCalled();
+  });
+});
+
+// [회차 예약](2026-09-25 사용자 지시): "상품에 대하여 시간도 세팅가능하게 하는건?" →
+// "이 방식으로 구현들어가고" — session_id가 있으면 회차의 날짜/시작 시간을 그대로
+// booking_date/booking_time으로 채우고, 저장 직전에 정원을 다시 검증한다.
+describe('createBooking (회차 예약)', () => {
+  const SESSION_BOOKING_INPUT = {
+    ...VALID_BOOKING_INPUT,
+    booking_date: null,
+    booking_time: null,
+    session_id: 'session-1',
+  };
+
+  afterEach(() => {
+    getUserMock.mockReset();
+    insertMock.mockReset();
+    fromMock.mockClear();
+    revalidatePathMock.mockReset();
+    sessionSingleMock.mockReset();
+    sessionEqMock.mockClear();
+    sessionSelectMock.mockClear();
+    bookedNeqMock.mockReset();
+    bookedEqMock.mockClear();
+    bookedSelectMock.mockClear();
+  });
+
+  it('회차를 찾을 수 없으면 에러를 반환한다', async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
+    sessionSingleMock.mockResolvedValue({ data: null, error: { message: 'not found' } });
+
+    const result = await createBooking(SESSION_BOOKING_INPUT);
+    expect(result).toEqual({ error: '선택한 회차를 찾을 수 없어요.' });
+    expect(insertMock).not.toHaveBeenCalled();
+  });
+
+  it('정원을 초과하면 잔여석을 안내하는 에러를 반환한다', async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
+    sessionSingleMock.mockResolvedValue({ data: { session_date: '2026-10-01', start_time: '10:00:00', capacity: 5 }, error: null });
+    bookedNeqMock.mockResolvedValue({ data: [{ headcount: 3 }], error: null });
+
+    // 이미 3명이 예약돼 있고(5명 정원), 이번 예약이 4명이라 3+4=7 > 5로 초과.
+    const result = await createBooking({ ...SESSION_BOOKING_INPUT, headcount: 4 });
+    expect(result).toEqual({ error: '이 회차는 2자리만 남아 있어요.' });
+    expect(insertMock).not.toHaveBeenCalled();
+  });
+
+  it('정원 안이면 회차의 날짜/시작 시간으로 booking_date/booking_time을 채워 insert한다', async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
+    sessionSingleMock.mockResolvedValue({ data: { session_date: '2026-10-01', start_time: '10:00:00', capacity: 5 }, error: null });
+    bookedNeqMock.mockResolvedValue({ data: [{ headcount: 1 }], error: null });
+    insertMock.mockResolvedValue({ error: null });
+
+    const result = await createBooking(SESSION_BOOKING_INPUT);
+
+    expect(result).toEqual({ success: true });
+    expect(insertMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        booking_date: '2026-10-01',
+        booking_time: '10:00:00',
+        session_id: 'session-1',
+      })
+    );
   });
 });
 

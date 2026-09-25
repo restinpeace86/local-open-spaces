@@ -18,7 +18,7 @@ vi.mock('next/cache', () => ({
   revalidatePath: (path: string) => revalidatePathMock(path),
 }));
 
-const VALID_INPUT = { name: '캠핑사이트 A형', price: 50000, pricing_unit: 'flat' as const };
+const VALID_INPUT = { name: '캠핑사이트 A형', price: 50000, pricing_unit: 'flat' as const, time_mode: 'free' as const };
 
 function resetAll() {
   getUserMock.mockReset();
@@ -43,6 +43,7 @@ describe('createPartnerProduct', () => {
     ['price(음수)', { ...VALID_INPUT, price: -1 }, '가격은 0 이상의 숫자로 입력해 주세요.'],
     ['price(소수)', { ...VALID_INPUT, price: 100.5 }, '가격은 0 이상의 숫자로 입력해 주세요.'],
     ['pricing_unit(잘못된 값)', { ...VALID_INPUT, pricing_unit: 'weird' as never }, '가격 기준이 올바르지 않습니다.'],
+    ['time_mode(잘못된 값)', { ...VALID_INPUT, time_mode: 'weird' as never }, '시간 세팅 방식이 올바르지 않습니다.'],
   ])('%s가 유효하지 않으면 로그인 확인 없이 검증 에러를 반환한다', async (_field, input, expectedError) => {
     const result = await createPartnerProduct(input);
     expect(result).toEqual({ error: expectedError });
@@ -69,6 +70,7 @@ describe('createPartnerProduct', () => {
       name: '캠핑사이트 A형',
       price: 50000,
       pricing_unit: 'flat',
+      time_mode: 'free',
     });
   });
 
@@ -102,7 +104,7 @@ describe('updatePartnerProduct', () => {
 
     expect(result).toEqual({ success: true });
     expect(fromMock).toHaveBeenCalledWith('partner_products');
-    expect(updateMock).toHaveBeenCalledWith({ name: '캠핑사이트 A형', price: 50000, pricing_unit: 'per_person' });
+    expect(updateMock).toHaveBeenCalledWith({ name: '캠핑사이트 A형', price: 50000, pricing_unit: 'per_person', time_mode: 'free' });
     expect(updateEqMock).toHaveBeenCalledWith('id', 'product-1');
   });
 });

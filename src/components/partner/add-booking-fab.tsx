@@ -1,14 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { createBooking } from '@/actions/partner/bookings';
+import { listAvailableSessionsForProduct, AvailableSession } from '@/actions/partner/sessions';
 import { PricingUnit } from '@/lib/partner/pricing-unit';
+import { TimeMode } from '@/lib/partner/time-mode';
 import { formatPhoneNumber } from '@/lib/partner/format-phone';
 import { formatPriceInput, parsePriceInput } from '@/lib/partner/format-price';
 import { Toast } from '@/components/map/toast';
 
-export type AddBookingProduct = { id: string; name: string; price: number; pricing_unit: PricingUnit };
+export type AddBookingProduct = { id: string; name: string; price: number; pricing_unit: PricingUnit; time_mode: TimeMode };
+
+function formatSessionTime(time: string): string {
+  return time.slice(0, 5);
+}
 
 // 선택된 상품과 인원수로 결제 금액을 계산한다. "팀당"은 인원수와 무관하게 가격
 // 그대로, "인당"은 가격 * 인원수 — 2026-09-23 사용자 지시("상품에 대하여 팀당
@@ -54,8 +60,28 @@ export function AddBookingFab({ defaultDate, products = [] }: { defaultDate: str
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  // [고정 회차 선택](2026-09-25 사용자 지시 반영): time_mode='session' 상품을
+  // 고르면 자유 날짜/시간 입력 대신 미리 등록된 회차 중에서 고른다.
+  const [availableSessions, setAvailableSessions] = useState<AvailableSession[] | null>(null);
+  const [isLoadingSessions, setIsLoadingSessions] = useState(false);
+  const [selectedSessionId, setSelectedSessionId] = useState('');
 
   const selectedProduct = products.find((p) => p.id === selectedProductId);
+  const selectedSession = availableSessions?.find((s) => s.id === selectedSessionId);
+
+  useEffect(() => {
+    if (!selectedProduct || selectedProduct.time_mode !== 'session') {
+      setAvailableSessions(null);
+      setSelectedSessionId('');
+      return;
+    }
+    setIsLoadingSessions(true);
+    setSelectedSessionId('');
+    listAvailableSessionsForProduct(selectedProduct.id).then((result) => {
+      setIsLoadingSessions(false);
+      setAvailableSessions('error' in result ? [] : result.sessions);
+    });
+  }, [selectedProduct]);
 
   function applyComputedPrice(product: AddBookingProduct | undefined, nextHeadcount: number) {
     const computed = computeTotalPrice(product, nextHeadcount);
@@ -84,6 +110,8 @@ export function AddBookingFab({ defaultDate, products = [] }: { defaultDate: str
     setHeadcount(1);
     setMemo('');
     setSelectedProductId('');
+    setSelectedSessionId('');
+    setAvailableSessions(null);
     setTotalPrice('');
     setFormError(null);
   }
@@ -97,14 +125,21 @@ export function AddBookingFab({ defaultDate, products = [] }: { defaultDate: str
     e.preventDefault();
     if (isSubmitting) return;
 
+    const isSessionMode = selectedProduct?.time_mode === 'session';
+    if (isSessionMode && !selectedSessionId) {
+      setFormError('회차를 선택해 주세요.');
+      return;
+    }
+
     setIsSubmitting(true);
     setFormError(null);
     try {
       const result = await createBooking({
         customer_name: customerName,
         customer_phone: customerPhone,
-        booking_date: bookingDate,
-        booking_time: bookingTime,
+        booking_date: isSessionMode ? null : bookingDate,
+        booking_time: isSessionMode ? null : bookingTime,
+        session_id: isSessionMode ? selectedSessionId : null,
         headcount,
         memo: memo || null,
         product_name: selectedProduct?.name ?? null,
@@ -183,34 +218,6 @@ export function AddBookingFab({ defaultDate, products = [] }: { defaultDate: str
                 />
               </label>
 
-              <div className="flex gap-3">
-                <label className="flex flex-1 flex-col gap-1.5 text-sm font-medium text-gray-700">
-                  예약 날짜
-                  <input
-                    type="date"
-                    value={bookingDate}
-                    onChange={(e) => setBookingDate(e.target.value)}
-                    required
-                    className="rounded-xl border border-gray-300 px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  />
-                </label>
-                <label className="flex flex-1 flex-col gap-1.5 text-sm font-medium text-gray-700">
-                  예약 시간
-                  <select
-                    value={bookingTime}
-                    onChange={(e) => setBookingTime(e.target.value)}
-                    required
-                    className="rounded-xl border border-gray-300 px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    {TIME_OPTIONS.map((time) => (
-                      <option key={time} value={time}>
-                        {time}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-
               <label className="flex flex-col gap-1.5 text-sm font-medium text-gray-700">
                 상품명(선택)
                 <select
@@ -223,6 +230,7 @@ export function AddBookingFab({ defaultDate, products = [] }: { defaultDate: str
                     <option key={product.id} value={product.id}>
                       {product.name} ({product.price.toLocaleString('ko-KR')}원
                       {product.pricing_unit === 'per_person' ? '/인' : ''})
+                      {product.time_mode === 'session' ? ' · 고정 회차' : ''}
                     </option>
                   ))}
                 </select>
@@ -232,6 +240,78 @@ export function AddBookingFab({ defaultDate, products = [] }: { defaultDate: str
                   </span>
                 )}
               </label>
+
+              {/* [고정 회차 선택](2026-09-25 사용자 지시 반영): time_mode='session' 상품을
+                  고르면 자유 날짜/시간 입력 대신, 상품 관리에서 미리 등록해 둔 회차 중
+                  잔여 인원이 있는 것만 고를 수 있게 한다. */}
+              {selectedProduct?.time_mode === 'session' ? (
+                <div className="flex flex-col gap-1.5 text-sm font-medium text-gray-700">
+                  회차 선택
+                  {isLoadingSessions ? (
+                    <p className="text-xs text-gray-400">회차를 불러오는 중...</p>
+                  ) : !availableSessions || availableSessions.length === 0 ? (
+                    <p className="text-xs text-gray-400">
+                      선택 가능한 회차가 없어요 — 더보기 &gt; 상품 관리에서 회차를 먼저 등록해 주세요.
+                    </p>
+                  ) : (
+                    <div className="flex flex-col gap-1.5">
+                      {availableSessions.map((session) => {
+                        const isFull = session.remaining <= 0;
+                        return (
+                          <label
+                            key={session.id}
+                            className={`flex items-center justify-between gap-2 rounded-xl border px-3 py-2.5 text-sm ${
+                              isFull ? 'border-gray-100 bg-gray-50 text-gray-400' : 'border-gray-300 text-gray-700'
+                            }`}
+                          >
+                            <span className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                name="session_id"
+                                value={session.id}
+                                checked={selectedSessionId === session.id}
+                                onChange={() => setSelectedSessionId(session.id)}
+                                disabled={isFull}
+                              />
+                              {session.session_date} {formatSessionTime(session.start_time)}
+                              {session.end_time ? `~${formatSessionTime(session.end_time)}` : ''}
+                            </span>
+                            <span className="text-xs">{isFull ? '마감' : `잔여 ${session.remaining}명`}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="flex gap-3">
+                  <label className="flex flex-1 flex-col gap-1.5 text-sm font-medium text-gray-700">
+                    예약 날짜
+                    <input
+                      type="date"
+                      value={bookingDate}
+                      onChange={(e) => setBookingDate(e.target.value)}
+                      required
+                      className="rounded-xl border border-gray-300 px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </label>
+                  <label className="flex flex-1 flex-col gap-1.5 text-sm font-medium text-gray-700">
+                    예약 시간
+                    <select
+                      value={bookingTime}
+                      onChange={(e) => setBookingTime(e.target.value)}
+                      required
+                      className="rounded-xl border border-gray-300 px-3 py-3 text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      {TIME_OPTIONS.map((time) => (
+                        <option key={time} value={time}>
+                          {time}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              )}
 
               <div className="flex flex-col gap-1.5 text-sm font-medium text-gray-700">
                 방문 인원

@@ -85,6 +85,7 @@ export type Database = {
           naver_reservation_id: string | null
           partner_id: string
           product_name: string | null
+          session_id: string | null
           source: string
           status: string
           total_price: number | null
@@ -102,6 +103,7 @@ export type Database = {
           naver_reservation_id?: string | null
           partner_id: string
           product_name?: string | null
+          session_id?: string | null
           source: string
           status?: string
           total_price?: number | null
@@ -119,6 +121,7 @@ export type Database = {
           naver_reservation_id?: string | null
           partner_id?: string
           product_name?: string | null
+          session_id?: string | null
           source?: string
           status?: string
           total_price?: number | null
@@ -130,6 +133,13 @@ export type Database = {
             columns: ["partner_id"]
             isOneToOne: false
             referencedRelation: "partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bookings_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "product_sessions"
             referencedColumns: ["id"]
           },
         ]
@@ -781,6 +791,7 @@ export type Database = {
           partner_id: string
           price: number
           pricing_unit: string
+          time_mode: string
         }
         Insert: {
           created_at?: string
@@ -789,6 +800,7 @@ export type Database = {
           partner_id: string
           price?: number
           pricing_unit?: string
+          time_mode?: string
         }
         Update: {
           created_at?: string
@@ -797,6 +809,7 @@ export type Database = {
           partner_id?: string
           price?: number
           pricing_unit?: string
+          time_mode?: string
         }
         Relationships: [
           {
@@ -919,6 +932,54 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      product_sessions: {
+        Row: {
+          capacity: number
+          created_at: string
+          end_time: string | null
+          id: string
+          partner_id: string
+          product_id: string
+          session_date: string
+          start_time: string
+        }
+        Insert: {
+          capacity: number
+          created_at?: string
+          end_time?: string | null
+          id?: string
+          partner_id: string
+          product_id: string
+          session_date: string
+          start_time: string
+        }
+        Update: {
+          capacity?: number
+          created_at?: string
+          end_time?: string | null
+          id?: string
+          partner_id?: string
+          product_id?: string
+          session_date?: string
+          start_time?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "product_sessions_partner_id_fkey"
+            columns: ["partner_id"]
+            isOneToOne: false
+            referencedRelation: "partners"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "product_sessions_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "partner_products"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -1989,6 +2050,7 @@ export type Database = {
               reservation_end_date: string
               reservation_start_date: string
               reservation_url: string
+              service_category_id: string
               source_type: string
               start_date: string
               stroller_accessible: boolean
