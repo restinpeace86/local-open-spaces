@@ -1,0 +1,38 @@
+name: Naver Place Notice Refresh (Weekly)
+
+# [네이버 플레이스 공지 주간 배치](2026-09-25 사용자 지시): "1주일마다 배치로.. 소식
+# 가져온거에 대하여 1주일이 지났는지 체크하고 1주일이 넘은거에 대하여 주기적으로
+# 소식 데이터 가져오는거" — 유저가 스팟 상세를 열 때만 트리거되는 기존 온디맨드
+# 레이더(spot-notice-radar.ts, 그대로 유지)와 별개로, 트래픽과 무관하게
+# naver_place_id가 있는 스팟 전체를 주 1회 훑어 공지를 갱신한다. 중분류별 요일
+# 분산은 검토했으나 보류(스크립트 상단 주석 참고 — 현재 대상이 전부 한 중분류뿐).
+#
+# [스케줄] 매주 월요일 05:15 KST(UTC 일요일 20:15, 전날) — 기존 daily(02:47 KST)/
+# monthly(03:52 KST)/mom-pick-grade(04:23 KST) 배치와 겹치지 않도록 분산했다(정각을
+# 피한 비정규 분 — cron 정각 트리거 회피 원칙, ingest-daily.yml과 동일한 근거).
+permissions:
+  contents: read
+
+on:
+  schedule:
+    - cron: '15 20 * * 0'
+  workflow_dispatch:
+
+jobs:
+  notice-refresh-batch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Refresh stale Naver Place notices (naver_place_id 있는 스팟, notice_checked_at 7일 경과)
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/ingest/notice-refresh-batch.mjs
