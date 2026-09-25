@@ -329,11 +329,21 @@ const EDUCATION_FARM_CONFIG: CurationCategoryConfig = {
 // 구체적인 코드(수질관리/탕종류/수면실/노천탕/세신/샤워실/특이한찜질방/주차)만
 // 채택했다.
 //
-// [블로그 키워드 매칭 기반 7개 + 1개(24시간)] — 네이버 리뷰 투표 코드가 없어
+// [블로그 키워드 매칭 기반 9개 + 1개(24시간)] — 네이버 리뷰 투표 코드가 없어
 // (또는 있어도 너무 뭉뚱그려져서) 기존 방식(블로그 후기 본문 키워드 매칭,
 // matchBadgeKeysFromText)으로만 채운다: 놀이방/키즈존, 오락실·코인노래방·PC방,
-// 매점, 식당(키즈메뉴), 저온 힐링방, 야외 족욕탕/휴게공간, 이성 혼탕 나이 제한,
-// 24시간 운영.
+// 매점, 식당 있음, 키즈 메뉴 있음, 저온 힐링방, 족욕탕, 야외 휴게공간, 이성
+// 혼탕 나이 제한, 24시간 운영.
+//
+// [2026-09-26 사용자 피드백으로 조정]
+// - "세신 서비스 우수는 빼자" — jj_scrubber 삭제(뱃지/키워드/투표코드 매핑 전부).
+// - "식당(키즈메뉴)는 식당이 있으면서 식당에 키즈메뉴가 있는것만 체크되는거야?"
+//   → 실제로는 OR 매칭이라 "식당은 있는데 키즈메뉴는 없는 곳"과 구분이 안 됐다.
+//   jj_restaurant(식당 있음)과 jj_kids_menu(키즈 메뉴 있음)로 분리했다.
+// - "야외 족욕탕/휴게공간도 나누자.. 족욕탕이 야외에 있지않고 찜질방 내부에
+//   있으면 해당안되는거야?" — 맞다, 그래서 jj_foot_bath(족욕탕)는 "야외" 제한을
+//   빼고 실내외 무관하게 족욕 시설 자체만 판단하게 하고, jj_outdoor_lounge
+//   (야외 휴게공간)를 별도로 뒀다.
 const SPA_JJIMJILBANG_CONFIG: CurationCategoryConfig = {
   categoryId: 'spa_jjimjilbang',
   exposureCategoryNames: [],
@@ -345,16 +355,17 @@ const SPA_JJIMJILBANG_CONFIG: CurationCategoryConfig = {
     { key: 'jj_kids_zone', label: '놀이방/키즈존', group: '놀이/오락' },
     { key: 'jj_arcade', label: '오락실/코인노래방/PC방', group: '놀이/오락' },
     { key: 'jj_snack_bar', label: '매점(식혜·구운계란 등)', group: '식음료' },
-    { key: 'jj_restaurant', label: '식당(키즈 메뉴)', group: '식음료' },
+    { key: 'jj_restaurant', label: '식당 있음', group: '식음료' },
+    { key: 'jj_kids_menu', label: '키즈 메뉴 있음', group: '식음료' },
     { key: 'jj_various_baths', label: '탕 종류 다양함', group: '목욕시설' },
     { key: 'jj_outdoor_bath', label: '노천탕 있음', group: '목욕시설' },
     { key: 'jj_unique_room', label: '특이한 찜질방(테마방)', group: '목욕시설' },
     { key: 'jj_low_temp_room', label: '저온 힐링방(편백·소금방 등)', group: '목욕시설' },
-    { key: 'jj_scrubber', label: '세신 서비스 우수', group: '목욕시설' },
+    { key: 'jj_foot_bath', label: '족욕탕', group: '목욕시설' },
     { key: 'jj_sleeping_room', label: '수면실 있음', group: '휴게/청결' },
     { key: 'jj_water_quality', label: '수질 관리 우수', group: '휴게/청결' },
     { key: 'jj_shower', label: '샤워실 잘 되어있음', group: '휴게/청결' },
-    { key: 'jj_foot_bath', label: '야외 족욕탕/휴게공간', group: '휴게/청결' },
+    { key: 'jj_outdoor_lounge', label: '야외 휴게공간', group: '휴게/청결' },
     { key: 'jj_mixed_bath_age_limit', label: '이성 혼탕 나이 제한 있음', group: '주의/제한' },
   ],
   keywordGroups: {
@@ -363,16 +374,20 @@ const SPA_JJIMJILBANG_CONFIG: CurationCategoryConfig = {
     jj_kids_zone: ['놀이방', '키즈존', '볼풀장', '미끄럼틀', '어린이 놀이터', '키카페급', '키즈플레이존', '유아시설'],
     jj_arcade: ['오락실', '오락기', '코인노래방', '노래방', 'PC방', '게임기', '뽑기방', '오락존'],
     jj_snack_bar: ['매점', '식혜', '맥반석 계란', '구운계란', '구운감자', '매점 간식'],
-    jj_restaurant: ['구내식당', '찜질방 식당', '키즈메뉴', '어린이메뉴', '미역국', '돈까스', '아기식판'],
+    jj_restaurant: ['구내식당', '찜질방 식당', '식당'],
+    jj_kids_menu: ['키즈메뉴', '어린이메뉴', '미역국', '돈까스', '아기식판'],
     jj_various_baths: ['탕종류', '다양한 탕', '냉탕', '온탕', '열탕', '탕 종류가 다양'],
     jj_outdoor_bath: ['노천탕', '야외탕', '야외온천'],
     jj_unique_room: ['토굴방', '굴방', '토굴', '수면굴', '테마방', '특이한 찜질방', '히말라야', '보석방', '맥반석방', '황토방'],
     jj_low_temp_room: ['저온방', '편백방', '편백나무실', '소금방', '아기 찜질방', '키즈 편백룸', '힐링룸'],
-    jj_scrubber: ['세신', '세신사', '때밀이'],
+    // [실내외 무관](2026-09-26 사용자 지시): "족욕탕이 야외에 있지않고 찜질방
+    // 내부에 있으면 해당안되는거야?" — 아니다, 위치와 무관하게 족욕 시설 자체가
+    // 있으면 체크한다. 야외 한정 표현("야외 테라스" 등)은 jj_outdoor_lounge로 옮겼다.
+    jj_foot_bath: ['족욕탕', '족욕장', '족욕'],
     jj_sleeping_room: ['수면실', '수면방', '만화방'],
     jj_water_quality: ['수질', '수질관리', '수질 관리'],
     jj_shower: ['샤워실', '샤워부스'],
-    jj_foot_bath: ['족욕탕', '족욕장', '야외 테라스', '야외 휴게실', '야외 쉼터'],
+    jj_outdoor_lounge: ['야외 테라스', '야외 휴게실', '야외 쉼터', '야외 벤치', '야외 정원'],
     jj_mixed_bath_age_limit: ['혼탕', '이성탕', '동반입욕', '혼욕', '이성 보호자'],
   },
 };
@@ -383,7 +398,8 @@ const SPA_JJIMJILBANG_CONFIG: CurationCategoryConfig = {
 // 아이콘/문구만 다르게 두 코드로 내려보냄). 이 목록에 없는 코드(예: rest_area,
 // facility_equipped, play_var, foodplace_var, scale)는 의도적으로 제외했다 —
 // 사용자 지적대로 "어떤 휴게공간인지/부대시설인지 모른다"는 뭉뚱그려진 코드라
-// 특정 뱃지로 자동 확정하면 근거 없는 단정이 된다(제3장 제5조).
+// 특정 뱃지로 자동 확정하면 근거 없는 단정이 된다(제3장 제5조). scrubber_good은
+// 사용자 지시("세신 서비스 우수는 빼자")로 제거했다.
 export const NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY: Record<string, string> = {
   parking_easy: 'jj_parking',
   water_quality: 'jj_water_quality',
@@ -391,7 +407,6 @@ export const NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY: Record<string, string> = {
   baths_various_heart: 'jj_various_baths',
   sleeping_room: 'jj_sleeping_room',
   outdoor_bath: 'jj_outdoor_bath',
-  scrubber_good: 'jj_scrubber',
   shower_good: 'jj_shower',
   saunas_unique: 'jj_unique_room',
 };

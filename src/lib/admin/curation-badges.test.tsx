@@ -297,14 +297,36 @@ describe('spa_jjimjilbang(놀이방찜질방/스파) 카테고리 뱃지', () =>
     expect(resolveCurationCategoryId(null, null)).toBe('restaurant');
   });
 
-  it('16개 뱃지가 6개 그룹으로 나뉜다', () => {
+  it('17개 뱃지가 6개 그룹으로 나뉜다', () => {
     const options = getBadgeOptionsForCategory('spa_jjimjilbang');
-    expect(options).toHaveLength(16);
+    expect(options).toHaveLength(17);
     const groupCounts = options.reduce<Record<string, number>>((acc, o) => {
       acc[o.group] = (acc[o.group] ?? 0) + 1;
       return acc;
     }, {});
-    expect(groupCounts).toEqual({ '이동/편의': 2, '놀이/오락': 2, 식음료: 2, 목욕시설: 5, '휴게/청결': 4, '주의/제한': 1 });
+    expect(groupCounts).toEqual({ '이동/편의': 2, '놀이/오락': 2, 식음료: 3, 목욕시설: 5, '휴게/청결': 4, '주의/제한': 1 });
+  });
+
+  // [2026-09-26 사용자 피드백] "세신 서비스 우수는 빼자" — 삭제됐는지 확인.
+  it('세신 서비스 뱃지는 삭제되어 존재하지 않는다', () => {
+    expect(isKnownCurationBadgeKey('spa_jjimjilbang', 'jj_scrubber')).toBe(false);
+  });
+
+  // [2026-09-26 사용자 피드백] "식당(키즈메뉴)는.. 식당이 있으면서 키즈메뉴가
+  // 있는것만 체크되는거야?" → OR 매칭이라 구분이 안 됐음을 확인하고
+  // jj_restaurant(식당 있음)/jj_kids_menu(키즈 메뉴 있음)로 분리했다.
+  it('식당 있음과 키즈 메뉴 있음이 서로 독립적으로 매칭된다', () => {
+    expect(matchBadgeKeysFromText('찜질방 식당에서 밥을 먹었어요', 'spa_jjimjilbang')).toEqual(new Set(['jj_restaurant']));
+    expect(matchBadgeKeysFromText('아기식판에 미역국을 담아줬어요', 'spa_jjimjilbang')).toEqual(new Set(['jj_kids_menu']));
+  });
+
+  // [2026-09-26 사용자 피드백] "야외 족욕탕/휴게공간도 나누자.. 족욕탕이
+  // 야외에 있지않고 찜질방 내부에 있으면 해당안되는거야?" → 아니다, 실내외
+  // 무관하게 족욕 시설 자체만 판단한다(jj_foot_bath). 야외 한정 표현은
+  // jj_outdoor_lounge로 분리했다.
+  it('족욕탕은 실내외 무관하게 매칭되고, 야외 휴게공간은 별도 뱃지다', () => {
+    expect(matchBadgeKeysFromText('실내 족욕탕에서 발 담그고 쉬었어요', 'spa_jjimjilbang')).toEqual(new Set(['jj_foot_bath']));
+    expect(matchBadgeKeysFromText('야외 테라스에서 바람 쐬기 좋아요', 'spa_jjimjilbang')).toEqual(new Set(['jj_outdoor_lounge']));
   });
 
   it('블로그 키워드가 정확히 매칭된다', () => {
@@ -316,7 +338,7 @@ describe('spa_jjimjilbang(놀이방찜질방/스파) 카테고리 뱃지', () =>
     );
   });
 
-  it('NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY는 구체적인 8개 코드만 뱃지로 매핑하고, 뭉뚱그려진 코드는 제외한다', () => {
+  it('NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY는 구체적인 7개 코드만 뱃지로 매핑하고, 뭉뚱그려진 코드는 제외한다', () => {
     expect(NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY).toEqual({
       parking_easy: 'jj_parking',
       water_quality: 'jj_water_quality',
@@ -324,7 +346,6 @@ describe('spa_jjimjilbang(놀이방찜질방/스파) 카테고리 뱃지', () =>
       baths_various_heart: 'jj_various_baths',
       sleeping_room: 'jj_sleeping_room',
       outdoor_bath: 'jj_outdoor_bath',
-      scrubber_good: 'jj_scrubber',
       shower_good: 'jj_shower',
       saunas_unique: 'jj_unique_room',
     });
