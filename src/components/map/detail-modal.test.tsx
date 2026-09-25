@@ -957,7 +957,7 @@ describe('DetailModal 스팟픽 카드(spotPickCard)', () => {
     render(<DetailModal item={makeSpaceItem({ info_url: null })} onClose={() => {}} spotPickCard hideMapSection />);
 
     const link = (await screen.findByText('🟢 네이버 예약')).closest('a');
-    expect(link).toHaveAttribute('href', 'https://pcmap.place.naver.com/place/2095637824/booking');
+    expect(link).toHaveAttribute('href', 'https://map.naver.com/p/entry/place/2095637824');
     expect(link).toHaveAttribute('target', '_blank');
   });
 
