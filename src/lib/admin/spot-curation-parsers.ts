@@ -137,6 +137,16 @@ const MENU_LINE = /^(.+?)\s+([\d,]+)\s*원?\s*$/;
 // 인식한다.
 const PRICE_ONLY_LINE = /^([\d,]+)\s*원?$/;
 
+// [실사용 버그 제보](2026-09-26 사용자 지시, 찜질방/스파 가격표): "유아(12개월미만)"
+// 다음 줄에 "무료"만 있는 항목이 파싱 안 됐다 — 위 두 정규식 모두 숫자를 요구해서다.
+// "무료"는 가격 정보가 없는 게 아니라 "0원"이라는 명시적인 값이다(price-parser.mjs의
+// 기존 동일 판단 — "무료는 숫자가 아니어도 유료/무료 판별이기 때문에.. 데이터 없음이
+// 아니고 무료로 나와야 하는거 아니야?" — 과 같은 이유). 그래서 위 128행의 "가격을
+// 못 찾은 줄은 추측하지 않고 제외한다" 원칙과 상충하지 않는다 — "무료"는 애매한 줄이
+// 아니라 명확한 0원 표기라 예외로 다룬다.
+const MENU_LINE_FREE = /^(.+?)\s+무료\s*$/;
+const FREE_ONLY_LINE = /^무료$/;
+
 // menu_items 스키마(scripts/migrations/2026-09-01-create-spot-curations-table.sql)가
 // { name, price }만 저장하도록 이미 확정돼 있어(설명 컬럼 없음), 설명 줄은 의도적으로
 // 버린다 — 스키마를 임의로 바꾸지 않는다(제5장 제3조).
@@ -216,12 +226,29 @@ export function parseMenuText(text: string): ParsedMenuItem[] {
       continue;
     }
 
+    // ["이름 무료"] 단일 줄 형식 — 위 combinedMatch와 동일한 자리지만 숫자 대신
+    // "무료"가 붙은 경우(찜질방/스파 가격표에서 실측).
+    const combinedFreeMatch = trimmed.match(MENU_LINE_FREE);
+    if (combinedFreeMatch) {
+      const name = combinedFreeMatch[1].trim();
+      if (name) items.push({ name, price: 0 });
+      pendingName = null;
+      continue;
+    }
+
     // 신규 그룹 형식: 가격만 단독으로 있는 줄을 만나면, 바로 직전에 본 텍스트 줄을
     // 이름으로 확정해 항목을 완성한다.
     const priceOnlyMatch = trimmed.match(PRICE_ONLY_LINE);
     if (priceOnlyMatch) {
       const price = Number(priceOnlyMatch[1].replace(/,/g, ''));
       if (pendingName && Number.isFinite(price)) items.push({ name: pendingName, price });
+      pendingName = null;
+      continue;
+    }
+
+    // ["무료"] 단독 줄 — 그룹 형식의 가격 자리에 "무료"만 있는 경우.
+    if (FREE_ONLY_LINE.test(trimmed)) {
+      if (pendingName) items.push({ name: pendingName, price: 0 });
       pendingName = null;
       continue;
     }
