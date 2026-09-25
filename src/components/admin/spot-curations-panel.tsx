@@ -11,7 +11,13 @@ import {
   OperatingHoursByDay,
 } from '@/lib/admin/spot-curation-parsers';
 import { KIDS_RESTAURANT_CATEGORY_MIN } from '@/lib/spaces/spot-category-groups';
-import { getBadgeGroupsForCategory, getBadgeOptionsForCategory, matchBadgeKeysFromText, resolveCurationCategoryId } from '@/lib/admin/curation-badges';
+import {
+  getBadgeGroupsForCategory,
+  getBadgeOptionsForCategory,
+  isKnownCurationBadgeKey,
+  matchBadgeKeysFromText,
+  resolveCurationCategoryId,
+} from '@/lib/admin/curation-badges';
 import type { NaverPlaceBusinessHourDay, NaverPlaceReviewVoteHint } from '@/lib/admin/naver-place-crawler';
 
 // [개발 종합 요청] 스팟픽 MVP 스마트 폴백, 관리자 큐레이션 및 배치 안정화 고도화(2026-09-01)
@@ -414,9 +420,15 @@ export function CurationFormModal({
       // 편의시설 매칭과 동일한 안전장치(추가만, 기존 체크 해제 안 함)로 자동 반영하고,
       // 근거(순위/득표수)는 별도로 보관해뒀다가 저장 시 함께 반영한다(이 화면 자체는
       // 순위/득표수를 보여주지 않음 — 뱃지 전용 화면의 몫).
-      if (data.badgeVoteHints && data.badgeVoteHints.length > 0) {
-        setBadgeVoteHints(data.badgeVoteHints);
-        setSelectedBadges((prev) => new Set([...prev, ...data.badgeVoteHints!.map((h) => h.badgeKey)]));
+      // [버그 방지] naver-crawl 응답의 badgeVoteHints는 이 스팟의 실제 카테고리와
+      // 무관하게 매칭된 코드를 전부 내려준다(예: 놀이방식당 스팟도 리뷰에
+      // "주차하기 편해요" 표가 많으면 jj_parking 코드가 걸릴 수 있음) — 현재
+      // curationCategoryId에 실제로 존재하는 뱃지 키만 걸러서 다른 카테고리
+      // 스팟에 엉뚱한 뱃지 키(jj_*)가 섞여 들어가지 않게 한다.
+      const relevantVoteHints = (data.badgeVoteHints ?? []).filter((h) => isKnownCurationBadgeKey(curationCategoryId, h.badgeKey));
+      if (relevantVoteHints.length > 0) {
+        setBadgeVoteHints(relevantVoteHints);
+        setSelectedBadges((prev) => new Set([...prev, ...relevantVoteHints.map((h) => h.badgeKey)]));
       }
 
       if (data.imageUrl) setImageUrl(data.imageUrl);
