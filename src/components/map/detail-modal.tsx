@@ -90,8 +90,16 @@ function hasReservationBadge(curation: SpotCuration | null | undefined): boolean
   return Array.isArray(curation?.badge_labels) && curation.badge_labels.some((label) => RESERVATION_BADGE_LABELS.includes(label));
 }
 
+// [예약/예매 링크 정확도 개선](2026-09-25 사용자 지시): "확인해보니깐 /ticket이어도
+// /booking으로 쳤을때 redirect 해주더라.. 예약가능이나 예약필수일 경우에만
+// /booking으로 하면 아마 /ticket으로 redirect해줄꺼같아" — 네이버 플레이스는
+// 예약이 아니라 예매(티켓)만 지원하는 업체도 /booking 경로로 접근하면 실제
+// 예매 페이지(/ticket)로 자동 리다이렉트해준다(사용자가 직접 확인). 그래서 우리
+// 쪽에서 예약형/예매형을 따로 판별할 필요 없이, 예약 관련 뱃지가 있으면 항상
+// /booking으로 링크하면 된다 — 기존 범용 진입 링크(map.naver.com/p/entry/place)
+// 대신 예약/예매 페이지로 바로 꽂아준다.
 function buildNaverPlaceUrl(naverPlaceId: string): string {
-  return `https://map.naver.com/p/entry/place/${naverPlaceId}`;
+  return `https://pcmap.place.naver.com/place/${naverPlaceId}/booking`;
 }
 
 // 있는 것만 이어붙인다(추측으로 빈 칸을 채우지 않음) — formatCuratedHours와 동일한
