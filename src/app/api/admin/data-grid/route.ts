@@ -313,6 +313,10 @@ async function queryOpenSpaces(supabase: Ctx, searchParams: URLSearchParams, pag
   // 별도 테이블 spot_curations에 저장되므로, 아직 그 테이블에 행이 없는
   // open_spaces만 걸러낸다.
   const onlyUncurated = searchParams.get('only_uncurated') === 'true';
+  // [네이버 ID 없는 행만 보기](2026-09-26 사용자 지시): "네이버 id가 아직 없는
+  // 행만 보기도 검색으로 알수 있게" — 위 onlyUnmapped와 동일한 관례(open_spaces
+  // 전용 단일 컬럼, JOIN 불필요).
+  const onlyWithoutNaverPlaceId = searchParams.get('only_without_naver_place_id') === 'true';
   const createdFrom = parseDateFilter(searchParams.get('created_from'));
   const createdTo = parseDateFilter(searchParams.get('created_to'));
 
@@ -409,6 +413,7 @@ async function queryOpenSpaces(supabase: Ctx, searchParams: URLSearchParams, pag
     const curatedIds = (curatedRows ?? []).map((r) => r.spot_id).filter((id): id is string => Boolean(id));
     if (curatedIds.length > 0) query = query.not('id', 'in', `(${curatedIds.join(',')})`);
   }
+  if (onlyWithoutNaverPlaceId) query = query.is('naver_place_id', null);
   query = applyDateRange(query, 'created_at', createdFrom, createdTo);
   // [개선사항2](todo.md, 2026-09-09) "관리자 검수/큐레이션 화면에서는 무조건
   // 하나의 깔끔한 레코드로 노출" — 그룹에 속했지만 대표가 아닌 행(이미 병합된

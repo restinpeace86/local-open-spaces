@@ -771,6 +771,10 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
   // 큐레이션쪽 해야지.. 뱃지다는거" — 위 onlyUnmapped와 동일한 관례
   // (open_spaces 전용, 즉시 반영).
   const [onlyUncurated, setOnlyUncurated] = useState(false);
+  // [네이버 ID 없는 행만 보기](2026-09-26 사용자 지시): "네이버 id가 아직 없는
+  // 행만 보기도 검색으로 알수 있게" — 위 onlyUnmapped/onlyUncurated와 동일한
+  // 관례(open_spaces 전용, 즉시 반영).
+  const [onlyWithoutNaverPlaceId, setOnlyWithoutNaverPlaceId] = useState(false);
   // 요구사항 2: 단축 필터([오늘 등록건 보기]/[최근 3일건 보기]) + 달력 기간 조회. 다른 즉시
   // 반영 필터(검색어/칩 등)와 같은 관례로, 값이 바뀌면 바로 쿼리가 나간다(체크박스 필터만
   // pending/applied 2단계인 것과 다름 — 날짜는 오조작 빈도가 낮고 즉시 반영이 자연스럽다).
@@ -978,6 +982,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     setIsActive('true');
     setOnlyUnmapped(false);
     setOnlyUncurated(false);
+    setOnlyWithoutNaverPlaceId(false);
     setCreatedFrom(todayDateStr());
     setCreatedTo(todayDateStr());
   };
@@ -1032,6 +1037,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     if (tab === 'events' && spaceLinked !== 'all') params.set('space_linked', spaceLinked);
     if (tab === 'open_spaces' && onlyUnmapped) params.set('only_unmapped', 'true');
     if (tab === 'open_spaces' && onlyUncurated) params.set('only_uncurated', 'true');
+    if (tab === 'open_spaces' && onlyWithoutNaverPlaceId) params.set('only_without_naver_place_id', 'true');
     if (tab !== 'raw_ingest_data' && createdFrom) params.set('created_from', createdFrom);
     if (tab !== 'raw_ingest_data' && createdTo) params.set('created_to', createdTo);
     // [events.updated_at 컬럼 + 자동 갱신 트리거](2026-09-12 사용자 지시): events 탭
@@ -1063,7 +1069,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab, hasLoaded, debouncedQ, sourceTypes, sources, categories, minClassName, appliedCategoryMin, appliedTargetAudience, isActive, spaceLinked, onlyUnmapped, onlyUncurated, createdFrom, createdTo, updatedFrom, updatedTo, page, pageSize]);
+  }, [tab, hasLoaded, debouncedQ, sourceTypes, sources, categories, minClassName, appliedCategoryMin, appliedTargetAudience, isActive, spaceLinked, onlyUnmapped, onlyUncurated, onlyWithoutNaverPlaceId, createdFrom, createdTo, updatedFrom, updatedTo, page, pageSize]);
 
   const totalPages = useMemo(() => Math.max(1, Math.ceil(total / pageSize)), [total, pageSize]);
   const currentOptions = filterOptions[tab];
@@ -1230,38 +1236,55 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
           />
         )}
 
-        {/* [노출 중분류 미지정만 보기](2026-09-06 사용자 지시): "노출중분류가 null 인거에
-            대하여 어디서 체크할수있도록 해놓은거야? open_spaces.에 안보이는데?" —
-            open_spaces 전용 컬럼이라 이 탭에서만 보여준다. 체크박스라 즉시 반영한다
-            (표준 중분류처럼 별도 "조회하기" 클릭을 요구하지 않음 — isActive와 동일 관례). */}
+        {/* [세 가지 "아직 없는 행만 보기" 필터를 한 줄로 정렬](2026-09-26 사용자 지시):
+            "노출 중분류 아직없는 행만보기 검색조건이랑 큐레이션이 아직 없는행만보기랑
+            네이버 ID가 없는 행만보기.. pc에서 봤을때 한 행에 있도록 나열해줘" —
+            flex-wrap이라 PC 너비에서는 한 줄로 나열되고, 화면이 좁아지면(모바일)
+            자연스럽게 줄바꿈된다. */}
         {tab === 'open_spaces' && (
-          <label className="flex items-center gap-1.5 text-xs text-gray-600">
-            <input
-              type="checkbox"
-              checked={onlyUnmapped}
-              onChange={(e) => setOnlyUnmapped(e.target.checked)}
-              className="h-3.5 w-3.5"
-            />
-            노출 중분류(service_category_id)가 아직 없는 행만 보기
-          </label>
-        )}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+            {/* [노출 중분류 미지정만 보기](2026-09-06 사용자 지시): "노출중분류가 null 인거에
+                대하여 어디서 체크할수있도록 해놓은거야? open_spaces.에 안보이는데?" —
+                open_spaces 전용 컬럼이라 이 탭에서만 보여준다. 체크박스라 즉시 반영한다
+                (표준 중분류처럼 별도 "조회하기" 클릭을 요구하지 않음 — isActive와 동일 관례). */}
+            <label className="flex items-center gap-1.5 text-xs text-gray-600">
+              <input
+                type="checkbox"
+                checked={onlyUnmapped}
+                onChange={(e) => setOnlyUnmapped(e.target.checked)}
+                className="h-3.5 w-3.5"
+              />
+              노출 중분류(service_category_id)가 아직 없는 행만 보기
+            </label>
 
-        {/* [큐레이션 미완료만 보기](2026-09-07 사용자 지시): "노출 중분류가 아직
-            없는 행만보기 뿐만아니라 큐레이션이 아직 없는 행만보기도 추가해줘..
-            1차적으로 여러건에 대하여 한번에 표준중분류 노출중분류 했으면 이제
-            큐레이션쪽 해야지.. 뱃지다는거" — 표준 중분류/노출 중분류를 이미
-            일괄 적용한 행들 중 아직 블로그 검색으로 뱃지를 안 단(spot_curations
-            테이블에 행이 없는) 것만 골라보는 다음 단계 작업 흐름을 지원한다. */}
-        {tab === 'open_spaces' && (
-          <label className="flex items-center gap-1.5 text-xs text-gray-600">
-            <input
-              type="checkbox"
-              checked={onlyUncurated}
-              onChange={(e) => setOnlyUncurated(e.target.checked)}
-              className="h-3.5 w-3.5"
-            />
-            큐레이션(블로그/뱃지)이 아직 없는 행만 보기
-          </label>
+            {/* [큐레이션 미완료만 보기](2026-09-07 사용자 지시): "노출 중분류가 아직
+                없는 행만보기 뿐만아니라 큐레이션이 아직 없는 행만보기도 추가해줘..
+                1차적으로 여러건에 대하여 한번에 표준중분류 노출중분류 했으면 이제
+                큐레이션쪽 해야지.. 뱃지다는거" — 표준 중분류/노출 중분류를 이미
+                일괄 적용한 행들 중 아직 블로그 검색으로 뱃지를 안 단(spot_curations
+                테이블에 행이 없는) 것만 골라보는 다음 단계 작업 흐름을 지원한다. */}
+            <label className="flex items-center gap-1.5 text-xs text-gray-600">
+              <input
+                type="checkbox"
+                checked={onlyUncurated}
+                onChange={(e) => setOnlyUncurated(e.target.checked)}
+                className="h-3.5 w-3.5"
+              />
+              큐레이션(블로그/뱃지)이 아직 없는 행만 보기
+            </label>
+
+            {/* [네이버 ID 없는 행만 보기](2026-09-26 사용자 지시): "네이버 id가 아직
+                없는 행만 보기도 검색으로 알수 있게" */}
+            <label className="flex items-center gap-1.5 text-xs text-gray-600">
+              <input
+                type="checkbox"
+                checked={onlyWithoutNaverPlaceId}
+                onChange={(e) => setOnlyWithoutNaverPlaceId(e.target.checked)}
+                className="h-3.5 w-3.5"
+              />
+              네이버 ID(naver_place_id)가 아직 없는 행만 보기
+            </label>
+          </div>
         )}
 
         {/* 요구사항 2: 단축 필터 + 달력 기간 조회(created_at 기준) — 조회하기 버튼도 이 줄에 함께 둔다 */}

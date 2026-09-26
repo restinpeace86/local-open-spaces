@@ -408,6 +408,73 @@ describe('AdminDataGridClient — 큐레이션 미완료만 보기(2026-09-07)',
   });
 });
 
+// [네이버 ID 없는 행만 보기](2026-09-26 사용자 지시): "네이버 id가 아직 없는
+// 행만 보기도 검색으로 알수 있게" — 위 두 필터와 동일한 관례.
+describe('AdminDataGridClient — 네이버 ID 없는 행만 보기(2026-09-26)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('open_spaces 탭에 체크박스가 보이고, 체크하면 only_without_naver_place_id=true로 조회한다', async () => {
+    const fetchMock = vi.fn((_url: string) => Promise.resolve({ ok: true, json: () => Promise.resolve({ rows: [], total: 0 }) } as Response));
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+
+    const checkbox = screen.getByLabelText('네이버 ID(naver_place_id)가 아직 없는 행만 보기');
+    expect(checkbox).not.toBeChecked();
+
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await screen.findByText('조건에 맞는 데이터가 없습니다.');
+    fetchMock.mockClear();
+
+    fireEvent.click(checkbox);
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/data-grid'));
+      expect(call).toBeDefined();
+      expect(call![0] as string).toContain('only_without_naver_place_id=true');
+    });
+  });
+
+  it('events 탭에는 이 체크박스가 없다(open_spaces 전용 컬럼)', () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({ rows: [], total: 0 }) } as Response)));
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+
+    fireEvent.click(screen.getByText('events (행사·체험)'));
+
+    expect(screen.queryByLabelText('네이버 ID(naver_place_id)가 아직 없는 행만 보기')).not.toBeInTheDocument();
+  });
+
+  it('세 필터(노출중분류/큐레이션/네이버ID)를 함께 켤 수 있다', async () => {
+    const fetchMock = vi.fn((_url: string) => Promise.resolve({ ok: true, json: () => Promise.resolve({ rows: [], total: 0 }) } as Response));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await screen.findByText('조건에 맞는 데이터가 없습니다.');
+    fetchMock.mockClear();
+
+    fireEvent.click(screen.getByLabelText('노출 중분류(service_category_id)가 아직 없는 행만 보기'));
+    await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(0));
+    fetchMock.mockClear();
+
+    fireEvent.click(screen.getByLabelText('큐레이션(블로그/뱃지)이 아직 없는 행만 보기'));
+    await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(0));
+    fetchMock.mockClear();
+
+    fireEvent.click(screen.getByLabelText('네이버 ID(naver_place_id)가 아직 없는 행만 보기'));
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find((c) => (c[0] as string).includes('/api/admin/data-grid'));
+      expect(call).toBeDefined();
+      expect(call![0] as string).toContain('only_unmapped=true');
+      expect(call![0] as string).toContain('only_uncurated=true');
+      expect(call![0] as string).toContain('only_without_naver_place_id=true');
+    });
+  });
+});
+
 // [관리자 화면 목록 컬럼 정리](2026-09-07 사용자 지시): "1. ID와 출처는 비슷하니
 // 출처 컬럼만 남겨 2. 원천 대/중분류 컬럼은 안보이게 해 3. 제목/명칭 컬럼과
 // 장소/시설명 컬럼도 동일해.. 제목/명칭 컬럼만 남겨 4. 요금, 접수상태 컬럼은
