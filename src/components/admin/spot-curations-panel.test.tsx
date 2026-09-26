@@ -761,6 +761,71 @@ describe('SpotCurationsPanel — 네이버 플레이스 ID 저장/표시(2026-09
     });
   });
 
+  // [실사용 버그 제보](2026-09-27 사용자 지시, "어뮤즈스파 진주점" 중복 그룹 사례):
+  // "스팟 큐레이션으로 네이버 id 가져와도 저장이 안되는거 같은데?" — naver_place_id가
+  // 이미 다른(그룹 내 비대표) 스팟에 저장돼 있어 unique 제약(409)이 걸렸는데,
+  // 이전 코드는 이 실패를 확인하지 않고 조용히 모달을 닫아 관리자가 실패 사실을
+  // 전혀 알 수 없었다. 이제 에러가 화면에 보이고 모달이 안 닫혀야 한다.
+  it('naver_place_id 저장이 409로 실패하면 모달이 닫히지 않고 에러가 보인다', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.includes('/api/admin/spot-curations/naver-crawl')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ placeId: '1419884543', name: '장우랑 놀이방' }) } as Response);
+      }
+      if (url.includes('/api/admin/data-grid/naver-place-id')) {
+        return Promise.resolve({
+          ok: false,
+          json: () => Promise.resolve({ error: '이 네이버 플레이스는 이미 다른 스팟에 연동되어 있습니다.' }),
+        } as Response);
+      }
+      if (url.includes('/api/admin/data-grid')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ rows: [{ id: 'spot-1', name: '장우랑 놀이방', address: '경기도 양주시' }], total: 1 }),
+        } as Response);
+      }
+      if (url.includes('/api/admin/spot-curations') && init?.method === 'POST') {
+        return Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              item: {
+                id: 'curation-1',
+                spot_id: 'spot-1',
+                is_active: true,
+                menu_items: [],
+                curation_badges: [],
+                created_at: '2026-09-20T00:00:00.000Z',
+                updated_at: '2026-09-20T00:00:00.000Z',
+                open_spaces: { name: '장우랑 놀이방', display_name: null, address: '경기도 양주시', category: 'RESTAURANT', naver_place_id: null },
+              },
+            }),
+        } as Response);
+      }
+      if (url.includes('/api/admin/spot-curations')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [] }) } as Response);
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    render(<SpotCurationsPanel />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await waitFor(() => expect(screen.queryByText('불러오는 중...')).not.toBeInTheDocument());
+    fireEvent.click(screen.getByText('장우랑 놀이방'));
+    await screen.findByText('+ 스팟 큐레이션 등록');
+
+    fireEvent.change(screen.getByPlaceholderText(/map\.naver\.com/), {
+      target: { value: 'https://map.naver.com/p/entry/place/1419884543' },
+    });
+    fireEvent.click(screen.getByText('⚡ 데이터 가져오기'));
+    await screen.findByText(/이미 연동된 네이버 플레이스\(ID: 1419884543\)/);
+
+    fireEvent.click(screen.getByText('등록하기'));
+
+    expect(await screen.findByText(/네이버 ID 저장 실패: 이 네이버 플레이스는 이미 다른 스팟에 연동되어 있습니다\./)).toBeInTheDocument();
+    // 모달이 자동으로 닫히지 않고 그대로 열려 있어야 한다.
+    expect(screen.getByText('+ 스팟 큐레이션 등록')).toBeInTheDocument();
+  });
+
   it('이미 네이버 플레이스가 연동된 스팟을 다시 열면 URL 입력창이 자동으로 채워지고 안내 문구가 보인다', async () => {
     vi.stubGlobal(
       'fetch',

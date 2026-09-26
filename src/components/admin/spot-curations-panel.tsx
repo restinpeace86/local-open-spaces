@@ -610,6 +610,19 @@ export function CurationFormModal({
       const data: { item?: SpotCurationItem; error?: string } = await res.json();
       if (!res.ok || !data.item) throw new Error(data.error ?? '저장에 실패했습니다.');
 
+      // [실사용 버그 제보](2026-09-27 사용자 지시, "어뮤즈스파 진주점" 중복 그룹
+      // 사례): "스팟 큐레이션으로 네이버 id 가져와도 저장이 안되는거 같은데?" —
+      // 조사 결과 naver_place_id가 이미 같은 그룹의 다른(비대표) 행에 저장돼
+      // 있어 unique 제약(DB)이 정확히 막고 있었는데, 아래 두 블록이 fetch 실패만
+      // catch하고 HTTP 에러 응답(res.ok=false, 예: 409)은 전혀 확인하지 않아
+      // 관리자에게 어떤 안내도 없이 조용히 사라졌다. 이제 실패를 감지해
+      // secondaryWarning에 모아둔다 — 큐레이션 저장 자체는 여전히 되돌리지
+      // 않는다(제5장 제11조), 대신 모달을 자동으로 닫지 않고 에러로 보여줘
+      // 관리자가 알아채고 대응할 수 있게 한다(아래 onSaved 이후 분기 참고).
+      let secondaryWarning: string | null = null;
+      let displayNameSaved = true;
+      let naverPlaceIdSaved = true;
+
       // [OPEN_SPACES 노출 이름 수동 수정](2026-09-20 사용자 지시): 스팟 큐레이션
       // 저장이 성공한 뒤에만 노출 이름을 반영한다. display_name은 spot_curations가
       // 아닌 open_spaces 컬럼이라 별도 API 호출이 필요하다 — 실패해도 방금 성공한
@@ -618,30 +631,44 @@ export function CurationFormModal({
       const effectiveDisplayName = trimmedDisplayName || null;
       if (trimmedDisplayName !== initialDisplayName.trim()) {
         try {
-          await fetch('/api/admin/data-grid/display-name', {
+          const dnRes = await fetch('/api/admin/data-grid/display-name', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: spotId, display_name: trimmedDisplayName }),
           });
-        } catch {
-          // 위 주석 참고 — 조용히 무시.
+          if (!dnRes.ok) {
+            const dnData = await dnRes.json().catch(() => ({}));
+            displayNameSaved = false;
+            secondaryWarning = `노출 이름 저장 실패: ${dnData.error ?? '알 수 없는 오류'}`;
+          }
+        } catch (err) {
+          displayNameSaved = false;
+          secondaryWarning = `노출 이름 저장 실패: ${err instanceof Error ? err.message : '네트워크 오류'}`;
         }
       }
 
       // [스팟 큐레이션 네이버 플레이스 ID 저장](2026-09-20 사용자 지시): "처음에..
       // 네이버의 스팟 id.. 저장하라고 했는데" — 위 노출 이름과 동일한 이유(별도
       // open_spaces 컬럼)로 별도 API 호출이 필요하다. naver_place_id는 unique
-      // 제약이 있어 실패할 수 있지만(다른 스팟에 이미 연동됨), 이미 성공한 큐레이션
-      // 저장을 되돌리지 않고 조용히 넘어간다(위와 동일한 원칙).
+      // 제약이 있어 실패할 수 있다(다른 스팟에 이미 연동됨) — 이제 그 실패를
+      // 관리자에게 보여준다(위 주석 참고).
       if (naverPlaceId !== initialNaverPlaceId) {
         try {
-          await fetch('/api/admin/data-grid/naver-place-id', {
+          const npRes = await fetch('/api/admin/data-grid/naver-place-id', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ id: spotId, naver_place_id: naverPlaceId }),
           });
-        } catch {
-          // 위 주석 참고 — 조용히 무시.
+          if (!npRes.ok) {
+            const npData = await npRes.json().catch(() => ({}));
+            naverPlaceIdSaved = false;
+            const message = `네이버 ID 저장 실패: ${npData.error ?? '알 수 없는 오류'}`;
+            secondaryWarning = secondaryWarning ? `${secondaryWarning} / ${message}` : message;
+          }
+        } catch (err) {
+          naverPlaceIdSaved = false;
+          const message = `네이버 ID 저장 실패: ${err instanceof Error ? err.message : '네트워크 오류'}`;
+          secondaryWarning = secondaryWarning ? `${secondaryWarning} / ${message}` : message;
         }
       }
 
@@ -651,15 +678,27 @@ export function CurationFormModal({
       // 그 PATCH 이전(스팟 큐레이션 저장 응답) 시점의 스냅샷이라 새 display_name을 몰랐다.
       // onSaved로 넘기기 전에 방금 반영한 값으로 보정해야 이 값을 구독하는 화면(open_spaces
       // 상세 모달의 SpotDisplayNameEditor 등)이 최신 값을 받는다. naver_place_id도
-      // 동일한 이유로 함께 보정한다.
+      // 동일한 이유로 함께 보정한다 — 단, 실제로 저장이 성공한 필드만 보정한다(실패한
+      // 필드까지 낙관적으로 반영하면 저장 안 된 값을 저장된 것처럼 화면에 흘려보낸다).
       if (data.item.open_spaces) {
         data.item = {
           ...data.item,
-          open_spaces: { ...data.item.open_spaces, display_name: effectiveDisplayName, naver_place_id: naverPlaceId },
+          open_spaces: {
+            ...data.item.open_spaces,
+            display_name: displayNameSaved ? effectiveDisplayName : data.item.open_spaces.display_name,
+            naver_place_id: naverPlaceIdSaved ? naverPlaceId : data.item.open_spaces.naver_place_id,
+          },
         };
       }
 
       onSaved(data.item);
+      // [실사용 버그 수정](2026-09-27) 보조 필드(노출 이름/네이버 ID) 저장이 실패했으면
+      // 모달을 자동으로 닫지 않고 에러로 보여준다 — 지금까지는 여기서 바로 onClose()를
+      // 호출해 관리자가 실패 사실을 전혀 볼 수 없었다.
+      if (secondaryWarning) {
+        setErrorMessage(secondaryWarning);
+        return;
+      }
       onClose();
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : '저장에 실패했습니다.');
