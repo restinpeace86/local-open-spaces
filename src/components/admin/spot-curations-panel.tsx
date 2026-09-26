@@ -213,6 +213,18 @@ export function CurationFormModal({
   // 없어 그대로 restaurant로 되돌아가므로 기존 동작은 전혀 바뀌지 않는다.
   const spotCategoryMin = isEdit ? (initial!.open_spaces?.category_min ?? null) : (presetSpot!.category_min ?? null);
   const curationCategoryId = resolveCurationCategoryId(null, spotCategoryMin);
+  // [메뉴/가격표 라벨 동적화](2026-09-26 사용자 지시): "결국 라벨이 이상한거 맞긴해
+  // 라벨을 동적으로 둘수있어? 식당일땐 메뉴가 맞지만 여기선 메뉴라고 사용자한테
+  // 보여선 안되는데" — 데이터 구조(menu_items)는 그대로 재사용하고(제5장 제4조),
+  // 화면 라벨만 카테고리에 맞게 바꾼다.
+  const menuSectionLabel = curationCategoryId === 'spa_jjimjilbang' ? '가격표' : '메뉴';
+  // [키즈메뉴 뱃지 체크박스 카테고리 스코프](2026-09-26): 이 체크박스는 'kids_menu'
+  // (restaurant 전용 뱃지 키)를 직접 켜고 끈다 — 놀이방찜질방/스파는 이 키가 없고
+  // 대신 blog 키워드로 자동 매칭되는 jj_kids_menu를 쓰므로, 다른 카테고리에서
+  // 이 체크박스를 켜면 badgeVoteHints와 동일한 종류의 버그(엉뚱한 뱃지 키가
+  // curation_badges에 섞여 들어감)가 생긴다. 실제로 그 키가 존재하는 카테고리에서만
+  // 보이고 저장되게 한다.
+  const supportsKidsMenuBadge = isKnownCurationBadgeKey(curationCategoryId, KIDS_MENU_BADGE_KEY);
   // [OPEN_SPACES 노출 이름 수동 수정](2026-09-20 사용자 지시): "스팟큐레이션으로
   // 데이터 가져올때 상호명도 가져오는데.. 자동적으로 상호명도 들어가도록" — 이
   // 화면(네이버 플레이스 크롤링)이 open_spaces.name을 대체할 노출 이름을 채우는
@@ -581,7 +593,7 @@ export function CurationFormModal({
         guardian_fee: guardianFee,
         naver_booking_url: naverBookingUrl.trim() || null,
         curation_note: curationNote || null,
-        curation_badges: hasKidsMenuBadge ? [...selectedBadges, KIDS_MENU_BADGE_KEY] : [...selectedBadges],
+        curation_badges: hasKidsMenuBadge && supportsKidsMenuBadge ? [...selectedBadges, KIDS_MENU_BADGE_KEY] : [...selectedBadges],
         naver_review_vote_hints: badgeVoteHints,
       };
       const res = isEdit
@@ -943,7 +955,7 @@ export function CurationFormModal({
               라벨/플레이스홀더에도 두 형식 모두 안내한다. */}
           <div className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-gray-700">
-              메뉴 — "이름 가격원" 한 줄씩, 또는 이름/가격/설명이 줄바꿈으로 나뉜 형식도 지원
+              {menuSectionLabel} — "이름 가격원" 한 줄씩, 또는 이름/가격/설명이 줄바꿈으로 나뉜 형식도 지원
               (파싱 후 항목을 클릭하면 [키즈추천] 표시를 직접 켜고 끌 수 있음)
             </span>
             <textarea
@@ -995,17 +1007,22 @@ export function CurationFormModal({
             )}
             {/* [개선사항 5] "관리자가 수동으로 끄거나 켤 수도 있어야 함" — 자동 파싱이
                 제안한 값을 여기서 직접 뒤집을 수 있다. */}
-            <label className="mt-1 flex items-center gap-1.5 text-xs text-gray-600">
-              <input
-                type="checkbox"
-                checked={hasKidsMenuBadge}
-                onChange={(e) => {
-                  kidsMenuManuallySetRef.current = true;
-                  setHasKidsMenuBadge(e.target.checked);
-                }}
-              />
-              🌟 [키즈메뉴] 뱃지 (⚡ 자동 파싱 시 키즈메뉴 매칭되면 자동 체크됨, 수동 변경 가능)
-            </label>
+            {/* [카테고리 스코프](2026-09-26): 'kids_menu' 뱃지 키가 없는 카테고리
+                (예: 놀이방찜질방/스파)에서는 숨긴다 — supportsKidsMenuBadge 선언부
+                주석 참고. */}
+            {supportsKidsMenuBadge && (
+              <label className="mt-1 flex items-center gap-1.5 text-xs text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={hasKidsMenuBadge}
+                  onChange={(e) => {
+                    kidsMenuManuallySetRef.current = true;
+                    setHasKidsMenuBadge(e.target.checked);
+                  }}
+                />
+                🌟 [키즈메뉴] 뱃지 (⚡ 자동 파싱 시 키즈메뉴 매칭되면 자동 체크됨, 수동 변경 가능)
+              </label>
+            )}
           </div>
 
           {/* [가격 및 입장료 스마트 파싱](2026-09-08 사용자 지시): "네이버 플레이스
