@@ -353,7 +353,7 @@ const SPA_JJIMJILBANG_CONFIG: CurationCategoryConfig = {
   categoryId: 'spa_jjimjilbang',
   exposureCategoryNames: [],
   categoryMinNames: ['놀이방찜질방/스파'],
-  badgeGroups: ['이동/편의', '놀이/오락', '식음료', '목욕시설', '휴게/청결', '주의/제한'],
+  badgeGroups: ['이동/편의', '놀이/오락', '식음료', '목욕시설', '휴게/청결'],
   badgeOptions: [
     { key: 'jj_parking', label: '주차 완비', group: '이동/편의' },
     { key: 'jj_24h', label: '24시간 운영', group: '이동/편의' },
@@ -385,7 +385,6 @@ const SPA_JJIMJILBANG_CONFIG: CurationCategoryConfig = {
     // 고급 안마의자가 가득해요")에 이미 근거가 있었다. KIDS_CAFE_CONFIG의
     // kc_parent_relax와 같은 개념 — 키워드도 그대로 재사용(제5장 제4조).
     { key: 'jj_massage_chair', label: '안마의자', group: '휴게/청결' },
-    { key: 'jj_mixed_bath_age_limit', label: '혼탕 나이 제한', group: '주의/제한' },
   ],
   keywordGroups: {
     jj_parking: ['주차', '주차장', '주차 편리', '주차 널찍', '지하주차장', '주차 완비'],
@@ -413,7 +412,11 @@ const SPA_JJIMJILBANG_CONFIG: CurationCategoryConfig = {
     jj_shower: ['샤워실', '샤워부스'],
     jj_outdoor_lounge: ['야외 테라스', '야외 휴게실', '야외 쉼터', '야외 벤치', '야외 정원'],
     jj_massage_chair: ['안마의자', '안마기', '릴렉스존'],
-    jj_mixed_bath_age_limit: ['혼탕', '이성탕', '동반입욕', '혼욕', '이성 보호자'],
+    // [2026-09-26 사용자 지시로 삭제] "이거 혼탕연령제한? 의미 있어? 공중위생법상
+    // 만4세이상 동성 자녀는 같이 혼욕못한다는데?" — 업체별 자율 정책이 아니라
+    // 법(공중위생법 시행규칙)으로 정해진 전국 공통 기준이라면, 스팟마다 다르게
+    // 붙는 뱃지로는 의미가 없다(모든 곳에 똑같이 적용되는 정보라 스팟 간
+    // 구분에 도움이 안 됨) — jj_mixed_bath_age_limit 뱃지 자체를 제거했다.
   },
 };
 

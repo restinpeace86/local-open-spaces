@@ -297,14 +297,21 @@ describe('spa_jjimjilbang(놀이방찜질방/스파) 카테고리 뱃지', () =>
     expect(resolveCurationCategoryId(null, null)).toBe('restaurant');
   });
 
-  it('21개 뱃지가 6개 그룹으로 나뉜다', () => {
+  it('20개 뱃지가 5개 그룹으로 나뉜다', () => {
     const options = getBadgeOptionsForCategory('spa_jjimjilbang');
-    expect(options).toHaveLength(21);
+    expect(options).toHaveLength(20);
     const groupCounts = options.reduce<Record<string, number>>((acc, o) => {
       acc[o.group] = (acc[o.group] ?? 0) + 1;
       return acc;
     }, {});
-    expect(groupCounts).toEqual({ '이동/편의': 5, '놀이/오락': 2, 식음료: 3, 목욕시설: 5, '휴게/청결': 5, '주의/제한': 1 });
+    expect(groupCounts).toEqual({ '이동/편의': 5, '놀이/오락': 2, 식음료: 3, 목욕시설: 5, '휴게/청결': 5 });
+  });
+
+  // [2026-09-26 사용자 지시로 삭제] "이거 혼탕연령제한? 의미 있어? 공중위생법상
+  // 만4세이상 동성 자녀는 같이 혼욕못한다는데?" — 법으로 정해진 전국 공통
+  // 기준이면 스팟마다 다르게 붙는 뱃지로는 의미가 없어 제거했다.
+  it('혼탕 나이 제한 뱃지는 삭제되어 존재하지 않는다', () => {
+    expect(isKnownCurationBadgeKey('spa_jjimjilbang', 'jj_mixed_bath_age_limit')).toBe(false);
   });
 
   // [2026-09-26 사용자 지시] "안마의자가 빠졌네" — 이 세션 앞부분 블로그 후기
