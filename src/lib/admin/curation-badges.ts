@@ -378,7 +378,6 @@ const SPA_JJIMJILBANG_CONFIG: CurationCategoryConfig = {
     { key: 'jj_foot_bath', label: '족욕탕', group: '목욕시설' },
     { key: 'jj_sleeping_room', label: '수면실', group: '휴게/청결' },
     { key: 'jj_water_quality', label: '수질관리', group: '휴게/청결' },
-    { key: 'jj_shower', label: '샤워실', group: '휴게/청결' },
     { key: 'jj_outdoor_lounge', label: '야외 휴게공간', group: '휴게/청결' },
     // [2026-09-26 사용자 지시] "안마의자가 빠졌네" — 이 세션 앞부분에 붙여준
     // 아뮤즈스파 블로그 후기 원문("휴식의 하이라이트는 역시 안마의자실이죠?..
@@ -409,7 +408,10 @@ const SPA_JJIMJILBANG_CONFIG: CurationCategoryConfig = {
     jj_foot_bath: ['족욕탕', '족욕장', '족욕'],
     jj_sleeping_room: ['수면실', '수면방', '만화방'],
     jj_water_quality: ['수질', '수질관리', '수질 관리'],
-    jj_shower: ['샤워실', '샤워부스'],
+    // [2026-09-26 사용자 지시로 삭제] "샤워실도 빼자.. 기본적으로 샤워실은
+    // 존재하고 샤워실이 좌지우지 하는거 같지는 않아. 큰 차이 없어보여" —
+    // 혼탕 나이 제한과 같은 이유(제3장 제5조): 어느 목욕탕/찜질방이든 기본으로
+    // 있는 시설이라 스팟마다 다르게 붙는 뱃지로는 구분에 도움이 안 된다.
     jj_outdoor_lounge: ['야외 테라스', '야외 휴게실', '야외 쉼터', '야외 벤치', '야외 정원'],
     jj_massage_chair: ['안마의자', '안마기', '릴렉스존'],
     // [2026-09-26 사용자 지시로 삭제] "이거 혼탕연령제한? 의미 있어? 공중위생법상
@@ -427,7 +429,8 @@ const SPA_JJIMJILBANG_CONFIG: CurationCategoryConfig = {
 // facility_equipped, play_var, foodplace_var, scale)는 의도적으로 제외했다 —
 // 사용자 지적대로 "어떤 휴게공간인지/부대시설인지 모른다"는 뭉뚱그려진 코드라
 // 특정 뱃지로 자동 확정하면 근거 없는 단정이 된다(제3장 제5조). scrubber_good은
-// 사용자 지시("세신 서비스 우수는 빼자")로 제거했다.
+// 사용자 지시("세신 서비스 우수는 빼자")로, shower_good은 "샤워실도 빼자..
+// 기본적으로 존재하고 좌지우지 하는거 같지는 않아"라는 지시로 제거했다.
 export const NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY: Record<string, string> = {
   parking_easy: 'jj_parking',
   water_quality: 'jj_water_quality',
@@ -435,7 +438,6 @@ export const NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY: Record<string, string> = {
   baths_various_heart: 'jj_various_baths',
   sleeping_room: 'jj_sleeping_room',
   outdoor_bath: 'jj_outdoor_bath',
-  shower_good: 'jj_shower',
   saunas_unique: 'jj_unique_room',
 };
 

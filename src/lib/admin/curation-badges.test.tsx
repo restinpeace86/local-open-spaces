@@ -297,14 +297,20 @@ describe('spa_jjimjilbang(놀이방찜질방/스파) 카테고리 뱃지', () =>
     expect(resolveCurationCategoryId(null, null)).toBe('restaurant');
   });
 
-  it('20개 뱃지가 5개 그룹으로 나뉜다', () => {
+  it('19개 뱃지가 5개 그룹으로 나뉜다', () => {
     const options = getBadgeOptionsForCategory('spa_jjimjilbang');
-    expect(options).toHaveLength(20);
+    expect(options).toHaveLength(19);
     const groupCounts = options.reduce<Record<string, number>>((acc, o) => {
       acc[o.group] = (acc[o.group] ?? 0) + 1;
       return acc;
     }, {});
-    expect(groupCounts).toEqual({ '이동/편의': 5, '놀이/오락': 2, 식음료: 3, 목욕시설: 5, '휴게/청결': 5 });
+    expect(groupCounts).toEqual({ '이동/편의': 5, '놀이/오락': 2, 식음료: 3, 목욕시설: 5, '휴게/청결': 4 });
+  });
+
+  // [2026-09-26 사용자 피드백] "샤워실도 빼자.. 기본적으로 샤워실은 존재하고
+  // 좌지우지 하는거 같지는 않아. 큰 차이 없어보여" — 삭제됐는지 확인.
+  it('샤워실 뱃지는 삭제되어 존재하지 않는다', () => {
+    expect(isKnownCurationBadgeKey('spa_jjimjilbang', 'jj_shower')).toBe(false);
   });
 
   // [2026-09-26 사용자 지시로 삭제] "이거 혼탕연령제한? 의미 있어? 공중위생법상
@@ -365,7 +371,7 @@ describe('spa_jjimjilbang(놀이방찜질방/스파) 카테고리 뱃지', () =>
     );
   });
 
-  it('NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY는 구체적인 7개 코드만 뱃지로 매핑하고, 뭉뚱그려진 코드는 제외한다', () => {
+  it('NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY는 구체적인 6개 코드만 뱃지로 매핑하고, 뭉뚱그려진 코드는 제외한다', () => {
     expect(NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY).toEqual({
       parking_easy: 'jj_parking',
       water_quality: 'jj_water_quality',
@@ -373,7 +379,6 @@ describe('spa_jjimjilbang(놀이방찜질방/스파) 카테고리 뱃지', () =>
       baths_various_heart: 'jj_various_baths',
       sleeping_room: 'jj_sleeping_room',
       outdoor_bath: 'jj_outdoor_bath',
-      shower_good: 'jj_shower',
       saunas_unique: 'jj_unique_room',
     });
     // 뭉뚱그려진 코드(사용자 지적: "휴게공간이 어떤 휴게공간인지 모른다")는 없어야 한다.

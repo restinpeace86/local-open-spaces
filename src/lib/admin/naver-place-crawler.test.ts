@@ -459,7 +459,7 @@ describe('extractNaverPlaceReviewVoteHints', () => {
               makeDetail('baths_various', '탕 종류가 다양해요', 149),
               makeDetail('baths_various_heart', '탕 종류가 다양해요', 88),
               makeDetail('sleeping_room', '수면실이 잘 되어있어요', 25),
-              makeDetail('shower_good', '샤워실이 잘 되어있어요', 23),
+              makeDetail('shower_good', '샤워실이 잘 되어있어요', 23), // 뱃지 삭제됨(사용자 지시) — 제외
               makeDetail('saunas_unique', '특이한 찜질방이 있어요', 14),
               makeDetail('outdoor_bath', '노천탕이 잘 되어있어요', 10),
               makeDetail('scrubber_good', '세신사의 실력이 좋아요', 10), // 뱃지 삭제됨(사용자 지시) — 제외
@@ -480,7 +480,6 @@ describe('extractNaverPlaceReviewVoteHints', () => {
       { code: 'baths_various', badgeKey: 'jj_various_baths', displayName: '탕 종류가 다양해요', count: 149, rank: 6 },
       { code: 'baths_various_heart', badgeKey: 'jj_various_baths', displayName: '탕 종류가 다양해요', count: 88, rank: 7 },
       { code: 'sleeping_room', badgeKey: 'jj_sleeping_room', displayName: '수면실이 잘 되어있어요', count: 25, rank: 8 },
-      { code: 'shower_good', badgeKey: 'jj_shower', displayName: '샤워실이 잘 되어있어요', count: 23, rank: 9 },
       { code: 'saunas_unique', badgeKey: 'jj_unique_room', displayName: '특이한 찜질방이 있어요', count: 14, rank: 10 },
       { code: 'outdoor_bath', badgeKey: 'jj_outdoor_bath', displayName: '노천탕이 잘 되어있어요', count: 10, rank: 11 },
     ]);
