@@ -344,6 +344,11 @@ const EDUCATION_FARM_CONFIG: CurationCategoryConfig = {
 //   있으면 해당안되는거야?" — 맞다, 그래서 jj_foot_bath(족욕탕)는 "야외" 제한을
 //   빼고 실내외 무관하게 족욕 시설 자체만 판단하게 하고, jj_outdoor_lounge
 //   (야외 휴게공간)를 별도로 뒀다.
+// [라벨 축약](2026-09-26 사용자 지시): "뱃지들이 이번꺼 너무 길어.." — 뱃지 체크박스
+// UI가 좁은 칩 형태라 "특이한 찜질방(테마방)"/"샤워실 잘 되어있음"류의 긴 라벨이
+// 줄바꿈되며 답답해 보였다. 뱃지 키(jj_*)와 keywordGroups는 그대로 두고 label만
+// 명사형으로 짧게 다듬었다 — 의미는 동일하다("있음"/"우수"/"잘 되어있음" 등 서술어만
+// 제거).
 const SPA_JJIMJILBANG_CONFIG: CurationCategoryConfig = {
   categoryId: 'spa_jjimjilbang',
   exposureCategoryNames: [],
@@ -353,20 +358,20 @@ const SPA_JJIMJILBANG_CONFIG: CurationCategoryConfig = {
     { key: 'jj_parking', label: '주차 완비', group: '이동/편의' },
     { key: 'jj_24h', label: '24시간 운영', group: '이동/편의' },
     { key: 'jj_kids_zone', label: '놀이방/키즈존', group: '놀이/오락' },
-    { key: 'jj_arcade', label: '오락실/코인노래방/PC방', group: '놀이/오락' },
-    { key: 'jj_snack_bar', label: '매점(식혜·구운계란 등)', group: '식음료' },
-    { key: 'jj_restaurant', label: '식당 있음', group: '식음료' },
-    { key: 'jj_kids_menu', label: '키즈 메뉴 있음', group: '식음료' },
-    { key: 'jj_various_baths', label: '탕 종류 다양함', group: '목욕시설' },
-    { key: 'jj_outdoor_bath', label: '노천탕 있음', group: '목욕시설' },
-    { key: 'jj_unique_room', label: '특이한 찜질방(테마방)', group: '목욕시설' },
-    { key: 'jj_low_temp_room', label: '저온 힐링방(편백·소금방 등)', group: '목욕시설' },
+    { key: 'jj_arcade', label: '오락존', group: '놀이/오락' },
+    { key: 'jj_snack_bar', label: '매점', group: '식음료' },
+    { key: 'jj_restaurant', label: '식당', group: '식음료' },
+    { key: 'jj_kids_menu', label: '키즈메뉴', group: '식음료' },
+    { key: 'jj_various_baths', label: '다양한 탕 종류', group: '목욕시설' },
+    { key: 'jj_outdoor_bath', label: '노천탕', group: '목욕시설' },
+    { key: 'jj_unique_room', label: '테마 찜질방', group: '목욕시설' },
+    { key: 'jj_low_temp_room', label: '저온 힐링방', group: '목욕시설' },
     { key: 'jj_foot_bath', label: '족욕탕', group: '목욕시설' },
-    { key: 'jj_sleeping_room', label: '수면실 있음', group: '휴게/청결' },
-    { key: 'jj_water_quality', label: '수질 관리 우수', group: '휴게/청결' },
-    { key: 'jj_shower', label: '샤워실 잘 되어있음', group: '휴게/청결' },
+    { key: 'jj_sleeping_room', label: '수면실', group: '휴게/청결' },
+    { key: 'jj_water_quality', label: '수질관리', group: '휴게/청결' },
+    { key: 'jj_shower', label: '샤워실', group: '휴게/청결' },
     { key: 'jj_outdoor_lounge', label: '야외 휴게공간', group: '휴게/청결' },
-    { key: 'jj_mixed_bath_age_limit', label: '이성 혼탕 나이 제한 있음', group: '주의/제한' },
+    { key: 'jj_mixed_bath_age_limit', label: '혼탕 나이 제한', group: '주의/제한' },
   ],
   keywordGroups: {
     jj_parking: ['주차', '주차장', '주차 편리', '주차 널찍', '지하주차장', '주차 완비'],
