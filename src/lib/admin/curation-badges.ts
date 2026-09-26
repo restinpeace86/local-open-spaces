@@ -380,6 +380,11 @@ const SPA_JJIMJILBANG_CONFIG: CurationCategoryConfig = {
     { key: 'jj_water_quality', label: '수질관리', group: '휴게/청결' },
     { key: 'jj_shower', label: '샤워실', group: '휴게/청결' },
     { key: 'jj_outdoor_lounge', label: '야외 휴게공간', group: '휴게/청결' },
+    // [2026-09-26 사용자 지시] "안마의자가 빠졌네" — 이 세션 앞부분에 붙여준
+    // 아뮤즈스파 블로그 후기 원문("휴식의 하이라이트는 역시 안마의자실이죠?..
+    // 고급 안마의자가 가득해요")에 이미 근거가 있었다. KIDS_CAFE_CONFIG의
+    // kc_parent_relax와 같은 개념 — 키워드도 그대로 재사용(제5장 제4조).
+    { key: 'jj_massage_chair', label: '안마의자', group: '휴게/청결' },
     { key: 'jj_mixed_bath_age_limit', label: '혼탕 나이 제한', group: '주의/제한' },
   ],
   keywordGroups: {
@@ -407,6 +412,7 @@ const SPA_JJIMJILBANG_CONFIG: CurationCategoryConfig = {
     jj_water_quality: ['수질', '수질관리', '수질 관리'],
     jj_shower: ['샤워실', '샤워부스'],
     jj_outdoor_lounge: ['야외 테라스', '야외 휴게실', '야외 쉼터', '야외 벤치', '야외 정원'],
+    jj_massage_chair: ['안마의자', '안마기', '릴렉스존'],
     jj_mixed_bath_age_limit: ['혼탕', '이성탕', '동반입욕', '혼욕', '이성 보호자'],
   },
 };

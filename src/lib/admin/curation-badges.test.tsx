@@ -297,14 +297,22 @@ describe('spa_jjimjilbang(놀이방찜질방/스파) 카테고리 뱃지', () =>
     expect(resolveCurationCategoryId(null, null)).toBe('restaurant');
   });
 
-  it('20개 뱃지가 6개 그룹으로 나뉜다', () => {
+  it('21개 뱃지가 6개 그룹으로 나뉜다', () => {
     const options = getBadgeOptionsForCategory('spa_jjimjilbang');
-    expect(options).toHaveLength(20);
+    expect(options).toHaveLength(21);
     const groupCounts = options.reduce<Record<string, number>>((acc, o) => {
       acc[o.group] = (acc[o.group] ?? 0) + 1;
       return acc;
     }, {});
-    expect(groupCounts).toEqual({ '이동/편의': 5, '놀이/오락': 2, 식음료: 3, 목욕시설: 5, '휴게/청결': 4, '주의/제한': 1 });
+    expect(groupCounts).toEqual({ '이동/편의': 5, '놀이/오락': 2, 식음료: 3, 목욕시설: 5, '휴게/청결': 5, '주의/제한': 1 });
+  });
+
+  // [2026-09-26 사용자 지시] "안마의자가 빠졌네" — 이 세션 앞부분 블로그 후기
+  // 원문("휴식의 하이라이트는 역시 안마의자실이죠?..")에 이미 근거가 있었다.
+  it('안마의자 키워드가 정확히 매칭된다', () => {
+    expect(matchBadgeKeysFromText('안마의자실에 고급 안마의자가 가득해요', 'spa_jjimjilbang')).toEqual(
+      new Set(['jj_massage_chair'])
+    );
   });
 
   // [2026-09-26 사용자 지시] "편의쪽에 유아의자 이런거도 넣어줘.. 기저귀갈이대라던가
