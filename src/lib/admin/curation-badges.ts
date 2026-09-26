@@ -357,6 +357,15 @@ const SPA_JJIMJILBANG_CONFIG: CurationCategoryConfig = {
   badgeOptions: [
     { key: 'jj_parking', label: '주차 완비', group: '이동/편의' },
     { key: 'jj_24h', label: '24시간 운영', group: '이동/편의' },
+    // [2026-09-26 사용자 지시] "편의쪽에 유아의자 이런거도 넣어줘 그래도
+    // 키즈친화인데" — 실측(아뮤즈스파&피트니스 남악점 편의시설)에 "유아의자"가
+    // 실제로 있어 확인된 항목. "기저귀갈이대라던가 수유룸.. 있을수도 있나"는
+    // 같은 실측 데이터의 InformationFacilities 전체 카탈로그에 없어 근거가
+    // 약하다 — 편의시설 자동체크 대상에서 빼고 블로그 키워드 매칭으로만
+    // 채운다(추측 금지, 제3장 제5조 — 확신 없는 걸 자동 확정하지 않음).
+    { key: 'jj_kids_chair', label: '유아의자', group: '이동/편의' },
+    { key: 'jj_diaper_table', label: '기저귀 교환대', group: '이동/편의' },
+    { key: 'jj_nursing_room', label: '수유실', group: '이동/편의' },
     { key: 'jj_kids_zone', label: '놀이방/키즈존', group: '놀이/오락' },
     { key: 'jj_arcade', label: '오락존', group: '놀이/오락' },
     { key: 'jj_snack_bar', label: '매점', group: '식음료' },
@@ -376,6 +385,11 @@ const SPA_JJIMJILBANG_CONFIG: CurationCategoryConfig = {
   keywordGroups: {
     jj_parking: ['주차', '주차장', '주차 편리', '주차 널찍', '지하주차장', '주차 완비'],
     jj_24h: ['24시간', '24시간 운영', '심야영업', '밤새'],
+    // [기존 구조 재사용](제5장 제4조): RESTAURANT_KEYWORD_GROUPS/GENERIC_KEYWORD_GROUPS의
+    // 동일 개념 키워드를 그대로 가져왔다(새로 지어내지 않음).
+    jj_kids_chair: ['유아의자', '아기의자'],
+    jj_diaper_table: ['기저귀', '갈이대', '기저귀존', '기저귀교환대'],
+    jj_nursing_room: ['수유실', '모유수유'],
     jj_kids_zone: ['놀이방', '키즈존', '볼풀장', '미끄럼틀', '어린이 놀이터', '키카페급', '키즈플레이존', '유아시설'],
     jj_arcade: ['오락실', '오락기', '코인노래방', '노래방', 'PC방', '게임기', '뽑기방', '오락존'],
     jj_snack_bar: ['매점', '식혜', '맥반석 계란', '구운계란', '구운감자', '매점 간식'],

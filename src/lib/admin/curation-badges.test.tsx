@@ -297,14 +297,26 @@ describe('spa_jjimjilbang(놀이방찜질방/스파) 카테고리 뱃지', () =>
     expect(resolveCurationCategoryId(null, null)).toBe('restaurant');
   });
 
-  it('17개 뱃지가 6개 그룹으로 나뉜다', () => {
+  it('20개 뱃지가 6개 그룹으로 나뉜다', () => {
     const options = getBadgeOptionsForCategory('spa_jjimjilbang');
-    expect(options).toHaveLength(17);
+    expect(options).toHaveLength(20);
     const groupCounts = options.reduce<Record<string, number>>((acc, o) => {
       acc[o.group] = (acc[o.group] ?? 0) + 1;
       return acc;
     }, {});
-    expect(groupCounts).toEqual({ '이동/편의': 2, '놀이/오락': 2, 식음료: 3, 목욕시설: 5, '휴게/청결': 4, '주의/제한': 1 });
+    expect(groupCounts).toEqual({ '이동/편의': 5, '놀이/오락': 2, 식음료: 3, 목욕시설: 5, '휴게/청결': 4, '주의/제한': 1 });
+  });
+
+  // [2026-09-26 사용자 지시] "편의쪽에 유아의자 이런거도 넣어줘.. 기저귀갈이대라던가
+  // 수유룸? 이있을수도 있나" — 유아의자는 실측(아뮤즈스파 편의시설)으로 확인돼
+  // 추가했고, 기저귀갈이대/수유실은 근거가 약해 블로그 키워드로만 매칭한다.
+  it('유아의자/기저귀 교환대/수유실 키워드가 정확히 매칭된다', () => {
+    expect(matchBadgeKeysFromText('유아의자가 있어서 아기랑 밥 먹기 편했어요', 'spa_jjimjilbang')).toEqual(
+      new Set(['jj_kids_chair'])
+    );
+    expect(matchBadgeKeysFromText('기저귀갈이대와 수유실이 따로 있어요', 'spa_jjimjilbang')).toEqual(
+      new Set(['jj_diaper_table', 'jj_nursing_room'])
+    );
   });
 
   // [2026-09-26 사용자 피드백] "세신 서비스 우수는 빼자" — 삭제됐는지 확인.
