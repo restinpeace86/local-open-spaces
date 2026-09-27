@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     // (제3장 제5조 추측 금지), 서버가 직접 DB에서 실제 created_at을 조회해 판정한다.
     const { data: memberRows, error: memberError } = await admin
       .from('open_spaces')
-      .select('id, created_at')
+      .select('id, created_at, naver_place_id')
       .in('id', spotIds);
     if (memberError) return NextResponse.json({ error: memberError.message }, { status: 500 });
     if (!memberRows || memberRows.length !== spotIds.length) {
@@ -61,6 +61,24 @@ export async function POST(request: NextRequest) {
       if (rTime !== earliestTime) return rTime < earliestTime ? r : earliest;
       return r.id < earliest.id ? r : earliest;
     }).id;
+
+    // [그룹 병합 시 naver_place_id 자동 이전](2026-09-27 사용자 지시, "어뮤즈스파
+    // 진주점" 사례): "그룹병합한 후에 안보이게 되고 그룹병합후 해서 채우면 보이면
+    // 돼. 혹은 둘중에 값 있던 것으로 나머지 그룹병합된것도 채워줘도 되고" —
+    // naver_place_id는 unique 제약이 있어(open_spaces) 여러 행에 동시에 같은 값을
+    // 채울 수 없다. 비대표가 될 멤버 중 하나가 이미 값을 갖고 있고 대표는 아직
+    // 없으면, 그 값을 대표로 옮긴다(비대표 쪽은 비운다) — 그래야 대표가 화면에
+    // 보이는 유일한 행이라는 전제와 맞는다. 값을 가진 멤버가 둘 이상이고 서로
+    // 다른 값이면(진짜 데이터 충돌) 추측으로 하나를 고르지 않고 그대로 둔다
+    // (제3장 제5조 추측 금지).
+    const representativeRow = memberRows.find((r) => r.id === representativeId);
+    const distinctNaverPlaceIds = Array.from(
+      new Set(
+        memberRows.map((r) => r.naver_place_id).filter((v): v is string => typeof v === 'string' && v.length > 0)
+      )
+    );
+    const naverPlaceIdToMigrate =
+      !representativeRow?.naver_place_id && distinctNaverPlaceIds.length === 1 ? distinctNaverPlaceIds[0] : null;
 
     // 1. 이력 테이블에 먼저 기록해 group_id를 발급받는다(요구사항: "그룹핑 정보와
     // 처리 완료 상태가 DB에 이력으로 적재").
@@ -98,6 +116,21 @@ export async function POST(request: NextRequest) {
       .update({ is_dedup_representative: true })
       .eq('id', representativeId);
     if (representativeError) return NextResponse.json({ error: representativeError.message }, { status: 500 });
+
+    // [그룹 병합 시 naver_place_id 자동 이전, 이어서] 반드시 비대표(원래 값을
+    // 갖고 있던 멤버)에서 먼저 비운 뒤에 대표로 옮긴다 — 순서를 바꾸면 잠깐 두
+    // 행이 동시에 같은 값을 가지게 돼 unique 제약을 그대로 위반한다.
+    if (naverPlaceIdToMigrate) {
+      const sourceId = memberRows.find((r) => r.naver_place_id === naverPlaceIdToMigrate)!.id;
+      const { error: clearError } = await admin.from('open_spaces').update({ naver_place_id: null }).eq('id', sourceId);
+      if (clearError) return NextResponse.json({ error: clearError.message }, { status: 500 });
+
+      const { error: migrateError } = await admin
+        .from('open_spaces')
+        .update({ naver_place_id: naverPlaceIdToMigrate })
+        .eq('id', representativeId);
+      if (migrateError) return NextResponse.json({ error: migrateError.message }, { status: 500 });
+    }
 
     // [중복 스팟 검수 — 진행 상태 임시 저장](2026-09-05 사용자 지시): "수정 다하고
     // 등록하면 임시테이블에서.. 진짜 테이블로 옮겨가고 임시테이블에서는 해당 row들
