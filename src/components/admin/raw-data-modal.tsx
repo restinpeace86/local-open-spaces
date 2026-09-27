@@ -15,6 +15,7 @@ import { GroupMemberRow } from '@/app/api/admin/spot-dedup/group-members/route';
 import { cleanupMessyText, looksLikeMessyText } from '@/lib/admin/cleanup-messy-text';
 import { EVENTS_ALLOWED_CATEGORY_MINS } from '@/lib/admin/category-min-groups';
 import { OperatingScheduleUpdatedHandler } from '@/components/admin/operating-schedule-editor';
+import { OpenSpaceExcludedDaysEditor, OpenSpaceExcludedDaysUpdatedHandler } from '@/components/admin/open-space-excluded-days-editor';
 import { SpotServiceCategoryCheck } from '@/components/admin/spot-service-category-check';
 import { SpotMyRealTripLinkEditor } from '@/components/admin/spot-myrealtrip-link-editor';
 import { FacilityClassificationResult } from '@/lib/admin/llm-facility-classification';
@@ -859,6 +860,7 @@ export function RawDataModal({
   onServiceCategoryUpdated,
   onDisplayNameUpdated,
   onNaverPlaceIdUpdated,
+  onExcludedDaysUpdated,
   onDeleted,
 }: {
   table: AdminTable;
@@ -892,6 +894,8 @@ export function RawDataModal({
   // 전용. SpotCurationQuickModal이 저장한 최신 naver_place_id를 부모(그리드 상태)에
   // 즉시 반영하기 위한 콜백 — onDisplayNameUpdated와 동일한 스테일 상태 방지 목적.
   onNaverPlaceIdUpdated?: (id: string, nextNaverPlaceId: string | null) => void;
+  // [open_spaces 정기휴무 설정](2026-09-27 사용자 지시): open_spaces 탭 전용.
+  onExcludedDaysUpdated?: OpenSpaceExcludedDaysUpdatedHandler;
   // [open_spaces 삭제 기능](2026-09-06 사용자 지시): open_spaces 탭에서만 전달된다 —
   // 삭제 성공 시 부모가 목록에서 이 행을 제거하고 상세 모달을 닫는다.
   onDeleted?: (id: string) => void;
@@ -1109,6 +1113,13 @@ export function RawDataModal({
 
           {table === 'open_spaces' && onDisplayNameUpdated && (
             <SpotDisplayNameEditor row={row as AdminOpenSpaceRow} onUpdated={onDisplayNameUpdated} />
+          )}
+
+          {/* [open_spaces 정기휴무 설정](2026-09-27 사용자 지시): "이거 이벤트쪽에
+              있나 휴관일이나 정기휴무 설정하는거... 이거 open_spaces쪽에도 놓고..
+              정기휴무 설정할수있게해야하는거 아니야?" */}
+          {table === 'open_spaces' && onExcludedDaysUpdated && (
+            <OpenSpaceExcludedDaysEditor row={row as AdminOpenSpaceRow} onUpdated={onExcludedDaysUpdated} />
           )}
 
           {/* [관리자용 블로그 큐레이션 모달](2026-09-05 사용자 지시, Decision 021):

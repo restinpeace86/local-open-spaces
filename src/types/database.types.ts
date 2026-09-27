@@ -673,6 +673,8 @@ export type Database = {
           category_min_source: string | null
           created_at: string | null
           display_name: string | null
+          excluded_nth_weekdays: string[] | null
+          excluded_weekdays: string[] | null
           external_id: string
           facility_type: string | null
           feature_tag: string | null
@@ -710,6 +712,8 @@ export type Database = {
           category_min_source?: string | null
           created_at?: string | null
           display_name?: string | null
+          excluded_nth_weekdays?: string[] | null
+          excluded_weekdays?: string[] | null
           external_id: string
           facility_type?: string | null
           feature_tag?: string | null
@@ -747,6 +751,8 @@ export type Database = {
           category_min_source?: string | null
           created_at?: string | null
           display_name?: string | null
+          excluded_nth_weekdays?: string[] | null
+          excluded_weekdays?: string[] | null
           external_id?: string
           facility_type?: string | null
           feature_tag?: string | null

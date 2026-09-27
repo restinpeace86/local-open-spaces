@@ -102,6 +102,13 @@ export type AdminOpenSpaceRow = {
   sigungu_name: string | null;
   created_at: string | null;
   updated_at: string | null;
+  // [open_spaces 정기휴무 설정](2026-09-27 사용자 지시): "이거 이벤트쪽에 있나
+  // 휴관일이나 정기휴무 설정하는거... 이거 open_spaces쪽에도 놓고.. 정기휴무
+  // 설정할수있게해야하는거 아니야?" — events의 excluded_weekdays와 같은 의미
+  // (정기 휴무 요일). excluded_nth_weekdays는 events의 operating_nth_weekdays와
+  // 반대 극성(운영 아니라 휴무)이라 이름을 분리했다.
+  excluded_weekdays?: string[] | null;
+  excluded_nth_weekdays?: string[] | null;
 };
 
 export type AdminEventRow = {
@@ -2044,6 +2051,20 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
             );
             setSelectedRow((prev) =>
               prev && 'id' in prev && prev.id === id ? { ...prev, next_reservation_open_at: nextOpenAt } : prev
+            );
+          }}
+          onExcludedDaysUpdated={(id, nextExcludedWeekdays, nextExcludedNthWeekdays) => {
+            setRows((prev) =>
+              prev.map((row) =>
+                'id' in row && row.id === id
+                  ? { ...row, excluded_weekdays: nextExcludedWeekdays, excluded_nth_weekdays: nextExcludedNthWeekdays }
+                  : row
+              )
+            );
+            setSelectedRow((prev) =>
+              prev && 'id' in prev && prev.id === id
+                ? { ...prev, excluded_weekdays: nextExcludedWeekdays, excluded_nth_weekdays: nextExcludedNthWeekdays }
+                : prev
             );
           }}
           onOperatingScheduleUpdated={(
