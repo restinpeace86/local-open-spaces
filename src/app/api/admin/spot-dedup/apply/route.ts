@@ -45,7 +45,7 @@ export async function POST(request: NextRequest) {
     // (제3장 제5조 추측 금지), 서버가 직접 DB에서 실제 created_at을 조회해 판정한다.
     const { data: memberRows, error: memberError } = await admin
       .from('open_spaces')
-      .select('id, created_at, naver_place_id')
+      .select('id, created_at, naver_place_id, excluded_weekdays, excluded_nth_weekdays')
       .in('id', spotIds);
     if (memberError) return NextResponse.json({ error: memberError.message }, { status: 500 });
     if (!memberRows || memberRows.length !== spotIds.length) {
@@ -80,6 +80,29 @@ export async function POST(request: NextRequest) {
     const naverPlaceIdToMigrate =
       !representativeRow?.naver_place_id && distinctNaverPlaceIds.length === 1 ? distinctNaverPlaceIds[0] : null;
 
+    // [어린이도서관 중복 스팟 그룹 — 정기휴관일 통합](2026-09-28 사용자 지시): "정기휴관일
+    // 관련하여서도 둘중 하나가 값이 있으면 있는것 기준으로 통합되게 해줘.. 동일한
+    // 그룹내 빈쪽에도 동일하게 채워주던가" — naver_place_id(unique 제약이 있어 대표
+    // 1건에만 이전)와 달리 excluded_weekdays/excluded_nth_weekdays는 제약이 없고
+    // "같은 물리적 장소면 모든 멤버가 같은 정기휴무 정보를 가져야 자연스럽다"는 게
+    // 요구사항이라, 대표뿐 아니라 그룹 멤버 전원에게 같은 값을 채운다. 멤버들 사이에
+    // 서로 다른 값이 섞여 있으면(진짜 충돌) 추측으로 하나를 고르지 않고 각자 값을
+    // 그대로 둔다(제3장 제5조 추측 금지).
+    // memberRows는 위에서 이미 null/길이 불일치를 걸러냈지만(early return), TS는
+    // 아래 중첩 함수 클로저까지 그 좁혀진 타입을 이어붙이지 않아 non-null 단언이 필요하다.
+    const validatedMemberRows = memberRows!;
+    function mergeGroupArrayField(field: 'excluded_weekdays' | 'excluded_nth_weekdays'): string[] | null {
+      const nonNullValues = validatedMemberRows
+        .map((r) => r[field] as string[] | null)
+        .filter((v): v is string[] => Array.isArray(v) && v.length > 0);
+      if (nonNullValues.length === 0) return null;
+      const serialized = nonNullValues.map((v) => JSON.stringify([...v].sort()));
+      const allSame = serialized.every((s) => s === serialized[0]);
+      return allSame ? nonNullValues[0] : null;
+    }
+    const mergedExcludedWeekdays = mergeGroupArrayField('excluded_weekdays');
+    const mergedExcludedNthWeekdays = mergeGroupArrayField('excluded_nth_weekdays');
+
     // 1. 이력 테이블에 먼저 기록해 group_id를 발급받는다(요구사항: "그룹핑 정보와
     // 처리 완료 상태가 DB에 이력으로 적재").
     const { data: groupRow, error: groupError } = await admin
@@ -105,6 +128,10 @@ export async function POST(request: NextRequest) {
         service_category_id: serviceCategoryId,
         group_id: groupRow.id,
         is_dedup_representative: false,
+        // [정기휴관일 통합, 이어서] 값을 찾았을 때만 포함한다 — 충돌이거나 그룹
+        // 전체가 비어있으면 이 키 자체를 안 보내 각 행의 기존 값을 그대로 둔다.
+        ...(mergedExcludedWeekdays ? { excluded_weekdays: mergedExcludedWeekdays } : {}),
+        ...(mergedExcludedNthWeekdays ? { excluded_nth_weekdays: mergedExcludedNthWeekdays } : {}),
       })
       .in('id', spotIds)
       .select('id');
