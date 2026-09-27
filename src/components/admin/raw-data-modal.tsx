@@ -71,9 +71,15 @@ function getModalContent(table: AdminTable, row: AdminRow): { title: string; sub
   // [OPEN_SPACES 노출 이름 수동 수정](2026-09-20 사용자 지시): 관리자가 override를
   // 설정했으면 모달 헤더도 실제 노출되는 이름을 보여준다 — 원본 name은 아래
   // SpotDisplayNameEditor의 subtitle로 계속 확인 가능하다.
+  // [운영시간/휴관일 화면 가시성](2026-09-27 사용자 지시): "어디에 추가됐는지
+  // 관리자 화면에서 확인이 어려운데" — operating_hours 컬럼이 그리드/상세 팝업
+  // 어디에도 안 보이고 있었다(그리드 목록에는 없고, DB 컬럼 자체가 상세 패널의
+  // "전체 컬럼" JSON 덤프 대상인 raw_data 안에도 없음 — raw_data와 별개인
+  // 최상위 컬럼). events가 부제에 "행사기간"을 보여주는 것과 동일한 방식으로
+  // 값이 있을 때만 노출한다.
   return {
     title: r.display_name ?? r.name,
-    subtitle: `${r.source_type} · ${r.external_id}`,
+    subtitle: `${r.source_type} · ${r.external_id}${r.operating_hours ? ` · 🕐 ${r.operating_hours}` : ''}`,
     raw: r.raw_data,
     sourceUrl: r.info_url,
   };

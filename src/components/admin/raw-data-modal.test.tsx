@@ -38,6 +38,23 @@ function buildRow(overrides: Partial<AdminOpenSpaceRow> = {}): AdminOpenSpaceRow
   };
 }
 
+// [운영시간/휴관일 화면 가시성](2026-09-27 사용자 지시): "어디에 추가됐는지
+// 관리자 화면에서 확인이 어려운데" — operating_hours가 그리드/상세 팝업 어디에도
+// 안 보이던 문제를 부제에 노출해 해결했는지 검증한다.
+describe('RawDataModal — operating_hours 부제 노출(2026-09-27)', () => {
+  it('operating_hours가 있으면 부제에 함께 보인다', () => {
+    const row = buildRow({ operating_hours: '휴관일 매주 월요일, 법정공휴일' });
+    render(<RawDataModal table="open_spaces" row={row} categoryMinOptions={[]} onClose={vi.fn()} />);
+    expect(screen.getAllByText(/휴관일 매주 월요일, 법정공휴일/).length).toBeGreaterThan(0);
+  });
+
+  it('operating_hours가 없으면 부제에 아무것도 추가되지 않는다(기존 형태 유지)', () => {
+    const row = buildRow({ operating_hours: null, source_type: 'TEST_SOURCE', external_id: 'ext-1' });
+    render(<RawDataModal table="open_spaces" row={row} categoryMinOptions={[]} onClose={vi.fn()} />);
+    expect(screen.getAllByText('TEST_SOURCE · ext-1').length).toBeGreaterThan(0);
+  });
+});
+
 describe('RawDataModal URL/이미지 렌더링', () => {
   it('http(s) URL 값은 새 창으로 열리는 링크로 렌더링된다', () => {
     const row = buildRow();
