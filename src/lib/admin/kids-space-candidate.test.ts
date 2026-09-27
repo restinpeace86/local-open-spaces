@@ -43,6 +43,12 @@ describe('isKidsSpaceReviewCandidate', () => {
     expect(isKidsSpaceReviewCandidate('OO 어린이 도서관', '도서관')).toBe(true);
   });
 
+  it('도서관은 일반도서관 안의 "자료실"(구역)만 있으면 후보가 아니다(순수 어린이도서관만)', () => {
+    expect(isKidsSpaceReviewCandidate('레인보우영동도서관_어린이자료실', '도서관')).toBe(false);
+    expect(isKidsSpaceReviewCandidate('통영시립도서관 아동자료실_유아자료실', '도서관')).toBe(false);
+    expect(isKidsSpaceReviewCandidate('노원어린이도서관', '도서관')).toBe(true);
+  });
+
   it('category_min이 null이면 기본 규칙(포함/제외 키워드)을 적용한다', () => {
     expect(isKidsSpaceReviewCandidate('상상어린이체험관', null)).toBe(true);
     expect(isKidsSpaceReviewCandidate('평범한 시설', null)).toBe(false);

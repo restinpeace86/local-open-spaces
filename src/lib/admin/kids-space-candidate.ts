@@ -17,6 +17,15 @@ const EXCLUDE_KEYWORDS = /어린이집|유치원|지역아동센터|방과후교
 // 실제로 특색 있는 공간들만 남았다. 공원만 이 좁은 규칙을 쓴다.
 const PARK_THEME_KEYWORDS = /생태|체험|모험|동화|과학관|상상|키즈|장난감/;
 
+// [도서관 노이즈 확인](2026-09-27 실측, 사용자 지시): "아니 통영시립도서관
+// 아동자료실_유아자료실은 아니야 순수 어린이 도서관만" — "OO도서관_아동자료실/
+// 어린이자료실"처럼 일반도서관 안의 한 구역(자료실)만 이름에 "어린이/아동"이
+// 붙는 경우가 있다(실측 4건: 레인보우영동도서관_어린이자료실, 통영시립도서관
+// 아동자료실_유아자료실 등) — 건물 전체가 어린이 전용인 "OOO어린이도서관"과는
+// 다르다. 도서관만 "자료실"이 포함되면 제외한다(그 외 카테고리는 "자료실"이
+// 노이즈 신호인지 확인된 바 없어 건드리지 않음, 제3장 제5조 추측 금지).
+const LIBRARY_SECTION_ONLY_KEYWORDS = /자료실/;
+
 // [체육시설 검토 제외](2026-09-27 사용자 지시): "체육시설은 수영장 외에는
 // 다 빼도 돼" — 수영장만 남기고 나머지 중분류는 후보 표시 대상에서 제외.
 const EXCLUDED_SPORTS_MINORS = new Set([
@@ -48,6 +57,7 @@ export function isKidsSpaceReviewCandidate(name: string, categoryMin: string | n
   if (categoryMin && EXCLUDED_SPORTS_MINORS.has(categoryMin)) return false;
 
   if (categoryMin === '공원') return PARK_THEME_KEYWORDS.test(name);
+  if (categoryMin === '도서관' && LIBRARY_SECTION_ONLY_KEYWORDS.test(name)) return false;
 
   return INCLUDE_KEYWORDS.test(name) && !EXCLUDE_KEYWORDS.test(name);
 }
