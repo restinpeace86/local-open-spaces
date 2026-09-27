@@ -149,7 +149,10 @@ export const CORE_SPOT_CATEGORIES: CoreSpotCategory[] = [
     major: 'culture-facility',
   },
   { id: 'art-museum', label: '미술관', emoji: '🖼️', minors: ['미술관'], major: 'culture-facility' },
-  { id: 'library', label: '도서관', emoji: '📚', minors: ['도서관'], major: 'culture-facility' },
+  // [순수 어린이도서관 표준 중분류 분리](2026-09-28 사용자 지시): 소비자 화면
+  // 필터 칩은 그대로 "도서관" 하나만 유지하고(임의로 새 칩을 만들지 않음, 제3장
+  // 제3조 사용자 흐름 임의 변경 금지), 그 아래 두 표준 중분류를 함께 담는다.
+  { id: 'library', label: '도서관', emoji: '📚', minors: ['도서관', '어린이도서관'], major: 'culture-facility' },
   { id: 'exhibition-hall', label: '전시실', emoji: '🖼️', minors: ['전시실'], major: 'culture-facility' },
   { id: 'performance-hall', label: '공연장', emoji: '🎭', minors: ['공연장'], major: 'culture-facility' },
   { id: 'science-museum', label: '과학관', emoji: '🔬', minors: ['과학관'], major: 'culture-facility' },
