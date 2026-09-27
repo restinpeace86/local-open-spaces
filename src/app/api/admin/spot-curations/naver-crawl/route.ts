@@ -28,13 +28,21 @@ const CONTENT_TYPE_EXTENSION: Record<string, string> = {
   'image/gif': 'gif',
 };
 
-async function fetchHtmlOrNull(url: string): Promise<string | null> {
+// [네이버 429 오진단 방지](2026-09-27 사용자 지시, "똑같이 막혀.. 네이버 플레이스
+// 페이지를 가져오지 못했습니다(네트워크 오류 또는 존재하지 않는 장소)"): 실측 확인
+// 결과 이 실패는 URL이 잘못됐거나 장소가 없는 게 아니라, 네이버 서버(nfront WAF)가
+// 우리 서버 IP를 레이트리밋해서 HTTP 429를 응답하는 것이었다(직접 요청 재현: 이
+// 장소 ID와 기존에 정상 동작했던 다른 ID 모두 동일하게 429). 기존 코드는 res.ok가
+// 아니면 상태 코드를 버리고 무조건 null만 반환해 "URL이 틀렸다"는 오해를 주는 안내문만
+// 나왔다 — 상태 코드를 같이 반환해 429일 때는 정확한 안내(잠시 후 재시도)를 준다
+// (제5장 제11조 오류 처리 원칙 — 사용자에게 적절한 안내를 제공).
+async function fetchHtmlOrNull(url: string): Promise<{ html: string | null; status: number | null }> {
   try {
     const res = await fetchWithTimeout(url, { headers: { 'User-Agent': CHROME_USER_AGENT } }, FETCH_TIMEOUT_MS);
-    if (!res.ok) return null;
-    return await res.text();
+    if (!res.ok) return { html: null, status: res.status };
+    return { html: await res.text(), status: res.status };
   } catch {
-    return null;
+    return { html: null, status: null };
   }
 }
 
@@ -85,13 +93,23 @@ export async function POST(request: NextRequest) {
 
     const { homeUrl, menuUrl } = buildNaverPlaceUrls(placeId);
     const reviewUrl = buildNaverPlaceReviewUrl(placeId);
-    const [homeHtml, menuHtml, reviewHtml] = await Promise.all([
+    const [homeResult, menuResult, reviewResult] = await Promise.all([
       fetchHtmlOrNull(homeUrl),
       fetchHtmlOrNull(menuUrl),
       fetchHtmlOrNull(reviewUrl),
     ]);
+    const homeHtml = homeResult.html;
+    const menuHtml = menuResult.html;
+    const reviewHtml = reviewResult.html;
 
     if (!homeHtml && !menuHtml) {
+      // 429는 URL/장소 문제가 아니라 네이버 쪽 레이트리밋이므로 안내문을 구분한다.
+      if (homeResult.status === 429 || menuResult.status === 429) {
+        return NextResponse.json(
+          { error: '네이버 쪽에서 요청이 너무 많다고 응답했습니다(429). URL은 정상이니 잠시 후(수 분 뒤) 다시 시도해 주세요.' },
+          { status: 502 }
+        );
+      }
       return NextResponse.json(
         { error: '네이버 플레이스 페이지를 가져오지 못했습니다(네트워크 오류 또는 존재하지 않는 장소). URL을 다시 확인해 주세요.' },
         { status: 502 }
