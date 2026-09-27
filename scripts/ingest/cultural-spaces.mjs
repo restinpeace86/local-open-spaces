@@ -41,7 +41,17 @@ async function fetchPage(startIdx, endIdx) {
   return { items: body.row ?? [], totalCount: body.list_total_count ?? 0 };
 }
 
-function mapToOpenSpaceRow(item) {
+// [어린이도서관 후보 검수 — 휴관일 활용](2026-09-27 사용자 지시): "38건의
+// 휴관일, 운영시간을 실제로 뽑아 쓰는 작업까지 해" — 원본에 이미 CLOSEDAY(휴관일)가
+// 있는데(실측: 전체 seoul_public_culture 행에서 null/빈 문자열 0건) 그동안 안
+// 쓰고 있었다. OPENHOUR는 도서관류에서 자주 빈 문자열이라(실측: 도서관 19건 중
+// 16건) 있을 때만 앞에 붙인다.
+export function buildOperatingHours(item) {
+  const parts = [item.OPENHOUR, item.CLOSEDAY ? `휴관일 ${item.CLOSEDAY}` : null].filter(Boolean);
+  return parts.length ? parts.join(', ') : null;
+}
+
+export function mapToOpenSpaceRow(item) {
   // 필드명과 실제 값이 뒤바뀌어 있어 값 범위로 위도/경도를 판별한다 (한국 위도 33~39, 경도 124~132).
   const a = Number(item.X_COORD);
   const b = Number(item.Y_COORD);
@@ -64,7 +74,7 @@ function mapToOpenSpaceRow(item) {
     address: item.ADDR || '',
     location: toPointWKT(lng, lat),
     is_free: item.ENTRFREE === '무료',
-    operating_hours: item.OPENHOUR || null,
+    operating_hours: buildOperatingHours(item),
     info_url: item.HOMEPAGE || null,
     raw_data: item,
     ...tags,

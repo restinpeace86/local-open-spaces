@@ -41,7 +41,12 @@ function resolveIsFree(item) {
   return deriveIsFreeFromFeeText(item.rntfee);
 }
 
-function buildOperatingHours(item) {
+// [어린이도서관 후보 검수 — 휴관일 활용](2026-09-27 사용자 지시): "38건의
+// 휴관일, 운영시간을 실제로 뽑아 쓰는 작업까지 해" — 원본에 이미 `rstde`(휴관일,
+// 예: "월+법정공휴일", "연중무휴")가 있는데 그동안 안 쓰고 있었다(실측: 전체
+// public_facility_open 행 전수에서 null/빈 문자열/"-" 0건 — 항상 의미 있는
+// 값이라 별도 플레이스홀더 필터링 불필요).
+export function buildOperatingHours(item) {
   const weekday =
     item.weekdayOperOpenHhmm && item.weekdayOperColseHhmm
       ? `평일 ${item.weekdayOperOpenHhmm}~${item.weekdayOperColseHhmm}`
@@ -50,7 +55,8 @@ function buildOperatingHours(item) {
     item.wkendOperOpenHhmm && item.wkendOperCloseHhmm
       ? `주말 ${item.wkendOperOpenHhmm}~${item.wkendOperCloseHhmm}`
       : null;
-  const parts = [weekday, weekend].filter(Boolean);
+  const closedDay = item.rstde ? `휴관일 ${item.rstde}` : null;
+  const parts = [weekday, weekend, closedDay].filter(Boolean);
   return parts.length ? parts.join(', ') : null;
 }
 

@@ -90,6 +90,22 @@ describe('PublicFacilityOpenAdapter', () => {
       expect(rows[0].external_id).toMatch(/^PUBLIC_FACILITY_OPEN_/);
     });
 
+    // [어린이도서관 후보 검수 — 휴관일 활용](2026-09-27 사용자 지시): 원본에
+    // 이미 있는 rstde(휴관일)를 운영시간 뒤에 덧붙여 노출한다.
+    it('rstde(휴관일)가 있으면 운영시간 문구에 덧붙인다', () => {
+      const adapter = new PublicFacilityOpenAdapter();
+      const rows = adapter.transform([{ ...BASE_ITEM, rstde: '월+법정공휴일' }]);
+
+      expect(rows[0].operating_hours).toBe('평일 06:00~23:59, 주말 06:00~23:59, 휴관일 월+법정공휴일');
+    });
+
+    it('rstde가 없으면 기존처럼 운영시간만 표시한다', () => {
+      const adapter = new PublicFacilityOpenAdapter();
+      const rows = adapter.transform([BASE_ITEM]);
+
+      expect(rows[0].operating_hours).toBe('평일 06:00~23:59, 주말 06:00~23:59');
+    });
+
     it('pchrgUseYn=Y이면 rntfee와 무관하게 유료(false)로 판별한다', () => {
       const adapter = new PublicFacilityOpenAdapter();
       const rows = adapter.transform([{ ...BASE_ITEM, pchrgUseYn: 'Y', rntfee: '55000' }]);
