@@ -1649,6 +1649,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                 {/* "요금, 접수상태 컬럼은 안보이게 해" — open_spaces 전용 숨김. */}
                 {tab === 'events' && <th className="py-2.5 pr-3">요금</th>}
                 {tab === 'events' && <th className="py-2.5 pr-3">접수상태</th>}
+                {tab === 'events' && <th className="py-2.5 pr-3">예약 오픈 알림</th>}
                 <th className="py-2.5 pr-3">{tab === 'raw_ingest_data' ? '' : '수정/적재일'}</th>
                 <th className="py-2.5 pr-3" />
               </tr>
@@ -1692,6 +1693,15 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                 const maxClass = isEvent ? (r as AdminEventRow).max_class ?? null : null;
                 const minClass = isEvent ? (r as AdminEventRow).min_class ?? null : null;
                 const svcStat = isEvent ? (r as AdminEventRow).svc_stat ?? null : null;
+                // [예약 오픈 알림 — 관리자 화면 가시성](2026-09-27 사용자 지시): "공공키즈카페랑
+                // 서울형키즈카페는 규칙에 의하여 예약일자가 들어가있는걸로 아는데.. 관리자
+                // 화면에서 좀 볼수있도록 해줘" — next_reservation_open_at은 이미 select되고
+                // 상세 팝업(ReservationOpenAtEditor)에서 편집 가능했지만 목록에서는 안 보였다.
+                // 지났는지(과거) 여부까지 함께 보여줘야 "다음 회차 갱신을 놓쳤다"는 걸 목록만
+                // 보고 바로 알 수 있다(실측: 이번 확인 시점 기준 공공키즈카페/서울형키즈카페
+                // 전부 과거 값으로 남아있어 알림이 안 나가는 상태였음).
+                const nextReservationOpenAt = isEvent ? (r as AdminEventRow).next_reservation_open_at ?? null : null;
+                const isReservationOpenPast = Boolean(nextReservationOpenAt) && new Date(nextReservationOpenAt!).getTime() <= Date.now();
                 const updatedAt = isEvent ? (r as AdminEventRow).created_at : (r as AdminOpenSpaceRow).updated_at ?? (r as AdminOpenSpaceRow).created_at;
                 // 요구사항 3: 오늘 자정 이후 새로 생성된 건 [NEW] 뱃지. "내용 갱신([UPDATED])"은
                 // TodayBatchSummary 주석과 동일한 이유로 이번 범위에 포함하지 않는다.
@@ -1815,6 +1825,30 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                       </td>
                     )}
                     {isEvent && <td className="py-2 pr-3 text-gray-600 whitespace-nowrap">{svcStat ?? '-'}</td>}
+                    {isEvent && (
+                      <td className="py-2 pr-3 text-gray-600 whitespace-nowrap text-xs">
+                        {nextReservationOpenAt ? (
+                          <>
+                            {new Date(nextReservationOpenAt).toLocaleString('ko-KR', {
+                              month: '2-digit',
+                              day: '2-digit',
+                              weekday: 'short',
+                              hour: '2-digit',
+                              minute: '2-digit',
+                            })}
+                            <span
+                              className={`ml-1 text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
+                                isReservationOpenPast ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-700'
+                              }`}
+                            >
+                              {isReservationOpenPast ? '지남' : '예정'}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-gray-300">미설정</span>
+                        )}
+                      </td>
+                    )}
                     <td className="py-2 pr-3 text-gray-400 whitespace-nowrap text-xs">{updatedAt ? new Date(updatedAt).toLocaleDateString('ko-KR') : '-'}</td>
                     <td className="py-2 pr-3 text-right text-xs text-blue-600">상세</td>
                   </tr>

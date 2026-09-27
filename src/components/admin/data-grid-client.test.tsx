@@ -963,3 +963,82 @@ describe('AdminDataGridClient — 키즈 공간 후보 검토 표시(2026-09-27)
     expect(screen.queryByText('후보')).not.toBeInTheDocument();
   });
 });
+
+// [예약 오픈 알림 — 관리자 화면 가시성](2026-09-27 사용자 지시): "공공키즈카페랑
+// 서울형키즈카페는 규칙에 의하여 예약일자가 들어가있는걸로 아는데.. 관리자 화면에서
+// 좀 볼수있도록 해줘"
+describe('AdminDataGridClient — 예약 오픈 알림(next_reservation_open_at) 컬럼(2026-09-27)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function mockEventFetch(rows: AdminEventRow[]) {
+    return vi.fn((url: string) => {
+      if (url.includes('/api/admin/data-grid')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ rows, total: rows.length }) } as Response);
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+  }
+
+  it('미래 시각이면 "예정" 뱃지가 보인다', async () => {
+    const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    vi.stubGlobal(
+      'fetch',
+      mockEventFetch([buildEventRow({ id: 'ev-1', title: '서울형 키즈카페 A점', next_reservation_open_at: future })])
+    );
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+    fireEvent.click(screen.getByText('events (행사·체험)'));
+    fireEvent.click(screen.getByText('📥 불러오기'));
+
+    await screen.findByText('서울형 키즈카페 A점');
+    expect(screen.getByText('예정')).toBeInTheDocument();
+  });
+
+  it('과거 시각이면 "지남" 뱃지가 보인다(다음 회차 갱신을 놓쳤다는 신호)', async () => {
+    const past = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    vi.stubGlobal(
+      'fetch',
+      mockEventFetch([buildEventRow({ id: 'ev-1', title: '공공키즈카페 B점', next_reservation_open_at: past })])
+    );
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+    fireEvent.click(screen.getByText('events (행사·체험)'));
+    fireEvent.click(screen.getByText('📥 불러오기'));
+
+    await screen.findByText('공공키즈카페 B점');
+    expect(screen.getByText('지남')).toBeInTheDocument();
+  });
+
+  it('값이 없으면 "미설정"이 보인다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      mockEventFetch([buildEventRow({ id: 'ev-1', title: '일반 행사', next_reservation_open_at: null })])
+    );
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+    fireEvent.click(screen.getByText('events (행사·체험)'));
+    fireEvent.click(screen.getByText('📥 불러오기'));
+
+    await screen.findByText('일반 행사');
+    expect(screen.getByText('미설정')).toBeInTheDocument();
+  });
+
+  it('open_spaces 탭에는 이 컬럼이 안 보인다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/admin/data-grid')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ rows: [buildOpenSpaceRow({ id: 'row-1', name: '스팟A' })], total: 1 }),
+          } as Response);
+        }
+        return Promise.reject(new Error(`unexpected fetch: ${url}`));
+      })
+    );
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+
+    await screen.findByText('스팟A');
+    expect(screen.queryByText('예약 오픈 알림')).not.toBeInTheDocument();
+  });
+});
