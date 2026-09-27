@@ -888,3 +888,78 @@ describe('AdminDataGridClient — 상세 모달 열 때 raw_data 지연 로딩(2
     expect(fetchMock.mock.calls.some((c) => (c[0] as string).includes('/api/admin/data-grid/raw-data'))).toBe(false);
   });
 });
+
+// [공간 문제 해결 후보 검토 표시](2026-09-27 사용자 지시): "너가 후보라고
+// 해놓은거는.. 관리자화면의 open_spaces쪽에 그리드 row쪽에 좀 표시 해줄수
+// 있어?.. 출처 옆에라던가.. 표시해놓으면 내가 그거보고 한번 확인해보게"
+describe('AdminDataGridClient — 키즈 공간 후보 검토 표시(2026-09-27)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function mockFetch(rows: AdminOpenSpaceRow[]) {
+    return vi.fn((url: string) => {
+      if (url.includes('/api/admin/data-grid')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ rows, total: rows.length }) } as Response);
+      }
+      if (url.includes('/api/admin/service-categories')) {
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({ items: [] }) } as Response);
+      }
+      return Promise.reject(new Error(`unexpected fetch: ${url}`));
+    });
+  }
+
+  it('후보 규칙에 맞는 행에는 "후보" 뱃지가 보인다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      mockFetch([buildOpenSpaceRow({ id: 'row-1', name: '가원습지생태공원', category_min: '공원' })])
+    );
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+
+    await screen.findByText('가원습지생태공원');
+    expect(screen.getByText('후보')).toBeInTheDocument();
+  });
+
+  it('주택단지처럼 제외 대상인 category_min에는 이름이 매칭돼도 뱃지가 안 보인다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      mockFetch([buildOpenSpaceRow({ id: 'row-1', name: '한마음아파트 어린이놀이터', category_min: '주택단지' })])
+    );
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+
+    await screen.findByText('한마음아파트 어린이놀이터');
+    expect(screen.queryByText('후보')).not.toBeInTheDocument();
+  });
+
+  it('공원은 "어린이/유아"만 있고 테마 키워드가 없으면 뱃지가 안 보인다', async () => {
+    vi.stubGlobal('fetch', mockFetch([buildOpenSpaceRow({ id: 'row-1', name: '새싹어린이공원', category_min: '공원' })]));
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+
+    await screen.findByText('새싹어린이공원');
+    expect(screen.queryByText('후보')).not.toBeInTheDocument();
+  });
+
+  it('events 탭에는 뱃지가 안 보인다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/admin/data-grid')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ rows: [buildEventRow({ id: 'ev-1', title: '어린이 생태체험 행사' })], total: 1 }),
+          } as Response);
+        }
+        return Promise.reject(new Error(`unexpected fetch: ${url}`));
+      })
+    );
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+    fireEvent.click(screen.getByText('events (행사·체험)'));
+    fireEvent.click(screen.getByText('📥 불러오기'));
+
+    await screen.findByText('어린이 생태체험 행사');
+    expect(screen.queryByText('후보')).not.toBeInTheDocument();
+  });
+});

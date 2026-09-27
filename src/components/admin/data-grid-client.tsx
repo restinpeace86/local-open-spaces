@@ -20,6 +20,7 @@ import { CategoryMappingPanel } from '@/components/admin/category-mapping-panel'
 import { MyRealTripSearchPanel } from '@/components/admin/myrealtrip-search-panel';
 import { SpotNoticesPanel } from '@/components/admin/spot-notices-panel';
 import { ServiceCategory } from '@/lib/admin/service-category';
+import { isKidsSpaceReviewCandidate } from '@/lib/admin/kids-space-candidate';
 
 // [관리자 화면(/admin/data-grid) 기능 고도화 및 범용 제휴 상품 테이블 개편](2026-08-30
 // 사용자 지시): 'curated_items'를 네 번째 탭으로 추가한다. 아래 나머지 탭 3개(open_spaces/
@@ -1719,7 +1720,25 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                     {/* [그리드 컬럼 축소](2026-09-12 사용자 지시): "events 탭도 ID컬럼
                         숨겨줘" — 위 헤더와 짝을 맞춰 이 셀도 제거한다(출처 컬럼과
                         중복 정보). */}
-                    <td className="py-2 pr-3 text-gray-600 whitespace-nowrap">{r.source ?? (isEvent ? '-' : (r as AdminOpenSpaceRow).source_type)}</td>
+                    <td className="py-2 pr-3 text-gray-600 whitespace-nowrap">
+                      {r.source ?? (isEvent ? '-' : (r as AdminOpenSpaceRow).source_type)}
+                      {/* [공간 문제 해결 후보 검토 표시](2026-09-27 사용자 지시): "너가
+                          후보라고 해놓은거는.. 그리드 row쪽에 좀 표시 해줄수 있어?
+                          출처 옆에라던가" — 채팅 SQL 분석 결과를 그리드에서 바로 보이게
+                          표시만 한다(실제 분류는 바꾸지 않음). */}
+                      {!isEvent &&
+                        isKidsSpaceReviewCandidate(
+                          (r as AdminOpenSpaceRow).name,
+                          (r as AdminOpenSpaceRow).category_min
+                        ) && (
+                          <span
+                            title="키즈 공간 후보 검토 대상(2026-09-27 키워드 필터 기준, 실제 분류를 바꾸지는 않음)"
+                            className="ml-1.5 inline-block align-middle text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-amber-500 text-white"
+                          >
+                            후보
+                          </span>
+                        )}
+                    </td>
                     {isEvent && (
                       <td className="py-2 pr-3 text-gray-600 whitespace-nowrap">
                         {maxClass || minClass ? (
