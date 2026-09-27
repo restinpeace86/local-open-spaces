@@ -606,6 +606,47 @@ function HierarchicalCategoryMinFilter({
   );
 }
 
+// [예약 오픈 알림 규칙 안내](2026-09-27 사용자 지시): 서울시 공지문을 그대로 옮긴
+// 참고표 — scripts/migrations/2026-09-20-seed-gonggong-kids-cafe-next-reservation-
+// open-at.mjs / 2026-09-20-seed-seoul-kids-cafe-next-reservation-open-at.mjs의
+// DISTRICT_OPEN_HOUR_KST를 그대로 옮긴 것이다(로직 중복이 아니라 이미 하드코딩돼
+// 있던 참고자료를 화면에 노출만 함 — 제5장 제6조 하드코딩 최소화는 "서비스 데이터"에
+// 적용되는 원칙이라, 이 1회성 공지문 참고표에는 새로운 위반이 아니다). 서울시가 규칙을
+// 다시 바꾸면 이 표도 함께 갱신해야 한다(자동 동기화 대상 아님).
+const RESERVATION_OPEN_RULE_REFERENCE: {
+  categoryMin: string;
+  noticeLabel: string;
+  weekday: string;
+  groups: { label: string; hour: string; districts: string[] }[];
+}[] = [
+  {
+    categoryMin: '공공키즈카페',
+    noticeLabel: '2026-04-14(화) 시행 공지문',
+    weekday: '매주 화요일',
+    groups: [
+      { label: '1그룹', hour: '09:00', districts: ['강남구', '강동구', '강북구', '강서구', '광진구', '구로구'] },
+      { label: '2그룹', hour: '11:00', districts: ['관악구', '금천구', '노원구', '도봉구', '동대문구', '동작구'] },
+      { label: '3그룹', hour: '13:00', districts: ['마포구', '서대문구', '서초구', '성동구', '성북구', '송파구'] },
+      { label: '4그룹', hour: '15:00', districts: ['양천구', '영등포구', '용산구', '은평구', '종로구', '중구', '중랑구'] },
+    ],
+  },
+  {
+    categoryMin: '서울형키즈카페',
+    noticeLabel: '2026-09-14(월) 시행 공지문',
+    weekday: '매주 월요일',
+    groups: [
+      { label: '1. 오감놀이터', hour: '10:00', districts: ['은평구', '서대문구', '마포구', '강서구'] },
+      { label: '2. 체험놀이터', hour: '12:00', districts: ['용산구', '양천구', '구로구', '금천구', '영등포구'] },
+      {
+        label: '3. 모험놀이터',
+        hour: '14:00',
+        districts: ['성동구', '동대문구', '중랑구', '성북구', '강북구', '도봉구', '노원구'],
+      },
+      { label: '4. 성장놀이터', hour: '16:00', districts: ['광진구', '강남구', '서초구', '송파구', '강동구'] },
+    ],
+  },
+];
+
 // [카테고리 정제 & 어드민 확장](2026-08-26): category_min_source(RAW/RULE/MANUAL) 출처 뱃지.
 const CATEGORY_MIN_SOURCE_STYLE: Record<string, string> = {
   RAW: 'bg-emerald-100 text-emerald-700',
@@ -718,6 +759,14 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
   // 있도록" — 나머지 필터(출처 2종/카테고리/원천 중분류/이벤트 전용 필터)를 이
   // 접이식 영역 하나로 몰아 기본은 접어 두고, 목록이 화면을 더 넓게 쓰게 한다.
   const [isFiltersExpanded, setIsFiltersExpanded] = useState(false);
+  // [예약 오픈 알림 규칙 안내](2026-09-27 사용자 지시): "규칙에 대하여 지금 이전에
+  // 공지문대로 한거 그거를 관리자 화면에 어딘가에서 볼수있게해달라는거야" — 지난
+  // 컬럼 추가는 "각 행의 현재 값"만 보여줬을 뿐, 그 값이 어떤 규칙(서울시 공지문)으로
+  // 나왔는지는 여전히 implementation/ 문서나 1회성 시드 스크립트 안에만 있었다.
+  // 이 규칙은 서울시가 또 바꿀 수 있어(제3장 제5조 추측 금지로 코드에 자동 계산을
+  // 넣지 않기로 이미 확정) 여기서도 새 계산 로직을 추가하지 않고, 시드 스크립트에
+  // 이미 하드코딩돼 있던 같은 매핑표를 화면에 참고용으로만 그대로 노출한다.
+  const [isReservationRuleExpanded, setIsReservationRuleExpanded] = useState(false);
   // [관리자 화면 모바일 필터 영역 재수정](2026-09-06 사용자 지시): "여전히 거의
   // 안보여 검색조건쪽이 90% 차지" — 1차 수정(필터 바에 max-h-[45vh])만으로는
   // 부족했다. 실측 원인: (1) vh는 화면 전체 뷰포트 기준이라, 전역 하단 탭바
@@ -1449,6 +1498,44 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
         >
           {isFiltersExpanded ? '▴ 상세 필터 접기' : '▾ 상세 필터 더보기 (출처/카테고리/원천 중분류 등)'}
         </button>
+
+        {tab === 'events' && (
+          <button
+            type="button"
+            onClick={() => setIsReservationRuleExpanded((v) => !v)}
+            className="self-start text-xs font-medium text-blue-600 hover:underline"
+          >
+            {isReservationRuleExpanded
+              ? '▴ 예약 오픈 알림 규칙 접기'
+              : '▾ 예약 오픈 알림 규칙 보기(공공키즈카페/서울형키즈카페)'}
+          </button>
+        )}
+
+        {tab === 'events' && isReservationRuleExpanded && (
+          <div className="flex flex-col gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3 text-xs">
+            <p className="text-gray-500">
+              아래는 next_reservation_open_at을 채울 때 실제로 적용한 서울시 공지문 그대로다 — 자동으로
+              다시 계산되지 않으며, 서울시가 그룹 구성을 바꾸면 이 표도 관리자가 함께 갱신해야 한다.
+            </p>
+            {RESERVATION_OPEN_RULE_REFERENCE.map((rule) => (
+              <div key={rule.categoryMin} className="rounded-md border border-gray-200 bg-white p-2.5">
+                <p className="font-semibold text-gray-800">
+                  {rule.categoryMin} — {rule.weekday} ({rule.noticeLabel})
+                </p>
+                <div className="mt-1.5 flex flex-col gap-1">
+                  {rule.groups.map((group) => (
+                    <div key={group.label} className="flex items-baseline gap-2">
+                      <span className="w-20 shrink-0 font-medium text-gray-600">
+                        {group.label} {group.hour}
+                      </span>
+                      <span className="text-gray-500">{group.districts.join(', ')}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {isFiltersExpanded && (
           <div className="flex flex-col gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3">

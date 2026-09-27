@@ -1042,3 +1042,30 @@ describe('AdminDataGridClient — 예약 오픈 알림(next_reservation_open_at)
     expect(screen.queryByText('예약 오픈 알림')).not.toBeInTheDocument();
   });
 });
+
+// [예약 오픈 알림 규칙 안내](2026-09-27 사용자 지시): "규칙에 대하여 지금 이전에
+// 공지문대로 한거 그거를 관리자 화면에 어딘가에서 볼수있게해달라는거야"
+describe('AdminDataGridClient — 예약 오픈 알림 규칙 안내 패널(2026-09-27)', () => {
+  it('open_spaces 탭에는 규칙 안내 토글이 안 보인다', () => {
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+    expect(screen.queryByText(/예약 오픈 알림 규칙 보기/)).not.toBeInTheDocument();
+  });
+
+  it('events 탭에서 토글을 누르면 공공키즈카페/서울형키즈카페 규칙표가 보인다', () => {
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+    fireEvent.click(screen.getByText('events (행사·체험)'));
+
+    const toggle = screen.getByText(/예약 오픈 알림 규칙 보기/);
+    expect(screen.queryByText('강남구, 강동구, 강북구, 강서구, 광진구, 구로구')).not.toBeInTheDocument();
+
+    fireEvent.click(toggle);
+
+    expect(screen.getByText(/공공키즈카페/)).toBeInTheDocument();
+    expect(screen.getByText('강남구, 강동구, 강북구, 강서구, 광진구, 구로구')).toBeInTheDocument();
+    expect(screen.getByText(/서울형키즈카페/)).toBeInTheDocument();
+    expect(screen.getByText('은평구, 서대문구, 마포구, 강서구')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('▴ 예약 오픈 알림 규칙 접기'));
+    expect(screen.queryByText('강남구, 강동구, 강북구, 강서구, 광진구, 구로구')).not.toBeInTheDocument();
+  });
+});
