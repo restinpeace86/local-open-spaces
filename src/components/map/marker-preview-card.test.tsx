@@ -116,4 +116,28 @@ describe('MarkerPreviewCard', () => {
     fireEvent.click(screen.getByLabelText('미리보기 닫기'));
     expect(onClose).toHaveBeenCalled();
   });
+
+  // [open_spaces 정기휴무 마커 클릭 안내](2026-09-27 사용자 지시): "마커눌렀을때도
+  // 오늘은 정기휴무입니다 띄워주고"
+  it('오늘 요일이 excluded_weekdays에 있으면 "오늘은 정기휴무입니다" 안내가 보인다', async () => {
+    mockCurationResponse(null);
+    const todayCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][new Date().getDay()];
+    render(
+      <MarkerPreviewCard
+        item={makeItem({ excluded_weekdays: [todayCode] })}
+        onOpenDetail={vi.fn()}
+        onClose={vi.fn()}
+      />
+    );
+
+    expect(await screen.findByText('오늘은 정기휴무입니다')).toBeInTheDocument();
+  });
+
+  it('정기휴무 규칙이 없으면 안내가 안 보인다', async () => {
+    mockCurationResponse(null);
+    render(<MarkerPreviewCard item={makeItem()} onOpenDetail={vi.fn()} onClose={vi.fn()} />);
+
+    await screen.findByText('행복키즈카페');
+    expect(screen.queryByText('오늘은 정기휴무입니다')).not.toBeInTheDocument();
+  });
 });

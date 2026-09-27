@@ -80,4 +80,43 @@ describe('ItemListPanel (스팟픽 리스트 카드)', () => {
     render(<ItemListPanel items={[makeItem({ address: null })]} selectedId={null} onSelect={vi.fn()} />);
     expect(screen.getByText('숲속 놀이터')).toBeInTheDocument();
   });
+
+  // [open_spaces 정기휴무 리스트 표시](2026-09-27 사용자 지시): "오늘 휴무인 항목은
+  // 좀 연한 회색으로 리스트 색칠.. 사용자가 직관적으로 알수 있도록"
+  describe('오늘 정기휴무인 스팟(2026-09-27)', () => {
+    it('오늘 요일이 excluded_weekdays에 있으면 "오늘 휴무" 칩이 보이고 행이 회색으로 표시된다', () => {
+      const today = new Date();
+      const todayCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][today.getDay()];
+      render(
+        <ItemListPanel
+          items={[makeItem({ excluded_weekdays: [todayCode] })]}
+          selectedId={null}
+          onSelect={vi.fn()}
+        />
+      );
+
+      expect(screen.getByText('오늘 휴무')).toBeInTheDocument();
+      expect(screen.getByText('숲속 놀이터')).toHaveClass('text-gray-400');
+    });
+
+    it('오늘 요일이 excluded_weekdays에 없으면 "오늘 휴무" 칩이 안 보인다', () => {
+      const today = new Date();
+      const todayCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][today.getDay()];
+      const otherCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].find((c) => c !== todayCode)!;
+      render(
+        <ItemListPanel
+          items={[makeItem({ excluded_weekdays: [otherCode] })]}
+          selectedId={null}
+          onSelect={vi.fn()}
+        />
+      );
+
+      expect(screen.queryByText('오늘 휴무')).not.toBeInTheDocument();
+    });
+
+    it('excluded_weekdays/excluded_nth_weekdays가 없으면(EVENT 등) "오늘 휴무" 칩이 안 보인다', () => {
+      render(<ItemListPanel items={[makeItem()]} selectedId={null} onSelect={vi.fn()} />);
+      expect(screen.queryByText('오늘 휴무')).not.toBeInTheDocument();
+    });
+  });
 });

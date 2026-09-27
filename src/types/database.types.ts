@@ -2043,6 +2043,8 @@ export type Database = {
               category_min: string
               distance_meters: number
               end_date: string
+              excluded_nth_weekdays: string[]
+              excluded_weekdays: string[]
               facility_type: string
               group_id: string
               has_parking: boolean
@@ -2162,6 +2164,8 @@ export type Database = {
           category_min: string
           distance_meters: number
           end_date: string
+          excluded_nth_weekdays: string[]
+          excluded_weekdays: string[]
           facility_type: string
           group_id: string
           has_parking: boolean

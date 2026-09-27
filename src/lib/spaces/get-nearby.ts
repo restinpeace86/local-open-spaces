@@ -94,6 +94,16 @@ export type NearbyItem = {
   // null(이 개념 자체가 없음)을 반환한다. get_spot_group_members 등 이 컬럼을
   // 아직 반환하지 않는 다른 RPC 경로에서는 undefined로 남는다.
   service_category_id?: string | null;
+  // [open_spaces 정기휴무 마커/리스트 표시](2026-09-27 사용자 지시): "정기휴무일은
+  // 마커도.. 회색으로 칠해주고" — get_nearby_spaces_and_events/
+  // get_spots_by_service_category(2026-09-27-nearby-rpc-add-excluded-weekdays.sql
+  // 이후)가 SPACE에는 open_spaces.excluded_weekdays/excluded_nth_weekdays를,
+  // EVENT에는 항상 null(이 개념이 events에는 다른 필드로 따로 있음)을 반환한다.
+  // get_spot_group_members 등 이 컬럼을 아직 반환하지 않는 다른 RPC 경로에서는
+  // undefined로 남는다. src/lib/spaces/open-space-closure.ts의
+  // isOpenSpaceClosedOn으로 판정한다.
+  excluded_weekdays?: string[] | null;
+  excluded_nth_weekdays?: string[] | null;
 };
 
 // Task 9-6-10(2026-08-23): itemType을 넘기면 RPC가 해당 타입만 반환한다(예: '/nearby' 지도는

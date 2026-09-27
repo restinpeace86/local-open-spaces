@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { formatDDay } from '@/lib/spaces/d-day';
 import { formatDistance } from '@/lib/spaces/format';
+import { isOpenSpaceClosedOn } from '@/lib/spaces/open-space-closure';
 
 export type SpotBadgeInfo = { labels: string[]; minAge: number };
 
@@ -52,7 +53,13 @@ export function ItemListPanel({
         const dDay = item.item_type === 'EVENT' ? formatDDay(item.reservation_end_date ?? item.end_date) : null;
         const isSelected = item.id === selectedId;
         const badgeInfo = badgesBySpotId?.[item.id];
+        // [open_spaces 정기휴무 리스트 표시](2026-09-27 사용자 지시): "오늘 휴무인
+        // 항목은 좀 연한 회색으로 리스트 색칠.. 오늘 운영안하는구나 하고" — EVENT는
+        // excluded_weekdays가 항상 null이라 이 함수가 자연히 항상 false를 반환한다
+        // (SPACE 전용으로 동작, item_type 분기 불필요).
+        const isClosedToday = isOpenSpaceClosedOn(item.excluded_weekdays, item.excluded_nth_weekdays, new Date());
         const badgeChips: string[] = [
+          ...(isClosedToday ? ['오늘 휴무'] : []),
           ...(badgeInfo && badgeInfo.minAge > 0 ? [`만 ${badgeInfo.minAge}세 이상`] : []),
           ...(badgeInfo?.labels ?? []),
         ];
@@ -64,12 +71,18 @@ export function ItemListPanel({
               onClick={() => onSelect(item)}
               aria-current={isSelected ? 'true' : undefined}
               className={`w-full text-left px-4 py-3 flex flex-col gap-1.5 transition-colors ${
-                isSelected ? 'bg-blue-50 ring-1 ring-inset ring-blue-300' : 'hover:bg-gray-50'
+                isSelected
+                  ? 'bg-blue-50 ring-1 ring-inset ring-blue-300'
+                  : isClosedToday
+                    ? 'bg-gray-100 hover:bg-gray-200'
+                    : 'hover:bg-gray-50'
               }`}
             >
               {/* 1영역 1줄: 상호명(좌) + 거리(우) */}
               <div className="flex items-baseline justify-between gap-2">
-                <span className="text-sm font-semibold text-gray-900 truncate">{item.name}</span>
+                <span className={`text-sm font-semibold truncate ${isClosedToday ? 'text-gray-400' : 'text-gray-900'}`}>
+                  {item.name}
+                </span>
                 <span className="shrink-0 flex items-center gap-1.5">
                   {dDay && <span className="text-xs font-semibold text-red-600">{dDay}</span>}
                   {item.distance_meters >= 0 && (
@@ -86,9 +99,11 @@ export function ItemListPanel({
                     <span
                       key={chip}
                       className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${
-                        i === 0 && badgeInfo && badgeInfo.minAge > 0
-                          ? 'bg-amber-100 text-amber-700'
-                          : 'bg-gray-100 text-gray-600'
+                        chip === '오늘 휴무'
+                          ? 'bg-gray-300 text-gray-700'
+                          : i === 0 && badgeInfo && badgeInfo.minAge > 0
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-gray-100 text-gray-600'
                       }`}
                     >
                       {chip}

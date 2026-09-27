@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { loadKakaoMapSdk } from '@/lib/kakao/load-kakao-sdk';
 import { buildMarkerSvgDataUrl, buildDealMarkerSvgDataUrl } from '@/lib/kakao/marker-image';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
+import { isOpenSpaceClosedOn } from '@/lib/spaces/open-space-closure';
 import { haversineDistanceMeters } from '@/lib/geo/haversine';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { MarkerPreviewCard } from '@/components/map/marker-preview-card';
@@ -391,7 +392,14 @@ export function KakaoMapView({
     const markers = items.map((item) => {
       const meta = getCategoryMeta(item.category);
       const isDeal = dealSpotIds?.has(item.id) ?? false;
-      const src = isDeal ? buildDealMarkerSvgDataUrl() : buildMarkerSvgDataUrl(meta.color);
+      // [open_spaces 정기휴무 마커 회색 표시](2026-09-27 사용자 지시): "정기휴무일은
+      // 마커도.. 회색으로 칠해주고" — EVENT 항목은 RPC가 excluded_weekdays를 항상
+      // null로 주므로 이 함수가 자연히 항상 false를 반환해 SPACE 전용으로 동작한다
+      // (item_type 분기 불필요). "기타 카테고리"용 기본 회색(#6b7280)과 헷갈리지
+      // 않도록 더 밝은 회색(#d1d5db)을 쓴다.
+      const isClosedToday = isOpenSpaceClosedOn(item.excluded_weekdays, item.excluded_nth_weekdays, new Date());
+      const markerColor = isClosedToday ? '#d1d5db' : meta.color;
+      const src = isDeal ? buildDealMarkerSvgDataUrl() : buildMarkerSvgDataUrl(markerColor);
       const [w, h] = isDeal ? [34, 44] : [28, 36];
       const normal = new window.kakao.maps.MarkerImage(src, new window.kakao.maps.Size(w, h), {
         offset: new window.kakao.maps.Point(w / 2, h),

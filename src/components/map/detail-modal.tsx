@@ -15,6 +15,7 @@ import { BookmarkButton } from '@/components/community/bookmark-button';
 import { KIDS_RESTAURANT_CATEGORY_MIN } from '@/lib/spaces/spot-category-groups';
 import { usePublishedSpotNotices, SpotNoticesSection } from '@/components/common/spot-notices-section';
 import { EventReservationReminderHint } from '@/components/common/event-reservation-reminder-hint';
+import { isOpenSpaceClosedOn } from '@/lib/spaces/open-space-closure';
 
 const NO_INFO_TEXT = '정보 준비 중 (공공 기관 문의)';
 
@@ -471,6 +472,11 @@ export function DetailModal({
   // (행사 자체의 시작/종료일 기준 "오늘 한정"/"오늘 마감")도 추가하고, 무료/유료·
   // 실내/야외는 getParentalBadges에서 그 두 종류만 뽑아 뱃지 줄에 더한다.
   const eventDateBanner = isEvent ? getDateBannerBadge(item) : null;
+  // [open_spaces 정기휴무 상세 안내](2026-09-27 사용자 지시): "마커눌렀을때도 오늘은
+  // 정기휴무입니다 띄워주고" — EVENT는 excluded_weekdays가 항상 null이라 이 값이
+  // 자연히 항상 false다(SPACE 전용으로 동작, isEvent 분기 불필요하지만 명시적으로
+  // 남겨 의도를 드러낸다).
+  const isSpaceClosedToday = !isEvent && isOpenSpaceClosedOn(item.excluded_weekdays, item.excluded_nth_weekdays, new Date());
   const eventExtraBadges = isEvent
     ? getParentalBadges(item).filter((badge) => badge.key === 'is_free' || badge.key === 'facility_type')
     : [];
@@ -1011,6 +1017,14 @@ export function DetailModal({
                 {item.is_free !== null && (
                   <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-600">
                     {item.is_free ? '무료' : '유료'}
+                  </span>
+                )}
+                {/* [open_spaces 정기휴무 상세 안내](2026-09-27 사용자 지시): "마커눌렀을때도
+                    오늘은 정기휴무입니다 띄워주고" — 이 else 분기가 실제 SPACE(스팟)
+                    상세 카드다(위 isEvent 분기는 EVENT 전용이라 SPACE는 절대 안 지나감). */}
+                {isSpaceClosedToday && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full text-white bg-gray-500">
+                    오늘은 정기휴무입니다
                   </span>
                 )}
               </div>

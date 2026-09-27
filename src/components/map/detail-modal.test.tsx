@@ -1617,3 +1617,34 @@ describe('DetailModal 스팟 큐레이션 재크롤링 트리거(2026-09-20)', (
     expect(fetchMock.mock.calls.some((c) => (c[0] as string) === '/api/spot-curation-refresh')).toBe(false);
   });
 });
+
+// [open_spaces 정기휴무 상세 안내](2026-09-27 사용자 지시): "마커눌렀을때도 오늘은
+// 정기휴무입니다 띄워주고"
+describe('DetailModal — 오늘 정기휴무 안내(2026-09-27)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('오늘 요일이 excluded_weekdays에 있으면 "오늘은 정기휴무입니다" 뱃지가 보인다', () => {
+    const todayCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][new Date().getDay()];
+    render(<DetailModal item={makeSpaceItem({ excluded_weekdays: [todayCode] })} onClose={() => {}} />);
+
+    expect(screen.getByText('오늘은 정기휴무입니다')).toBeInTheDocument();
+  });
+
+  it('정기휴무 규칙이 없으면 뱃지가 안 보인다', () => {
+    render(<DetailModal item={makeSpaceItem()} onClose={() => {}} />);
+    expect(screen.queryByText('오늘은 정기휴무입니다')).not.toBeInTheDocument();
+  });
+
+  it('EVENT 항목은 excluded_weekdays가 있어도 뱃지가 안 보인다(SPACE 전용)', () => {
+    const todayCode = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'][new Date().getDay()];
+    render(
+      <DetailModal
+        item={makeSpaceItem({ item_type: 'EVENT', excluded_weekdays: [todayCode] })}
+        onClose={() => {}}
+      />
+    );
+    expect(screen.queryByText('오늘은 정기휴무입니다')).not.toBeInTheDocument();
+  });
+});

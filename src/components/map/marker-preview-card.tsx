@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
 import { getCategoryMeta } from '@/lib/spaces/category-meta';
 import { formatDistance } from '@/lib/spaces/format';
+import { isOpenSpaceClosedOn } from '@/lib/spaces/open-space-closure';
 
 // [지도 마커 인터랙션 — 마커에 붙는 프리뷰 카드](2026-09-10 사용자 지시): "마커 클릭시
 // 프리뷰 카드는 마커 위에 떠서 마커랑 같이 이동해야 한다(가운데 고정으로 뜨면 마커랑
@@ -55,6 +56,10 @@ export function MarkerPreviewCard({
 
   // 카드가 좁아 핵심 뱃지 2개까지만.
   const coreBadges = (curation?.badge_labels ?? []).slice(0, 2);
+  // [open_spaces 정기휴무 마커 클릭 안내](2026-09-27 사용자 지시): "마커눌렀을때도
+  // 오늘은 정기휴무입니다 띄워주고" — EVENT는 excluded_weekdays가 항상 null이라
+  // 자연히 항상 false다(SPACE 전용으로 동작).
+  const isClosedToday = isOpenSpaceClosedOn(item.excluded_weekdays, item.excluded_nth_weekdays, new Date());
 
   return (
     // 부모(previewEl)는 마커 핀 꼭지(좌표) 지점의 0×0 기준점. 프리뷰가 뜰 때
@@ -107,8 +112,13 @@ export function MarkerPreviewCard({
               )}
             </div>
             {item.address && <p className="truncate text-xs text-gray-500">{item.address}</p>}
-            {coreBadges.length > 0 && (
+            {(isClosedToday || coreBadges.length > 0) && (
               <div className="mt-1 flex gap-1">
+                {isClosedToday && (
+                  <span className="shrink-0 rounded-full bg-gray-300 px-1.5 py-0.5 text-[10px] font-semibold text-gray-700">
+                    오늘은 정기휴무입니다
+                  </span>
+                )}
                 {coreBadges.map((label) => (
                   <span
                     key={label}
