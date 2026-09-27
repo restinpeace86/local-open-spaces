@@ -1514,8 +1514,10 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
         {tab === 'events' && isReservationRuleExpanded && (
           <div className="flex flex-col gap-3 rounded-lg border border-gray-100 bg-gray-50 p-3 text-xs">
             <p className="text-gray-500">
-              아래는 next_reservation_open_at을 채울 때 실제로 적용한 서울시 공지문 그대로다 — 자동으로
-              다시 계산되지 않으며, 서울시가 그룹 구성을 바꾸면 이 표도 관리자가 함께 갱신해야 한다.
+              아래는 next_reservation_open_at 계산에 실제로 적용 중인 서울시 공지문 그대로다 — 매일 배치가
+              이 규칙으로 다음 오픈 시각을 자동 재계산한다(상세 팝업에서 수동으로 고쳐도 다음 배치 때 이
+              규칙으로 다시 덮어써진다). 서울시가 그룹 구성을 바꾸면 이 표와
+              scripts/ingest/lib/kids-cafe-reservation-rule.mjs를 함께 갱신해야 한다.
             </p>
             {RESERVATION_OPEN_RULE_REFERENCE.map((rule) => (
               <div key={rule.categoryMin} className="rounded-md border border-gray-200 bg-white p-2.5">

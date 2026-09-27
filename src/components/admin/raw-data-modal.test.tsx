@@ -1449,4 +1449,35 @@ describe('RawDataModal — 다음 예약 오픈 시각 수동 입력(Reservation
     render(<RawDataModal table="events" row={row as unknown as AdminEventRow} categoryMinOptions={[]} onClose={vi.fn()} />);
     expect(screen.queryByText(/다음 예약 오픈 시각/)).not.toBeInTheDocument();
   });
+
+  // [예약 오픈 알림 — 공공키즈카페/서울형키즈카페 자동 주간 재계산](2026-09-27
+  // 사용자 지시): 이 두 카테고리는 이제 매일 배치가 자동으로 값을 덮어쓰므로,
+  // 수동 입력이 무의미해질 수 있다는 걸 여기서 미리 알려야 한다.
+  it('공공키즈카페/서울형키즈카페는 자동 재계산 안내문을 보여준다', () => {
+    const row = { ...buildRow(), id: 'row-1', category_min: '공공키즈카페', next_reservation_open_at: null };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        onClose={vi.fn()}
+        onReservationOpenAtUpdated={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/매일 배치가 서울시 공지문 규칙으로 자동 재계산합니다/)).toBeInTheDocument();
+  });
+
+  it('그 외 카테고리는 기존 수동 갱신 안내문을 그대로 보여준다', () => {
+    const row = { ...buildRow(), id: 'row-1', category_min: '문화행사', next_reservation_open_at: null };
+    render(
+      <RawDataModal
+        table="events"
+        row={row as unknown as AdminEventRow}
+        categoryMinOptions={[]}
+        onClose={vi.fn()}
+        onReservationOpenAtUpdated={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/다음 회차가 확정될 때마다 이 값을 갱신해 주세요/)).toBeInTheDocument();
+  });
 });

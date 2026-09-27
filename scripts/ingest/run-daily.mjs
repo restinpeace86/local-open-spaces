@@ -43,6 +43,7 @@ import { run as runTourApiFestival } from './tour-api-festival.mjs';
 import { applyCategoryRules } from './lib/category-rules.mjs';
 import { deactivateExpiredEvents } from './lib/deactivate-expired-events.mjs';
 import { rehostEventThumbnails } from './lib/rehost-event-thumbnails.mjs';
+import { refreshKidsCafeReservationOpenAt } from './lib/kids-cafe-reservation-rule.mjs';
 
 loadEnv();
 
@@ -225,6 +226,49 @@ async function runDeactivateExpiredEvents({ dryRun }) {
     errorCount: 0,
     excludeFromVerification: true,
     note: `end_date < ${cutoffDate} 이면서 is_active=true였던 행 ${deactivatedCount}건을 false로 전환(신규 적재 아닌 만료 정리 후처리)`,
+  };
+}
+
+// [예약 오픈 알림 — 공공키즈카페/서울형키즈카페 자동 주간 재계산](2026-09-27 사용자
+// 지시): "이거는 일단 매주 발생하는거니깐 예약시간을 규칙안내화면과 같이 매주
+// 화요일로 해줄래?" — 실측 확인 결과 이 두 카테고리의 raw_data.RCPTBGNDT/
+// RCPTENDDT는 매번 갱신되는 값이 아니라(2주 접수기간이 지나도 그대로 남아있음)
+// 관리자가 매주 직접 next_reservation_open_at을 갱신해야 했다. 서울시 공지문
+// (자치구별 그룹 요일/시각)을 scripts/ingest/lib/kids-cafe-reservation-rule.mjs에
+// 담아두고 매 배치마다 "다음 돌아오는 요일:시각"으로 다시 계산한다 — 값이 실제로
+// 바뀔 때만 UPDATE하므로(문자열 포맷이 아니라 실제 시각으로 비교) 이미 발송한
+// 회차의 reservation_open_reminder_sent_at을 매일 조용히 리셋하는 사고를 만들지
+// 않는다. SEOUL_YEYAK 단계가 이 두 카테고리의 category_min/sigungu_name을 이미
+// RAW로 채워두므로 다른 후처리 단계에 대한 의존성이 없다(독립적으로 실행 가능).
+async function runRefreshKidsCafeReservationOpenAt({ dryRun }) {
+  if (dryRun) {
+    return {
+      sourceKey: 'REFRESH_KIDS_CAFE_RESERVATION_OPEN_AT',
+      source: null,
+      targetTable: 'events',
+      rawCount: 0,
+      count: 0,
+      upserted: false,
+      safeMergeCount: 0,
+      errorCount: 0,
+      excludeFromVerification: true,
+      note: 'dry-run: 실제 UPDATE는 실행하지 않음',
+    };
+  }
+
+  const client = createAdminClient();
+  const result = await refreshKidsCafeReservationOpenAt(client);
+  return {
+    sourceKey: 'REFRESH_KIDS_CAFE_RESERVATION_OPEN_AT',
+    source: null,
+    targetTable: 'events',
+    rawCount: result.scanned,
+    count: result.updated,
+    upserted: result.updated > 0,
+    safeMergeCount: 0,
+    errorCount: result.skipped,
+    excludeFromVerification: true,
+    note: `공공키즈카페/서울형키즈카페 next_reservation_open_at을 "다음 돌아오는 요일:시각"으로 재계산(신규 적재 아닌 후처리) — ${result.updated}/${result.scanned}건 갱신, 자치구 매칭 불가 ${result.skipped}건 스킵`,
   };
 }
 
@@ -650,6 +694,14 @@ export async function runDailyBatch({ dryRun = false } = {}) {
   } catch (err) {
     console.error(`❌ [DEACTIVATE_EXPIRED_EVENTS] 실패: ${err.message}`);
     results.push({ failed: true, sourceKey: 'DEACTIVATE_EXPIRED_EVENTS', source: null, note: err.message });
+  }
+
+  console.log('\n=== [REFRESH_KIDS_CAFE_RESERVATION_OPEN_AT] ===');
+  try {
+    results.push(await runRefreshKidsCafeReservationOpenAt({ dryRun }));
+  } catch (err) {
+    console.error(`❌ [REFRESH_KIDS_CAFE_RESERVATION_OPEN_AT] 실패: ${err.message}`);
+    results.push({ failed: true, sourceKey: 'REFRESH_KIDS_CAFE_RESERVATION_OPEN_AT', source: null, note: err.message });
   }
 
   console.log('\n=== [DEDUPE_OPEN_SPACES] ===');
