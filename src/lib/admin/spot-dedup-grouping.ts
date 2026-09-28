@@ -1,3 +1,5 @@
+import { OPEN_SPACES_GROUPS_STATIC } from './category-min-groups';
+
 // [개선사항10 - 중복 스팟 그룹핑](2026-09-04 todo.md): DB RPC(find_spot_dedup_candidates)가
 // 돌려주는 후보 행을 "정규화 주소 일치" 또는 "좌표 근접"이라는 두 근거 중 하나라도
 // 겹치면 같은 그룹으로 합친다(예: A-B가 주소로 묶이고 B-C가 좌표로 묶이면 A-B-C가 한
@@ -43,6 +45,31 @@ export type DedupGroup = {
 // 20~30m"의 상한을 그대로 쓴다. Haversine 공식으로 계산하는 실제 지구 표면 거리라
 // degree 근사와 달리 위도/경도 방향에 따른 오차가 없다.
 const PROXIMITY_THRESHOLD_METERS = 30;
+
+// [건물형 시설 임계값 확대](2026-09-29 사용자 지시): "30m에서 건물형 시설은 좀
+// 넓힐까? 어차피 중복에 대하여체크는 내가 직접하잖아" — 실측 재현(어린이도서관
+// 미병합 4쌍)으로 확인한 원인: 같은 건물이라도 원본 소스마다 지오코딩이 30m보다
+// 훨씬 크게 벌어질 수 있다(노원 36.3m/국립 55.3m/아리랑 118.2m/지혜샘 136.8m,
+// 전부 실제 Haversine 거리). 야외 시설(공원/놀이터 등)은 부지가 넓어 30m가 이미
+// 관대한 편이라 그대로 두고, "건물형" 표준중분류만 넓힌다 — 이 판정 결과는 최종
+// 자동 병합이 아니라 "후보로 띄우는" 데만 쓰이고 관리자가 매번 직접 확인 후
+// 저장하므로(제5장 제11조와 달리 여기는 사용자가 이미 위험을 감수하겠다고 확정),
+// 오탐(candidate)이 늘어도 최종 데이터가 잘못 합쳐지는 위험은 없다. 150m는 실측
+// 최대값(136.8m)에 여유를 더한 값이다. 카테고리 목록은 category-min-groups.ts의
+// '문화시설' 대분류(도서관/어린이도서관/미술관/박물관/과학관 등 실내 건물형 시설)를
+// 그대로 재사용한다(제5장 제4조 기존 구조 우선 — 같은 분류를 두 곳에 따로 유지하면
+// 나중에 한쪽만 고쳐 어긋난다).
+const BUILDING_TYPE_PROXIMITY_THRESHOLD_METERS = 150;
+const BUILDING_TYPE_CATEGORY_MINS = new Set(
+  OPEN_SPACES_GROUPS_STATIC.find((g) => g.major === '문화시설')?.minors ?? []
+);
+
+function getProximityThresholdMeters(categoryMin: string | null): number {
+  return categoryMin && BUILDING_TYPE_CATEGORY_MINS.has(categoryMin)
+    ? BUILDING_TYPE_PROXIMITY_THRESHOLD_METERS
+    : PROXIMITY_THRESHOLD_METERS;
+}
+
 const EARTH_RADIUS_METERS = 6371000;
 
 function toRadians(deg: number): number {
@@ -113,7 +140,11 @@ export function groupDedupCandidates(rows: DedupCandidateRow[]): DedupGroup[] {
     for (let j = i + 1; j < withCoords.length; j += 1) {
       const a = withCoords[i];
       const b = withCoords[j];
-      if (haversineDistanceMeters(a.lat!, a.lng!, b.lat!, b.lng!) <= PROXIMITY_THRESHOLD_METERS) {
+      // 둘 중 하나라도 건물형 표준중분류면 더 넓은 임계값을 적용한다 — 미매핑
+      // 스캔(category_min이 서로 다를 수 있음)에서도 안전하게 동작하도록 둘 중
+      // 더 큰 값을 쓴다.
+      const threshold = Math.max(getProximityThresholdMeters(a.category_min), getProximityThresholdMeters(b.category_min));
+      if (haversineDistanceMeters(a.lat!, a.lng!, b.lat!, b.lng!) <= threshold) {
         uf.union(a.id, b.id);
       }
     }

@@ -102,6 +102,53 @@ describe('groupDedupCandidates', () => {
     expect(groupDedupCandidates(rows)).toHaveLength(0);
   });
 
+  // [건물형 시설 임계값 확대](2026-09-29 사용자 지시): "30m에서 건물형 시설은 좀
+  // 넓힐까? 어차피 중복에 대하여체크는 내가 직접하잖아" — 실측 재현(어린이도서관
+  // 미병합 4쌍의 실제 Haversine 거리: 36.3/55.3/118.2/136.8m)이 전부 30m를
+  // 넘었던 사례를 그대로 검증한다. category_min='어린이도서관'은 category-min-
+  // groups.ts의 '문화시설' 대분류에 속해 150m 임계값이 적용돼야 한다.
+  it('건물형 표준중분류(어린이도서관)는 30m를 넘어도(150m 이내) 하나의 그룹으로 묶는다', () => {
+    const rows = [
+      row({
+        id: 'a',
+        category_min: '어린이도서관',
+        normalized_address: 'addr-a',
+        lat: 37.65822782877038,
+        lng: 127.07659471204484,
+      }),
+      // 실측 사례(노원어린이도서관 두 대표 행) — 실제 거리 36.3m, 기존 30m 임계값은 초과.
+      row({
+        id: 'b',
+        category_min: '어린이도서관',
+        normalized_address: 'addr-b',
+        lat: 37.6579494099946,
+        lng: 127.076379050006,
+      }),
+    ];
+    const groups = groupDedupCandidates(rows);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].members.map((m) => m.id).sort()).toEqual(['a', 'b']);
+  });
+
+  it('건물형 표준중분류라도 150m를 초과하면 묶지 않는다', () => {
+    const rows = [
+      row({ id: 'a', category_min: '어린이도서관', normalized_address: 'addr-a', lat: 37.24919086669924, lng: 127.04071538228706 }),
+      // 지혜샘어린이도서관 실측 사례(136.8m)보다 더 벌린 좌표 — 150m를 명백히 초과.
+      row({ id: 'b', category_min: '어린이도서관', normalized_address: 'addr-b', lat: 37.245, lng: 127.04 }),
+    ];
+    expect(groupDedupCandidates(rows)).toHaveLength(0);
+  });
+
+  it('건물형이 아닌 표준중분류(공원)는 여전히 30m 임계값을 그대로 쓴다', () => {
+    const rows = [
+      // 위 "건물형" 테스트와 동일한 좌표 쌍(실측 36.3m) — category_min만 '공원'으로
+      // 바꿔 건물형이 아니면 여전히 30m 초과로 묶이지 않는지 검증한다.
+      row({ id: 'a', category_min: '공원', normalized_address: 'addr-a', lat: 37.65822782877038, lng: 127.07659471204484 }),
+      row({ id: 'b', category_min: '공원', normalized_address: 'addr-b', lat: 37.6579494099946, lng: 127.076379050006 }),
+    ];
+    expect(groupDedupCandidates(rows)).toHaveLength(0);
+  });
+
   it('1건짜리(중복 아님)는 그룹으로 반환하지 않는다', () => {
     const rows = [row({ id: 'a', normalized_address: 'addr-only-one' })];
     expect(groupDedupCandidates(rows)).toHaveLength(0);
