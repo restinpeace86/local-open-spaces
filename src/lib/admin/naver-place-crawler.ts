@@ -58,6 +58,15 @@ export type NaverPlaceCrawlResult = {
 // restaurant/36200306/home"처럼 place ID 앞뒤 경로가 제각각이다 — "/place/숫자" 또는
 // "/restaurant|entertainment|accommodation 등/숫자" 공통 패턴(경로 세그먼트로서의 순수
 // 숫자 ID)만으로 넓게 매칭한다. 못 찾으면 null(추측으로 다른 값을 쓰지 않음).
+// [실사용 버그 제보](2026-09-28 사용자 지시, 어린이도서관 naver_place_id 사례):
+// "네이버 ID 집어넣고 저장했는데 다시 들어가보면 세팅이 안돼있어" — 조사 결과 이
+// 입력창은 "네이버 플레이스 URL"만 받고 있어서, 관리자가 URL이 아니라 순수 숫자
+// ID만 타이핑하면 위 패턴이 전부 매치 실패해(경로 세그먼트가 없으니 당연히
+// 404) placeId가 null로 반환되고, 크롤링 자체가 400 에러로 실패해 naver_place_id가
+// 한 번도 저장되지 못했다(다른 필드는 저장되니 "저장은 됐는데 이것만 빠졌다"로
+// 보임). 트리밍한 입력이 숫자로만 이루어져 있으면(URL 패턴이 아예 아닐 때만) 그
+// 자체를 ID로 인정한다 — 기존 "ID를 찾을 수 없으면 null"(예: 검색 URL) 동작은
+// 그대로 유지된다(숫자만으로 된 문자열이 아니므로 안 걸림).
 export function extractNaverPlaceId(url: string): string | null {
   if (!url) return null;
   const trimmed = url.trim();
@@ -66,6 +75,7 @@ export function extractNaverPlaceId(url: string): string | null {
     const match = trimmed.match(pattern);
     if (match) return match[1];
   }
+  if (/^\d+$/.test(trimmed)) return trimmed;
   return null;
 }
 

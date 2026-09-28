@@ -728,6 +728,13 @@ export function CurationFormModal({
               "위치: 기존 관리자 입력 폼의 가장 맨 위(Header 영역 바로 아래)". */}
           <div className="flex flex-col gap-1.5 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm">
             <span className="font-medium text-gray-700">네이버 플레이스 주소로 자동 채우기</span>
+            {/* [실사용 버그 제보](2026-09-28 사용자 지시): "네이버 ID 집어넣고
+                저장했는데 다시 들어가보면 세팅이 안돼있어" — 조사 결과 이 입력창은
+                URL만 받고 있어서, 숫자 ID만 입력하면 크롤링이 400으로 실패해
+                naver_place_id가 저장되지 않았다(다른 필드는 저장되니 이것만 빠진
+                것처럼 보임). extractNaverPlaceId가 순수 숫자 ID도 인정하도록
+                고쳤고, 이 안내문도 함께 명시한다. */}
+            <p className="text-xs text-gray-500">전체 URL 또는 네이버 플레이스 숫자 ID만 입력해도 됩니다.</p>
             {/* [스팟 큐레이션 네이버 플레이스 ID 저장](2026-09-20 사용자 지시): "이거
                 관련해서 스팟 큐레이션에서 보여줘 한번 이미 가져온거는" — 이미 연동된
                 스팟이면 위 URL 입력창이 그 플레이스로 미리 채워져 있고(초기화 로직

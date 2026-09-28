@@ -31,6 +31,20 @@ describe('extractNaverPlaceId', () => {
     expect(extractNaverPlaceId('https://map.naver.com/p/search/강남역')).toBeNull();
     expect(extractNaverPlaceId('')).toBeNull();
   });
+
+  // [실사용 버그 제보](2026-09-28 사용자 지시): "네이버 ID 집어넣고 저장했는데 다시
+  // 들어가보면 세팅이 안돼있어" — URL이 아니라 순수 숫자 ID만 입력하면 위 패턴이
+  // 전부 매치 실패해 크롤링 자체가 400으로 실패했다(naver_place_id가 아예 저장
+  // 시도조차 안 됨).
+  it('URL이 아니라 순수 숫자 ID만 입력해도 그대로 ID로 인정한다', () => {
+    expect(extractNaverPlaceId('18277005')).toBe('18277005');
+    expect(extractNaverPlaceId('  11797439  ')).toBe('11797439');
+  });
+
+  it('숫자만으로 된 문자열이 아니면(예: 검색 URL) 여전히 null이다', () => {
+    expect(extractNaverPlaceId('https://map.naver.com/p/search/강남역')).toBeNull();
+    expect(extractNaverPlaceId('강남역 도서관')).toBeNull();
+  });
 });
 
 describe('buildNaverPlaceUrls', () => {
