@@ -27,30 +27,38 @@ todo.md [개선사항 1] (2026-09-28 등록): 전국 전문 어린이도서관�
 | #신발벗는 온돌·마루방 | 2건에서 명시 확인 | 뱃지 신설(`floor_seating`, 기존 restaurant config 키 재사용) |
 | #영유아 전용 자료실 분리 | 2건에서 층/자료실 분리 명시 확인 | 뱃지 신설(`lib_infant_reading_room`) |
 | #영어 그림책 전문 | 4건에서 명칭/소개글로 명시 확인 | 뱃지 신설(`lib_english_picture_books`) |
-| #소곤소곤 대화 가능 | 20건 전체에서 근거 0건 | 뱃지 미신설 |
-| #주말 독서·체험 프로그램 | 20건 전체에서 "주말"+프로그램 결합 근거 0건 | 뱃지 미신설 |
-| #만화·웹툰 특화 | 20건 전체에서 근거 0건 | 뱃지 미신설 |
-| #주차 편리 | 기존 `parking`("주차 완비")과 개념 중복 | 별도 뱃지 미신설, 기존 뱃지로 대체 |
+| #소곤소곤 대화 가능 | 20건 전체에서 근거 0건 | 뱃지 항목만 신설(`lib_quiet_talk_allowed`), 자동 태깅 0건 |
+| #주말 독서·체험 프로그램 | 20건 전체에서 "주말"+프로그램 결합 근거 0건 | 뱃지 항목만 신설(`lib_weekend_program`), 자동 태깅 0건 |
+| #만화·웹툰 특화 | 20건 전체에서 근거 0건 | 뱃지 항목만 신설(`lib_comics_webtoon`), 자동 태깅 0건 |
+| #주차 편리 | 20건 전체에서 근거 0건(기존 `parking`="주차 완비"와는 별개 개념) | 뱃지 항목만 신설(`lib_parking_convenient`), 자동 태깅 0건 |
 
-미신설 3개는 "정보가 불확실하면 미부여"라는 지시 원문과 제3장 제5조(추측 금지)에
-따라 억지로 만들지 않았다.
+**[2026-09-28 후속 지시] "다 만들어.. 크롤링해서 뱃지 채울건 아니니깐 일단
+만들어놓고 채워지지 않으면 안 보여주면 되지"** — 근거가 없던 4개도 badgeOptions
+항목 자체(관리자용 체크박스)는 전부 만들었다. "추측 금지"는 근거 없이 실제
+스팟에 자동으로 값을 채워 넣는 행위에만 적용되고, 체크박스 항목을 미리 만들어
+두는 것과는 별개다 — `spot_curations.curation_badges`에 값이 없으면 소비자/
+관리자 화면 어디서도 렌더링되지 않는 기존 구조 그대로이므로, 항목만 먼저
+만들어 두고 관리자가 실제 방문·확인 후 수기로 체크하면 된다. 이번 커밋에서
+이 4개 뱃지를 실제 스팟에 자동 태깅한 건은 0건이다.
 
 ## 변경 사항
 ### `src/lib/admin/curation-badges.ts`
 - '어린이 도서관'을 보편 임시 config(`GENERIC_CONFIGS`)에서 빼고 전용
   `CHILDREN_LIBRARY_CONFIG`로 승격(`categoryMinNames: ['어린이도서관']`로
   표준중분류 우선 매칭 — SPA_JJIMJILBANG_CONFIG와 동일한 방식).
-- badgeOptions 11개: 기존 매핑 이력 보존 6개(parking/stroller/nursing_room/
+- badgeOptions 15개: 기존 매핑 이력 보존 6개(parking/stroller/nursing_room/
   diaper_table/kids_chair/kids_zone — 기존 restaurant config와 동일한 키를
-  그대로 재사용해 이미 저장된 값이 고아가 되지 않게 함) + 신규 확정 3개
-  (floor_seating/lib_infant_reading_room/lib_english_picture_books) +
-  운영 2개(reservation_required/reservation_possible).
+  그대로 재사용해 이미 저장된 값이 고아가 되지 않게 함) + 원문 근거로 확정한
+  3개(floor_seating/lib_infant_reading_room/lib_english_picture_books) +
+  후속 지시로 항목만 추가한 4개(lib_quiet_talk_allowed/lib_weekend_program/
+  lib_comics_webtoon/lib_parking_convenient) + 운영 2개(reservation_required/
+  reservation_possible).
 
 ### `src/lib/admin/curation-badges.test.tsx`
 - '어린이 도서관'을 검증하던 "보편 임시 뱃지" 테스트를 '어린이 과학관 / 박물관'
   으로 교체(어린이 도서관은 이제 전용 config이므로).
 - `children_library` 전용 describe 블록 신규(3개): categoryMin 우선 매칭,
-  11개 뱃지 목록 정확성, 보존 대상 3개가 restaurant와 동일 키를 쓰는지.
+  15개 뱃지 목록 정확성, 보존 대상 3개가 restaurant와 동일 키를 쓰는지.
 
 ### `scripts/migrations/2026-09-28-tag-children-library-badges.mjs` (신규)
 - 원문 근거가 확인된 8개 스팟에 한해 `spot_curations.curation_badges`에
@@ -63,9 +71,11 @@ todo.md [개선사항 1] (2026-09-28 등록): 전국 전문 어린이도서관�
 - 기존 값 보존 + 신규 추가 검증(1), 큐레이션 행이 아직 없는 스팟 처리 검증(1).
 
 ## 검증
-- `npx vitest run scripts/migrations/2026-09-28-tag-children-library-badges.test.mjs src/lib/admin/curation-badges.test.tsx` — 2 파일 77개 테스트 통과.
+- `npx vitest run scripts/migrations/2026-09-28-tag-children-library-badges.test.mjs src/lib/admin/curation-badges.test.tsx` — 2 파일 75개 테스트 통과.
 - `npx tsc --noEmit` / `npm run test`(전체 216개 파일 2,478개) / `npm run build` 모두 통과.
-- 실제 DB: 8개 스팟 갱신 완료(마이그레이션 스크립트 실행 로그로 전/후 값 확인).
+- 실제 DB: 8개 스팟 갱신 완료(마이그레이션 스크립트 실행 로그로 전/후 값 확인,
+  자동 태깅한 건 3개 뱃지·8개 스팟 그대로 — 후속 지시로 추가된 4개 badgeOptions는
+  체크박스 항목만 만들었을 뿐 DB 값은 변경하지 않았다).
 
 ## 특이 사항
 - todo.md 원문의 "Output Format"(마크다운 테이블)과 "Input Data"(빈 플레이스홀더)는

@@ -446,11 +446,22 @@ export const NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY: Record<string, string> = {
 // 팩트 기반으로 판단할 수 있는 것만" — 실측 확인: category_min='어린이도서관' 156건
 // 중 원문 소개글(FAC_DESC)이 있는 건 seoul_public_culture 소스 20건뿐이고(나머지
 // 136건은 소개 텍스트 자체가 없음, public_facility_open 10건도 "책상+의자" 같은
-// 비품 목록일 뿐), 그 20건을 직접 다 읽어 7개 기준 중 실제 원문 근거가 있는 것만
-// 골랐다. 소곤소곤 대화 가능/주말 독서·체험 프로그램/만화·웹툰 특화 3개는 20건
-// 전체에서 단 하나의 근거도 못 찾아 뱃지 자체를 만들지 않았다(추측 금지, 제3장
-// 제5조) — "정보가 불확실하면 미부여"라는 지시 원문과도 일치한다. "#주차 편리"는
-// 기존 parking("주차 완비") 뱃지와 개념이 같아 중복 신설하지 않았다.
+// 비품 목록일 뿐), 그 20건을 직접 다 읽어 7개 기준 중 3개(floor_seating/
+// lib_infant_reading_room/lib_english_picture_books)만 실제 원문 근거를 찾아
+// 8개 스팟에 태깅했다(scripts/migrations/2026-09-28-tag-children-library-badges.mjs
+// 참고). 나머지 4개(소곤소곤 대화 가능/주말 독서·체험 프로그램/만화·웹툰 특화/
+// 주차 편리)는 20건 전체에서 근거를 못 찾아 "자동 태깅"은 하지 않았다.
+// [뱃지 옵션은 전부 만들어 두기](2026-09-28 사용자 후속 지시): "다 만들어..
+// 이건 크롤링해서 뱃지 채울건 아니니깐.. 일단 만들어놓고 채워지지 않으면 안
+// 보여주면 되지" — 이 뱃지들은 자동 크롤링/키워드 매칭으로 채워지는 게 아니라
+// 관리자가 방문·확인 후 수기로 체크하는 항목이다. 그래서 "원문 근거 없이는
+// 만들지 않는다(추측 금지)"는 자동 확정(=근거 없이 실제 스팟에 체크)에만
+// 적용되고, badgeOptions 자체(체크박스 항목)를 미리 만들어 두는 것과는 별개다
+// — spot_curations.curation_badges 배열에 값이 없으면 소비자 화면/관리자
+// 화면 어디서도 그냥 렌더링되지 않으니(기존 구조 그대로), 항목만 먼저 만들어
+// 놓고 관리자가 실제로 확인한 곳만 체크하면 된다. 나머지 4개도 badgeOptions에
+// 추가하되, DB에 자동으로 채워 넣지는 않는다(이번 커밋에서 이 4개를 태깅한
+// 스팟은 0건).
 // - "현재 매핑된게 1건이라도 있는 뱃지는 없애지 말고 그대로 두세요(주차 완비,
 //   놀이방/키즈존, 아기의자)" — 이 3개는 기존 RESTAURANT_CONFIG와 동일한 키
 //   (parking/kids_zone/kids_chair)를 그대로 재사용한다. 어린이도서관은 그동안
@@ -460,8 +471,12 @@ export const NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY: Record<string, string> = {
 //   badgeOptions 목록에서 안 보여 관리자 화면에서 라벨 없이 고아처럼 남는다.
 // - floor_seating은 RESTAURANT_CONFIG에 이미 있는 동일 개념 키를 재사용한다
 //   (제5장 제4조 기존 구조 우선) — 라벨만 이 카테고리에 맞게 다듬었다. 나머지
-//   2개(영유아 전용 자료실 분리/영어 그림책 전문)는 기존에 없던 개념이라 lib_
+//   6개(영유아 전용 자료실 분리/영어 그림책 전문/소곤소곤 대화 가능/주말
+//   독서·체험 프로그램/만화·웹툰 특화/주차 편리)는 기존에 없던 개념이라 lib_
 //   접두사로 새 키를 만들었다(SPA_JJIMJILBANG_CONFIG의 jj_ 접두사 관례와 동일).
+//   주차 편리(lib_parking_convenient)는 기존 parking("주차 완비": 주차 가능
+//   여부)과 달리 "자체 주차장이 넓거나 주말 주차가 수월함"까지 확인된 경우로
+//   구분되는 별도 개념이라 중복이 아니다.
 // - 실측 근거(FAC_DESC 원문, scripts/migrations/2026-09-28-tag-children-library-badges.mjs
 //   참고): floor_seating→강서길꽃어린이도서관("온돌" 명시)·송파어린이도서관("맨발로
 //   돌아다녀도 좋은" = 신발 벗는 편안한 독서공간); lib_infant_reading_room→
@@ -469,7 +484,10 @@ export const NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY: Record<string, string> = {
 //   무명칭 도서관 1곳(id 61165c85, "유아자료실, 어린이자료실" 별도 표기);
 //   lib_english_picture_books→용두/송파/용암(856a9b20) 어린이영어도서관 3곳(모두
 //   "영어도서관"/"영어특화전문도서관" 명시) 및 동작영어마루도서관("English
-//   Children Book" 별도 서가 명시).
+//   Children Book" 별도 서가 명시). 나머지 4개(lib_quiet_talk_allowed/
+//   lib_weekend_program/lib_comics_webtoon/lib_parking_convenient)는 badgeOptions
+//   항목만 만들고, 관리자가 방문 확인 후 수기로 체크하도록 남겨둔다(자동 태깅된
+//   스팟 없음).
 const CHILDREN_LIBRARY_KEYWORD_GROUPS: Record<string, string[]> = {
   parking: ['주차', '주차장', '파킹', '차댈곳', '발렛'],
   stroller: ['유모차', '유모차반입', '유모차동반'],
@@ -480,6 +498,10 @@ const CHILDREN_LIBRARY_KEYWORD_GROUPS: Record<string, string[]> = {
   floor_seating: ['온돌', '마루방', '신발 벗고', '맨발로'],
   lib_infant_reading_room: ['영유아 전용', '유아자료실', '유아 열람실', '영유아실', '유아전용'],
   lib_english_picture_books: ['영어도서관', '영어특화', '영어 전문', '영어 그림책', '영어원서'],
+  lib_quiet_talk_allowed: ['소곤소곤', '작은 대화 가능', '조근조근', '책 읽어주기 가능'],
+  lib_weekend_program: ['주말 프로그램', '독서교실', '인형극', '주말 체험'],
+  lib_comics_webtoon: ['만화책', '웹툰', '그래픽노블', '만화 서가'],
+  lib_parking_convenient: ['주차 편리', '주차 널찍', '주말 주차 가능', '넓은 주차장'],
   reservation_required: ['예약필수', '사전예약필수'],
   reservation_possible: ['예약', '사전예약', '네이버예약'],
 };
@@ -494,11 +516,15 @@ const CHILDREN_LIBRARY_CONFIG: CurationCategoryConfig = {
     { key: 'stroller', label: '유모차 가능', group: '이동/편의' },
     { key: 'nursing_room', label: '수유실 있음', group: '이동/편의' },
     { key: 'diaper_table', label: '기저귀 갈이대', group: '이동/편의' },
+    { key: 'lib_parking_convenient', label: '주차 편리', group: '이동/편의' },
     { key: 'kids_chair', label: '아기의자', group: '공간/놀이' },
     { key: 'kids_zone', label: '키즈존/놀이방', group: '공간/놀이' },
     { key: 'floor_seating', label: '신발벗는 온돌·마루방', group: '독서 환경' },
     { key: 'lib_infant_reading_room', label: '영유아 전용 자료실 분리', group: '독서 환경' },
+    { key: 'lib_quiet_talk_allowed', label: '소곤소곤 대화 가능', group: '독서 환경' },
+    { key: 'lib_weekend_program', label: '주말 독서·체험 프로그램', group: '독서 환경' },
     { key: 'lib_english_picture_books', label: '영어 그림책 전문', group: '독서 환경' },
+    { key: 'lib_comics_webtoon', label: '만화·웹툰 특화', group: '독서 환경' },
     { key: 'reservation_required', label: '예약 필수', group: '운영' },
     { key: 'reservation_possible', label: '예약 가능', group: '운영' },
   ],
