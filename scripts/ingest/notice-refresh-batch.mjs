@@ -29,6 +29,15 @@ const FETCH_TIMEOUT_MS = 15000;
 const STALE_THRESHOLD_MS = 7 * 24 * 60 * 60 * 1000; // 7일 경과(달력일 아님) — spot-curation-refresh.ts와 동일 기준.
 const INTERVAL_MS = 10_000; // 사용자 지시: 스팟 1건 처리 후 다음 건 처리 전 10초 텀.
 
+// [표준중분류별 공지 크롤링 제외](2026-09-28 사용자 지시, todo.md 개선사항2): "표준
+// 중분류가 '어린이도서관'인 항목은 크롤링 대상에서 제외.. 불필요한 네트워크 요청이나
+// 업데이트 로직을 타지 않도록.. 추후 다른 표준중분류도 제외대상으로 추가될 수 있으니
+// 확장성을 고려" — 실측 확인: naver_place_id가 채워진 어린이도서관이 67건 있어 이
+// 배치가 매주 그만큼 불필요한 네이버 크롤링을 하고 있었다(도서관은 "공지사항" 개념이
+// 놀이방식당/찜질방과 달리 큐레이션 대상이 아님). 배열이라 앞으로 다른 중분류도
+// 그대로 추가하면 된다.
+const EXCLUDED_CATEGORY_MINS = ['어린이도서관'];
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -77,18 +86,21 @@ export async function run() {
   const admin = createAdminClient();
   const staleBefore = new Date(Date.now() - STALE_THRESHOLD_MS).toISOString();
 
-  const { data: spots, error } = await admin
+  const { data: allSpots, error } = await admin
     .from('open_spaces')
-    .select('id, naver_place_id')
+    .select('id, naver_place_id, category_min')
     .not('naver_place_id', 'is', null)
     .or(`notice_checked_at.is.null,notice_checked_at.lt.${staleBefore}`);
   if (error) throw new Error(`대상 스팟 조회 실패: ${error.message}`);
+
+  const spots = (allSpots ?? []).filter((spot) => !EXCLUDED_CATEGORY_MINS.includes(spot.category_min));
+  const excludedCount = (allSpots?.length ?? 0) - spots.length;
 
   let checkedCount = 0;
   let savedNoticeCount = 0;
   let failedCount = 0;
 
-  for (const spot of spots ?? []) {
+  for (const spot of spots) {
     try {
       const { saved } = await refreshOneSpot(admin, spot);
       savedNoticeCount += saved;
@@ -101,9 +113,9 @@ export async function run() {
   }
 
   console.log(
-    `[NOTICE_REFRESH_BATCH] 완료 — 대상 ${spots?.length ?? 0}건 중 체크 ${checkedCount}건, 신규 공지 ${savedNoticeCount}건, 실패 ${failedCount}건`
+    `[NOTICE_REFRESH_BATCH] 완료 — 대상 ${spots.length}건 중 체크 ${checkedCount}건, 신규 공지 ${savedNoticeCount}건, 실패 ${failedCount}건(제외 대상 중분류라 건너뜀: ${excludedCount}건)`
   );
-  return { targetCount: spots?.length ?? 0, checkedCount, savedNoticeCount, failedCount };
+  return { targetCount: spots.length, excludedCount, checkedCount, savedNoticeCount, failedCount };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {

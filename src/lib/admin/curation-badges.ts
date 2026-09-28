@@ -441,10 +441,75 @@ export const NAVER_REVIEW_VOTE_CODE_TO_BADGE_KEY: Record<string, string> = {
   saunas_unique: 'jj_unique_room',
 };
 
+// [어린이도서관 전용 뱃지](2026-09-28 사용자 지시, todo.md 개선사항1): "전국 전문
+// 어린이도서관 170곳 분석해 7개 표준 뱃지 태깅.. 억지로 끼워 맞추지 말고, 원문이나
+// 팩트 기반으로 판단할 수 있는 것만" — 실측 확인: category_min='어린이도서관' 156건
+// 중 원문 소개글(FAC_DESC)이 있는 건 seoul_public_culture 소스 20건뿐이고(나머지
+// 136건은 소개 텍스트 자체가 없음, public_facility_open 10건도 "책상+의자" 같은
+// 비품 목록일 뿐), 그 20건을 직접 다 읽어 7개 기준 중 실제 원문 근거가 있는 것만
+// 골랐다. 소곤소곤 대화 가능/주말 독서·체험 프로그램/만화·웹툰 특화 3개는 20건
+// 전체에서 단 하나의 근거도 못 찾아 뱃지 자체를 만들지 않았다(추측 금지, 제3장
+// 제5조) — "정보가 불확실하면 미부여"라는 지시 원문과도 일치한다. "#주차 편리"는
+// 기존 parking("주차 완비") 뱃지와 개념이 같아 중복 신설하지 않았다.
+// - "현재 매핑된게 1건이라도 있는 뱃지는 없애지 말고 그대로 두세요(주차 완비,
+//   놀이방/키즈존, 아기의자)" — 이 3개는 기존 RESTAURANT_CONFIG와 동일한 키
+//   (parking/kids_zone/kids_chair)를 그대로 재사용한다. 어린이도서관은 그동안
+//   전용 config가 없어 노출중분류 미배정 상태일 때 DEFAULT_CATEGORY_ID(식당)로
+//   판정돼 뱃지가 붙은 이력이 있다 — 키를 다른 이름으로 바꾸면 이미
+//   spot_curations.curation_badges에 저장된 문자열(예: "parking")이 이 config의
+//   badgeOptions 목록에서 안 보여 관리자 화면에서 라벨 없이 고아처럼 남는다.
+// - floor_seating은 RESTAURANT_CONFIG에 이미 있는 동일 개념 키를 재사용한다
+//   (제5장 제4조 기존 구조 우선) — 라벨만 이 카테고리에 맞게 다듬었다. 나머지
+//   2개(영유아 전용 자료실 분리/영어 그림책 전문)는 기존에 없던 개념이라 lib_
+//   접두사로 새 키를 만들었다(SPA_JJIMJILBANG_CONFIG의 jj_ 접두사 관례와 동일).
+// - 실측 근거(FAC_DESC 원문, scripts/migrations/2026-09-28-tag-children-library-badges.mjs
+//   참고): floor_seating→강서길꽃어린이도서관("온돌" 명시)·송파어린이도서관("맨발로
+//   돌아다녀도 좋은" = 신발 벗는 편안한 독서공간); lib_infant_reading_room→
+//   장안어린이도서관(1층 유아 열람실/2층 아동 열람실로 층 자체가 분리)·서울 소재
+//   무명칭 도서관 1곳(id 61165c85, "유아자료실, 어린이자료실" 별도 표기);
+//   lib_english_picture_books→용두/송파/용암(856a9b20) 어린이영어도서관 3곳(모두
+//   "영어도서관"/"영어특화전문도서관" 명시) 및 동작영어마루도서관("English
+//   Children Book" 별도 서가 명시).
+const CHILDREN_LIBRARY_KEYWORD_GROUPS: Record<string, string[]> = {
+  parking: ['주차', '주차장', '파킹', '차댈곳', '발렛'],
+  stroller: ['유모차', '유모차반입', '유모차동반'],
+  nursing_room: ['수유실', '모유수유'],
+  diaper_table: ['기저귀', '갈이대', '기저귀존'],
+  kids_chair: ['아기의자', '하이체어', '유아용의자', '유아의자'],
+  kids_zone: ['키즈존', '놀이방', '영유아놀이공간'],
+  floor_seating: ['온돌', '마루방', '신발 벗고', '맨발로'],
+  lib_infant_reading_room: ['영유아 전용', '유아자료실', '유아 열람실', '영유아실', '유아전용'],
+  lib_english_picture_books: ['영어도서관', '영어특화', '영어 전문', '영어 그림책', '영어원서'],
+  reservation_required: ['예약필수', '사전예약필수'],
+  reservation_possible: ['예약', '사전예약', '네이버예약'],
+};
+
+const CHILDREN_LIBRARY_CONFIG: CurationCategoryConfig = {
+  categoryId: 'children_library',
+  exposureCategoryNames: ['어린이 도서관'],
+  categoryMinNames: ['어린이도서관'],
+  badgeGroups: ['이동/편의', '공간/놀이', '독서 환경', '운영'],
+  badgeOptions: [
+    { key: 'parking', label: '주차 완비', group: '이동/편의' },
+    { key: 'stroller', label: '유모차 가능', group: '이동/편의' },
+    { key: 'nursing_room', label: '수유실 있음', group: '이동/편의' },
+    { key: 'diaper_table', label: '기저귀 갈이대', group: '이동/편의' },
+    { key: 'kids_chair', label: '아기의자', group: '공간/놀이' },
+    { key: 'kids_zone', label: '키즈존/놀이방', group: '공간/놀이' },
+    { key: 'floor_seating', label: '신발벗는 온돌·마루방', group: '독서 환경' },
+    { key: 'lib_infant_reading_room', label: '영유아 전용 자료실 분리', group: '독서 환경' },
+    { key: 'lib_english_picture_books', label: '영어 그림책 전문', group: '독서 환경' },
+    { key: 'reservation_required', label: '예약 필수', group: '운영' },
+    { key: 'reservation_possible', label: '예약 가능', group: '운영' },
+  ],
+  keywordGroups: CHILDREN_LIBRARY_KEYWORD_GROUPS,
+};
+
 // [보편 임시 뱃지](위 파일 상단 설명 참고) — 아직 전용 콘텐츠가 확정되지 않은
-// 나머지 8개 노출 중분류에 공통으로 적용하는 최소 항목. venue별 특화 뱃지가
+// 나머지 7개 노출 중분류에 공통으로 적용하는 최소 항목. venue별 특화 뱃지가
 // 아니라 "어느 공공장소든 있을 법한" 편의시설만 담았다 — 임의로 지어낸 특화
-// 항목(예: 도서관에 "볼풀장")은 없다.
+// 항목(예: 도서관에 "볼풀장")은 없다. '어린이 도서관'은 전용 config
+// (CHILDREN_LIBRARY_CONFIG)로 승격돼 이 목록에서 빠졌다.
 const GENERIC_BADGE_GROUPS = ['이동/편의', '운영'];
 const GENERIC_BADGE_OPTIONS: CurationBadgeOption[] = [
   { key: 'parking', label: '주차 완비', group: '이동/편의' },
@@ -475,7 +540,6 @@ const GENERIC_CATEGORY_NAMES = [
   '대형 근린공원 / 잔디광장',
   '생태공원 / 산책로',
   '수목원 / 식물원',
-  '어린이 도서관',
   '어린이 과학관 / 박물관',
   '미술관 / 전시체험관',
 ];
@@ -499,6 +563,7 @@ const CURATION_CATEGORIES: CurationCategoryConfig[] = [
   RURAL_VILLAGE_CONFIG,
   EDUCATION_FARM_CONFIG,
   SPA_JJIMJILBANG_CONFIG,
+  CHILDREN_LIBRARY_CONFIG,
   ...GENERIC_CONFIGS,
 ];
 

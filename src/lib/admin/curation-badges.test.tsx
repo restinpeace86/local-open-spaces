@@ -168,10 +168,46 @@ describe('kids_cafe 카테고리 뱃지 — 식당과 완전히 독립적', () =
 describe('아직 전용 콘텐츠가 없는 노출 중분류(보편 임시 뱃지)', () => {
   it('식당/키즈카페 전용 항목 없이 보편적인 항목(주차/유모차 등)만 갖는다', () => {
     // [2026-09-10] '캠핑장 / 피크닉장'은 전용 config로 승격돼(아래 describe 참고)
-    // 이 테스트는 여전히 보편 임시 뱃지인 '어린이 도서관'으로 검증한다.
-    const categoryId = resolveCurationCategoryId('어린이 도서관');
+    // 이 테스트는 여전히 보편 임시 뱃지인 카테고리로 검증한다. [2026-09-28]
+    // '어린이 도서관'도 전용 config(CHILDREN_LIBRARY_CONFIG, 아래 describe 참고)로
+    // 승격돼 이 테스트 대상에서 빠졌다 — '어린이 과학관 / 박물관'으로 교체.
+    const categoryId = resolveCurationCategoryId('어린이 과학관 / 박물관');
     const labels = getBadgeOptionsForCategory(categoryId).map((o) => o.label);
     expect(labels).toEqual(['주차 완비', '유모차 가능', '수유실 있음', '기저귀 갈이대', '예약 필수', '예약 가능']);
+  });
+});
+
+// [어린이도서관 전용 뱃지](2026-09-28 사용자 지시, todo.md 개선사항1): 실측한
+// FAC_DESC 원문 근거(curation-badges.ts 상단 주석 참고)로 확정한 3개 신규 뱃지 +
+// 기존에 이미 매핑 이력이 있던 3개(주차 완비/키즈존/아기의자) 보존을 검증한다.
+describe('children_library 카테고리 뱃지 — 어린이도서관 전용', () => {
+  it('표준중분류(category_min)만으로도 children_library로 매핑된다(노출중분류 미배정이어도)', () => {
+    expect(resolveCurationCategoryId(null, '어린이도서관')).toBe('children_library');
+    expect(resolveCurationCategoryId('어린이 도서관')).toBe('children_library');
+  });
+
+  it('기존 매핑 이력이 있는 3개(주차 완비/키즈존/아기의자)를 그대로 보존하고, 원문 근거로 확정한 3개를 새로 추가한다', () => {
+    const options = getBadgeOptionsForCategory('children_library');
+    expect(options.map((o) => o.label)).toEqual([
+      '주차 완비',
+      '유모차 가능',
+      '수유실 있음',
+      '기저귀 갈이대',
+      '아기의자',
+      '키즈존/놀이방',
+      '신발벗는 온돌·마루방',
+      '영유아 전용 자료실 분리',
+      '영어 그림책 전문',
+      '예약 필수',
+      '예약 가능',
+    ]);
+  });
+
+  it('보존 대상 3개는 restaurant 카테고리와 동일한 키를 쓴다(기존 저장 데이터가 고아가 되지 않도록)', () => {
+    const libraryKeys = getBadgeOptionsForCategory('children_library').map((o) => o.key);
+    expect(libraryKeys).toEqual(
+      expect.arrayContaining(['parking', 'kids_chair', 'kids_zone'])
+    );
   });
 });
 
