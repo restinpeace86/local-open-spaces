@@ -145,7 +145,10 @@ export const CORE_SPOT_CATEGORIES: CoreSpotCategory[] = [
     id: 'museum',
     label: '박물관',
     emoji: '🏛️',
-    minors: ['종합/기타박물관', '역사박물관'],
+    // [순수 어린이박물관 표준 중분류 분리](2026-09-30 사용자 지시): library/
+    // science-museum 칩과 동일한 관례 — 소비자 화면 필터 칩은 "박물관" 하나만
+    // 유지하고 그 아래 표준 중분류를 함께 담는다.
+    minors: ['종합/기타박물관', '역사박물관', '어린이박물관'],
     major: 'culture-facility',
   },
   { id: 'art-museum', label: '미술관', emoji: '🖼️', minors: ['미술관'], major: 'culture-facility' },

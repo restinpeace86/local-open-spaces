@@ -132,18 +132,20 @@ describe('getSpotCategoriesByMajor', () => {
 });
 
 describe('isSpotCategoryVisible', () => {
-  const category = CORE_SPOT_CATEGORIES.find((c) => c.id === 'museum')!; // minors: 종합/기타박물관, 역사박물관
+  // [순수 어린이박물관 표준 중분류 분리](2026-09-30) 이후 minors: 종합/기타박물관,
+  // 역사박물관, 어린이박물관.
+  const category = CORE_SPOT_CATEGORIES.find((c) => c.id === 'museum')!;
 
   it('counts가 없으면(조회 전) 항상 노출한다', () => {
     expect(isSpotCategoryVisible(category)).toBe(true);
   });
 
   it('소속 중분류 중 하나라도 카운트가 0보다 크면 노출한다', () => {
-    expect(isSpotCategoryVisible(category, { '종합/기타박물관': 0, '역사박물관': 5 })).toBe(true);
+    expect(isSpotCategoryVisible(category, { '종합/기타박물관': 0, '역사박물관': 5, '어린이박물관': 0 })).toBe(true);
   });
 
   it('소속 중분류가 전부 0이면 숨긴다', () => {
-    expect(isSpotCategoryVisible(category, { '종합/기타박물관': 0, '역사박물관': 0 })).toBe(false);
+    expect(isSpotCategoryVisible(category, { '종합/기타박물관': 0, '역사박물관': 0, '어린이박물관': 0 })).toBe(false);
   });
 });
 
