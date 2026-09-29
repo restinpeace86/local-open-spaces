@@ -1,0 +1,85 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import fs from 'fs';
+
+// [표준중분류 '기타'/미지정(NULL) 명칭·주소 CSV 내보내기] 검증: 두 카테고리를
+// 각각 별도 CSV로 저장하고, 페이지네이션(1,000건 상한) 처리 및 display_name
+// 우선순위가 올바른지 확인한다.
+
+function makeAdminClient(rowsByFilter) {
+  const fromMock = vi.fn(() => ({
+    select: () => ({
+      eq: (_col, categoryMin) => ({
+        or: () => ({
+          range: (from) => {
+            const rows = rowsByFilter[`eq:${categoryMin}`] ?? [];
+            const page = rows.slice(from, from + 1000);
+            return Promise.resolve({ data: page, error: null });
+          },
+        }),
+      }),
+      is: () => ({
+        or: () => ({
+          range: (from) => {
+            const rows = rowsByFilter['is:null'] ?? [];
+            const page = rows.slice(from, from + 1000);
+            return Promise.resolve({ data: page, error: null });
+          },
+        }),
+      }),
+    }),
+  }));
+  return { from: fromMock };
+}
+
+describe('export-etc-and-unassigned-category-min run()', () => {
+  const writeFileSyncSpy = vi.spyOn(fs, 'writeFileSync').mockImplementation(() => {});
+
+  beforeEach(() => {
+    writeFileSyncSpy.mockClear();
+    vi.resetModules();
+  });
+
+  afterEach(() => {
+    vi.doUnmock('./ingest/lib/supabase-admin.mjs');
+  });
+
+  it('기타.csv와 미지정.csv를 각각 별도 파일로 저장한다', async () => {
+    const admin = makeAdminClient({
+      'eq:기타': [{ id: '1', name: '테스트기타', display_name: null, address: '주소1' }],
+      'is:null': [{ id: '2', name: '테스트미지정', display_name: null, address: '주소2' }],
+    });
+    vi.doMock('./ingest/lib/supabase-admin.mjs', () => ({ createAdminClient: () => admin }));
+
+    const { run } = await import('./export-etc-and-unassigned-category-min.mjs');
+    const result = await run();
+
+    expect(writeFileSyncSpy.mock.calls.map((c) => c[0])).toEqual(['기타.csv', '미지정.csv']);
+    expect(result).toEqual({ etcCount: 1, unassignedCount: 1 });
+  });
+
+  it('display_name이 있으면 원본 name 대신 display_name을 쓴다', async () => {
+    const admin = makeAdminClient({
+      'eq:기타': [{ id: '1', name: '원본이름', display_name: '노출이름', address: '주소1' }],
+      'is:null': [],
+    });
+    vi.doMock('./ingest/lib/supabase-admin.mjs', () => ({ createAdminClient: () => admin }));
+
+    const { run } = await import('./export-etc-and-unassigned-category-min.mjs');
+    await run();
+
+    const call = writeFileSyncSpy.mock.calls.find((c) => c[0] === '기타.csv');
+    expect(call[1]).toContain('노출이름');
+    expect(call[1]).not.toContain('원본이름');
+  });
+
+  it('1,000건이 넘으면 여러 페이지로 나눠 전량 조회한다', async () => {
+    const manyRows = Array.from({ length: 1500 }, (_, i) => ({ id: `id-${i}`, name: `이름${i}`, display_name: null, address: `주소${i}` }));
+    const admin = makeAdminClient({ 'eq:기타': manyRows, 'is:null': [] });
+    vi.doMock('./ingest/lib/supabase-admin.mjs', () => ({ createAdminClient: () => admin }));
+
+    const { run } = await import('./export-etc-and-unassigned-category-min.mjs');
+    const result = await run();
+
+    expect(result.etcCount).toBe(1500);
+  });
+});
