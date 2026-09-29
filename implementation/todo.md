@@ -50,3 +50,9 @@ Supabase DB의 `open_spaces` 테이블에서 특정 표준중분류(`category_su
 # DB Schema Reference (참고용)
 - 테이블명: `open_spaces`
 - 주요 컬럼명: `name` (또는 title), `address`, `category_sub`
+
+- [제외 조건 예시]
+
+정규 기수제 수강료를 내고 다니는 학원형/멤버십형 민간 시설(예: 어린이천문대 등 사설 교육기관)은 **is_target: false**로 제외해 주세요.
+
+대중이 상시(또는 일반 예약으로) 가볍게 방문할 수 있는 공공 및 일반 상설 박물관·과학관 위주로 골라주세요.
