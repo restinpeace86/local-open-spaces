@@ -14,7 +14,7 @@
 ---
 
 
-[x] [개선사항 1] — # Role
+[개선사항 1] — # Role
 당신은 Next.js와 React, Tailwind CSS를 활용한 프론트엔드 개발 전문가입니다.
 
 # Task
@@ -28,3 +28,25 @@
 
 # Code
 [여기에 수정이 필요한 open_spaces 및 events 탭 관련 관리자 페이지 코드를 붙여넣으세요]
+
+
+[개선사항 2] # Role
+당신은 Node.js, Supabase, PostgreSQL 백엔드 개발 전문가입니다.
+
+# Task
+Supabase DB의 `open_spaces` 테이블에서 특정 표준중분류(`category_sub`) 필터링을 거쳐, 각 카테고리별로 `명칭(제목)`과 `주소` 컬럼만 추출하여 개별 CSV 파일로 저장하는 Node.js 스크립트를 작성해 주세요.
+
+# Target Categories & Output Filenames
+1. `과학관` ➔ `과학관.csv`
+2. `역사박물관` ➔ `역사박물관.csv`
+3. `종합/기타박물관` ➔ `종합기타박물관.csv`
+
+# Requirements
+1. **Supabase 연동:** `@supabase/supabase-js` 라이브러리를 사용하여 `.env` 파일의 환경변수(`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` 등)를 로드해 연결해 주세요.
+2. **데이터 추출:** `open_spaces` 테이블에서 `category_sub`가 위 세 가지 조건에 각각 해당하는 행들을 조회하고, 출력 필드는 오직 `name`(또는 title)과 `address`만 가져오도록 쿼리를 구성해 주세요.
+3. **CSV 파일 생성:** Node.js 기본 내장 모듈(`fs`) 또는 가벼운 로직을 활용하여, 쌍따옴표(`"`) 처리 등으로 주소나 명칭에 콤마(,)가 포함되어도 CSV 포맷이 깨지지 않도록 안전하게 각각 파일(`과학관.csv`, `역사박물관.csv`, `종합기타박물관.csv`)로 저장해 주세요.
+4. **실행 방법 안내:** 스크립트 실행을 위해 필요한 패키지 설치 명령어와 실행 방법(`node export-museums.js` 등)을 간단히 주석이나 설명으로 덧붙여 주세요.
+
+# DB Schema Reference (참고용)
+- 테이블명: `open_spaces`
+- 주요 컬럼명: `name` (또는 title), `address`, `category_sub`
