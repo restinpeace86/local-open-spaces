@@ -506,6 +506,13 @@ const CHILDREN_LIBRARY_KEYWORD_GROUPS: Record<string, string[]> = {
   reservation_possible: ['예약', '사전예약', '네이버예약'],
 };
 
+// [뱃지 라벨 3개 수정](2026-09-29 사용자 지시): "#신발벗는 온돌·마루방 ➡️
+// #신발벗는 마루방 / #영유아 전용 자료실 분리 ➡️ #영유아 전용 공간 분리 /
+// #영어 그림책 전문 ➡️ #영어 그림책·원서 특화" — 키(floor_seating/
+// lib_infant_reading_room/lib_english_picture_books)는 그대로 두고 라벨
+// 문구만 바꿨다. 키가 그대로라 이미 spot_curations.curation_badges에
+// 저장된 값(예: "floor_seating")은 손대지 않아도 새 라벨로 자동 표시된다
+// (별도 데이터 마이그레이션 불필요).
 const CHILDREN_LIBRARY_CONFIG: CurationCategoryConfig = {
   categoryId: 'children_library',
   exposureCategoryNames: ['어린이 도서관'],
@@ -519,11 +526,11 @@ const CHILDREN_LIBRARY_CONFIG: CurationCategoryConfig = {
     { key: 'lib_parking_convenient', label: '주차 편리', group: '이동/편의' },
     { key: 'kids_chair', label: '아기의자', group: '공간/놀이' },
     { key: 'kids_zone', label: '키즈존/놀이방', group: '공간/놀이' },
-    { key: 'floor_seating', label: '신발벗는 온돌·마루방', group: '독서 환경' },
-    { key: 'lib_infant_reading_room', label: '영유아 전용 자료실 분리', group: '독서 환경' },
+    { key: 'floor_seating', label: '신발벗는 마루방', group: '독서 환경' },
+    { key: 'lib_infant_reading_room', label: '영유아 전용 공간 분리', group: '독서 환경' },
     { key: 'lib_quiet_talk_allowed', label: '소곤소곤 대화 가능', group: '독서 환경' },
     { key: 'lib_weekend_program', label: '주말 독서·체험 프로그램', group: '독서 환경' },
-    { key: 'lib_english_picture_books', label: '영어 그림책 전문', group: '독서 환경' },
+    { key: 'lib_english_picture_books', label: '영어 그림책·원서 특화', group: '독서 환경' },
     { key: 'lib_comics_webtoon', label: '만화·웹툰 특화', group: '독서 환경' },
     { key: 'reservation_required', label: '예약 필수', group: '운영' },
     { key: 'reservation_possible', label: '예약 가능', group: '운영' },

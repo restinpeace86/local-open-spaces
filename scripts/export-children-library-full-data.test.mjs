@@ -64,7 +64,7 @@ describe('export-children-library-full-data run()', () => {
 
     expect(result).toEqual({ filename: '어린이도서관_전체데이터.csv', count: 1 });
     const csvContent = writeFileSyncSpy.mock.calls[0][1];
-    expect(csvContent).toContain('표준이름도서관,서울시 종로구 1,"신발벗는 온돌·마루방, 주말 독서·체험 프로그램","월, 화",매월 2번째 토요일');
+    expect(csvContent).toContain('표준이름도서관,서울시 종로구 1,"신발벗는 마루방, 주말 독서·체험 프로그램","월, 화",매월 2번째 토요일');
   });
 
   it('standard_name이 없으면 display_name, 그것도 없으면 원본 name을 쓴다', async () => {
