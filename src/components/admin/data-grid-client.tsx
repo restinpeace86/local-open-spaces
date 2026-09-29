@@ -855,6 +855,11 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
   const [pageSize, setPageSize] = useState(PAGE_SIZE_OPTIONS[0]);
 
   const [rows, setRows] = useState<AdminRow[]>([]);
+  // [주소 기준 정렬](2026-09-29 사용자 지시, todo.md 개선사항1): "open_spaces 탭과
+  // events 탭.. '주소(address)' 기준 정렬 기능.. 오름차순 ➔ 내림차순 ➔ 기본 정렬
+  // 순으로 토글" — 서버 재조회 없이 현재 페이지에 이미 로드된 rows만 클라이언트
+  // 상태에서 정렬한다(raw_ingest_data는 주소 컬럼 자체가 없어 대상에서 제외).
+  const [addressSortDirection, setAddressSortDirection] = useState<'asc' | 'desc' | null>(null);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -1055,7 +1060,25 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     setBulkCategoryMin('');
     setBulkServiceCategoryId('');
     setBulkResultMessage(null);
+    setAddressSortDirection(null);
   };
+
+  // [주소 기준 정렬, 이어서] 헤더 클릭 시 오름차순 ➔ 내림차순 ➔ 기본 정렬(None)
+  // 순으로 순환한다.
+  function toggleAddressSort() {
+    setAddressSortDirection((prev) => (prev === null ? 'asc' : prev === 'asc' ? 'desc' : null));
+  }
+
+  const displayRows = useMemo(() => {
+    if (!addressSortDirection) return rows;
+    // events는 행 단위 상세 주소 컬럼이 없다 — 화면에 실제로 보여주는 값과
+    // 동일하게 sigungu_name(시군구명)을 정렬 기준으로 쓴다(위 addressText 계산과
+    // 동일한 로직, 제5장 제4조 기존 구조 우선).
+    const getAddress = (row: AdminRow): string =>
+      tab === 'events' ? ((row as AdminEventRow).sigungu_name ?? '') : ('address' in row ? (row.address ?? '') : '');
+    const sorted = [...rows].sort((a, b) => getAddress(a).localeCompare(getAddress(b), 'ko'));
+    return addressSortDirection === 'desc' ? sorted.reverse() : sorted;
+  }, [rows, addressSortDirection, tab]);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQ(q.trim()), 300);
@@ -1740,7 +1763,21 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
                     open_spaces는 둘 다 name이라 완전히 같은 값이었다. events는
                     title/venue_name이 서로 다른 정보라 그대로 둔다. */}
                 {tab === 'events' && <th className="py-2.5 pr-3">장소/시설명</th>}
-                {tab !== 'raw_ingest_data' && <th className="py-2.5 pr-3">주소</th>}
+                {tab !== 'raw_ingest_data' && (
+                  <th className="py-2.5 pr-3">
+                    <button
+                      type="button"
+                      onClick={toggleAddressSort}
+                      className="flex items-center gap-1 hover:text-gray-900"
+                      aria-label="주소 기준 정렬"
+                    >
+                      주소
+                      <span aria-hidden="true">
+                        {addressSortDirection === 'asc' ? '▲' : addressSortDirection === 'desc' ? '▼' : '↕'}
+                      </span>
+                    </button>
+                  </th>
+                )}
                 {tab !== 'raw_ingest_data' && <th className="py-2.5 pr-3">위도/경도</th>}
                 {/* "요금, 접수상태 컬럼은 안보이게 해" — open_spaces 전용 숨김. */}
                 {tab === 'events' && <th className="py-2.5 pr-3">요금</th>}
@@ -1751,7 +1788,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
               </tr>
             </thead>
             <tbody>
-              {rows.map((row, rowIndex) => {
+              {displayRows.map((row, rowIndex) => {
                 const zebraClass = rowIndex % 2 === 1 ? 'bg-gray-50/60' : 'bg-white';
                 if (tab === 'raw_ingest_data') {
                   const r = row as AdminRawIngestRow;

@@ -1069,3 +1069,123 @@ describe('AdminDataGridClient — 예약 오픈 알림 규칙 안내 패널(2026
     expect(screen.queryByText('강남구, 강동구, 강북구, 강서구, 광진구, 구로구')).not.toBeInTheDocument();
   });
 });
+
+// [주소 기준 정렬](2026-09-29 사용자 지시, todo.md 개선사항1): "주소 컬럼 헤더..
+// 클릭했을 때.. 오름차순 ➔ 내림차순 ➔ 기본 정렬(None) 순으로 토글.. open_spaces
+// 컴포넌트와 events 컴포넌트 양쪽 모두에 동일한 패턴으로 적용."
+describe('AdminDataGridClient — 주소 기준 정렬(2026-09-29)', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('open_spaces 탭에서 주소 헤더를 클릭하면 오름차순 → 내림차순 → 기본 정렬 순으로 토글된다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              rows: [
+                buildOpenSpaceRow({ id: 'row-1', name: '다스팟', address: '다 주소' }),
+                buildOpenSpaceRow({ id: 'row-2', name: '가스팟', address: '가 주소' }),
+                buildOpenSpaceRow({ id: 'row-3', name: '나스팟', address: '나 주소' }),
+              ],
+              total: 3,
+            }),
+        } as Response)
+      )
+    );
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await screen.findByText('다스팟');
+
+    function currentOrder() {
+      return screen.getAllByRole('row').slice(1).map((r) => r.textContent);
+    }
+
+    // 기본(서버 응답 순서): 다 → 가 → 나.
+    expect(currentOrder()[0]).toContain('다스팟');
+
+    fireEvent.click(screen.getByRole('button', { name: '주소 기준 정렬' }));
+    await waitFor(() => expect(currentOrder()[0]).toContain('가스팟'));
+    expect(currentOrder()[1]).toContain('나스팟');
+    expect(currentOrder()[2]).toContain('다스팟');
+
+    fireEvent.click(screen.getByRole('button', { name: '주소 기준 정렬' }));
+    await waitFor(() => expect(currentOrder()[0]).toContain('다스팟'));
+    expect(currentOrder()[1]).toContain('나스팟');
+    expect(currentOrder()[2]).toContain('가스팟');
+
+    // 세 번째 클릭 — 기본 정렬(원래 서버 응답 순서)로 되돌아간다.
+    fireEvent.click(screen.getByRole('button', { name: '주소 기준 정렬' }));
+    await waitFor(() => expect(currentOrder()[0]).toContain('다스팟'));
+    expect(currentOrder()[1]).toContain('가스팟');
+    expect(currentOrder()[2]).toContain('나스팟');
+  });
+
+  it('events 탭에서도 동일하게 주소(시군구명) 기준으로 정렬된다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              rows: [
+                buildEventRow({ id: 'ev-1', title: '다행사', sigungu_name: '다 구' }),
+                buildEventRow({ id: 'ev-2', title: '가행사', sigungu_name: '가 구' }),
+              ],
+              total: 2,
+            }),
+        } as Response)
+      )
+    );
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+    fireEvent.click(screen.getByText('events (행사·체험)'));
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await screen.findByText('다행사');
+
+    fireEvent.click(screen.getByRole('button', { name: '주소 기준 정렬' }));
+
+    await waitFor(() => {
+      const order = screen.getAllByRole('row').slice(1).map((r) => r.textContent);
+      expect(order[0]).toContain('가행사');
+      expect(order[1]).toContain('다행사');
+    });
+  });
+
+  it('탭을 전환하면 정렬 상태가 초기화된다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve({
+          ok: true,
+          json: () =>
+            Promise.resolve({
+              rows: [
+                buildOpenSpaceRow({ id: 'row-1', name: '가스팟', address: '가 주소' }),
+                buildOpenSpaceRow({ id: 'row-2', name: '나스팟', address: '나 주소' }),
+              ],
+              total: 2,
+            }),
+        } as Response)
+      )
+    );
+    render(<AdminDataGridClient filterOptions={EMPTY_FILTER_OPTIONS} />);
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await screen.findByText('가스팟');
+
+    fireEvent.click(screen.getByRole('button', { name: '주소 기준 정렬' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: '주소 기준 정렬' }).textContent).toContain('▲'));
+
+    // [탭 전환 시 자동 조회 금지](2026-08-30 기존 관례) — switchTab이 hasLoaded도
+    // 함께 초기화하므로 다시 [불러오기]를 눌러야 한다.
+    fireEvent.click(screen.getByText('events (행사·체험)'));
+    fireEvent.click(screen.getByText('open_spaces (공간·시설)'));
+    fireEvent.click(screen.getByText('📥 불러오기'));
+    await screen.findByText('가스팟');
+
+    expect(screen.getByRole('button', { name: '주소 기준 정렬' }).textContent).toContain('↕');
+  });
+});

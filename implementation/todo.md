@@ -14,7 +14,13 @@
 ---
 
 
-[개선사항 1] — # Role
+[x] [개선사항 1] — 완료(2026-09-29). data-grid-client.tsx의 open_spaces/events
+탭 주소 컬럼 헤더를 클릭하면 오름차순→내림차순→기본 정렬 순으로 토글되도록
+구현했다(클라이언트 측 localeCompare, 서버 재조회 없음). events는 행 단위
+상세 주소가 없어 화면에 실제로 보이는 sigungu_name(시군구명)을 정렬
+기준으로 썼다. 상세: implementation/2026-09-29-data-grid-address-sort.md
+
+# Role
 당신은 Next.js와 React, Tailwind CSS를 활용한 프론트엔드 개발 전문가입니다.
 
 # Task
