@@ -36,7 +36,15 @@
 [여기에 수정이 필요한 open_spaces 및 events 탭 관련 관리자 페이지 코드를 붙여넣으세요]
 
 
-[개선사항 2] # Role
+[x] [개선사항 2] — 완료(2026-09-29). scripts/export-museum-name-address.mjs로
+과학관(138건)/역사박물관(325건)/종합·기타박물관(1,388건) 명칭+주소 CSV
+3개를 생성했다. "어린이천문대" 사설 교육기관 예시는 실측 확인 결과 전국
+18곳에 동일 이름 패턴(OO어린이천문대)으로 퍼져 있어 그 패턴만 확실한
+근거로 제외했고, 그 밖의 잠재적 사설 시설은 구분 근거가 없어 추측으로
+빼지 않았다(전부 CSV에 남김). 상세:
+implementation/2026-09-29-export-museum-name-address-csv.md
+
+# Role
 당신은 Node.js, Supabase, PostgreSQL 백엔드 개발 전문가입니다.
 
 # Task
