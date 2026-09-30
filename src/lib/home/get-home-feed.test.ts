@@ -742,11 +742,14 @@ describe('getTodayEvents: 당일 한정(end_date=오늘) 조건 강화 (Task 9-6
   });
 
   it('end_date가 오늘이 아니면(몇 주짜리 장기 행사 등) 제외한다', async () => {
+    // [실행 시점 무관 고정](발견: 2026-09-30) 하드코딩한 end_date가 실제 실행일과
+    // 우연히 같아지면 "오늘 마감"으로 잘못 포함돼 이 테스트가 깨진다 — 위
+    // daysFromToday와 동일한 이유로 상대 날짜를 쓴다.
     const longRunning = eventRow({
       id: 'long-running',
       title: '장기 전시',
-      start_date: '2026-08-01',
-      end_date: '2026-09-30',
+      start_date: daysFromToday(-30),
+      end_date: daysFromToday(30),
       is_active: true,
     });
     const endsToday = eventRow({ id: 'ends-today', title: '오늘 마감 행사', is_active: true });
