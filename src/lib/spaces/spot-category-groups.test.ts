@@ -40,7 +40,9 @@ describe('CORE_SPOT_CATEGORIES', () => {
     const museum = CORE_SPOT_CATEGORIES.find((c) => c.id === 'museum');
     const artMuseum = CORE_SPOT_CATEGORIES.find((c) => c.id === 'art-museum');
     expect(museum?.minors).not.toContain('미술관');
-    expect(artMuseum?.minors).toEqual(['미술관']);
+    // [순수 어린이전시미술관 표준 중분류 분리](2026-09-30): '미술관' 칩 아래로
+    // 편입됐다(위 spot-category-groups.ts 코멘트 참고).
+    expect(artMuseum?.minors).toEqual(['미술관', '어린이전시미술관']);
   });
 
   it('[행안부 놀이시설 매핑](2026-08-29) 자연휴양림 칩이 존재한다', () => {
