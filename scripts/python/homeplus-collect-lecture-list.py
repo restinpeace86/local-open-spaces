@@ -147,8 +147,12 @@ def load_env() -> dict:
 
 
 def check_session_valid(page: Page) -> bool:
+    # [2026-10-02 GitHub Actions 실측 수정] CI(헤드리스) 환경에서
+    # "Timeout 30000ms exceeded"로 재현됨 — Playwright 공식 문서도 "networkidle은
+    # 광고/트래커/폴링이 있는 실제 사이트에서는 신뢰할 수 없다"고 명시한다.
+    # page.goto()는 기본적으로 이미 'load' 이벤트까지 기다리므로 이 추가 대기는
+    # 애초에 불필요했다 — 제거.
     page.goto(SESSION_CHECK_URL)
-    page.wait_for_load_state("networkidle")
     final_url = page.url
     page_text = page.content()
     redirected_to_login = "login" in final_url.lower()
@@ -208,8 +212,12 @@ def select_targets(page: Page, targets: list[str]) -> None:
 
 
 def run_search(page: Page) -> None:
+    # [2026-10-02 GitHub Actions 실측 수정] "networkidle"은 CI 환경에서
+    # 타임아웃으로 재현됐다(check_session_valid와 동일 원인) — 클릭이
+    # 네비게이션을 유발하는 건 맞아서 대기 자체는 필요하지만, 'load'가 더
+    # 안정적이다.
     page.click("button.btn_reuslt_search:has-text('강좌검색')")
-    page.wait_for_load_state("networkidle")
+    page.wait_for_load_state("load")
 
 
 def apply_sort_order(page: Page) -> None:
@@ -370,8 +378,10 @@ def main() -> None:
                 regions = batch_config["regions"]
                 print(f"\n=== {batch_number}차 검색 시작(지역 {len(regions)}개 + Kids/Baby 전체) ===")
 
+                # [2026-10-02 GitHub Actions 실측 수정] check_session_valid와 동일한
+                # 이유로 "networkidle" 추가 대기를 제거(page.goto()가 이미 'load'까지
+                # 기다림).
                 page.goto(SEARCH_URL)
-                page.wait_for_load_state("networkidle")
                 random_delay()
 
                 select_regions(page, regions)

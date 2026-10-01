@@ -255,3 +255,48 @@ Secret 저장 방식에 동의 확인 후) "새기기 로그인 알림뜨는건 
 - GitHub Actions 러너는 매 실행마다 다른 IP를 쓰므로, 홈플러스/카카오
   쪽에서 세션을 더 자주(로컬보다) 강제로 끊을 가능성도 배제 못 한다 —
   실제 빈도는 운영하면서 지켜봐야 한다.
+
+## 후속 실측 — 첫 실제 GitHub Actions 실행 실패 + 수정(2026-10-02)
+사용자가 Secret(`HOMEPLUS_STATE_JSON`) 등록 후 워크플로를 수동 실행
+(`workflow_dispatch`)했고, 2회(1차 + 2분 뒤 자동 재시도) 모두
+`check_session_valid()`의 `page.wait_for_load_state("networkidle")`에서
+`TimeoutError: Timeout 30000ms exceeded`로 실패했다(사용자가 Actions 로그의
+Python 트레이스백 전체를 공유해줘서 정확한 줄 번호까지 확인). `pipeline_logs`
+에도 두 번 다 `FAILED` 행으로 정확히 기록된 것을 확인 — 로깅 자체는
+의도대로 동작.
+
+### 원인
+`"networkidle"`(500ms 동안 네트워크 연결이 전혀 없어야 충족)은 Playwright
+공식 문서가 "광고/트래커/폴링이 있는 실제 사이트에서는 신뢰할 수 없다"고
+명시적으로 경고하는 패턴이다. 로컬(헤드풀 브라우저, 사용자 PC)에서는 3번
+연속 성공했지만, GitHub Actions 헤드리스 환경에서는 2번 연속 같은 지점에서
+타임아웃 — 데이터센터 IP와 사용자 PC 간 네트워크 특성 차이(또는 사이트의
+백그라운드 polling/트래커가 환경에 따라 다르게 동작) 때문으로 보인다.
+확정할 순 없지만, `"networkidle"`은 애초에 Playwright가 권장하지 않는
+패턴이라 제거/대체가 그 자체로 정당한 수정이다.
+
+### 수정 — `scripts/python/homeplus-collect-lecture-list.py`
+`networkidle` 사용 3곳을 모두 정리:
+1. `check_session_valid()`: `page.goto()` 직후 — `page.goto()`가 기본적으로
+   이미 `'load'` 이벤트까지 기다리므로 애초에 불필요한 중복 대기였다.
+   완전히 제거.
+2. `main()`의 배치 루프 `page.goto(SEARCH_URL)` 직후 — 동일한 이유로 제거.
+3. `run_search()`의 "강좌검색" 버튼 클릭 직후 — 클릭이 실제로 폼 제출
+   네비게이션을 유발하므로 대기 자체는 필요하지만(`click()`은 그 이후
+   네비게이션 완료를 자동으로 기다려주지 않음), `"networkidle"` 대신 더
+   안정적인 `"load"`로 교체.
+
+하류의 `page.wait_for_selector(...)` 호출들(`#selSort` 15초,
+`div.search_result_list ul li` 20초)이 이미 실제 콘텐츠 등장을 직접
+확인하는 더 강한 보장이라, 위 제거/교체로 안전성이 떨어지지 않는다.
+
+### 검증
+- 로컬 재실행(기존처럼 헤드풀) — 수정 후에도 1차/2차 각 20건, 총 40건
+  정상 수집·저장 확인(세션 체크 포함 전체 플로우 회귀 없음).
+- `python -m py_compile` 통과.
+- `npx tsc --noEmit` / `npm run test`(248개 파일 2,628개) / `npm run build`
+  전부 통과(Python 전용 변경이라 영향 없음 재확인).
+- **GitHub Actions에서의 실제 재검증은 아직 못 했다** — 다음 수동 실행 또는
+  다음 날 새벽 cron에서 결과를 다시 확인해야 한다. 만약 이번에도 CI에서만
+  재현되는 문제가 남아있다면(예: 헤드리스 전용 봇 탐지/차단), 그건
+  `networkidle` 문제와는 별개의 원인이라 추가 조사가 필요하다.
