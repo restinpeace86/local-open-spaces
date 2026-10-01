@@ -89,10 +89,18 @@ const RESTAURANT_KEYWORD_GROUPS: Record<string, string[]> = {
   reservation_possible: ['예약', '사전예약', '캐치테이블', '네이버예약'],
 };
 
+// [스마트서울맵 오케이존 인증 뱃지 편입](2026-10-01 사용자 지시): "편한외출 서울키즈
+// 오케이존.. 오케이존 인증 식당은 이쪽으로 다 매핑시켜주고 오케이존 인증 뱃지
+// 달아줘" — 실측 확인(SUBCATE 9종: 한식/양식/중식/일식/경양식/제과/카페/패스트푸드/
+// 아시아푸드) 결과 오케이존 655건 전부 식당·카페류라 신규 표준중분류 '키즈친화
+// 식당(오케이존)'을 이 식당 config에 함께 묶는다(기존 13개 식당 뱃지 그대로 재사용
+// + 인증 사실 자체만 전용 뱃지 1개 추가). 이 뱃지는 블로그 텍스트 추측이 아니라
+// 스마트서울맵 API가 이미 확정해준 사실을 수집 스크립트가 직접 써넣으므로
+// keywordGroups 항목은 두지 않는다(자동 매칭 대상 아님).
 const RESTAURANT_CONFIG: CurationCategoryConfig = {
   categoryId: 'restaurant',
-  exposureCategoryNames: ['키즈친화 식당(놀이시설 포함)', '키즈친화 식당 (놀이시설 포함)'],
-  badgeGroups: ['이동/편의', '식사/아기', '공간/놀이', '운영'],
+  exposureCategoryNames: ['키즈친화 식당(놀이시설 포함)', '키즈친화 식당 (놀이시설 포함)', '키즈친화 식당(오케이존)'],
+  badgeGroups: ['이동/편의', '식사/아기', '공간/놀이', '운영', '인증'],
   badgeOptions: [
     { key: 'parking', label: '주차 완비', group: '이동/편의' },
     { key: 'stroller', label: '유모차 가능', group: '이동/편의' },
@@ -107,6 +115,7 @@ const RESTAURANT_CONFIG: CurationCategoryConfig = {
     { key: 'outdoor_yard', label: '야외 마당/테라스', group: '공간/놀이' },
     { key: 'reservation_required', label: '예약 필수', group: '운영' },
     { key: 'reservation_possible', label: '예약 가능', group: '운영' },
+    { key: 'ok_zone_certified', label: '오케이존 인증', group: '인증' },
   ],
   keywordGroups: RESTAURANT_KEYWORD_GROUPS,
 };
@@ -134,10 +143,17 @@ const RESTAURANT_CONFIG: CurationCategoryConfig = {
 //   같이 저장) 별도 UI 변경 없이 세 뱃지를 추가하는 것만으로 "복수선택
 //   가능"이 충족된다. 사용자가 확인한 경계값 그대로: 영유아=36개월(만 3세)
 //   이하, 미취학=7세 이하, 취학=초등학생.
+// [스마트서울맵 서울형키즈카페/카페머니 사용처 뱃지 편입](2026-10-01 사용자
+// 지시): "서울형 키즈카페.. 표준중분류 '키즈카페'에 이미 서울형키즈카페들이
+// 있어.. 둘다 '서울형키즈카페' 뱃지 달아주자" + "키즈카페머니 사용처는.. 뱃지로
+// 하고.. 맞는 키즈카페없으면 키즈카페쪽에 새로 등록하고 뱃지달고" — 두 뱃지
+// 모두 스마트서울맵 API가 이미 확정해준 사실(서울시 인증/바우처 사용처 목록)을
+// 수집 스크립트가 직접 써넣으므로 keywordGroups 항목은 두지 않는다(블로그 텍스트
+// 추측 매칭 대상 아님).
 const KIDS_CAFE_CONFIG: CurationCategoryConfig = {
   categoryId: 'kids_cafe',
   exposureCategoryNames: ['키즈카페 / 실내놀이터'],
-  badgeGroups: ['이동/편의', '놀이/시설', '부대시설/보호자', '운영', '공공/민간', '연령대'],
+  badgeGroups: ['이동/편의', '놀이/시설', '부대시설/보호자', '운영', '공공/민간', '연령대', '서울시 연계'],
   badgeOptions: [
     { key: 'kc_parking', label: '주차 완비', group: '이동/편의' },
     { key: 'kc_stroller_parking', label: '유모차 보관/가능', group: '이동/편의' },
@@ -159,6 +175,8 @@ const KIDS_CAFE_CONFIG: CurationCategoryConfig = {
     { key: 'kc_age_infant', label: '영유아(0~36개월)', group: '연령대' },
     { key: 'kc_age_preschool', label: '미취학(7세 이하)', group: '연령대' },
     { key: 'kc_age_school', label: '취학(초등학생)', group: '연령대' },
+    { key: 'kc_seoul_type', label: '서울형키즈카페', group: '서울시 연계' },
+    { key: 'kc_voucher_accepted', label: '키즈카페머니 사용가능', group: '서울시 연계' },
   ],
   keywordGroups: {
     kc_parking: ['주차', '주차장', '파킹', '차댈곳', '발렛'],
@@ -208,10 +226,14 @@ const KIDS_CAFE_CONFIG: CurationCategoryConfig = {
 // [네거티브(주의/제한) 뱃지] curation_badges는 단순 키 배열이라 포지티브/
 // 네거티브를 스키마로 구분할 필요가 없다 — "주의/제한" 그룹명으로만 묶어
 // 관리자가 어린이 동반 시 배제 요소를 명확히 체크하게 한다.
+// [스마트서울맵 서울형캠핑장 뱃지 편입](2026-10-01 사용자 지시): "캠핑장도
+// 마찬가지로 중복이면 중복인데 뱃지달아주고.. '서울형캠핑장' 이렇게 달자" —
+// 스마트서울맵 API가 이미 확정해준 사실을 수집 스크립트가 직접 써넣으므로
+// keywordGroups 항목은 두지 않는다.
 const CAMPING_CONFIG: CurationCategoryConfig = {
   categoryId: 'camping',
   exposureCategoryNames: ['캠핑장 / 피크닉장'],
-  badgeGroups: ['놀이/물놀이', '편의/시설', '캠핑 유형', '주의/제한'],
+  badgeGroups: ['놀이/물놀이', '편의/시설', '캠핑 유형', '주의/제한', '서울시 연계'],
   badgeOptions: [
     { key: 'CAMPING_TRAMPOLINE', label: '트램폴린/방방', group: '놀이/물놀이' },
     { key: 'CAMPING_WATER_PLAY', label: '수영장/물놀이장/계곡 인접', group: '놀이/물놀이' },
@@ -229,6 +251,7 @@ const CAMPING_CONFIG: CurationCategoryConfig = {
     { key: 'NEG_ROUGH_TERRAIN', label: '험지/고지대', group: '주의/제한' },
     { key: 'NEG_PET_ONLY', label: '반려동물 전용 캠핑장', group: '주의/제한' },
     { key: 'NEG_DANGEROUS_VALLEY', label: '안전펜스 없는 계곡/급류', group: '주의/제한' },
+    { key: 'CAMPING_SEOUL_OPERATED', label: '서울형캠핑장', group: '서울시 연계' },
   ],
   keywordGroups: {
     CAMPING_TRAMPOLINE: ['방방', '방방이', '방방장', '방방존', '트램폴린', '트램펄린', '퐁퐁', '봉봉'],
@@ -575,6 +598,11 @@ const GENERIC_CATEGORY_NAMES = [
   '수목원 / 식물원',
   '어린이 과학관 / 박물관',
   '미술관 / 전시체험관',
+  // [스마트서울맵 유아숲체험원 신규 노출중분류](2026-10-01 사용자 지시): "일단
+  // 유아숲 체험시설은 신규로 따고.. 뱃지는 안달아도되려나?" — 독자적 신규
+  // 표준중분류라 전용 뱃지는 두지 않고(표준중분류 자체가 이미 식별 정보),
+  // 어느 공공장소든 보편적으로 적용 가능한 최소 공통 뱃지만 연결한다.
+  '유아숲체험원',
 ];
 
 function slugifyCategoryName(name: string): string {

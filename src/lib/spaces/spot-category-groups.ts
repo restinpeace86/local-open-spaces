@@ -77,7 +77,10 @@ export const CORE_SPOT_CATEGORIES: CoreSpotCategory[] = [
     major: 'kids-play',
   },
   { id: 'kids-cafe', label: '키즈카페', emoji: '☕', minors: ['키즈카페'], major: 'kids-play' },
-  { id: 'kids-restaurant', label: '키즈친화 식당', emoji: '🍽️', minors: ['놀이방식당'], major: 'kids-play' },
+  // [스마트서울맵 키즈친화 식당(오케이존) 신규 표준중분류 편입](2026-10-01 사용자
+  // 지시): museum/library/science-museum 칩과 동일한 관례 — 소비자 화면 필터 칩은
+  // "키즈친화 식당" 하나만 유지하고 그 아래 표준 중분류를 함께 담는다.
+  { id: 'kids-restaurant', label: '키즈친화 식당', emoji: '🍽️', minors: ['놀이방식당', '키즈친화 식당(오케이존)'], major: 'kids-play' },
   { id: 'water-play', label: '물놀이시설', emoji: '💦', minors: ['바닥분수/물놀이시설'], major: 'kids-play' },
   // [설치장소코드 표준 중분류 전면 정비 후속](2026-09-09 사용자 지시): "육아종합지원센터와
   // 유아교육진흥원 중분류는 왜 기타 대분류로 안옮겼어?" — 어드민(category-min-groups.ts)이
@@ -132,6 +135,9 @@ export const CORE_SPOT_CATEGORIES: CoreSpotCategory[] = [
   // [표준 중분류 동기화](2026-09-05) 신규 편입: 어드민 정의를 그대로 따른다(상단 코멘트 참고).
   { id: 'plaza', label: '광장', emoji: '🏙️', minors: ['광장'], major: 'nature-park' },
   { id: 'tourist-attraction', label: '관광명소', emoji: '📍', minors: ['관광명소'], major: 'nature-park' },
+  // [스마트서울맵 유아숲체험원 신규 표준중분류 편입](2026-10-01 사용자 지시):
+  // 기존 칩 중 의미가 겹치는 게 없어(자연휴양림/생태공원과는 별개 개념) 새 칩으로 둔다.
+  { id: 'toddler-forest-experience', label: '유아숲체험원', emoji: '🌲', minors: ['유아숲체험원'], major: 'nature-park' },
 
   // 🏛️ 문화시설
   {

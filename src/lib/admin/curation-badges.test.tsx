@@ -26,9 +26,11 @@ import {
 // getBadgeOptionsForCategory(categoryId)/isKnownCurationBadgeKey(categoryId, key)로
 // 바뀌었다. 'restaurant'가 기존(식당) 카테고리 id다.
 describe('restaurant 카테고리 뱃지', () => {
-  it('정정 반영 후 13개 뱃지가 정확히 존재한다', () => {
+  // [스마트서울맵 오케이존 인증 뱃지 편입](2026-10-01): 13개 → 14개('오케이존
+  // 인증' 추가, '인증' 그룹 신설).
+  it('정정 반영 후 14개 뱃지가 정확히 존재한다', () => {
     const options = getBadgeOptionsForCategory('restaurant');
-    expect(options).toHaveLength(13);
+    expect(options).toHaveLength(14);
     expect(options.map((o) => o.label)).toEqual([
       '주차 완비',
       '유모차 가능',
@@ -43,15 +45,16 @@ describe('restaurant 카테고리 뱃지', () => {
       '야외 마당/테라스',
       '예약 필수',
       '예약 가능',
+      '오케이존 인증',
     ]);
   });
 
-  it('4개 그룹(이동/편의, 식사/아기, 공간/놀이, 운영)으로 나뉜다', () => {
+  it('5개 그룹(이동/편의, 식사/아기, 공간/놀이, 운영, 인증)으로 나뉜다', () => {
     const groupCounts = getBadgeOptionsForCategory('restaurant').reduce<Record<string, number>>((acc, o) => {
       acc[o.group] = (acc[o.group] ?? 0) + 1;
       return acc;
     }, {});
-    expect(groupCounts).toEqual({ '이동/편의': 4, '식사/아기': 5, '공간/놀이': 2, 운영: 2 });
+    expect(groupCounts).toEqual({ '이동/편의': 4, '식사/아기': 5, '공간/놀이': 2, 운영: 2, 인증: 1 });
   });
 
   it('isKnownCurationBadgeKey는 실제 키만 true를 반환한다', () => {
@@ -61,6 +64,11 @@ describe('restaurant 카테고리 뱃지', () => {
     expect(isKnownCurationBadgeKey('restaurant', 'room')).toBe(false); // 분리했다가 되돌린 임시 키는 없음
     expect(isKnownCurationBadgeKey('restaurant', 'private_space')).toBe(false);
     expect(isKnownCurationBadgeKey('restaurant', '완전히새로운키')).toBe(false);
+  });
+
+  it('키즈친화 식당(오케이존)도 restaurant로 매핑되고 오케이존 인증 뱃지가 존재한다', () => {
+    expect(resolveCurationCategoryId('키즈친화 식당(오케이존)')).toBe('restaurant');
+    expect(isKnownCurationBadgeKey('restaurant', 'ok_zone_certified')).toBe(true);
   });
 });
 
@@ -101,7 +109,9 @@ describe('kids_cafe 카테고리 뱃지 — 식당과 완전히 독립적', () =
     expect(options.map((o) => o.label)).not.toContain('좌식/온돌 있음'); // 식당 전용 항목은 없음
   });
 
-  it('6개 그룹(이동/편의, 놀이/시설, 부대시설/보호자, 운영, 공공/민간, 연령대)으로 나뉜다', () => {
+  // [스마트서울맵 서울형키즈카페/카페머니 사용처 뱃지 편입](2026-10-01): 6개 →
+  // 7개('서울시 연계' 그룹 신설).
+  it('7개 그룹(이동/편의, 놀이/시설, 부대시설/보호자, 운영, 공공/민간, 연령대, 서울시 연계)으로 나뉜다', () => {
     expect(getBadgeGroupsForCategory('kids_cafe')).toEqual([
       '이동/편의',
       '놀이/시설',
@@ -109,6 +119,7 @@ describe('kids_cafe 카테고리 뱃지 — 식당과 완전히 독립적', () =
       '운영',
       '공공/민간',
       '연령대',
+      '서울시 연계',
     ]);
   });
 
@@ -127,7 +138,13 @@ describe('kids_cafe 카테고리 뱃지 — 식당과 완전히 독립적', () =
         '취학(초등학생)',
       ])
     );
-    expect(options).toHaveLength(20);
+    // [스마트서울맵 서울형키즈카페/카페머니 사용처 뱃지 편입](2026-10-01): 20개 → 22개.
+    expect(options).toHaveLength(22);
+  });
+
+  it('스마트서울맵 연계 뱃지(서울형키즈카페/키즈카페머니 사용가능)가 존재한다', () => {
+    expect(isKnownCurationBadgeKey('kids_cafe', 'kc_seoul_type')).toBe(true);
+    expect(isKnownCurationBadgeKey('kids_cafe', 'kc_voucher_accepted')).toBe(true);
   });
 
   it('미끄럼틀은 볼풀장/정글짐과 별개의 전용 뱃지로 매칭된다(예전엔 볼풀장 키워드에 섞여 있었음)', () => {
@@ -243,8 +260,19 @@ describe('camping(캠핑장 / 피크닉장) 카테고리 뱃지', () => {
     );
   });
 
-  it('4개 그룹(놀이/물놀이, 편의/시설, 캠핑 유형, 주의/제한)으로 나뉜다', () => {
-    expect(getBadgeGroupsForCategory('camping')).toEqual(['놀이/물놀이', '편의/시설', '캠핑 유형', '주의/제한']);
+  // [스마트서울맵 서울형캠핑장 뱃지 편입](2026-10-01): 4개 → 5개('서울시 연계' 그룹 신설).
+  it('5개 그룹(놀이/물놀이, 편의/시설, 캠핑 유형, 주의/제한, 서울시 연계)으로 나뉜다', () => {
+    expect(getBadgeGroupsForCategory('camping')).toEqual([
+      '놀이/물놀이',
+      '편의/시설',
+      '캠핑 유형',
+      '주의/제한',
+      '서울시 연계',
+    ]);
+  });
+
+  it('서울형캠핑장 뱃지가 존재한다', () => {
+    expect(isKnownCurationBadgeKey('camping', 'CAMPING_SEOUL_OPERATED')).toBe(true);
   });
 
   it('스펙 예시 문구가 각 뱃지 키로 정확히 매칭된다', () => {

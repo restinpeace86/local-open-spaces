@@ -979,6 +979,11 @@ describe('getCategoryMinFeed (대분류·중분류 드릴다운)', () => {
   // 묶여야 한다. 대표는 start_date가 가장 이른 것을 고른다.
   describe('동일 스팟(space_id) 예약 옵션 그룹핑 — 캠핑장 한정', () => {
     it('같은 space_id+장소명(venue_name)인 이벤트는 대표 1건+grouped_count로 묶인다(가장 이른 start_date가 대표)', async () => {
+      // [실행 시점 무관 고정](발견: 2026-10-01) 하드코딩한 end_date가 실제
+      // 실행일을 지나버리면 "진행중" 행사가 "이미 종료"로 잘못 제외돼 3건
+      // 그룹핑 전제 자체가 깨진다 — 위 daysFromToday 헬퍼와 동일한 이유로
+      // 상대 날짜를 쓴다(camp-1/camp-3가 camp-2보다 먼저 시작·종료하는
+      // 상대적 순서만 원본과 동일하게 유지).
       const rows = [
         eventRow({
           id: 'camp-2',
@@ -987,8 +992,8 @@ describe('getCategoryMinFeed (대분류·중분류 드릴다운)', () => {
           is_active: true,
           space_id: 'space-nanji',
           venue_name: '한강공원 난지캠핑장',
-          start_date: '2026-09-01',
-          end_date: '2026-10-31',
+          start_date: daysFromToday(-5),
+          end_date: daysFromToday(25),
         }),
         eventRow({
           id: 'camp-1',
@@ -997,8 +1002,8 @@ describe('getCategoryMinFeed (대분류·중분류 드릴다운)', () => {
           is_active: true,
           space_id: 'space-nanji',
           venue_name: '한강공원 난지캠핑장',
-          start_date: '2026-08-01',
-          end_date: '2026-09-30',
+          start_date: daysFromToday(-20),
+          end_date: daysFromToday(10),
         }),
         eventRow({
           id: 'camp-3',
@@ -1007,8 +1012,8 @@ describe('getCategoryMinFeed (대분류·중분류 드릴다운)', () => {
           is_active: true,
           space_id: 'space-nanji',
           venue_name: '한강공원 난지캠핑장',
-          start_date: '2026-08-01',
-          end_date: '2026-09-30',
+          start_date: daysFromToday(-20),
+          end_date: daysFromToday(10),
         }),
       ];
 
@@ -1401,7 +1406,10 @@ describe('getCurrentlyOngoingEvents', () => {
   });
 
   it('오늘이 start_date~end_date 범위 안에 있는 행사만 반환한다', async () => {
-    const ongoing = eventRow({ id: 'ongoing', start_date: '2026-08-01', end_date: '2026-09-30', is_active: true });
+    // [실행 시점 무관 고정](발견: 2026-10-01) 하드코딩한 end_date가 실제 실행일을
+    // 지나버리면 "진행중" 행사가 "이미 종료"로 잘못 제외돼 이 테스트가 깨진다 —
+    // 위 daysFromToday 헬퍼와 동일한 이유로 상대 날짜를 쓴다.
+    const ongoing = eventRow({ id: 'ongoing', start_date: daysFromToday(-30), end_date: daysFromToday(30), is_active: true });
     const notStartedYet = eventRow({
       id: 'not-started',
       start_date: '2099-01-01',
