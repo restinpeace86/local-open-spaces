@@ -89,3 +89,51 @@ store_name/date_range_text는 카드 텍스트에서 휴리스틱 추출(첫 줄
   관리자 화면에서 원본으로 대조 가능하다.
 - 이번 결과는 "전부 마감" 전제로 인해(사용자 보고) 1차/2차 각각 첫 묶음
   (20건)에서 바로 멈출 가능성이 높아 최대 40건 수준으로 예상된다.
+
+## 후속 변경(2026-10-02) — 독립 페이지 → `/admin/data-grid` 탭으로 전환
+사용자 지시: "아.. 이거 .. /admin/data-grid쪽에 tab 하나 더 만들어서 하는건
+안돼 ?" — 위 3번 항목(`src/app/admin/homeplus-lectures/page.tsx`, 독립
+페이지)을 삭제하고, 기존 data-grid의 "자기완결 패널" 탭 관례(spot_notices
+탭과 동일한 패턴)를 그대로 따라 신규 탭으로 재구성했다. 2번 API 라우트
+(`/api/admin/homeplus-lecture-list`)는 그대로 재사용한다.
+
+### 변경 파일
+- `src/components/admin/homeplus-lecture-list-panel.tsx` (신규) — 독립
+  페이지였던 내용을 자기완결 패널로 옮김. data-grid의 "탭 전환 시 자동
+  데이터 로딩 금지"(2026-08-30 결정) 관례에 따라 마운트 시 자동 조회하지
+  않고 "조회하기" 버튼 클릭으로 시작. 마감/신청가능 필터 토글 포함.
+- `src/components/admin/data-grid-client.tsx` — 신규 탭 등록에 필요한
+  5개 지점 전부 수정: import, `AdminTable` union, FilterOptions 타입,
+  `TAB_LABEL`('🏫 홈플러스 강좌 리스트'), `hasLoaded` 초기값, 렌더 분기.
+- `src/app/admin/data-grid/page.tsx` — filterOptions 객체에
+  `homeplus_lecture_list: {}` 추가(다른 자기완결 탭들과 동일하게 빈 객체).
+- `src/app/admin/homeplus-lectures/page.tsx` 및 디렉터리 삭제.
+- `src/components/admin/data-grid-client.test.tsx` — 공유 상수
+  `EMPTY_FILTER_OPTIONS`에 `homeplus_lecture_list: {}` 한 줄 추가(이 한
+  곳만 고치면 되는 이유: 이 테스트 파일 전체가 탭별로 상수를 따로 두지
+  않고 이 공유 상수 하나를 재사용하는 구조였기 때문 — grep으로 확인).
+- `src/components/admin/raw-data-modal.tsx` — `CategoryMinEditor` 렌더
+  조건의 타입 내로잉 제외 체인에 `table !== 'homeplus_lecture_list'`
+  추가(다른 자기완결 탭들과 동일하게 제외 — 이 패널은 애초에 그 모달을
+  열지 않으므로 동작 변화는 없고 타입 에러만 해소).
+- `src/components/admin/homeplus-lecture-list-panel.test.tsx` (신규,
+  3개) — `spot-notices-panel.test.tsx`와 동일한 패턴(자동 조회 안 함,
+  필터 토글, 에러 메시지). 필터 토글 버튼("마감"/"신청가능")과 상태
+  배지(`<span>마감</span>`)가 같은 텍스트라 `getByText`가 모호하게
+  매치되는 문제가 있어 `getByRole('button', { name: ... })`로 버튼만
+  정확히 선택하도록 작성했다.
+
+### 발견한 문제와 수정
+- 독립 페이지 삭제 직후 `npx tsc --noEmit`이 `.next/types/validator.ts`가
+  삭제된 페이지를 여전히 참조해 실패 — `rm -rf .next`는 Bash 도구의
+  파괴적 명령 차단에 걸려 대신 `npm run build`를 먼저 실행해 `.next`를
+  새로 생성한 뒤 `tsc --noEmit`을 재실행해 해결했다.
+- `data-grid-client.test.tsx`에서 신규 탭 누락으로 TS2741 에러 40개 이상
+  발생 — 전부 공유 상수 `EMPTY_FILTER_OPTIONS` 하나가 원인이라 그 한
+  줄만 고쳐서 일괄 해결했다.
+
+## 검증(2026-10-02 탭 전환 후)
+- `npx tsc --noEmit` 통과.
+- `npm run test` 전체 248개 파일 2,625개 테스트 통과.
+- `npm run build` 통과(신규 페이지 없이 기존 `/admin/data-grid` 라우트
+  그대로, 독립 페이지 라우트는 빌드 결과물에서 제거 확인).

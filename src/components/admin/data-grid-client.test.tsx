@@ -108,6 +108,7 @@ const EMPTY_FILTER_OPTIONS = {
   category_mapping: {},
   myrealtrip_search: {},
   spot_notices: {},
+  homeplus_lecture_list: {},
 };
 
 describe('AdminDataGridClient — curated_items 탭 통합', () => {

@@ -128,6 +128,9 @@ export default async function AdminDataGridPage() {
         // [네이버 플레이스 공지 온디맨드 레이더](2026-09-19): SpotNoticesPanel도
         // 동일하게 자기완결적이라 빈 객체만 넘긴다.
         spot_notices: {},
+        // [홈플러스 문화센터 강좌 리스트 탭](2026-10-02 사용자 지시): HomeplusLectureListPanel도
+        // 동일하게 자기완결적이라 빈 객체만 넘긴다.
+        homeplus_lecture_list: {},
       }}
     />
   );
