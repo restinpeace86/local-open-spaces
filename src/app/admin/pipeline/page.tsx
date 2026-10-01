@@ -188,7 +188,14 @@ export default function AdminPipelinePage() {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
+    // [2026-10-02 실측 수정] "PC로 봤을때 스크롤 안돼서 밑에꺼 다못보네" —
+    // 전역 레이아웃(src/app/layout.tsx)의 body가 `h-dvh flex flex-col
+    // overflow-hidden`인데, 이 페이지 루트 div에 min-h-0/overflow-y-auto가
+    // 없어서(2026-09-05 data-grid 레이아웃 버그와 동일한 원인: flex 아이템의
+    // 기본 min-height는 auto라 내용이 뷰포트보다 길어지면 이 div가 계속
+    // 커지고 body의 overflow-hidden이 넘치는 부분을 그냥 잘라버린다) 목록
+    // 아래쪽을 볼 방법이 없었다.
+    <div className="flex-1 min-h-0 overflow-y-auto p-6 max-w-6xl mx-auto">
       <h1 className="text-lg font-bold text-gray-900">🔁 파이프라인 관리</h1>
       <p className="text-sm text-gray-500 mt-1 mb-4">
         데이터 수집/후처리 에이전트별 최근 실행 상태(pipeline_logs)와 개별 소스 수동 재수집을 한 화면에서 확인합니다.
