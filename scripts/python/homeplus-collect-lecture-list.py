@@ -1,7 +1,8 @@
 """홈플러스 문화센터 강좌 리스트를 2차례 검색(전국 지점을 10개 조건 제한
 때문에 지역 2그룹으로 나눔)으로 수집해 Supabase `homeplus_lecture_list`
 테이블에 저장하는 스크립트(LectureMasterID 추출 전단계 — 관리자 화면
-(`/admin/homeplus-lectures`)에서 결과를 확인할 수 있게 한다).
+(`/admin/data-grid`의 "🏫 홈플러스 강좌 리스트" 탭)에서 결과를 확인할 수
+있게 한다).
 
 [검색 조건](2026-10-02 사용자 지시)
 - 1차: 대상/강좌군 Kids 전체·Baby 전체 + 지점 서울/인천,부천/수원,화성/경기/
@@ -25,10 +26,11 @@
 [마감 판정 — 사용자 실측 확인] 카드의 장바구니 버튼이 마감 시:
     <button type="button" class="btn_class_cart" disabled="">...<span>마감</span></button>
 
-[구조화 추출의 한계] 로그인 세션 없이는 카드 HTML 구조(클래스명 등)를 직접
-볼 수 없어, store_name(카드 텍스트 첫 줄)과 date_range_text(YYYY.MM.DD ~
-YYYY.MM.DD 패턴)만 정규식/휴리스틱으로 뽑고, 나머지는 raw_text(카드 전체
-텍스트)로 보존한다 — 관리자 화면에서 raw_text로 항상 원본을 확인할 수 있다.
+[구조화 추출] store_name은 실제 카드 마크업(`<span class="office_name">`,
+2026-10-02 로그인 세션으로 직접 확인)에서 추출하고(마크업이 없는 예외
+케이스만 "카드 텍스트 첫 줄" 휴리스틱으로 폴백), date_range_text는
+YYYY.MM.DD ~ YYYY.MM.DD 정규식으로 뽑는다. 나머지는 raw_text(카드 전체
+텍스트)로 항상 함께 보존해 관리자 화면에서 원본으로 대조할 수 있다.
 
 [Supabase 저장] 이 프로젝트 최초의 Python→Supabase 직접 연동이다(기존
 수집기는 전부 Node.js). .env.local에서 NEXT_PUBLIC_SUPABASE_URL /
@@ -39,7 +41,7 @@ SUPABASE_SERVICE_ROLE_KEY를 직접 읽어 REST API(PostgREST)로 insert한다.
 실행:
     python homeplus-collect-lecture-list.py
 
-결과 확인: /admin/homeplus-lectures (Next.js 개발 서버 실행 중이어야 함)
+결과 확인: /admin/data-grid "🏫 홈플러스 강좌 리스트" 탭
 """
 
 from __future__ import annotations
@@ -120,11 +122,16 @@ def run_search(page: Page) -> None:
 def apply_sort_order(page: Page) -> None:
     """정렬을 '개강임박순'(최신 날짜가 먼저 나오는 순서, 사용자 실측 확인)으로
     바꾼다. 선택 후 실제로 반영된 라벨을 출력하니, 처음 실행할 때는 터미널
-    로그와 실제 화면을 같이 보고 정상적으로 재정렬됐는지 확인하는 걸 권한다."""
-    page.wait_for_selector("#sel_sort", timeout=15000)
-    page.select_option("#sel_sort", label="개강임박순")
+    로그와 실제 화면을 같이 보고 정상적으로 재정렬됐는지 확인하는 걸 권한다.
+
+    [2026-10-02 실측 수정] 셀렉터 id는 `sel_sort`가 아니라 `selSort`였다
+    (언더스코어 없음) — 실제 결과 페이지 HTML을 직접 덤프해 확인했다.
+    실측 화면상 이 드롭다운은 기본값이 이미 '개강임박순'이었지만, 명시적으로
+    재선택해 의도를 코드에 남긴다."""
+    page.wait_for_selector("#selSort", timeout=15000)
+    page.select_option("#selSort", label="개강임박순")
     page.wait_for_timeout(500)
-    selected_label = page.locator("#sel_sort option:checked").inner_text()
+    selected_label = page.locator("#selSort option:checked").inner_text()
     print(f"  정렬 적용: '{selected_label}' 선택됨")
     random_delay()
 
@@ -136,7 +143,14 @@ def is_item_closed(item) -> bool:
     return "마감" in cart_button.first.inner_text()
 
 
-def extract_store_name(item_text: str) -> str | None:
+def extract_store_name(item, item_text: str) -> str | None:
+    """[2026-10-02 실측 수정] 실제 카드 마크업(`<span class="office_name">`)을
+    확인해 정확한 선택자로 추출하도록 바꿨다(기존에는 로그인 세션 없이
+    구조를 볼 수 없어 '카드 텍스트 첫 줄' 휴리스틱만 썼었다). 혹시 마크업이
+    없는 카드가 있을 경우를 대비해 첫 줄 휴리스틱을 폴백으로 남겨둔다."""
+    office_name = item.locator("span.office_name")
+    if office_name.count() > 0:
+        return office_name.first.inner_text().strip()
     lines = [line.strip() for line in item_text.splitlines() if line.strip()]
     return lines[0] if lines else None
 
@@ -160,8 +174,11 @@ def collect_batch_rows(page: Page, batch_number: int) -> list[dict]:
     """현재 적용된 필터+정렬 기준으로 결과를 스크롤/더보기로 반복 로드한다.
     새로 로드된 묶음에 마감 항목이 하나라도 있으면 그 묶음까지 기록하고
     멈춘다. 전부 신청가능이면 다음 묶음으로 계속 진행한다."""
-    items = page.locator("#lecture_textlist ul li")
-    page.wait_for_selector("#lecture_textlist ul li", timeout=20000)
+    # [2026-10-02 실측 수정] 컨테이너는 `#lecture_textlist`가 아니라
+    # `div.search_result_list`였다 — 실제 검색 결과 페이지 HTML을 직접
+    # 덤프해 확인했다. 카드는 `<li id="liLecture_{LectureMasterID}">`.
+    items = page.locator("div.search_result_list ul li")
+    page.wait_for_selector("div.search_result_list ul li", timeout=20000)
 
     collected: list[dict] = []
     prev_count = 0
@@ -186,7 +203,7 @@ def collect_batch_rows(page: Page, batch_number: int) -> list[dict]:
             collected.append(
                 {
                     "search_batch": batch_number,
-                    "store_name": extract_store_name(text),
+                    "store_name": extract_store_name(item, text),
                     "date_range_text": extract_date_range(text),
                     "is_closed": closed,
                     "raw_text": text,
@@ -272,7 +289,7 @@ def main() -> None:
 
             closed_count = sum(1 for r in all_rows if r["is_closed"])
             print(f"\n총 {len(all_rows)}건 수집(마감 {closed_count}건 / 신청가능 {len(all_rows) - closed_count}건)")
-            print("Next.js 개발 서버 실행 중이면 /admin/homeplus-lectures 에서 확인할 수 있습니다.")
+            print("/admin/data-grid '🏫 홈플러스 강좌 리스트' 탭에서 확인할 수 있습니다.")
 
             print("\n확인 후 Enter를 누르면 브라우저가 닫힙니다.")
             input()

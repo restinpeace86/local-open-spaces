@@ -137,3 +137,35 @@ store_name/date_range_text는 카드 텍스트에서 휴리스틱 추출(첫 줄
 - `npm run test` 전체 248개 파일 2,625개 테스트 통과.
 - `npm run build` 통과(신규 페이지 없이 기존 `/admin/data-grid` 라우트
   그대로, 독립 페이지 라우트는 빌드 결과물에서 제거 확인).
+
+## 후속 실측 — 사용자 대신 실제 수집 실행(2026-10-02)
+사용자 지시: "대신실행해줘" — `homeplus-collect-lecture-list.py`를 실제
+로그인 세션(`state.json`)으로 처음 실행해보니, 로그인 세션 없이 추측으로
+작성했던 선택자 2곳이 실제 마크업과 달라 즉시 실패했다. 임시 진단
+스크립트(`homeplus-debug-search-result.py`, 실측 후 삭제)로 실제 검색
+결과 페이지 HTML을 직접 덤프해 원인을 확인하고 수정했다:
+- **정렬 드롭다운 id 오류**: `#sel_sort`로 추측했으나 실제는 `#selSort`
+  (언더스코어 없음). `apply_sort_order()` 수정.
+- **결과 리스트 컨테이너 선택자 오류**: `#lecture_textlist`로 추측했으나
+  실제는 `div.search_result_list`이고, 개별 카드는
+  `<li id="liLecture_{LectureMasterID}">` 형태였다. `collect_batch_rows()`
+  수정.
+- **(발견, 이번 범위 아님)** 카드 안에
+  `<input type="hidden" name="LectureMasterID" value="...">`가 이미 있어
+  나중 LectureMasterID 추출 단계에서 `li` id 파싱이나 정규식 없이 바로
+  읽어올 수 있다 — 지금은 손대지 않고 기록만 남긴다(제5장 제7조,
+  "확장 기능 자체를 구현하지는 않는다").
+- **store_name 추출 개선**: 실제 카드에 `<span class="office_name">`이
+  있는 것을 확인해, 기존 "카드 텍스트 첫 줄" 휴리스틱을 정확한 선택자
+  기반 추출로 교체(마크업이 없는 예외 케이스만 기존 휴리스틱으로 폴백).
+
+수정 후 재실행 결과: 1차(서울 등 8개 지역) 20건, 2차(대구 등 5개 지역)
+20건, 총 40건 전부 `is_closed=true`로 수집·Supabase 저장 성공 —
+사용자가 미리 예상했던 "전부 마감이면 최대 40건" 수치와 정확히 일치한다.
+`/admin/data-grid`의 "🏫 홈플러스 강좌 리스트" 탭에서 확인 가능.
+
+### 검증
+- 수정 후 `python -m py_compile` 통과, 실제 실행 성공(위 결과).
+- Supabase REST API로 직접 재조회해 40건 전부 저장된 것 확인.
+- `npx tsc --noEmit` / `npm run test`(248개 파일 2,625개) / `npm run build`
+  재실행 — 전부 통과(이번 변경은 Python 전용이라 영향 없음을 재확인).
