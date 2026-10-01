@@ -169,3 +169,89 @@ store_name/date_range_text는 카드 텍스트에서 휴리스틱 추출(첫 줄
 - Supabase REST API로 직접 재조회해 40건 전부 저장된 것 확인.
 - `npx tsc --noEmit` / `npm run test`(248개 파일 2,625개) / `npm run build`
   재실행 — 전부 통과(이번 변경은 Python 전용이라 영향 없음을 재확인).
+
+## 후속 — 일일 배치 자동화 + 세션 만료 배너(2026-10-02)
+사용자 지시: "매일 배치 돌려서 하루에 한번 확인은 못하는구조야?" → (GitHub
+Secret 저장 방식에 동의 확인 후) "새기기 로그인 알림뜨는건 어쩔 수 없지.
+그건 문제없지않나? 그리고 세션 만료 관련해서는 홈플러스 강좌리스트
+보는곳에 세션 만료되었다고 다시 카카오폰 로그인 해달라는거랑 해당
+관리자쪽의 홈플러스 강좌 리스트에서 진행할수있게 해줘."
+
+### 설계 확인(AskUserQuestion)
+1. 로그인 세션(state.json 내용)을 GitHub Actions Secret으로 저장해 CI가
+   매일 접근 → **동의**.
+2. 세션 만료 시 관리자 화면에 보여줄 "마지막 실행 상태"를 어디에
+   기록할지 → **기존 `pipeline_logs` 테이블 재사용**(신규 테이블 대신,
+   제5장 제4조 기존 구조 우선).
+
+### 핵심 제약(사용자에게 사전 설명) — "완전 무인"은 아님
+`state.json`은 API 키가 아니라 사용자의 실제 카카오 로그인 세션 쿠키다.
+세션은 언젠가 만료되고, 만료되면 카카오 로그인(폰 앱 승인)을 사용자가
+직접 다시 해야 한다 — 그래서 "평소엔 자동, 세션 만료 시에만 수동 갱신"
+구조로 설계했다. GitHub Actions 러너의 IP가 바뀌는 데서 오는 "새로운
+환경에서 로그인" 카카오 알림은 사용자가 이미 감수하기로 확인했다.
+
+### 변경 파일
+- `scripts/python/homeplus-collect-lecture-list.py`:
+  - `IS_CI`(env `CI=true`) 기준으로 `headless` 결정, 성공/실패 후
+    `input()` 대기를 CI에서는 스킵.
+  - `load_env()`: OS 환경변수(GitHub Actions secrets) 우선, 없으면
+    `.env.local` 폴백 — 기존 로컬 실행 방식은 그대로 유지.
+  - `check_session_valid()`: 검색을 시도하기 **전에** 세션 유효성을 먼저
+    확인(`homeplus-check-session.py`와 동일한 판정 기준: 로그인 페이지
+    리다이렉트 또는 "로그인해주세요" 문구). 무효면 검색을 시작하지도
+    않고 `pipeline_logs`에 `FAILED` + `meta_data.reason:
+    "session_expired"`를 남기고 조용히 종료(워크플로 자체를 실패로 보지
+    않음 — 버그가 아니라 예상된 상황이라서).
+  - `post_pipeline_log()`: 성공 시 `OK` + `meta_data:{collected, closed}`,
+    그 외 예외 발생 시 `FAILED` + `error_message`를 남기고 예외를
+    재전파(CI 잡 자체는 실패로 표시되어야 진짜 버그를 놓치지 않음).
+  - `agent_name='HOMEPLUS_LECTURE_LIST'`, `period='daily'` — Node 배치와
+    동일한 `pipeline_logs` 스키마를 그대로 따른다.
+- `scripts/ingest/lib/pipeline-agent-registry.mjs`: `HOMEPLUS_LECTURE_LIST`
+  항목 등록(관리자 `/admin/pipeline` 현황판에서 다른 소스와 동일하게 보이게
+  — 이 소스는 Python이라 이 레지스트리를 직접 import하지 못해, 동일한
+  description 문자열을 Python 쪽에도 그대로 복제해뒀다. 바꿀 때 두 곳
+  함께 수정 필요).
+- `scripts/python/requirements.txt`(신규): `playwright==1.60.0`,
+  `requests==2.32.5`(로컬 설치 버전과 고정).
+- `.github/workflows/homeplus-lecture-list-batch.yml`(신규): 매일 KST
+  03:20(UTC 18:20, 기존 daily 17:47/monthly 18:52와 겹치지 않게 분산)
+  cron + `workflow_dispatch`. `secrets.HOMEPLUS_STATE_JSON`을
+  `state.json`으로 복원 → Python 스크립트 실행(가벼운 1회 재시도, 2분
+  대기) → 세션 파일 정리(`if: always()`).
+- `src/components/admin/homeplus-lecture-list-panel.tsx`:
+  `BatchStatusBanner`(신규) — `TodayBatchSummary`와 동일하게 마운트 시
+  자동 조회(메인 데이터 테이블의 "조회하기" 버튼 관례와는 별개 — 가벼운
+  보조 상태 지표라 예외). `/api/admin/pipeline-logs?agent_name=
+  HOMEPLUS_LECTURE_LIST`(기존 라우트 그대로 재사용, 수정 없음)의 최신
+  1건을 읽어 OK → 초록 성공 배너, FAILED+session_expired → 빨간 "세션
+  만료, 재로그인 필요" 배너(homeplus-save-login-session.py 재실행 +
+  GitHub secret 갱신 안내 문구 포함), FAILED(그 외) → 일반 에러 배너.
+- `src/components/admin/homeplus-lecture-list-panel.test.tsx`: URL 기준
+  분기 mock(`mockFetchRouter`)으로 교체(패널이 이제 pipeline-logs/
+  lecture-list 두 엔드포인트를 호출하므로), 배너 3종(성공/세션만료/일반
+  실패) 신규 테스트 3개 추가(기존 3개 + 3개 = 6개).
+
+### 검증
+- `npx vitest run .../homeplus-lecture-list-panel.test.tsx` 6개 전부 통과.
+- `python -m py_compile` 통과, 실제 재실행(로컬, state.json 유효한 상태)
+  성공 — `pipeline_logs`에 `agent_name=HOMEPLUS_LECTURE_LIST, status=OK,
+  meta_data={collected:40, closed:40}` 행이 정확히 기록된 것을 Supabase
+  REST API로 직접 재조회해 확인.
+- `npx tsc --noEmit` / `npm run test`(248개 파일 2,628개) / `npm run build`
+  전부 통과.
+- GitHub Actions 워크플로 자체(cron 트리거 실제 발화, secret 등록 후 첫
+  실행)는 이 세션에서 실측하지 못했다 — `secrets.HOMEPLUS_STATE_JSON`을
+  사용자가 직접 등록해야 하고(제가 `gh` CLI 접근 권한이 없음, `gh: command
+  not found` 확인), 그 이후 `workflow_dispatch`로 수동 1회 트리거하거나
+  다음 cron까지 기다려 실제 성공 여부를 확인해야 한다.
+
+### 특이 사항 / 남은 리스크
+- 세션 만료 감지는 "로그인 페이지로 리다이렉트/로그인 안내 문구"만
+  확인한다 — 홈플러스가 캡차나 2차 인증을 요구하는 다른 종류의 차단을
+  걸 경우 이 로직이 "유효함"으로 오판할 수 있다(실측된 적 없는 리스크,
+  사용자에게 투명하게 남겨둠).
+- GitHub Actions 러너는 매 실행마다 다른 IP를 쓰므로, 홈플러스/카카오
+  쪽에서 세션을 더 자주(로컬보다) 강제로 끊을 가능성도 배제 못 한다 —
+  실제 빈도는 운영하면서 지켜봐야 한다.

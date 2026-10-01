@@ -1,0 +1,72 @@
+name: Homeplus Lecture List Batch (Python/Playwright)
+
+# [홈플러스 강좌 리스트 일일 배치 자동화](2026-10-02 사용자 지시: "매일 배치
+# 돌려서 하루에 한번 확인은 못하는구조야?") — 기존 ingest-daily/ingest-monthly
+# (Node.js 오케스트레이터)와는 완전히 별도다. 이 소스만 로그인 세션
+# (카카오 OAuth) 기반이라 Node 배치에 편입할 수 없고, Python/Playwright로
+# 따로 돈다.
+#
+# [세션 수명 한계 — 완전 무인 아님] state.json은 API 키가 아니라 사용자의
+# 실제 카카오 로그인 세션 쿠키다(secrets.HOMEPLUS_STATE_JSON). 세션이
+# 만료되면 scripts/python/homeplus-collect-lecture-list.py가 검색을 시도하기
+# 전에 먼저 유효성을 확인해 pipeline_logs에 FAILED(세션 만료) 상태를 남기고
+# 조용히 종료한다(워크플로 자체는 실패로 표시하지 않음 — 정상적으로 예상된
+# 상황이지 버그가 아니기 때문). 관리자 화면(홈플러스 강좌 리스트 탭)이 이
+# 상태를 읽어 배너로 보여주면, 사용자가 로컬에서 세션을 새로 저장하고 이
+# 저장소 Settings → Secrets에서 HOMEPLUS_STATE_JSON 값을 갱신해야 배치가
+# 재개된다. 새 IP(GitHub Actions 러너)에서의 로그인으로 카카오 "새로운
+# 환경에서 로그인" 알림이 뜰 수 있는데, 이는 사용자가 이미 감수하기로 한
+# 부분이다(2026-10-02 확인).
+#
+# 크론 시간: 기존 daily(17:47 UTC)/monthly(18:52 UTC, 매월 말)와 겹치지 않게
+# KST 새벽 3시 20분(UTC 18:20)으로 분산.
+on:
+  schedule:
+    - cron: '20 18 * * *'
+  workflow_dispatch:
+
+jobs:
+  homeplus-lecture-list-batch:
+    runs-on: ubuntu-latest
+    env:
+      CI: true
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: pip install -r scripts/python/requirements.txt
+
+      - name: Install Playwright browsers
+        run: python -m playwright install --with-deps chromium
+
+      # [세션 복원] secrets.HOMEPLUS_STATE_JSON은 homeplus-save-login-session.py가
+      # 로컬에서 만든 state.json 파일 내용을 그대로 저장소 Secret에 붙여넣은 것.
+      - name: Restore Homeplus login session
+        run: echo '${{ secrets.HOMEPLUS_STATE_JSON }}' > state.json
+
+      # [가벼운 1회 재시도] ingest-daily.yml의 15분 대기 재시도는 네트워크 전체
+      # 장애를 흡수하기 위한 것이라 이 배치(실행 시간 2~3분 수준, 더 가벼움)에는
+      # 과하다 — 선택자/타이밍성 일시 실패만 흡수하면 충분해 짧게(2분) 대기 후
+      # 1회만 재시도한다.
+      - name: Run Homeplus lecture list collection
+        run: |
+          set +e
+          python scripts/python/homeplus-collect-lecture-list.py
+          exit_code=$?
+          if [ $exit_code -ne 0 ]; then
+            echo "⚠️ 1차 실행 실패(exit $exit_code) — 2분 대기 후 1회 재시도합니다."
+            sleep 120
+            python scripts/python/homeplus-collect-lecture-list.py
+            exit_code=$?
+          fi
+          exit $exit_code
+
+      - name: Remove restored session file
+        if: always()
+        run: rm -f state.json

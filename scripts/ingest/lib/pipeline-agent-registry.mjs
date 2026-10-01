@@ -164,6 +164,16 @@ export const PIPELINE_AGENTS = {
     description: 'LOCALDATA_PLAYGROUND의 설치장소코드(instlPlaceCd) 기준 category_min 백필(신규 적재 아님)',
     period: 'monthly',
   },
+
+  // [홈플러스 강좌 리스트 일일 배치 자동화](2026-10-02 사용자 지시): 이 소스만 유일하게
+  // Node.js run-daily.mjs/run-monthly.mjs가 아니라 별도 Python/Playwright 스크립트 +
+  // 전용 GitHub Actions 워크플로(homeplus-lecture-list-batch.yml)로 실행된다(로그인
+  // 세션 기반이라 Node 오케스트레이터에 편입할 수 없음) — 그래도 같은 pipeline_logs
+  // 테이블에 같은 스키마로 기록해 관리자 현황판에서 다른 소스와 동일하게 보인다.
+  HOMEPLUS_LECTURE_LIST: {
+    description: '홈플러스 문화센터 강좌 리스트 수집(Kids/Baby 전체, 전국 2그룹 검색) — 로그인 세션 기반 Python/Playwright 배치',
+    period: 'daily',
+  },
 };
 
 export function getAgentMeta(sourceKey) {
