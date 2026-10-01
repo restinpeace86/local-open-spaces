@@ -23,6 +23,12 @@
 .env
 .env*.local
 
+# [홈플러스 문화센터 크롤링 세션](2026-10-02) Playwright storage_state에는
+# 실제 로그인 쿠키/세션이 그대로 들어있다 — 절대 커밋 금지.
+/state.json
+/lecture_ids.json
+scripts/python/__pycache__/
+
 # ingest pipeline logs
 /ingest.log
 

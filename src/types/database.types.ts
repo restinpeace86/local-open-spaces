@@ -545,6 +545,36 @@ export type Database = {
           },
         ]
       }
+      homeplus_lecture_list: {
+        Row: {
+          collected_at: string
+          date_range_text: string | null
+          id: number
+          is_closed: boolean
+          raw_text: string
+          search_batch: number
+          store_name: string | null
+        }
+        Insert: {
+          collected_at?: string
+          date_range_text?: string | null
+          id?: never
+          is_closed: boolean
+          raw_text: string
+          search_batch: number
+          store_name?: string | null
+        }
+        Update: {
+          collected_at?: string
+          date_range_text?: string | null
+          id?: never
+          is_closed?: boolean
+          raw_text?: string
+          search_batch?: number
+          store_name?: string | null
+        }
+        Relationships: []
+      }
       mom_pick_likes: {
         Row: {
           created_at: string
