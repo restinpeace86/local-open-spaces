@@ -100,6 +100,30 @@ online/offline`이 boolean이 아니라 "Y"/"N" 문자열로, `classMaterialFee`
   GitHub Secret 등록은 사용자가 직접 해야 한다(이미 공개 키라 민감도는 낮지만,
   CI 워크플로가 env로 참조하므로 등록 필요).
 
+## 후속 — 요청 간격/헤더 보강(2026-10-03)
+사용자 지시: "음.. 요청간격 더 늘려.. 1s 1.5s 사이로" (앞서 "어떻게 감지할수도
+있을거같은데"라는 우려에 대해 제가 제안한 보강안 중 간격 부분을 구체화).
+
+### 변경 — `scripts/ingest/emart-culture-club.mjs`
+- 요청 간 고정 500ms 딜레이를 **1.0~1.5초 랜덤** 딜레이로 교체(`randomPacingDelay()`)
+  — 고정 간격은 기계적인 패턴으로 보일 수 있어 범위로 흔든다.
+- 요청 헤더에 `Origin`/`Referer`/`User-Agent`/`Accept-Language`를 실제 프론트엔드가
+  보내는 것과 같은 모양으로 추가 — 이 API 키 자체가 프론트엔드 공개 키라, 속이는
+  게 아니라 "진짜 그 사이트에서 호출하는 요청"과 같은 모양으로 맞추는 것뿐이다.
+- 사용자가 "Origin/Referer/User-Agent/Accept-Language를 직접 찾아서 알려줘야
+  하냐"고 확인했는데, 넷 다 이미 알고 있는 사이트 URL(Origin/Referer)이거나
+  일반적인 값(User-Agent/Accept-Language)이라 실제 회원님 브라우저 값을 알아올
+  필요가 없다고 설명 — 인증 토큰이 아니라 설명용 메타데이터라 "그럴듯한 값"이면
+  충분하다.
+
+### 검증
+- `npx vitest run emart-culture-club.test.mjs` 7개 통과(transform 로직 자체는
+  변경 없음 — 이번 변경은 요청 레벨이라 영향 없음을 재확인).
+- `npx tsc --noEmit` / `npm run test`(254개 파일 2,673개) / `npm run build`
+  전부 통과.
+- 새 헤더/간격으로 실제 재수집 — 6,519건 정상 upsert 성공(이전 6,516건에서
+  소폭 변동, 정상 범위 — 매 실행마다 접수 상태가 실시간으로 바뀌므로).
+
 ## 특이 사항 / 남은 작업
 - API 키는 공개 프론트엔드 키라 비밀 취급은 안 해도 되지만, 이마트가 키를
   교체하면 파이프라인이 깨진다 — 이 경우 JS 번들을 다시 확인해 키를 갱신해야

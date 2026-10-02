@@ -17,9 +17,16 @@
 // 구분). 그래서 상태별로 쿼리를 3번 나눠 호출하고, 각 행에 어떤 필터로 수집됐는지
 // (filter_status)를 그대로 저장한다.
 //
-// [매너 있게 수집](2026-10-02 사용자 지시 — Playwright 크롤링 일반 원칙이지만
-// API 호출에도 동일하게 적용): 페이지 요청 사이에 고정 딜레이를 둬 짧은 시간에
-// 과도하게 몰아치지 않는다. 개인정보는 전혀 수집하지 않는다(강좌 메타데이터만).
+// [매너 있게 수집](2026-10-03 사용자 지시: "요청간격 더 늘려.. 1s 1.5s 사이로"):
+// 페이지 요청 사이에 1.0~1.5초 랜덤 딜레이를 둬 짧은 시간에 과도하게 몰아치지
+// 않는다(고정 간격이면 기계적인 패턴으로 보일 수 있어 랜덤 범위로 흔든다).
+// 개인정보는 전혀 수집하지 않는다(강좌 메타데이터만).
+//
+// [요청 헤더 — 실제 프론트엔드처럼](2026-10-03 사용자 지시: "어떻게 감지할수도
+// 있을거같은데"): 이 API 키는 이마트 프론트엔드가 쓰는 것과 동일한 공개 키라,
+// 실제 프론트엔드가 보내는 것과 같은 모양의 요청(Origin/Referer/User-Agent)을
+// 그대로 재현한다 — 속이는 게 아니라 "진짜 그 사이트에서 호출하는 요청"과
+// 똑같이 만드는 것뿐이다.
 import { pathToFileURL } from 'url';
 import { loadEnv } from '../lib/load-env.mjs';
 import { fetchWithTimeout } from './lib/fetch-with-timeout.mjs';
@@ -30,7 +37,16 @@ const SOURCE_KEY = 'EMART_CULTURE_CLUB';
 const GRAPHQL_URL = 'https://wrihg4edszhmvagptse4t4eggi.appsync-api.ap-northeast-2.amazonaws.com/graphql';
 const PAGE_SIZE = 100;
 const UPSERT_CHUNK_SIZE = 500;
-const REQUEST_PACING_MS = 500;
+const REQUEST_PACING_MIN_MS = 1000;
+const REQUEST_PACING_MAX_MS = 1500;
+const BROWSER_LIKE_HEADERS = {
+  Origin: 'https://www.cultureclub.emart.com',
+  Referer: 'https://www.cultureclub.emart.com/enrolment',
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  Accept: 'application/json',
+  'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+};
 
 const STORE_CODES = [
   // 서울 11개
@@ -87,6 +103,10 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function randomPacingDelay() {
+  return REQUEST_PACING_MIN_MS + Math.random() * (REQUEST_PACING_MAX_MS - REQUEST_PACING_MIN_MS);
+}
+
 function buildFilterData(status) {
   return [
     { type: 'mainStoreInfo.storeCode', data: STORE_CODES },
@@ -103,7 +123,7 @@ async function fetchPage(status, from, size) {
 
   const res = await fetchWithTimeout(GRAPHQL_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey },
+    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, ...BROWSER_LIKE_HEADERS },
     body: JSON.stringify({
       query: QUERY,
       variables: { keyword: '', filterData: buildFilterData(status), sortKey: 'deadline', from, size },
@@ -139,7 +159,7 @@ async function fetchAllForStatus(status) {
     items.push(...page.data);
     if (page.data.length < PAGE_SIZE) break;
     from += PAGE_SIZE;
-    await sleep(REQUEST_PACING_MS);
+    await sleep(randomPacingDelay());
   }
 
   return items;
@@ -228,7 +248,7 @@ export async function run({ dryRun = false } = {}) {
     console.log(`  [${status}] ${items.length}건 수신`);
     const rows = items.map((item) => transform(item, status)).filter(Boolean);
     allRows.push(...rows);
-    await sleep(REQUEST_PACING_MS);
+    await sleep(randomPacingDelay());
   }
 
   // 동일 classId가 상태 전환 중 두 상태 조회 사이에 걸쳐 중복 수신될 가능성에 대비
