@@ -26,6 +26,7 @@ type ClassRow = {
   register_start_date: string | null;
   register_end_date: string | null;
   filter_status: '접수대기' | '접수중' | '정원마감';
+  is_excluded: boolean;
   collected_at: string;
 };
 
@@ -72,6 +73,28 @@ export function EmartCultureClubPanel() {
       })
       .catch((err: Error) => setErrorMessage(err.message))
       .finally(() => setIsLoading(false));
+  }
+
+  // [수동 노출 제외](2026-10-03 사용자 지시): "화면에 노출 배제할꺼 수동으로
+  // 체크할수 있어? ... Club Original은 섞여있어서 어른께 더 많은편이야" —
+  // Club Originals 카테고리에 섞인 성인 전용 강좌를 관리자가 리뷰하며 개별
+  // 체크로 제외 처리한다. 낙관적 업데이트 후 실패하면 되돌린다.
+  function toggleExcluded(classId: string, nextExcluded: boolean) {
+    setRows((prev) => prev?.map((r) => (r.class_id === classId ? { ...r, is_excluded: nextExcluded } : r)) ?? null);
+
+    fetch('/api/admin/emart-culture-club', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ class_id: classId, is_excluded: nextExcluded }),
+    })
+      .then((res) => res.json())
+      .then((data: { error?: string }) => {
+        if (data.error) throw new Error(data.error);
+      })
+      .catch((err: Error) => {
+        setErrorMessage(`노출 제외 처리 실패: ${err.message}`);
+        setRows((prev) => prev?.map((r) => (r.class_id === classId ? { ...r, is_excluded: !nextExcluded } : r)) ?? null);
+      });
   }
 
   return (
@@ -131,6 +154,7 @@ export function EmartCultureClubPanel() {
           <table className="w-full text-sm border-collapse">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 text-left text-xs font-semibold text-gray-600">
+                <th className="py-2 px-3">노출 제외</th>
                 <th className="py-2 px-3">강좌명</th>
                 <th className="py-2 px-3">지점</th>
                 <th className="py-2 px-3">카테고리</th>
@@ -144,8 +168,19 @@ export function EmartCultureClubPanel() {
             </thead>
             <tbody>
               {rows.map((row) => (
-                <tr key={row.id} className={row.filter_status === '정원마감' ? 'bg-amber-50' : 'bg-white'}>
-                  <td className="py-2 px-3 max-w-xs truncate" title={row.class_title}>
+                <tr
+                  key={row.id}
+                  className={row.is_excluded ? 'bg-gray-100 opacity-60' : row.filter_status === '정원마감' ? 'bg-amber-50' : 'bg-white'}
+                >
+                  <td className="py-2 px-3">
+                    <input
+                      type="checkbox"
+                      checked={row.is_excluded}
+                      onChange={(e) => toggleExcluded(row.class_id, e.target.checked)}
+                      aria-label={`${row.class_title} 노출 제외`}
+                    />
+                  </td>
+                  <td className={`py-2 px-3 max-w-xs truncate ${row.is_excluded ? 'line-through' : ''}`} title={row.class_title}>
                     {row.class_title}
                   </td>
                   <td className="py-2 px-3 whitespace-nowrap">{row.store_name ?? '-'}</td>

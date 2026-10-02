@@ -296,6 +296,7 @@ export type Database = {
           end_time: string | null
           filter_status: string
           id: number
+          is_excluded: boolean
           main_category_code: string | null
           main_category_name: string | null
           main_image_bucket: string | null
@@ -338,6 +339,7 @@ export type Database = {
           end_time?: string | null
           filter_status: string
           id?: never
+          is_excluded?: boolean
           main_category_code?: string | null
           main_category_name?: string | null
           main_image_bucket?: string | null
@@ -380,6 +382,7 @@ export type Database = {
           end_time?: string | null
           filter_status?: string
           id?: never
+          is_excluded?: boolean
           main_category_code?: string | null
           main_category_name?: string | null
           main_image_bucket?: string | null

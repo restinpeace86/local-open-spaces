@@ -22,11 +22,23 @@ const ROW = {
   register_start_date: '202608101000',
   register_end_date: '20261130',
   filter_status: '접수중' as const,
+  is_excluded: false,
   collected_at: '2026-10-03T00:00:00.000Z',
 };
 
 function mockFetch(rows: unknown[], total: number) {
   return vi.fn((_url: string) => Promise.resolve({ ok: true, json: () => Promise.resolve({ rows, total }) } as Response));
+}
+
+function mockFetchRouter({ rows, total, patchOk = true }: { rows: unknown[]; total: number; patchOk?: boolean }) {
+  const patchSpy = vi.fn((_url: string, _init?: RequestInit) =>
+    Promise.resolve({ ok: true, json: () => Promise.resolve(patchOk ? { ok: true } : { error: '제외 처리 실패' }) } as Response)
+  );
+  const fn = vi.fn((_url: string, init?: RequestInit) => {
+    if (init?.method === 'PATCH') return patchSpy(_url, init);
+    return Promise.resolve({ ok: true, json: () => Promise.resolve({ rows, total }) } as Response);
+  });
+  return { fn, patchSpy };
 }
 
 describe('EmartCultureClubPanel', () => {
@@ -89,5 +101,51 @@ describe('EmartCultureClubPanel', () => {
     fireEvent.click(screen.getByText('조회하기'));
 
     expect(await screen.findByText('대기접수 가능')).toBeInTheDocument();
+  });
+
+  // [수동 노출 제외](2026-10-03 사용자 지시): "화면에 노출 배제할꺼 수동으로
+  // 체크할수 있어? ... Club Original은 섞여있어서 어른께 더 많은편이야"
+  describe('노출 제외 체크박스', () => {
+    it('체크하면 PATCH로 class_id/is_excluded를 전송한다', async () => {
+      const { fn, patchSpy } = mockFetchRouter({ rows: [ROW], total: 1 });
+      vi.stubGlobal('fetch', fn);
+
+      render(<EmartCultureClubPanel />);
+      fireEvent.click(screen.getByText('조회하기'));
+      const checkbox = await screen.findByRole('checkbox', { name: '키즈 댄스 클래스 노출 제외' });
+
+      fireEvent.click(checkbox);
+
+      expect(patchSpy).toHaveBeenCalledWith(
+        '/api/admin/emart-culture-club',
+        expect.objectContaining({ body: JSON.stringify({ class_id: 'abc123', is_excluded: true }) })
+      );
+      expect(checkbox).toBeChecked();
+    });
+
+    it('PATCH 실패 시 체크 상태를 되돌리고 에러 메시지를 보여준다', async () => {
+      const { fn } = mockFetchRouter({ rows: [ROW], total: 1, patchOk: false });
+      vi.stubGlobal('fetch', fn);
+
+      render(<EmartCultureClubPanel />);
+      fireEvent.click(screen.getByText('조회하기'));
+      const checkbox = await screen.findByRole('checkbox', { name: '키즈 댄스 클래스 노출 제외' });
+
+      fireEvent.click(checkbox);
+
+      await screen.findByText(/노출 제외 처리 실패/);
+      expect(checkbox).not.toBeChecked();
+    });
+
+    it('이미 제외된 강좌는 체크박스가 체크된 채로 표시되고 취소선이 적용된다', async () => {
+      vi.stubGlobal('fetch', mockFetch([{ ...ROW, is_excluded: true }], 1));
+
+      render(<EmartCultureClubPanel />);
+      fireEvent.click(screen.getByText('조회하기'));
+
+      const checkbox = await screen.findByRole('checkbox', { name: '키즈 댄스 클래스 노출 제외' });
+      expect(checkbox).toBeChecked();
+      expect(screen.getByText('키즈 댄스 클래스')).toHaveClass('line-through');
+    });
   });
 });
