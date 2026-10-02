@@ -1,0 +1,35 @@
+name: Emart Culture Club Detail Batch
+
+# [이마트 컬처클럽 강좌 상세정보 1회성 수집](2026-10-03 사용자 지시): "하나의
+# 강좌에 대하여 한번만 상세페이지꺼 가져와서 채우면돼.. 중요한거 변해야하고
+# 캐치해야하는게 그 status 이거 하나야" — 목록 배치(emart-culture-club-batch.yml,
+# KST 04:00)가 끝난 뒤 실행해 class_id별 상세설명/이미지를 증분으로 채운다(이미
+# 채워진 class_id는 다시 조회하지 않음 — 정적 콘텐츠라 한 번이면 충분).
+#
+# [첫날 소요 시간 안내] 처음 실행 시 기존 6,500여 건을 전부 백필하므로 300ms~1초
+# 랜덤 간격 기준 약 1~2시간 소요될 수 있다 — 이후로는 그날 새로 추가된 강좌만
+# 대상이라 훨씬 빨리 끝난다.
+on:
+  schedule:
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+
+jobs:
+  emart-culture-club-detail-batch:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      EMART_CULTURE_CLUB_API_KEY: ${{ secrets.EMART_CULTURE_CLUB_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Emart Culture Club detail collection
+        run: node scripts/ingest/emart-culture-club-detail.mjs

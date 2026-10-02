@@ -38,6 +38,7 @@
     "ingest:enrich-gg-culture-locations": "node scripts/ingest/enrich-gg-culture-event-locations.mjs",
     "ingest:seoul-public-parking": "node scripts/ingest/seoul-public-parking.mjs",
     "ingest:emart-culture-club": "node scripts/ingest/emart-culture-club.mjs",
+    "ingest:emart-culture-club-detail": "node scripts/ingest/emart-culture-club-detail.mjs",
     "ingest:daily": "node scripts/ingest/run-daily.mjs",
     "ingest:monthly": "node scripts/ingest/run-monthly.mjs"
   },

@@ -279,6 +279,8 @@ export type Database = {
           class_capacity: number | null
           class_closed_date: string | null
           class_day: string[] | null
+          class_detail_content: string | null
+          class_detail_title: string | null
           class_end_date: string | null
           class_fee: number | null
           class_id: string
@@ -290,11 +292,15 @@ export type Database = {
           classroom: string | null
           collected_at: string
           created_at: string
+          detail_fetched_at: string | null
           end_time: string | null
           filter_status: string
           id: number
           main_category_code: string | null
           main_category_name: string | null
+          main_image_bucket: string | null
+          main_image_key: string | null
+          main_image_region: string | null
           min_class_capacity: number | null
           occupied_full_flag: boolean | null
           register_end_date: string | null
@@ -315,6 +321,8 @@ export type Database = {
           class_capacity?: number | null
           class_closed_date?: string | null
           class_day?: string[] | null
+          class_detail_content?: string | null
+          class_detail_title?: string | null
           class_end_date?: string | null
           class_fee?: number | null
           class_id: string
@@ -326,11 +334,15 @@ export type Database = {
           classroom?: string | null
           collected_at?: string
           created_at?: string
+          detail_fetched_at?: string | null
           end_time?: string | null
           filter_status: string
           id?: never
           main_category_code?: string | null
           main_category_name?: string | null
+          main_image_bucket?: string | null
+          main_image_key?: string | null
+          main_image_region?: string | null
           min_class_capacity?: number | null
           occupied_full_flag?: boolean | null
           register_end_date?: string | null
@@ -351,6 +363,8 @@ export type Database = {
           class_capacity?: number | null
           class_closed_date?: string | null
           class_day?: string[] | null
+          class_detail_content?: string | null
+          class_detail_title?: string | null
           class_end_date?: string | null
           class_fee?: number | null
           class_id?: string
@@ -362,11 +376,15 @@ export type Database = {
           classroom?: string | null
           collected_at?: string
           created_at?: string
+          detail_fetched_at?: string | null
           end_time?: string | null
           filter_status?: string
           id?: never
           main_category_code?: string | null
           main_category_name?: string | null
+          main_image_bucket?: string | null
+          main_image_key?: string | null
+          main_image_region?: string | null
           min_class_capacity?: number | null
           occupied_full_flag?: boolean | null
           register_end_date?: string | null

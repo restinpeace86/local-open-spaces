@@ -192,6 +192,15 @@ export const PIPELINE_AGENTS = {
     description: '이마트 컬처클럽 강좌 리스트 수집(공개 GraphQL API) — open_spaces 아님, 관리자 검토용',
     period: 'daily',
   },
+
+  // [이마트 컬처클럽 상세정보 1회성 수집](2026-10-03 사용자 지시): "하나의 강좌에
+  // 대하여 한번만 상세페이지꺼 가져와서 채우면돼" — EMART_CULTURE_CLUB(목록
+  // 배치)가 먼저 class_id를 채운 뒤, 이 소스가 상세정보 미수집 행만 증분으로
+  // 채운다(상태는 목록 배치가 계속 갱신하므로 이 소스와 무관).
+  EMART_CULTURE_CLUB_DETAIL: {
+    description: '이마트 컬처클럽 강좌 상세정보(설명/이미지) 1회성 수집 — class_id당 한 번만, 증분 수집',
+    period: 'daily',
+  },
 };
 
 export function getAgentMeta(sourceKey) {
