@@ -172,6 +172,39 @@
 - `npx vitest run nearby-amenities-section.test.tsx` 5개 통과(신규 링크 검증 포함).
 - `npx tsc --noEmit` / `npm run test`(252개 파일 2,661개) / `npm run build` 전부 통과.
 
+## 후속 — 공개 읽기 RLS 누락 + 펼침 스크롤 포커스 버그(2026-10-02)
+사용자 실측 리포트: "인사동 엔틱&아트페어 아직 안보이는데? 새로고침했는데? 그 주변
+키즈친화식당만 보이고... 그리고 주변 키즈친화 식당 관련해서 펼치기 했을때 포커스가
+이게 아닌거 같아.. 9곳펼쳐도 아래쪽으로 열리고 이걸 밑에서부터 끌어올려야돼"
+
+### 버그 1 — 공영주차장이 전혀 안 보임(RLS)
+서비스롤 키로 직접 조회하면 해당 이벤트(37.5739/126.9856) 반경 500m 내 주차장이
+실제로 2곳(서인사마당, 탑골공원 관광버스전용 주차장) 있었는데, 화면에는 전혀
+노출되지 않았다. **익명(anon) 키로 동일 RPC를 직접 호출해 재현** — 에러 없이
+`200 []`(빈 배열)만 반환됨을 확인. 원인: `seoul_public_parking_lots`를 만들 때
+`homeplus_lecture_list`(관리자 전용 내부 데이터) RLS 패턴을 그대로 복사해
+service_role 전용 정책만 뒀다 — 하지만 이 테이블은 상세 모달에서 anon 사용자가
+직접 읽어야 하는 **공개** 데이터다. `pg_policies`를 직접 조회해 비교해보니
+open_spaces/events는 애초에 RLS 자체가 없는 구조였다(정책 0건). 이 테이블은 RLS는
+유지하되(쓰기는 service_role만 — 더 안전한 설계) 읽기 전용 공개 정책을 추가:
+`scripts/migrations/2026-10-02-fix-seoul-public-parking-lots-public-read.sql`
+(`for select to anon, authenticated using (true)`, 적용 완료). 적용 후 anon
+키로 재조회해 2건 정상 반환 확인.
+
+### 버그 2 — 펼쳤을 때 화면이 자동으로 안 내려감
+`src/components/map/nearby-amenities-section.tsx`의 `AccordionShell`에 펼칠 때
+토글 버튼을 스크롤 가능한 조상(상세 모달의 overflow-y-auto 영역) 기준 상단으로
+자동 스크롤하는 `useEffect`(`containerRef.current?.scrollIntoView({ behavior:
+'smooth', block: 'start' })`) 추가. jsdom이 `scrollIntoView`를 구현하지 않아
+테스트가 깨져, `vitest.setup.ts`에 전역 no-op 폴리필 추가(이 메서드를 쓰는 다른
+컴포넌트에도 공통으로 적용되는 일반적인 수정).
+
+### 검증
+- `npx vitest run nearby-amenities-section.test.tsx` 5개 통과.
+- `npx tsc --noEmit` / `npm run test`(252개 파일 2,661개) / `npm run build` 전부 통과.
+- anon 키로 `get_nearby_parking_lots` RPC 재조회 — RLS 수정 전 `[]`, 수정 후
+  2건 정상 반환 확인(실측 전/후 대조).
+
 ## 특이 사항 / 남은 작업
 - **Tmap 키 미등록 상태** — 사용자가 추후 가입 예정("나중에 가입할게"). 그 전까지는
   모든 도보거리가 직선거리 기반 추정치(`isEstimate:true`)로 표시된다. 키 등록 후:

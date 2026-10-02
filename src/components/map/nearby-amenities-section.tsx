@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   getNearbyParkingLots,
   getNearbyKidsRestaurants,
@@ -121,9 +121,21 @@ function AccordionShell({
   onToggle: () => void;
   children: React.ReactNode;
 }) {
+  // [펼침 스크롤 포커스 버그 수정](2026-10-02 사용자 지시): "펼치기 했을때 포커스가
+  // 이게 아닌거 같아.. 9곳펼쳐도 아래쪽으로 열리고 이걸 밑에서부터 끌어올려야돼" —
+  // 카드 목록이 토글 버튼 아래로 펼쳐지면서 상세 모달의 스크롤 영역 기준으로는
+  // 화면 밖에 남아, 유저가 직접 아래로 스크롤해야만 보였다. 펼칠 때 이 아코디언의
+  // 토글 버튼을 스크롤 가능한 조상 기준으로 상단에 맞춰 자동으로 끌어올린다.
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (isOpen) {
+      containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [isOpen]);
+
   if (count === 0) return null;
   return (
-    <div className="border border-gray-200 rounded-xl overflow-hidden">
+    <div ref={containerRef} className="border border-gray-200 rounded-xl overflow-hidden">
       <button
         type="button"
         onClick={onToggle}
