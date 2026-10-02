@@ -121,8 +121,10 @@ export function HomeplusLectureListPanel() {
     // 넘치는 부분이 조상의 overflow-hidden에 그대로 잘려나가고 있었다.
     <div className="flex-1 min-h-0 overflow-y-auto p-4">
       <p className="text-sm text-gray-500 mb-3">
-        Kids/Baby 전체 대상, 전국 지점 검색 결과 수집본(검토용 — LectureMasterID 추출 전단계,
-        scripts/python/homeplus-collect-lecture-list.py로 매일 자동 수집).
+        Kids/Baby 전체 대상, 전국 지점 검색 결과 수집본(검토용 — LectureMasterID 추출 전단계).
+      </p>
+      <p className="text-xs text-amber-700 bg-amber-50 rounded-lg px-3 py-2 mb-3">
+        ⏸️ 홈플러스가 문화센터 서비스를 중단해(2026-10-02 확인) 자동 수집을 중단했습니다. 아래는 과거 수집본입니다.
       </p>
 
       <BatchStatusBanner />

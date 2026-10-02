@@ -1,32 +1,27 @@
 name: Homeplus Lecture List Batch (Python/Playwright)
 
-# [홈플러스 강좌 리스트 일일 배치 자동화](2026-10-02 사용자 지시: "매일 배치
-# 돌려서 하루에 한번 확인은 못하는구조야?") — 기존 ingest-daily/ingest-monthly
-# (Node.js 오케스트레이터)와는 완전히 별도다. 이 소스만 로그인 세션
-# (카카오 OAuth) 기반이라 Node 배치에 편입할 수 없고, Python/Playwright로
-# 따로 돈다.
+# [홈플러스 강좌 리스트 수집 중단](2026-10-02 사용자 지시: "홈플러스쪽은
+# 일단 중단해 배치도 하지마.. 여기 문화센터 서비스 중단했대") — 홈플러스가
+# 문화센터 서비스 자체를 중단했다는 사용자 확인에 따라 크론 스케줄을
+# 제거하고, 수동 실행(workflow_dispatch)도 `if: false`로 즉시 종료되게
+# 막아둔다. 데이터 원천이 사라졌으니 재개할 이유가 없다 — 다시 운영하게
+# 될 경우를 대비해 코드/워크플로 자체는 삭제하지 않고 남겨둔다.
 #
-# [세션 수명 한계 — 완전 무인 아님] state.json은 API 키가 아니라 사용자의
-# 실제 카카오 로그인 세션 쿠키다(secrets.HOMEPLUS_STATE_JSON). 세션이
-# 만료되면 scripts/python/homeplus-collect-lecture-list.py가 검색을 시도하기
-# 전에 먼저 유효성을 확인해 pipeline_logs에 FAILED(세션 만료) 상태를 남기고
-# 조용히 종료한다(워크플로 자체는 실패로 표시하지 않음 — 정상적으로 예상된
-# 상황이지 버그가 아니기 때문). 관리자 화면(홈플러스 강좌 리스트 탭)이 이
-# 상태를 읽어 배너로 보여주면, 사용자가 로컬에서 세션을 새로 저장하고 이
-# 저장소 Settings → Secrets에서 HOMEPLUS_STATE_JSON 값을 갱신해야 배치가
-# 재개된다. 새 IP(GitHub Actions 러너)에서의 로그인으로 카카오 "새로운
-# 환경에서 로그인" 알림이 뜰 수 있는데, 이는 사용자가 이미 감수하기로 한
-# 부분이다(2026-10-02 확인).
-#
-# 크론 시간: 기존 daily(17:47 UTC)/monthly(18:52 UTC, 매월 말)와 겹치지 않게
-# KST 새벽 3시 20분(UTC 18:20)으로 분산.
+# [중단 전 이력 — 참고용] 아래는 자동화를 만들 때의 설계 기록이다(더 이상
+# 유효하지 않음, 삭제하지 않고 남겨둠):
+# 기존 ingest-daily/ingest-monthly(Node.js 오케스트레이터)와는 완전히
+# 별도였다. 이 소스만 로그인 세션(카카오 OAuth) 기반이라 Node 배치에
+# 편입할 수 없어 Python/Playwright로 따로 돌았다. state.json은 API 키가
+# 아니라 사용자의 실제 카카오 로그인 세션 쿠키였고(secrets.HOMEPLUS_STATE_JSON),
+# 세션 만료 시 pipeline_logs에 FAILED(세션 만료) 상태를 남기고 관리자
+# 화면에 재로그인 안내 배너를 띄우는 구조였다. 크론은 KST 새벽 3시 20분
+# (UTC 18:20)이었다.
 on:
-  schedule:
-    - cron: '20 18 * * *'
   workflow_dispatch:
 
 jobs:
   homeplus-lecture-list-batch:
+    if: false
     runs-on: ubuntu-latest
     env:
       CI: true
