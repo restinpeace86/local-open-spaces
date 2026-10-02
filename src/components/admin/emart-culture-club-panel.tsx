@@ -19,15 +19,28 @@ type ClassRow = {
   sub_category_name: string | null;
   store_name: string | null;
   class_fee: number | null;
+  class_material_fee: number | null;
   class_capacity: number | null;
+  min_class_capacity: number | null;
   occupied_full_flag: boolean | null;
   semester: string | null;
   semester_year: string | null;
   register_start_date: string | null;
   register_end_date: string | null;
+  class_start_date: string | null;
+  class_end_date: string | null;
   filter_status: '접수대기' | '접수중' | '정원마감';
   is_excluded: boolean;
   collected_at: string;
+  // [상세보기](2026-10-03 사용자 지시): "상세데이터 가져왔다는데 볼수가없네..
+  // 각 row 누르면 상세데이터 볼수있도록 해줘" — emart-culture-club-detail.mjs가
+  // 채워주는 컬럼들.
+  class_detail_title: string | null;
+  class_detail_content: string | null;
+  main_image_bucket: string | null;
+  main_image_region: string | null;
+  main_image_key: string | null;
+  detail_fetched_at: string | null;
 };
 
 const CATEGORY_OPTIONS: { code: string; label: string }[] = [
@@ -49,6 +62,78 @@ function formatTimeRange(start: string | null, end: string | null) {
   return `${fmt(start)} ~ ${fmt(end)}`;
 }
 
+// [상세보기 모달](2026-10-03 사용자 지시) — row를 누르면 상세설명/이미지를
+// 보여준다. 이미지는 S3 bucket/region/key만 저장돼 있는데, 기본 S3 URL
+// (https://{bucket}.s3.{region}.amazonaws.com/{key})로 실제 접근해보니
+// 403(비공개 버킷 또는 별도 CDN 경로 필요)이라 <img>로 바로 띄우지 못한다 —
+// 추측으로 다른 CDN 도메인을 지어내지 않고, 원본 참조값만 텍스트로 보여준다
+// (나중에 실제 이미지 URL 패턴을 확인하면 교체).
+function DetailModal({ row, onClose }: { row: ClassRow; onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
+      <div
+        className="bg-white rounded-xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-y-auto p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-2 mb-3">
+          <h2 className="text-sm font-bold text-gray-900">{row.class_title}</h2>
+          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-700 shrink-0">
+            ✕
+          </button>
+        </div>
+
+        <dl className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-gray-600 mb-4">
+          <dt className="text-gray-400">지점</dt>
+          <dd>{row.store_name ?? '-'}</dd>
+          <dt className="text-gray-400">카테고리</dt>
+          <dd>{row.sub_category_name ?? '-'}</dd>
+          <dt className="text-gray-400">요일/시간</dt>
+          <dd>
+            {(row.class_day ?? []).join(',')} {formatTimeRange(row.start_time, row.end_time)}
+          </dd>
+          <dt className="text-gray-400">수강료</dt>
+          <dd>
+            {row.class_fee != null ? `${row.class_fee.toLocaleString('ko-KR')}원` : '-'}
+            {row.class_material_fee ? ` (+재료비 ${row.class_material_fee.toLocaleString('ko-KR')}원)` : ''}
+          </dd>
+          <dt className="text-gray-400">정원</dt>
+          <dd>
+            {row.min_class_capacity ?? '-'} ~ {row.class_capacity ?? '-'}명
+          </dd>
+          <dt className="text-gray-400">강좌 기간</dt>
+          <dd>
+            {row.class_start_date ?? '-'} ~ {row.class_end_date ?? '-'}
+          </dd>
+          <dt className="text-gray-400">접수 기간</dt>
+          <dd>
+            {row.register_start_date ?? '-'} ~ {row.register_end_date ?? '-'}
+          </dd>
+        </dl>
+
+        {row.detail_fetched_at ? (
+          <>
+            {row.class_detail_title && <p className="text-sm font-semibold text-gray-900 mb-1">{row.class_detail_title}</p>}
+            {row.class_detail_content ? (
+              <p className="text-sm text-gray-700 whitespace-pre-line">{row.class_detail_content}</p>
+            ) : (
+              <p className="text-sm text-gray-400">상세설명이 등록되어 있지 않은 강좌입니다.</p>
+            )}
+            {row.main_image_key && (
+              <p className="text-xs text-gray-400 mt-3 break-all">
+                🖼️ 이미지 참조(공개 URL 미확인): {row.main_image_bucket}/{row.main_image_key}
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="text-sm text-gray-400">
+            아직 상세정보가 수집되지 않았습니다(scripts/ingest/emart-culture-club-detail.mjs가 매일 새벽 증분 수집합니다).
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function EmartCultureClubPanel() {
   const [rows, setRows] = useState<ClassRow[] | null>(null);
   const [total, setTotal] = useState(0);
@@ -56,6 +141,7 @@ export function EmartCultureClubPanel() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const [selectedRow, setSelectedRow] = useState<ClassRow | null>(null);
 
   function loadRows() {
     setIsLoading(true);
@@ -170,9 +256,10 @@ export function EmartCultureClubPanel() {
               {rows.map((row) => (
                 <tr
                   key={row.id}
-                  className={row.is_excluded ? 'bg-gray-100 opacity-60' : row.filter_status === '정원마감' ? 'bg-amber-50' : 'bg-white'}
+                  onClick={() => setSelectedRow(row)}
+                  className={`cursor-pointer hover:bg-blue-50/50 ${row.is_excluded ? 'bg-gray-100 opacity-60' : row.filter_status === '정원마감' ? 'bg-amber-50' : 'bg-white'}`}
                 >
-                  <td className="py-2 px-3">
+                  <td className="py-2 px-3" onClick={(e) => e.stopPropagation()}>
                     <input
                       type="checkbox"
                       checked={row.is_excluded}
@@ -216,6 +303,8 @@ export function EmartCultureClubPanel() {
           {rows.length === 0 && <p className="text-sm text-gray-400 text-center py-6">조건에 맞는 데이터가 없습니다.</p>}
         </div>
       )}
+
+      {selectedRow && <DetailModal row={selectedRow} onClose={() => setSelectedRow(null)} />}
     </div>
   );
 }

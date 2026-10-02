@@ -19,11 +19,21 @@ const ROW = {
   occupied_full_flag: false,
   semester: '가을',
   semester_year: '2026',
+  class_material_fee: null,
+  min_class_capacity: 1,
+  class_start_date: '20261003',
+  class_end_date: '20261003',
   register_start_date: '202608101000',
   register_end_date: '20261130',
   filter_status: '접수중' as const,
   is_excluded: false,
   collected_at: '2026-10-03T00:00:00.000Z',
+  class_detail_title: '상세 제목',
+  class_detail_content: '상세 설명 내용입니다.',
+  main_image_bucket: 'test-bucket',
+  main_image_region: 'ap-northeast-2',
+  main_image_key: 'category/4/404/test-key',
+  detail_fetched_at: '2026-10-03T01:00:00.000Z',
 };
 
 function mockFetch(rows: unknown[], total: number) {
@@ -146,6 +156,55 @@ describe('EmartCultureClubPanel', () => {
       const checkbox = await screen.findByRole('checkbox', { name: '키즈 댄스 클래스 노출 제외' });
       expect(checkbox).toBeChecked();
       expect(screen.getByText('키즈 댄스 클래스')).toHaveClass('line-through');
+    });
+  });
+
+  // [상세보기](2026-10-03 사용자 지시): "상세데이터 가져왔다는데 볼수가없네..
+  // 각 row 누르면 상세데이터 볼수있도록 해줘"
+  describe('상세보기 모달', () => {
+    it('행을 누르면 상세 모달이 열리고 상세설명을 보여준다', async () => {
+      vi.stubGlobal('fetch', mockFetch([ROW], 1));
+
+      render(<EmartCultureClubPanel />);
+      fireEvent.click(screen.getByText('조회하기'));
+      fireEvent.click(await screen.findByText('키즈 댄스 클래스'));
+
+      expect(await screen.findByText('상세 제목')).toBeInTheDocument();
+      expect(screen.getByText('상세 설명 내용입니다.')).toBeInTheDocument();
+    });
+
+    it('체크박스를 눌러도 모달이 열리지 않는다(이벤트 버블링 방지)', async () => {
+      vi.stubGlobal('fetch', mockFetch([ROW], 1));
+
+      render(<EmartCultureClubPanel />);
+      fireEvent.click(screen.getByText('조회하기'));
+      const checkbox = await screen.findByRole('checkbox', { name: '키즈 댄스 클래스 노출 제외' });
+      fireEvent.click(checkbox);
+
+      expect(screen.queryByText('상세 설명 내용입니다.')).not.toBeInTheDocument();
+    });
+
+    it('아직 상세정보가 수집되지 않은 강좌는 안내 문구를 보여준다', async () => {
+      vi.stubGlobal('fetch', mockFetch([{ ...ROW, detail_fetched_at: null, class_detail_content: null }], 1));
+
+      render(<EmartCultureClubPanel />);
+      fireEvent.click(screen.getByText('조회하기'));
+      fireEvent.click(await screen.findByText('키즈 댄스 클래스'));
+
+      expect(await screen.findByText(/아직 상세정보가 수집되지 않았습니다/)).toBeInTheDocument();
+    });
+
+    it('✕ 버튼을 누르면 모달이 닫힌다', async () => {
+      vi.stubGlobal('fetch', mockFetch([ROW], 1));
+
+      render(<EmartCultureClubPanel />);
+      fireEvent.click(screen.getByText('조회하기'));
+      fireEvent.click(await screen.findByText('키즈 댄스 클래스'));
+      await screen.findByText('상세 설명 내용입니다.');
+
+      fireEvent.click(screen.getByText('✕'));
+
+      expect(screen.queryByText('상세 설명 내용입니다.')).not.toBeInTheDocument();
     });
   });
 });
