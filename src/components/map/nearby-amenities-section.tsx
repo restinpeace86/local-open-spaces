@@ -32,6 +32,7 @@ import {
 type OriginInfo = {
   lat: number;
   lng: number;
+  name: string;
   originTable: 'open_spaces' | 'events';
   originId: string;
 };
@@ -40,13 +41,28 @@ function formatDistance(meters: number): string {
   return meters < 1000 ? `${Math.round(meters)}m` : `${(meters / 1000).toFixed(1)}km`;
 }
 
-function DirectionsLink({ lat, lng, name }: { lat: number; lng: number; name: string }) {
+// [길찾기 출발지/이동수단 버그 수정](2026-10-02 사용자 지시): "길찾기하면... 출발지가
+// 현재위치기준으로 잡혀있네... 지금 현재위치기준이 아니고 우리가 가는 이벤트 스팟..
+// 목적지가 출발지가 되어야하고 그 주변식당이 도착지가 되어야하지. 그리고... default가
+// 차로 되어있는데 도보 선택해줄수있어?" — 기존 `/link/to/...`는 출발지를 지정할 방법이
+// 없어 앱이 항상 사용자의 실시간 GPS 위치를 출발지로 잡는다(이게 버그의 원인이었다).
+// 카카오맵 공식 URL 스킴 문서(apis.map.kakao.com/web/guide) 확인 결과 출발지·도착지·
+// 이동수단을 모두 지정하는 전용 형식이 있다: `/link/by/{car|walk|bicycle|traffic}/
+// {출발지명},{위도},{경도}/{도착지명},{위도},{경도}`. 이걸로 출발지=현재 보고 있는
+// 스팟/이벤트, 도착지=주차장/식당, 이동수단=도보(walk)로 명시한다.
+function DirectionsLink({
+  origin,
+  destination,
+}: {
+  origin: { lat: number; lng: number; name: string };
+  destination: { lat: number; lng: number; name: string };
+}) {
   // [기존 관례 재사용] 이 프로젝트는 "외부 지도 앱으로 내보내지 않고 인앱에서 해결"
   // 원칙(2026-08-30 결정)을 상세 모달 자체 길찾기에 적용했지만, 이 카드는 상세 모달이
   // 하나 더 열리는 구조가 아니라 "여기로 가는 길" 자체가 목적이라 카카오맵 앱/웹으로
   // 바로 연결하는 게 자연스럽다 — Tmap 연동 전까지는 정확한 인앱 경로선을 그릴 방법이
   // 없기도 하다(직선거리뿐).
-  const url = `https://map.kakao.com/link/to/${encodeURIComponent(name)},${lat},${lng}`;
+  const url = `https://map.kakao.com/link/by/walk/${encodeURIComponent(origin.name)},${origin.lat},${origin.lng}/${encodeURIComponent(destination.name)},${destination.lat},${destination.lng}`;
   return (
     <a
       href={url}
@@ -60,7 +76,7 @@ function DirectionsLink({ lat, lng, name }: { lat: number; lng: number; name: st
   );
 }
 
-function ParkingCard({ lot }: { lot: NearbyParkingLot }) {
+function ParkingCard({ lot, origin }: { lot: NearbyParkingLot; origin: OriginInfo }) {
   return (
     <div className="flex items-center justify-between gap-2 py-2 px-3 bg-gray-50 rounded-lg">
       <div className="min-w-0 flex-1">
@@ -70,12 +86,12 @@ function ParkingCard({ lot }: { lot: NearbyParkingLot }) {
           {lot.is_paid !== null && <> · {lot.is_paid ? '유료' : '무료'}</>}
         </p>
       </div>
-      <DirectionsLink lat={lot.lat} lng={lot.lng} name={lot.name} />
+      <DirectionsLink origin={origin} destination={lot} />
     </div>
   );
 }
 
-function RestaurantCard({ spot, badges }: { spot: NearbyItem; badges?: string[] }) {
+function RestaurantCard({ spot, origin, badges }: { spot: NearbyItem; origin: OriginInfo; badges?: string[] }) {
   return (
     <div className="flex items-center justify-between gap-2 py-2 px-3 bg-gray-50 rounded-lg">
       <div className="min-w-0 flex-1">
@@ -85,7 +101,7 @@ function RestaurantCard({ spot, badges }: { spot: NearbyItem; badges?: string[] 
           <p className="text-xs text-emerald-700 mt-0.5 truncate">🏷️ {badges.join(' · ')}</p>
         )}
       </div>
-      <DirectionsLink lat={spot.lat} lng={spot.lng} name={spot.name} />
+      <DirectionsLink origin={origin} destination={spot} />
     </div>
   );
 }
@@ -151,7 +167,7 @@ function ParkingAccordion(origin: OriginInfo) {
       onToggle={() => setIsOpen((v) => !v)}
     >
       {lots?.map((lot) => (
-        <ParkingCard key={lot.id} lot={lot} />
+        <ParkingCard key={lot.id} lot={lot} origin={origin} />
       ))}
     </AccordionShell>
   );
@@ -195,7 +211,7 @@ function RestaurantAccordion(origin: OriginInfo) {
       onToggle={() => setIsOpen((v) => !v)}
     >
       {spots?.map((spot) => (
-        <RestaurantCard key={spot.id} spot={spot} badges={badges[spot.id]?.labels} />
+        <RestaurantCard key={spot.id} spot={spot} origin={origin} badges={badges[spot.id]?.labels} />
       ))}
     </AccordionShell>
   );

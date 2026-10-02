@@ -941,7 +941,13 @@ export function DetailModal({
                   좌표로는 500m/1km 반경 검색 자체가 무의미) 노출한다. */}
               {hasExactLocation && (
                 <div className="mt-4">
-                  <NearbyAmenitiesSection lat={item.lat} lng={item.lng} originTable="events" originId={item.id} />
+                  <NearbyAmenitiesSection
+                    lat={item.lat}
+                    lng={item.lng}
+                    name={item.name}
+                    originTable="events"
+                    originId={item.id}
+                  />
                 </div>
               )}
             </div>
@@ -1304,7 +1310,13 @@ export function DetailModal({
                 정확한 좌표가 있을 때만 노출한다. */}
             {hasExactLocation && (
               <div className="mt-4">
-                <NearbyAmenitiesSection lat={item.lat} lng={item.lng} originTable="open_spaces" originId={item.id} />
+                <NearbyAmenitiesSection
+                  lat={item.lat}
+                  lng={item.lng}
+                  name={item.name}
+                  originTable="open_spaces"
+                  originId={item.id}
+                />
               </div>
             )}
 

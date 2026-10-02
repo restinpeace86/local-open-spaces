@@ -73,7 +73,7 @@ describe('NearbyAmenitiesSection', () => {
     vi.stubGlobal('fetch', mockFetchRouter());
 
     const { NearbyAmenitiesSection } = await import('./nearby-amenities-section');
-    render(<NearbyAmenitiesSection lat={37.5} lng={127.0} originTable="open_spaces" originId="spot-origin" />);
+    render(<NearbyAmenitiesSection lat={37.5} lng={127.0} name="2026 인사동 엔틱&아트페어" originTable="open_spaces" originId="spot-origin" />);
 
     expect(await screen.findByText('🅿️ 주변 공영주차장 (1곳)')).toBeInTheDocument();
     expect(screen.getByText('🍽️ 주변 키즈친화 식당 (1곳)')).toBeInTheDocument();
@@ -86,7 +86,7 @@ describe('NearbyAmenitiesSection', () => {
     vi.stubGlobal('fetch', mockFetchRouter());
 
     const { NearbyAmenitiesSection } = await import('./nearby-amenities-section');
-    render(<NearbyAmenitiesSection lat={37.5} lng={127.0} originTable="open_spaces" originId="spot-origin" />);
+    render(<NearbyAmenitiesSection lat={37.5} lng={127.0} name="2026 인사동 엔틱&아트페어" originTable="open_spaces" originId="spot-origin" />);
 
     await waitFor(() => expect(getNearbyParkingLots).toHaveBeenCalled());
     expect(screen.queryByText(/주변 공영주차장/)).not.toBeInTheDocument();
@@ -100,7 +100,7 @@ describe('NearbyAmenitiesSection', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const { NearbyAmenitiesSection } = await import('./nearby-amenities-section');
-    render(<NearbyAmenitiesSection lat={37.5} lng={127.0} originTable="open_spaces" originId="spot-origin" />);
+    render(<NearbyAmenitiesSection lat={37.5} lng={127.0} name="2026 인사동 엔틱&아트페어" originTable="open_spaces" originId="spot-origin" />);
 
     const toggle = await screen.findByText('🅿️ 주변 공영주차장 (1곳)');
     fireEvent.click(toggle);
@@ -110,13 +110,44 @@ describe('NearbyAmenitiesSection', () => {
     expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining('/api/nearby/walking-distance'), expect.anything());
   });
 
+  // [길찾기 출발지/이동수단 버그 수정](2026-10-02 사용자 지시): "길찾기하면 카카오
+  // 네비로 넘어오고 출발지가 현재위치기준으로 잡혀있네... 목적지가 출발지가 되어야
+  // 하고 그 주변식당이 도착지가 되어야하지. 그리고... default가 차로 되어있는데
+  // 도보 선택해줄수있어?" — 길찾기 링크가 (1) 현재 보고 있는 스팟/이벤트를
+  // 출발지로, 주차장/식당을 도착지로 명시하고 (2) 이동수단을 도보(walk)로
+  // 지정하는지 검증한다.
+  it('길찾기 링크는 현재 스팟/이벤트를 출발지로, 도보 모드로 지정한다', async () => {
+    getNearbyParkingLots.mockResolvedValue([PARKING_LOT]);
+    getNearbyKidsRestaurants.mockResolvedValue([]);
+    vi.stubGlobal('fetch', mockFetchRouter());
+
+    const { NearbyAmenitiesSection } = await import('./nearby-amenities-section');
+    render(
+      <NearbyAmenitiesSection
+        lat={37.5}
+        lng={127.0}
+        name="2026 인사동 엔틱&아트페어"
+        originTable="events"
+        originId="event-1"
+      />
+    );
+
+    fireEvent.click(await screen.findByText('🅿️ 주변 공영주차장 (1곳)'));
+    const link = await screen.findByText('길찾기 ↗');
+
+    expect(link).toHaveAttribute(
+      'href',
+      `https://map.kakao.com/link/by/walk/${encodeURIComponent('2026 인사동 엔틱&아트페어')},37.5,127/${encodeURIComponent('테스트 공영주차장')},37.501,127.001`
+    );
+  });
+
   it('다시 누르면 접혀서 카드 목록이 사라진다', async () => {
     getNearbyParkingLots.mockResolvedValue([PARKING_LOT]);
     getNearbyKidsRestaurants.mockResolvedValue([]);
     vi.stubGlobal('fetch', mockFetchRouter());
 
     const { NearbyAmenitiesSection } = await import('./nearby-amenities-section');
-    render(<NearbyAmenitiesSection lat={37.5} lng={127.0} originTable="open_spaces" originId="spot-origin" />);
+    render(<NearbyAmenitiesSection lat={37.5} lng={127.0} name="2026 인사동 엔틱&아트페어" originTable="open_spaces" originId="spot-origin" />);
 
     const toggle = await screen.findByText('🅿️ 주변 공영주차장 (1곳)');
     fireEvent.click(toggle);

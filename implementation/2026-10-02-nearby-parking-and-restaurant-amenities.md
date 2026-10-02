@@ -139,6 +139,39 @@
 - `npx vitest run nearby-amenities-section.test.tsx` 4개 통과.
 - `npx tsc --noEmit` / `npm run test`(252개 파일 2,660개) / `npm run build` 전부 통과.
 
+## 후속 — 길찾기 출발지/이동수단 버그 수정(2026-10-02)
+사용자 실측 버그 리포트: "2026 인사동 엔틱&아트페어 이벤트... 정성순대 울산옥동점이
+직선 927m인데... 길찾기하면 카카오네비로 넘어오고 출발지가 현재위치기준으로
+잡혀있네... 지금 현재위치기준이 아니고 우리가 가는 이벤트 스팟.. 목적지가 출발지가
+되어야하고 그 주변식당이 도착지가 되어야하지. 그리고... default가 차로 되어있는데
+도보 선택해줄수있어?"
+
+### 원인
+기존 `DirectionsLink`가 쓰던 `https://map.kakao.com/link/to/{name},{lat},{lng}`는
+목적지만 지정하는 형식이라, 카카오맵/내비 앱이 항상 사용자의 실시간 GPS 위치를
+출발지로 자동 적용한다 — 출발지를 지정할 방법 자체가 없는 URL 스킴이었다.
+
+### 조사
+카카오맵 공식 URL 스킴 문서(apis.map.kakao.com/web/guide)를 WebFetch로 직접
+확인(추측 금지) — 출발지·도착지·이동수단을 모두 지정하는 전용 형식 확인:
+`https://map.kakao.com/link/by/{car|walk|bicycle|traffic}/{출발지명},{위도},{경도}/
+{도착지명},{위도},{경도}`(첫 좌표가 출발지, 마지막이 도착지, 중간은 경유지).
+
+### 수정 — `src/components/map/nearby-amenities-section.tsx`
+- `OriginInfo`에 `name: string` 추가(링크의 출발지 라벨용).
+- `DirectionsLink`를 `{lat,lng,name}` 단일 지점 대신 `{origin, destination}` 두
+  지점을 받도록 변경, `/link/by/walk/...` 형식으로 출발지=현재 스팟/이벤트,
+  도착지=주차장/식당, 이동수단=도보를 전부 명시.
+- `ParkingCard`/`RestaurantCard`가 `origin`을 받아 `DirectionsLink`에 전달하도록 수정.
+- `src/components/map/detail-modal.tsx`: `NearbyAmenitiesSection` 호출 2곳(EVENT/
+  SPACE 분기)에 `name={item.name}` prop 추가.
+- 테스트: 길찾기 링크의 `href`가 올바른 출발지/도착지/도보 모드로 생성되는지
+  검증하는 테스트 신규 추가(5개로 재구성).
+
+### 검증
+- `npx vitest run nearby-amenities-section.test.tsx` 5개 통과(신규 링크 검증 포함).
+- `npx tsc --noEmit` / `npm run test`(252개 파일 2,661개) / `npm run build` 전부 통과.
+
 ## 특이 사항 / 남은 작업
 - **Tmap 키 미등록 상태** — 사용자가 추후 가입 예정("나중에 가입할게"). 그 전까지는
   모든 도보거리가 직선거리 기반 추정치(`isEstimate:true`)로 표시된다. 키 등록 후:
