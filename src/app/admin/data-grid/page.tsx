@@ -131,6 +131,9 @@ export default async function AdminDataGridPage() {
         // [홈플러스 문화센터 강좌 리스트 탭](2026-10-02 사용자 지시): HomeplusLectureListPanel도
         // 동일하게 자기완결적이라 빈 객체만 넘긴다.
         homeplus_lecture_list: {},
+        // [이마트 컬처클럽 강좌 리스트 탭](2026-10-03 사용자 지시): EmartCultureClubPanel도
+        // 동일하게 자기완결적이라 빈 객체만 넘긴다.
+        emart_culture_club: {},
       }}
     />
   );

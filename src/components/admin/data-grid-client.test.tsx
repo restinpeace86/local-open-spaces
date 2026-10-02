@@ -109,6 +109,7 @@ const EMPTY_FILTER_OPTIONS = {
   myrealtrip_search: {},
   spot_notices: {},
   homeplus_lecture_list: {},
+  emart_culture_club: {},
 };
 
 describe('AdminDataGridClient — curated_items 탭 통합', () => {

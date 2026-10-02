@@ -272,6 +272,117 @@ export type Database = {
         }
         Relationships: []
       }
+      emart_culture_club_classes: {
+        Row: {
+          channel_offline: boolean | null
+          channel_online: boolean | null
+          class_capacity: number | null
+          class_closed_date: string | null
+          class_day: string[] | null
+          class_end_date: string | null
+          class_fee: number | null
+          class_id: string
+          class_material_fee: number | null
+          class_original_fee: number | null
+          class_start_date: string | null
+          class_title: string
+          class_type: string | null
+          classroom: string | null
+          collected_at: string
+          created_at: string
+          end_time: string | null
+          filter_status: string
+          id: number
+          main_category_code: string | null
+          main_category_name: string | null
+          min_class_capacity: number | null
+          occupied_full_flag: boolean | null
+          register_end_date: string | null
+          register_start_date: string | null
+          semester: string | null
+          semester_year: string | null
+          start_time: string | null
+          store_center: string | null
+          store_code: string | null
+          store_name: string | null
+          sub_category_code: string | null
+          sub_category_name: string | null
+          updated_at: string
+        }
+        Insert: {
+          channel_offline?: boolean | null
+          channel_online?: boolean | null
+          class_capacity?: number | null
+          class_closed_date?: string | null
+          class_day?: string[] | null
+          class_end_date?: string | null
+          class_fee?: number | null
+          class_id: string
+          class_material_fee?: number | null
+          class_original_fee?: number | null
+          class_start_date?: string | null
+          class_title: string
+          class_type?: string | null
+          classroom?: string | null
+          collected_at?: string
+          created_at?: string
+          end_time?: string | null
+          filter_status: string
+          id?: never
+          main_category_code?: string | null
+          main_category_name?: string | null
+          min_class_capacity?: number | null
+          occupied_full_flag?: boolean | null
+          register_end_date?: string | null
+          register_start_date?: string | null
+          semester?: string | null
+          semester_year?: string | null
+          start_time?: string | null
+          store_center?: string | null
+          store_code?: string | null
+          store_name?: string | null
+          sub_category_code?: string | null
+          sub_category_name?: string | null
+          updated_at?: string
+        }
+        Update: {
+          channel_offline?: boolean | null
+          channel_online?: boolean | null
+          class_capacity?: number | null
+          class_closed_date?: string | null
+          class_day?: string[] | null
+          class_end_date?: string | null
+          class_fee?: number | null
+          class_id?: string
+          class_material_fee?: number | null
+          class_original_fee?: number | null
+          class_start_date?: string | null
+          class_title?: string
+          class_type?: string | null
+          classroom?: string | null
+          collected_at?: string
+          created_at?: string
+          end_time?: string | null
+          filter_status?: string
+          id?: never
+          main_category_code?: string | null
+          main_category_name?: string | null
+          min_class_capacity?: number | null
+          occupied_full_flag?: boolean | null
+          register_end_date?: string | null
+          register_start_date?: string | null
+          semester?: string | null
+          semester_year?: string | null
+          start_time?: string | null
+          store_center?: string | null
+          store_code?: string | null
+          store_name?: string | null
+          sub_category_code?: string | null
+          sub_category_name?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       event_operating_exceptions: {
         Row: {
           created_at: string

@@ -183,6 +183,15 @@ export const PIPELINE_AGENTS = {
     description: '서울시 공영주차장 안내 정보 수집(GetParkInfo) — open_spaces 아님, 주변 주차장 아코디언 전용',
     period: 'monthly',
   },
+
+  // [이마트 컬처클럽 강좌 리스트 수집](2026-10-03 사용자 지시): 홈플러스와 달리
+  // 로그인/Playwright 불필요 — 공개 AWS AppSync GraphQL API 직접 호출. open_spaces가
+  // 아닌 전용 테이블(emart_culture_club_classes)이라 run-daily.mjs의 STEPS에
+  // 편입하지 않고 독립 스텝으로 둔다(이 소스만 자체적으로 pipeline_logs 기록).
+  EMART_CULTURE_CLUB: {
+    description: '이마트 컬처클럽 강좌 리스트 수집(공개 GraphQL API) — open_spaces 아님, 관리자 검토용',
+    period: 'daily',
+  },
 };
 
 export function getAgentMeta(sourceKey) {

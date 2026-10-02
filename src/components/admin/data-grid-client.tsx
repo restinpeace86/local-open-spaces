@@ -20,6 +20,7 @@ import { CategoryMappingPanel } from '@/components/admin/category-mapping-panel'
 import { MyRealTripSearchPanel } from '@/components/admin/myrealtrip-search-panel';
 import { SpotNoticesPanel } from '@/components/admin/spot-notices-panel';
 import { HomeplusLectureListPanel } from '@/components/admin/homeplus-lecture-list-panel';
+import { EmartCultureClubPanel } from '@/components/admin/emart-culture-club-panel';
 import { ServiceCategory } from '@/lib/admin/service-category';
 import { isKidsSpaceReviewCandidate } from '@/lib/admin/kids-space-candidate';
 
@@ -59,7 +60,8 @@ export type AdminTable =
   | 'category_mapping'
   | 'myrealtrip_search'
   | 'spot_notices'
-  | 'homeplus_lecture_list';
+  | 'homeplus_lecture_list'
+  | 'emart_culture_club';
 
 export type AdminOpenSpaceRow = {
   id: string;
@@ -231,6 +233,7 @@ type FilterOptions = {
   myrealtrip_search: Record<string, never>;
   spot_notices: Record<string, never>;
   homeplus_lecture_list: Record<string, never>;
+  emart_culture_club: Record<string, never>;
 };
 
 type TriState = 'all' | 'true' | 'false';
@@ -272,6 +275,7 @@ const TAB_LABEL: Record<AdminTable, string> = {
   // tab 하나 더 만들어서 하는건 안돼?" — 다른 자기완결 탭과 동일한 이유로 분리
   // (제5장 제4조, homeplus-lecture-list-panel.tsx 주석 참고).
   homeplus_lecture_list: '🏫 홈플러스 강좌 리스트',
+  emart_culture_club: '🛒 이마트 컬처클럽',
 };
 
 // [타임존 버그 수정](2026-09-15 사용자 지시, todo.md [개선사항 4]): 기존
@@ -897,6 +901,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     myrealtrip_search: false,
     spot_notices: false,
     homeplus_lecture_list: false,
+    emart_culture_club: false,
   });
 
   // [노출 중분류 개별 행 수정](2026-09-05 사용자 지시) 참고: open_spaces 행을 열 때
@@ -1286,6 +1291,8 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
         <SpotNoticesPanel />
       ) : tab === 'homeplus_lecture_list' ? (
         <HomeplusLectureListPanel />
+      ) : tab === 'emart_culture_club' ? (
+        <EmartCultureClubPanel />
       ) : (
       <>
       {/* [관리자 화면 모바일 필터 영역 축소](2026-09-06 사용자 지시, 2차 수정): "중분류나
