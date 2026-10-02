@@ -144,7 +144,11 @@ export const CORE_SPOT_CATEGORIES: CoreSpotCategory[] = [
     id: 'culture-center',
     label: '문화센터/문화의집',
     emoji: '🏛️',
-    minors: ['문화의집', '문화원'],
+    // [대형마트 문화센터 신규 표준중분류](2026-10-03 사용자 지시): "이마트 지점에
+    // 대하여 open_spaces에 문화시설 대분류에 '대형마트문화센터'로 해당 스팟들
+    // 넣어줘" — 기존 문화센터 칩에 동일 계열로 편입(새 칩 신설 대신 재사용,
+    // 제5장 제4조 기존 구조 우선).
+    minors: ['문화의집', '문화원', '대형마트문화센터'],
     major: 'culture-facility',
   },
   {
