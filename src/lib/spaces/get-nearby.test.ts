@@ -102,3 +102,70 @@ describe('getSpotsByServiceCategory', () => {
     await expect(getSpotsByServiceCategory('cat-1')).rejects.toThrow('노출 중분류별 공간 조회 실패');
   });
 });
+
+// [스팟/이벤트 상세 "주변 주차장/식당" 아코디언](2026-10-02 사용자 지시) — 신규 wrapper
+// 2개. 단순 RPC 호출이지만 getNearbyKidsRestaurants는 category_min 그룹 정의(단일
+// 출처, spot-category-groups.ts)를 정확히 넘기는지가 핵심 로직이라 검증한다.
+describe('getNearbyKidsRestaurants', () => {
+  afterEach(() => {
+    vi.doUnmock('@/lib/supabase/client');
+    vi.resetModules();
+  });
+
+  it('kids-restaurant 그룹의 category_min 전체와 SPACE 필터를 RPC에 넘긴다', async () => {
+    const rpc = vi.fn(() => Promise.resolve({ data: [{ id: 's1' }], error: null }));
+    vi.doMock('@/lib/supabase/client', () => ({ createClient: () => ({ rpc }) }));
+
+    const { getNearbyKidsRestaurants } = await import('./get-nearby');
+    const result = await getNearbyKidsRestaurants(127.0, 37.5, 1000);
+
+    expect(result).toEqual([{ id: 's1' }]);
+    expect(rpc).toHaveBeenCalledWith('get_nearby_spaces_and_events', {
+      user_lng: 127.0,
+      user_lat: 37.5,
+      radius_meters: 1000,
+      p_item_type: 'SPACE',
+      p_category_mins: ['놀이방식당', '키즈친화 식당(오케이존)'],
+    });
+  });
+
+  it('RPC가 에러를 반환하면 에러를 던진다', async () => {
+    vi.doMock('@/lib/supabase/client', () => ({
+      createClient: () => ({ rpc: () => Promise.resolve({ data: null, error: { message: 'db down' } }) }),
+    }));
+
+    const { getNearbyKidsRestaurants } = await import('./get-nearby');
+    await expect(getNearbyKidsRestaurants(127.0, 37.5, 1000)).rejects.toThrow('주변 키즈친화 식당 조회 실패');
+  });
+});
+
+describe('getNearbyParkingLots', () => {
+  afterEach(() => {
+    vi.doUnmock('@/lib/supabase/client');
+    vi.resetModules();
+  });
+
+  it('get_nearby_parking_lots RPC를 올바른 파라미터로 호출한다', async () => {
+    const rpc = vi.fn(() => Promise.resolve({ data: [{ id: 1, name: '테스트 주차장' }], error: null }));
+    vi.doMock('@/lib/supabase/client', () => ({ createClient: () => ({ rpc }) }));
+
+    const { getNearbyParkingLots } = await import('./get-nearby');
+    const result = await getNearbyParkingLots(127.0, 37.5, 500);
+
+    expect(result).toEqual([{ id: 1, name: '테스트 주차장' }]);
+    expect(rpc).toHaveBeenCalledWith('get_nearby_parking_lots', {
+      user_lng: 127.0,
+      user_lat: 37.5,
+      radius_meters: 500,
+    });
+  });
+
+  it('RPC가 에러를 반환하면 에러를 던진다', async () => {
+    vi.doMock('@/lib/supabase/client', () => ({
+      createClient: () => ({ rpc: () => Promise.resolve({ data: null, error: { message: 'db down' } }) }),
+    }));
+
+    const { getNearbyParkingLots } = await import('./get-nearby');
+    await expect(getNearbyParkingLots(127.0, 37.5, 500)).rejects.toThrow('주변 공영주차장 조회 실패');
+  });
+});

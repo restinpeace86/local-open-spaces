@@ -174,6 +174,15 @@ export const PIPELINE_AGENTS = {
     description: '홈플러스 문화센터 강좌 리스트 수집(Kids/Baby 전체, 전국 2그룹 검색) — 로그인 세션 기반 Python/Playwright 배치',
     period: 'daily',
   },
+
+  // [스팟/이벤트 상세 "주변 주차장" 아코디언](2026-10-02 사용자 지시): open_spaces가 아닌
+  // 전용 테이블(seoul_public_parking_lots)에 적재하는 독립 소스라 run-monthly.mjs의
+  // STEPS/recordBatchRun(open_spaces/events 건수 집계 전용)에 편입하지 않고, 이 소스만
+  // 자체적으로 pipeline_logs에 기록한다(scripts/ingest/seoul-public-parking.mjs 참고).
+  SEOUL_PUBLIC_PARKING: {
+    description: '서울시 공영주차장 안내 정보 수집(GetParkInfo) — open_spaces 아님, 주변 주차장 아코디언 전용',
+    period: 'monthly',
+  },
 };
 
 export function getAgentMeta(sourceKey) {

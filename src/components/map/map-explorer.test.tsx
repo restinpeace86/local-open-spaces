@@ -779,6 +779,13 @@ describe('MapExplorer 그룹 펼쳐보기(2026-09-09)', () => {
 
   it('버튼을 누르면 get_spot_group_members를 호출해 그룹 멤버 목록을 보여주고, 하나를 고르면 그 상세로 이어진다', async () => {
     rpcMock.mockResolvedValueOnce({ data: [makeSpaceRow({ group_id: 'group-1' })], error: null });
+    // [주변 주차장/식당 아코디언](2026-10-02): 마커 클릭으로 상세 모달이 뜨면
+    // NearbyAmenitiesSection이 get_nearby_parking_lots/get_nearby_spaces_and_events(식당)를
+    // 추가로 호출한다 — rpcMock이 호출 순서로만 큐를 소비하는 구조라, 이 두 호출이
+    // 아래 get_spot_group_members용 응답을 가로채지 않도록 그 사이에 빈 응답 2개를
+    // 끼워 넣는다(실제 어떤 RPC가 호출됐는지는 무관하게 순서만 맞추면 된다).
+    rpcMock.mockResolvedValueOnce({ data: [], error: null });
+    rpcMock.mockResolvedValueOnce({ data: [], error: null });
     rpcMock.mockResolvedValueOnce({
       data: [
         makeSpaceRow({ id: 'space-1', name: '용인어린이상상의숲', group_id: 'group-1' }),

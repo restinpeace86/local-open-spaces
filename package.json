@@ -36,6 +36,7 @@
     "ingest:rural-experience-village": "node scripts/ingest/rural-experience-village.mjs",
     "ingest:rural-education-farm": "node scripts/ingest/rural-education-farm.mjs",
     "ingest:enrich-gg-culture-locations": "node scripts/ingest/enrich-gg-culture-event-locations.mjs",
+    "ingest:seoul-public-parking": "node scripts/ingest/seoul-public-parking.mjs",
     "ingest:daily": "node scripts/ingest/run-daily.mjs",
     "ingest:monthly": "node scripts/ingest/run-monthly.mjs"
   },

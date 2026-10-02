@@ -14,6 +14,7 @@ import { EventOperatingCalendarSheet } from '@/components/map/event-operating-ca
 import { BookmarkButton } from '@/components/community/bookmark-button';
 import { KIDS_RESTAURANT_CATEGORY_MIN } from '@/lib/spaces/spot-category-groups';
 import { usePublishedSpotNotices, SpotNoticesSection } from '@/components/common/spot-notices-section';
+import { NearbyAmenitiesSection } from '@/components/map/nearby-amenities-section';
 import { EventReservationReminderHint } from '@/components/common/event-reservation-reminder-hint';
 import { isOpenSpaceClosedOn } from '@/lib/spaces/open-space-closure';
 
@@ -933,6 +934,16 @@ export function DetailModal({
                   📍 {item.sigungu_name ? `${item.sigungu_name} 일대 (정확한 위치 정보 없음)` : '정확한 위치 정보가 없는 행사입니다'}
                 </p>
               )}
+
+              {/* [주변 주차장/식당 아코디언](2026-10-02 사용자 지시): "주차 안내 아래에
+                  자연스럽게 이어서 붙이면, 부모 유저들이 스크롤을 내리면서 한눈에 외출
+                  동선을 완벽하게 짤 수 있습니다." 정확한 좌표가 있을 때만(근사/미상
+                  좌표로는 500m/1km 반경 검색 자체가 무의미) 노출한다. */}
+              {hasExactLocation && (
+                <div className="mt-4">
+                  <NearbyAmenitiesSection lat={item.lat} lng={item.lng} originTable="events" originId={item.id} />
+                </div>
+              )}
             </div>
           </div>
 
@@ -1287,6 +1298,14 @@ export function DetailModal({
               <p className="mt-4 text-sm text-gray-400">
                 📍 {item.sigungu_name ? `${item.sigungu_name} 일대 (정확한 위치 정보 없음)` : '정확한 위치 정보가 없는 행사입니다'}
               </p>
+            )}
+
+            {/* [주변 주차장/식당 아코디언](2026-10-02 사용자 지시): EVENT 분기와 동일 —
+                정확한 좌표가 있을 때만 노출한다. */}
+            {hasExactLocation && (
+              <div className="mt-4">
+                <NearbyAmenitiesSection lat={item.lat} lng={item.lng} originTable="open_spaces" originId={item.id} />
+              </div>
             )}
 
             <div className="mt-5 flex gap-2">

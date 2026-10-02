@@ -691,6 +691,39 @@ export type Database = {
           },
         ]
       }
+      nearby_walking_distance_cache: {
+        Row: {
+          computed_at: string
+          distance_meters: number
+          duration_seconds: number
+          id: number
+          origin_id: string
+          origin_table: string
+          target_id: string
+          target_table: string
+        }
+        Insert: {
+          computed_at?: string
+          distance_meters: number
+          duration_seconds: number
+          id?: never
+          origin_id: string
+          origin_table: string
+          target_id: string
+          target_table: string
+        }
+        Update: {
+          computed_at?: string
+          distance_meters?: number
+          duration_seconds?: number
+          id?: never
+          origin_id?: string
+          origin_table?: string
+          target_id?: string
+          target_table?: string
+        }
+        Relationships: []
+      }
       open_spaces: {
         Row: {
           address: string
@@ -1159,6 +1192,84 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      seoul_public_parking_lots: {
+        Row: {
+          add_fee: number | null
+          add_minutes: number | null
+          address: string | null
+          base_fee: number | null
+          base_minutes: number | null
+          created_at: string
+          id: number
+          is_paid: boolean | null
+          kind_name: string | null
+          last_data_sync_at: string | null
+          location: unknown
+          name: string
+          operation_type_name: string | null
+          pklt_cd: string
+          realtime_info_status: string | null
+          realtime_info_status_name: string | null
+          tel: string | null
+          total_capacity: number | null
+          updated_at: string
+          weekday_close_time: string | null
+          weekday_open_time: string | null
+          weekend_close_time: string | null
+          weekend_open_time: string | null
+        }
+        Insert: {
+          add_fee?: number | null
+          add_minutes?: number | null
+          address?: string | null
+          base_fee?: number | null
+          base_minutes?: number | null
+          created_at?: string
+          id?: never
+          is_paid?: boolean | null
+          kind_name?: string | null
+          last_data_sync_at?: string | null
+          location?: unknown
+          name: string
+          operation_type_name?: string | null
+          pklt_cd: string
+          realtime_info_status?: string | null
+          realtime_info_status_name?: string | null
+          tel?: string | null
+          total_capacity?: number | null
+          updated_at?: string
+          weekday_close_time?: string | null
+          weekday_open_time?: string | null
+          weekend_close_time?: string | null
+          weekend_open_time?: string | null
+        }
+        Update: {
+          add_fee?: number | null
+          add_minutes?: number | null
+          address?: string | null
+          base_fee?: number | null
+          base_minutes?: number | null
+          created_at?: string
+          id?: never
+          is_paid?: boolean | null
+          kind_name?: string | null
+          last_data_sync_at?: string | null
+          location?: unknown
+          name?: string
+          operation_type_name?: string | null
+          pklt_cd?: string
+          realtime_info_status?: string | null
+          realtime_info_status_name?: string | null
+          tel?: string | null
+          total_capacity?: number | null
+          updated_at?: string
+          weekday_close_time?: string | null
+          weekday_open_time?: string | null
+          weekend_close_time?: string | null
+          weekend_open_time?: string | null
+        }
+        Relationships: []
       }
       service_categories: {
         Row: {
@@ -2026,6 +2137,20 @@ export type Database = {
           adopted_count: number
           author_id: string
           post_count: number
+        }[]
+      }
+      get_nearby_parking_lots: {
+        Args: { radius_meters?: number; user_lat: number; user_lng: number }
+        Returns: {
+          address: string
+          distance_meters: number
+          id: number
+          is_paid: boolean
+          lat: number
+          lng: number
+          name: string
+          tel: string
+          total_capacity: number
         }[]
       }
       get_nearby_spaces_and_events:

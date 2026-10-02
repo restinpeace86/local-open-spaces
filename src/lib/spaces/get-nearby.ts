@@ -1,4 +1,5 @@
 import { createClient } from '@/lib/supabase/client';
+import { CORE_SPOT_CATEGORIES } from '@/lib/spaces/spot-category-groups';
 
 export type NearbyItem = {
   id: string;
@@ -136,6 +137,63 @@ export async function getNearbySpacesAndEvents(
 // 노출된 항목(item.group_id 존재)을 상세에서 "다른 옵션 N건 더보기"로 클릭했을
 // 때, 같은 group_id를 공유하는 전체 멤버(대표 포함)를 가져온다. 반경 개념이 없어
 // distance_meters는 항상 -1(sentinel, getSpotsByServiceCategory와 동일 관례)이다.
+// [스팟/이벤트 상세 "주변 키즈친화 식당" 아코디언](2026-10-02 사용자 지시): "식당은
+// 이벤트 스팟 기준 1km 내의 우리가 가지고 있는 식당정보(놀이방식당 등 키즈친화식당)를
+// 보여줄꺼야" — 기존 get_nearby_spaces_and_events RPC가 이미 category_min 배열 필터를
+// 지원해(2026-09-27) 신규 RPC 없이 그대로 재사용한다. '키즈친화 식당' 그룹 정의
+// (spot-category-groups.ts)를 단일 출처로 삼아 중복 정의하지 않는다.
+const KIDS_RESTAURANT_CATEGORY_MINS =
+  CORE_SPOT_CATEGORIES.find((c) => c.id === 'kids-restaurant')?.minors ?? [];
+
+export async function getNearbyKidsRestaurants(lng: number, lat: number, radiusMeters: number): Promise<NearbyItem[]> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase.rpc('get_nearby_spaces_and_events', {
+    user_lng: lng,
+    user_lat: lat,
+    radius_meters: radiusMeters,
+    p_item_type: 'SPACE',
+    p_category_mins: KIDS_RESTAURANT_CATEGORY_MINS,
+  });
+
+  if (error) {
+    throw new Error(`주변 키즈친화 식당 조회 실패: ${error.message}`);
+  }
+
+  return (data ?? []) as NearbyItem[];
+}
+
+export type NearbyParkingLot = {
+  id: number;
+  name: string;
+  address: string;
+  distance_meters: number;
+  lng: number;
+  lat: number;
+  is_paid: boolean | null;
+  total_capacity: number | null;
+  tel: string | null;
+};
+
+// [스팟/이벤트 상세 "주변 공영주차장" 아코디언](2026-10-02 사용자 지시): open_spaces가
+// 아닌 전용 테이블(seoul_public_parking_lots)이라 get_nearby_spaces_and_events를 쓸 수
+// 없어 전용 RPC(2026-10-02-nearby-parking-and-restaurant-amenities.sql)를 호출한다.
+export async function getNearbyParkingLots(lng: number, lat: number, radiusMeters: number): Promise<NearbyParkingLot[]> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase.rpc('get_nearby_parking_lots', {
+    user_lng: lng,
+    user_lat: lat,
+    radius_meters: radiusMeters,
+  });
+
+  if (error) {
+    throw new Error(`주변 공영주차장 조회 실패: ${error.message}`);
+  }
+
+  return (data ?? []) as NearbyParkingLot[];
+}
+
 export async function getSpotGroupMembers(groupId: string): Promise<NearbyItem[]> {
   const supabase = createClient();
 
