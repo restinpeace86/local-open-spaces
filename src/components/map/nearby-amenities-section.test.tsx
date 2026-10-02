@@ -2,8 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 // [스팟/이벤트 상세 "주변 주차장/식당" 아코디언](2026-10-02 사용자 지시) 테스트:
-// 접힌 상태는 직선거리 개수만 즉시 표시, 펼치면 그제서야 도보거리 API를 호출하는
-// 2단계 전략(API 비용 절약)을 검증한다.
+// 접힌 상태는 직선거리 개수만 표시, 펼치면 직선거리 기준 카드 목록을 보여준다
+// ("지금은 직선거리 기반 직경거리로 해" — 2026-10-02, 도보거리 API 호출 제거).
 const getNearbyParkingLots = vi.fn();
 const getNearbyKidsRestaurants = vi.fn();
 
@@ -51,12 +51,9 @@ const RESTAURANT = {
   booking_status: null,
 };
 
-function mockFetchRouter({ walkingResults = [], badges = {} }: { walkingResults?: unknown[]; badges?: Record<string, unknown> } = {}) {
+function mockFetchRouter({ badges = {} }: { badges?: Record<string, unknown> } = {}) {
   return vi.fn((input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input.toString();
-    if (url.includes('/api/nearby/walking-distance')) {
-      return Promise.resolve({ ok: true, json: () => Promise.resolve({ results: walkingResults }) } as Response);
-    }
     if (url.includes('/api/nearby/spot-badges')) {
       return Promise.resolve({ ok: true, json: () => Promise.resolve({ badges }) } as Response);
     }
@@ -70,11 +67,10 @@ describe('NearbyAmenitiesSection', () => {
     vi.unstubAllGlobals();
   });
 
-  it('후보가 있으면 접힌 상태로 개수만 표시하고, 도보거리 API는 호출하지 않는다', async () => {
+  it('후보가 있으면 접힌 상태로 개수만 표시한다', async () => {
     getNearbyParkingLots.mockResolvedValue([PARKING_LOT]);
     getNearbyKidsRestaurants.mockResolvedValue([RESTAURANT]);
-    const fetchMock = mockFetchRouter();
-    vi.stubGlobal('fetch', fetchMock);
+    vi.stubGlobal('fetch', mockFetchRouter());
 
     const { NearbyAmenitiesSection } = await import('./nearby-amenities-section');
     render(<NearbyAmenitiesSection lat={37.5} lng={127.0} originTable="open_spaces" originId="spot-origin" />);
@@ -82,7 +78,6 @@ describe('NearbyAmenitiesSection', () => {
     expect(await screen.findByText('🅿️ 주변 공영주차장 (1곳)')).toBeInTheDocument();
     expect(screen.getByText('🍽️ 주변 키즈친화 식당 (1곳)')).toBeInTheDocument();
     expect(screen.queryByText(/테스트 공영주차장/)).not.toBeInTheDocument();
-    expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining('/api/nearby/walking-distance'), expect.anything());
   });
 
   it('후보가 0건이면 아코디언 자체를 숨긴다', async () => {
@@ -98,13 +93,11 @@ describe('NearbyAmenitiesSection', () => {
     expect(screen.queryByText(/주변 키즈친화 식당/)).not.toBeInTheDocument();
   });
 
-  it('펼치면 도보거리 API를 호출해 실거리/시간으로 교체 표시한다', async () => {
+  it('펼치면 직선거리 기준 카드 목록을 보여준다(도보거리 API는 호출하지 않는다)', async () => {
     getNearbyParkingLots.mockResolvedValue([PARKING_LOT]);
     getNearbyKidsRestaurants.mockResolvedValue([]);
-    vi.stubGlobal(
-      'fetch',
-      mockFetchRouter({ walkingResults: [{ targetId: '1', distanceMeters: 280, durationSeconds: 220, isEstimate: false }] })
-    );
+    const fetchMock = mockFetchRouter();
+    vi.stubGlobal('fetch', fetchMock);
 
     const { NearbyAmenitiesSection } = await import('./nearby-amenities-section');
     render(<NearbyAmenitiesSection lat={37.5} lng={127.0} originTable="open_spaces" originId="spot-origin" />);
@@ -112,7 +105,24 @@ describe('NearbyAmenitiesSection', () => {
     const toggle = await screen.findByText('🅿️ 주변 공영주차장 (1곳)');
     fireEvent.click(toggle);
 
-    expect(await screen.findByText(/테스트 공영주차장/, {}, { timeout: 2000 })).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByText(/280m/)).toBeInTheDocument());
+    expect(await screen.findByText(/테스트 공영주차장/)).toBeInTheDocument();
+    expect(screen.getByText(/직선 320m/)).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining('/api/nearby/walking-distance'), expect.anything());
+  });
+
+  it('다시 누르면 접혀서 카드 목록이 사라진다', async () => {
+    getNearbyParkingLots.mockResolvedValue([PARKING_LOT]);
+    getNearbyKidsRestaurants.mockResolvedValue([]);
+    vi.stubGlobal('fetch', mockFetchRouter());
+
+    const { NearbyAmenitiesSection } = await import('./nearby-amenities-section');
+    render(<NearbyAmenitiesSection lat={37.5} lng={127.0} originTable="open_spaces" originId="spot-origin" />);
+
+    const toggle = await screen.findByText('🅿️ 주변 공영주차장 (1곳)');
+    fireEvent.click(toggle);
+    expect(await screen.findByText(/테스트 공영주차장/)).toBeInTheDocument();
+
+    fireEvent.click(toggle);
+    expect(screen.queryByText(/테스트 공영주차장/)).not.toBeInTheDocument();
   });
 });

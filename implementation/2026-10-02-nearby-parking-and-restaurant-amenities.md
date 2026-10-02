@@ -116,6 +116,29 @@
 - `get_nearby_parking_lots` RPC 실측 호출(구로디지털단지역 좌표 기준): 1km 내 11건
   정상 반환, 거리순 정렬 확인.
 
+## 후속 — 도보거리 계산 보류(2026-10-02)
+사용자 지시: "지금은 직선거리 기반 직경거리로 해. 그리고 가까운순서대로 보여주고..
+그리고 처음에 default는 접힌상태야 사용자가 펼치기 누르면 펼치는거야. 그게
+낫겠지?"
+- **도보거리 API 호출 제거**: `NearbyAmenitiesSection`이 펼칠 때 `/api/nearby/
+  walking-distance`를 호출해 도보 실거리로 교체 표시하던 로직을 걷어내고, 지금은
+  항상 직선거리만 보여준다. 해당 API 라우트/Tmap 클라이언트/캐시 테이블은 삭제하지
+  않고 그대로 남겨둠(Tmap 키 등록 후 이 컴포넌트에서 다시 호출하도록 되돌리면 됨).
+- **정렬**: 이미 해결돼 있었다 — `get_nearby_parking_lots`/`get_nearby_spaces_and_
+  events` 둘 다 SQL에서 `order by distance_meters`로 정렬해 반환하므로 추가 작업
+  불필요(확인만 하고 코드 변경 없음).
+- **기본 접힘 상태**: 이미 `useState(false)`로 구현돼 있었다 — 변경 없음(사용자
+  확인 요청에 대한 재확인).
+- `src/components/map/nearby-amenities-section.tsx`: `walking`/`isLoadingWalking`
+  상태, `fetchWalkingDistances()` 호출 제거. 카드는 `lot.distance_meters`/
+  `spot.distance_meters`(직선거리)만 표시.
+- `src/components/map/nearby-amenities-section.test.tsx`: 도보거리 관련 테스트를
+  "직선거리만 표시" 테스트로 교체 + 토글 재클릭 시 접히는 테스트 추가(4개로 재구성).
+
+### 검증
+- `npx vitest run nearby-amenities-section.test.tsx` 4개 통과.
+- `npx tsc --noEmit` / `npm run test`(252개 파일 2,660개) / `npm run build` 전부 통과.
+
 ## 특이 사항 / 남은 작업
 - **Tmap 키 미등록 상태** — 사용자가 추후 가입 예정("나중에 가입할게"). 그 전까지는
   모든 도보거리가 직선거리 기반 추정치(`isEstimate:true`)로 표시된다. 키 등록 후:

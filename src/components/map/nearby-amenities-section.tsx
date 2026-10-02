@@ -11,14 +11,23 @@ import {
 // [스팟/이벤트 상세 "주변 주차장/식당" 아코디언](2026-10-02 사용자 지시): "키즈친화 식당
 // 하고 주변 주차장으로 해서 하나의 스팟/이벤트 장소에 대하여 주변정보로써 제공하려고
 // 해... 주차 안내 아래에 자연스럽게 이어서 붙이면, 부모 유저들이 스크롤을 내리면서
-// 한눈에 외출 동선을 완벽하게 짤 수 있습니다." 2단계 전략(사용자 지시 그대로):
-// 1) 접힌 상태 — 직선거리 반경(주차장 500m/식당 1km) DB 조회로 "N곳"만 즉시 표시
-//    (API 호출 비용 없음, Supabase RPC만 사용).
-// 2) 펼친 상태 — 그제서야 /api/nearby/walking-distance를 배치 호출해 도보 실거리/
-//    시간을 계산한다(Tmap 하루 1,000건 무료 한도를 아끼기 위해 접힌 상태에서는 호출
-//    안 함 — 캐시 우선이라 같은 쌍은 사이트 전체에서 한 번만 계산됨).
-
-type WalkingInfo = { distanceMeters: number; durationSeconds: number; isEstimate: boolean };
+// 한눈에 외출 동선을 완벽하게 짤 수 있습니다."
+//
+// [도보거리 계산 보류](2026-10-02 사용자 지시): "지금은 직선거리 기반 직경거리로
+// 해." — Tmap 키가 아직 없어(가입 전) 펼쳤을 때 /api/nearby/walking-distance를
+// 호출해 도보 실거리로 교체하던 로직을 걷어내고, 지금은 항상 직선거리만 보여준다.
+// 해당 API 라우트/Tmap 클라이언트 자체는 삭제하지 않고 남겨뒀다(키 등록 후 이
+// 컴포넌트에서 다시 호출하도록 되돌리면 된다).
+//
+// [정렬](2026-10-02 사용자 지시): "가까운순서대로 보여주고" — 별도 클라이언트 정렬이
+// 필요 없다. getNearbyParkingLots/getNearbyKidsRestaurants가 호출하는 RPC
+// (get_nearby_parking_lots, get_nearby_spaces_and_events) 둘 다 SQL에서 이미
+// `order by distance_meters`로 정렬해 반환하므로, 받은 배열을 그대로 렌더링하면
+// 가까운 순서가 유지된다.
+//
+// [기본 접힘 상태](2026-10-02 사용자 확인): "처음에 default는 접힌상태야 사용자가
+// 펼치기 누르면 펼치는거야" — 이미 `useState(false)`로 기본 접힘이었다(변경 없음,
+// 사용자 확인 요청에 대한 재확인).
 
 type OriginInfo = {
   lat: number;
@@ -31,42 +40,12 @@ function formatDistance(meters: number): string {
   return meters < 1000 ? `${Math.round(meters)}m` : `${(meters / 1000).toFixed(1)}km`;
 }
 
-function formatWalkingMinutes(seconds: number): string {
-  return `도보 ${Math.max(1, Math.round(seconds / 60))}분`;
-}
-
-async function fetchWalkingDistances(
-  origin: OriginInfo,
-  targetTable: 'seoul_public_parking_lots' | 'open_spaces',
-  targets: { id: string; lat: number; lng: number }[]
-): Promise<Record<string, WalkingInfo>> {
-  const res = await fetch('/api/nearby/walking-distance', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      originTable: origin.originTable,
-      originId: origin.originId,
-      originLat: origin.lat,
-      originLng: origin.lng,
-      targets: targets.map((t) => ({ targetTable, targetId: t.id, lat: t.lat, lng: t.lng })),
-    }),
-  });
-  if (!res.ok) throw new Error('도보 거리 계산에 실패했습니다.');
-  const data: { results?: { targetId: string; distanceMeters: number; durationSeconds: number; isEstimate: boolean }[] } =
-    await res.json();
-  const map: Record<string, WalkingInfo> = {};
-  for (const r of data.results ?? []) {
-    map[r.targetId] = { distanceMeters: r.distanceMeters, durationSeconds: r.durationSeconds, isEstimate: r.isEstimate };
-  }
-  return map;
-}
-
 function DirectionsLink({ lat, lng, name }: { lat: number; lng: number; name: string }) {
   // [기존 관례 재사용] 이 프로젝트는 "외부 지도 앱으로 내보내지 않고 인앱에서 해결"
   // 원칙(2026-08-30 결정)을 상세 모달 자체 길찾기에 적용했지만, 이 카드는 상세 모달이
   // 하나 더 열리는 구조가 아니라 "여기로 가는 길" 자체가 목적이라 카카오맵 앱/웹으로
   // 바로 연결하는 게 자연스럽다 — Tmap 연동 전까지는 정확한 인앱 경로선을 그릴 방법이
-  // 없기도 하다(직선거리 추정뿐).
+  // 없기도 하다(직선거리뿐).
   const url = `https://map.kakao.com/link/to/${encodeURIComponent(name)},${lat},${lng}`;
   return (
     <a
@@ -81,20 +60,13 @@ function DirectionsLink({ lat, lng, name }: { lat: number; lng: number; name: st
   );
 }
 
-function ParkingCard({ lot, walking }: { lot: NearbyParkingLot; walking?: WalkingInfo }) {
+function ParkingCard({ lot }: { lot: NearbyParkingLot }) {
   return (
     <div className="flex items-center justify-between gap-2 py-2 px-3 bg-gray-50 rounded-lg">
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-gray-900 truncate">🅿️ {lot.name}</p>
         <p className="text-xs text-gray-500">
-          {walking ? (
-            <>
-              {formatDistance(walking.distanceMeters)} · {formatWalkingMinutes(walking.durationSeconds)}
-              {walking.isEstimate && ' (추정)'}
-            </>
-          ) : (
-            `직선 ${formatDistance(lot.distance_meters)}`
-          )}
+          직선 {formatDistance(lot.distance_meters)}
           {lot.is_paid !== null && <> · {lot.is_paid ? '유료' : '무료'}</>}
         </p>
       </div>
@@ -103,21 +75,12 @@ function ParkingCard({ lot, walking }: { lot: NearbyParkingLot; walking?: Walkin
   );
 }
 
-function RestaurantCard({ spot, walking, badges }: { spot: NearbyItem; walking?: WalkingInfo; badges?: string[] }) {
+function RestaurantCard({ spot, badges }: { spot: NearbyItem; badges?: string[] }) {
   return (
     <div className="flex items-center justify-between gap-2 py-2 px-3 bg-gray-50 rounded-lg">
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-gray-900 truncate">🍽️ {spot.name}</p>
-        <p className="text-xs text-gray-500">
-          {walking ? (
-            <>
-              {formatDistance(walking.distanceMeters)} · {formatWalkingMinutes(walking.durationSeconds)}
-              {walking.isEstimate && ' (추정)'}
-            </>
-          ) : (
-            `직선 ${formatDistance(spot.distance_meters)}`
-          )}
-        </p>
+        <p className="text-xs text-gray-500">직선 {formatDistance(spot.distance_meters)}</p>
         {badges && badges.length > 0 && (
           <p className="text-xs text-emerald-700 mt-0.5 truncate">🏷️ {badges.join(' · ')}</p>
         )}
@@ -163,8 +126,6 @@ function AccordionShell({
 function ParkingAccordion(origin: OriginInfo) {
   const [lots, setLots] = useState<NearbyParkingLot[] | null>(null);
   const [isOpen, setIsOpen] = useState(false);
-  const [walking, setWalking] = useState<Record<string, WalkingInfo>>({});
-  const [isLoadingWalking, setIsLoadingWalking] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -181,27 +142,16 @@ function ParkingAccordion(origin: OriginInfo) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [origin.lat, origin.lng]);
 
-  function handleToggle() {
-    const nextOpen = !isOpen;
-    setIsOpen(nextOpen);
-    if (nextOpen && lots && lots.length > 0 && Object.keys(walking).length === 0) {
-      setIsLoadingWalking(true);
-      fetchWalkingDistances(
-        origin,
-        'seoul_public_parking_lots',
-        lots.map((l) => ({ id: String(l.id), lat: l.lat, lng: l.lng }))
-      )
-        .then(setWalking)
-        .catch(() => {})
-        .finally(() => setIsLoadingWalking(false));
-    }
-  }
-
   return (
-    <AccordionShell icon="🅿️" label="주변 공영주차장" count={lots?.length ?? 0} isOpen={isOpen} onToggle={handleToggle}>
-      {isLoadingWalking && <p className="text-xs text-gray-400 px-1 py-1">도보 거리 계산 중...</p>}
+    <AccordionShell
+      icon="🅿️"
+      label="주변 공영주차장"
+      count={lots?.length ?? 0}
+      isOpen={isOpen}
+      onToggle={() => setIsOpen((v) => !v)}
+    >
       {lots?.map((lot) => (
-        <ParkingCard key={lot.id} lot={lot} walking={walking[String(lot.id)]} />
+        <ParkingCard key={lot.id} lot={lot} />
       ))}
     </AccordionShell>
   );
@@ -210,8 +160,6 @@ function ParkingAccordion(origin: OriginInfo) {
 function RestaurantAccordion(origin: OriginInfo) {
   const [spots, setSpots] = useState<NearbyItem[] | null>(null);
   const [isOpen, setIsOpen] = useState(false);
-  const [walking, setWalking] = useState<Record<string, WalkingInfo>>({});
-  const [isLoadingWalking, setIsLoadingWalking] = useState(false);
   const [badges, setBadges] = useState<Record<string, { labels: string[] }>>({});
 
   useEffect(() => {
@@ -238,33 +186,16 @@ function RestaurantAccordion(origin: OriginInfo) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [origin.lat, origin.lng]);
 
-  function handleToggle() {
-    const nextOpen = !isOpen;
-    setIsOpen(nextOpen);
-    if (nextOpen && spots && spots.length > 0 && Object.keys(walking).length === 0) {
-      setIsLoadingWalking(true);
-      fetchWalkingDistances(
-        origin,
-        'open_spaces',
-        spots.map((s) => ({ id: s.id, lat: s.lat, lng: s.lng }))
-      )
-        .then(setWalking)
-        .catch(() => {})
-        .finally(() => setIsLoadingWalking(false));
-    }
-  }
-
   return (
     <AccordionShell
       icon="🍽️"
       label="주변 키즈친화 식당"
       count={spots?.length ?? 0}
       isOpen={isOpen}
-      onToggle={handleToggle}
+      onToggle={() => setIsOpen((v) => !v)}
     >
-      {isLoadingWalking && <p className="text-xs text-gray-400 px-1 py-1">도보 거리 계산 중...</p>}
       {spots?.map((spot) => (
-        <RestaurantCard key={spot.id} spot={spot} walking={walking[spot.id]} badges={badges[spot.id]?.labels} />
+        <RestaurantCard key={spot.id} spot={spot} badges={badges[spot.id]?.labels} />
       ))}
     </AccordionShell>
   );
