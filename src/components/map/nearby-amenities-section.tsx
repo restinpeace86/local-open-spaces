@@ -66,7 +66,7 @@ function ParkingCard({ lot }: { lot: NearbyParkingLot }) {
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-gray-900 truncate">🅿️ {lot.name}</p>
         <p className="text-xs text-gray-500">
-          직선 {formatDistance(lot.distance_meters)}
+          직선거리 {formatDistance(lot.distance_meters)}
           {lot.is_paid !== null && <> · {lot.is_paid ? '유료' : '무료'}</>}
         </p>
       </div>
@@ -80,7 +80,7 @@ function RestaurantCard({ spot, badges }: { spot: NearbyItem; badges?: string[] 
     <div className="flex items-center justify-between gap-2 py-2 px-3 bg-gray-50 rounded-lg">
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-gray-900 truncate">🍽️ {spot.name}</p>
-        <p className="text-xs text-gray-500">직선 {formatDistance(spot.distance_meters)}</p>
+        <p className="text-xs text-gray-500">직선거리 {formatDistance(spot.distance_meters)}</p>
         {badges && badges.length > 0 && (
           <p className="text-xs text-emerald-700 mt-0.5 truncate">🏷️ {badges.join(' · ')}</p>
         )}

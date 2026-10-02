@@ -106,7 +106,7 @@ describe('NearbyAmenitiesSection', () => {
     fireEvent.click(toggle);
 
     expect(await screen.findByText(/테스트 공영주차장/)).toBeInTheDocument();
-    expect(screen.getByText(/직선 320m/)).toBeInTheDocument();
+    expect(screen.getByText(/직선거리 320m/)).toBeInTheDocument();
     expect(fetchMock).not.toHaveBeenCalledWith(expect.stringContaining('/api/nearby/walking-distance'), expect.anything());
   });
 
