@@ -15,6 +15,7 @@ import {
   CuratedItemThemeKey,
 } from '@/lib/home/curated-items';
 import { EventBrowseSheet, EventBrowseSheetMode } from '@/components/home/event-browse-sheet';
+import { CultureClubSheet } from '@/components/home/culture-club-sheet';
 import { MajorCategoryGrid } from '@/components/home/major-category-grid';
 import { FeedCard } from '@/components/home/feed-card';
 import { FreeFeedSkeleton } from '@/components/home/free-feed-skeleton';
@@ -243,6 +244,10 @@ export function HomeView({
   // [이벤트픽 UX/UI 개선](2026-08-29 사용자 지시) 요구사항 3: "전체보기"가 페이지 이동 대신
   // 이 화면 위 바텀시트로 뜬다 — 어떤 종류의 전체보기를 열지만 상태로 들고 있으면 된다.
   const [browseSheetMode, setBrowseSheetMode] = useState<EventBrowseSheetMode | null>(null);
+  // [문화센터 탭](2026-10-03 사용자 지시): 기존 EventBrowseSheetMode는 이벤트 API 3종으로
+  // 닫힌 유니온이라(오늘/현재진행/예약오픈), 데이터 모양이 전혀 다른(브랜드/지점 필터)
+  // 문화센터 시트를 억지로 끼워넣지 않고 형제 상태로 분리한다.
+  const [isCultureClubOpen, setIsCultureClubOpen] = useState(false);
   const [heroEvents, setHeroEvents] = useState<NearbyItem[]>(initialHeroEvents);
   // [홈 화면 성능 최적화](2026-08-29 사용자 지시): 이 두 섹션은 더 이상 Server Component가
   // 미리 계산해 넘겨주지 않는다(라운드로빈 믹스 연산 포함 3개 쿼리를 SSR에서 한 번에 처리하던
@@ -432,6 +437,22 @@ export function HomeView({
                 }}
                 focusedItemId={focusedListItemId}
               />
+            </section>
+
+            {/* [문화센터 탭](2026-10-03 사용자 지시): "문화센터 탭 화면" — 이벤트픽엔 서브탭바가
+                없어, 기존 "전체보기" 류 화면과 동일하게 버튼으로 여는 풀스크린 바텀시트
+                진입점을 둔다(제5장 제4조 기존 구조 우선). [대분류 그리드 최상단 배치]
+                (2026-09-03 결정)를 깨지 않도록 MajorCategoryGrid 섹션보다 아래에 둔다 —
+                home-view.test.tsx가 "카테고리별 행사"가 항상 index 0이어야 함을 검증한다. */}
+            <section aria-label="문화센터">
+              <button
+                type="button"
+                onClick={() => setIsCultureClubOpen(true)}
+                className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 flex items-center justify-between hover:bg-gray-50"
+              >
+                <span className="text-sm font-semibold text-gray-900">🏫 문화센터 강좌 보러가기</span>
+                <span className="text-xs text-gray-400">이마트 컬처클럽 ›</span>
+              </button>
             </section>
 
             {/* Task 9-6-10(2026-08-23): 하단 탭 재편으로 이 화면("이벤트픽")은 항상 events만
@@ -665,6 +686,7 @@ export function HomeView({
           focusedItemId={focusedListItemId}
         />
       )}
+      {isCultureClubOpen && <CultureClubSheet onClose={() => setIsCultureClubOpen(false)} />}
       {selectedItem && <DetailModal item={selectedItem} onClose={() => setSelectedItem(null)} />}
       {selectedCuratedItem && (
         <CuratedItemDetailModal item={selectedCuratedItem} onClose={() => setSelectedCuratedItem(null)} />
