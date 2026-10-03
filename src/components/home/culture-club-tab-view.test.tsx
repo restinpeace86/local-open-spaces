@@ -26,6 +26,7 @@ type ClassFixture = {
   register_start_date: string;
   register_end_date: string;
   main_image_key: string | null;
+  collected_at: string;
 };
 
 function makeClass(overrides: Partial<ClassFixture> = {}): ClassFixture {
@@ -43,6 +44,7 @@ function makeClass(overrides: Partial<ClassFixture> = {}): ClassFixture {
     register_start_date: '202607231000',
     register_end_date: '20261013',
     main_image_key: 'classImages/6450c059-7f36-47e0-8c2e-670eeb1aed31',
+    collected_at: '2026-10-03T04:12:00+00:00',
     ...overrides,
   };
 }
@@ -106,6 +108,14 @@ describe('CultureClubTabView', () => {
 
     await screen.findByText(/두근두근/);
     expect(container.querySelector('img')).toBeNull();
+  });
+
+  it('하루 1회 갱신이라는 안내와 함께 마지막 업데이트 시각을 보여준다', async () => {
+    stubFetch([makeClass({ collected_at: '2026-10-03T04:12:00+00:00' })]);
+    render(<CultureClubTabView />);
+
+    expect(await screen.findByText(/마지막 업데이트/)).toBeInTheDocument();
+    expect(screen.getByText(/하루 1회 갱신돼요/)).toBeInTheDocument();
   });
 
   it('정원마감이면 "대기접수 가능"으로 표시한다', async () => {

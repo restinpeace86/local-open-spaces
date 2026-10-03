@@ -52,6 +52,7 @@ type CultureClubClass = {
   register_start_date: string | null;
   register_end_date: string | null;
   main_image_key: string | null;
+  collected_at: string;
 };
 
 function formatTimeRange(start: string | null, end: string | null) {
@@ -71,6 +72,18 @@ function formatDateCompact(raw: string | null) {
 function formatRegisterStart(raw: string | null) {
   if (!raw || raw.length !== 12) return formatDateCompact(raw);
   return `${raw.slice(0, 4)}.${raw.slice(4, 6)}.${raw.slice(6, 8)} ${raw.slice(8, 10)}:${raw.slice(10, 12)}`;
+}
+
+// [데이터 신선도 안내](2026-10-03 사용자 지적): "우린 하루에 한번 가져오는데 .. 접수중
+// 이거 보여줘도 되려나? 이게 하루에 한번 업데이트되니 사람들이 좀 착각할거같은데" —
+// 상태(접수중/정원마감 등)가 실시간이 아니라 일 1회 배치 갱신임을 숨기지 않고 그대로
+// 보여준다(제3장 추측 금지 — 실시간인 척하지 않음, 제6장 제2조 사용자 경험). 새 쿼리를
+// 추가하지 않고 이미 응답에 포함된 각 행의 collected_at(배치가 실제로 수집한 시각)을
+// 그대로 쓴다 — 같은 배치 실행에서 수집됐으므로 지점 내 모든 행이 사실상 동일한 값이다.
+function formatUpdatedAt(raw: string) {
+  const date = new Date(raw);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getMonth() + 1}.${date.getDate()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function statusLabel(status: CultureClubClass['filter_status']) {
@@ -344,6 +357,11 @@ export function CultureClubTabView() {
         {isLoading && items.length === 0 && <EventListSkeleton label="문화센터 강좌 불러오는 중" />}
         {errorMessage && <p className="text-sm text-red-500">{errorMessage}</p>}
         {isEmpty && <EmptyState onReset={resetFilters} />}
+        {items.length > 0 && (
+          <p className="mb-2 text-[11px] text-gray-400">
+            ⏱ 마지막 업데이트 {formatUpdatedAt(items[0].collected_at)} · 접수 상태는 하루 1회 갱신돼요
+          </p>
+        )}
         {items.length > 0 && (
           // [그리드 반응형](2026-10-03 사용자 지시): "캡쳐한게 pc기준으로해서 이벤트
           // 카드가 4개가 1row로 되어있는데... 모바일에선 2개정도가 한계이지 않을까?" —

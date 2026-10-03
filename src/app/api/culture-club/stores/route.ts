@@ -11,12 +11,23 @@ import { createAdminClient } from '@/lib/supabase/admin';
 const EXTERNAL_ID_PREFIX = 'EMART_STORE_';
 const CULTURE_CENTER_CATEGORY_MIN = '대형마트문화센터';
 
+// [지점명만으로는 위치를 알기 어려움](2026-10-03 사용자 지적): "스타필드 안성점이라고
+// 하면 얼추 다 아나? 어디인지?" — 지점명(예: "스타필드시티명지점")만으로는 어느
+// 지역인지 바로 알기 어려운 경우가 많아, address 앞 2토큰(시/도 + 시/군/구, 예:
+// "경기 안성시")을 괄호로 붙인다. home-view.tsx의 shortenSigunguForDisplay와 같은
+// 발상(짧은 지역명만 보여줌)이지만 주소 원문에서 추출한다는 점이 달라 별도로 둔다.
+function extractShortRegion(address: string | null): string | null {
+  if (!address) return null;
+  const tokens = address.trim().split(/\s+/);
+  return tokens.slice(0, 2).join(' ') || null;
+}
+
 export async function GET() {
   try {
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from('open_spaces')
-      .select('external_id, display_name, name')
+      .select('external_id, display_name, name, address')
       .eq('category_min', CULTURE_CENTER_CATEGORY_MIN)
       .order('display_name', { ascending: true });
 
@@ -24,10 +35,14 @@ export async function GET() {
 
     const stores = (data ?? [])
       .filter((row): row is typeof row & { external_id: string } => Boolean(row.external_id?.startsWith(EXTERNAL_ID_PREFIX)))
-      .map((row) => ({
-        storeCode: row.external_id.slice(EXTERNAL_ID_PREFIX.length),
-        label: row.display_name ?? row.name,
-      }));
+      .map((row) => {
+        const name = row.display_name ?? row.name;
+        const region = extractShortRegion(row.address);
+        return {
+          storeCode: row.external_id.slice(EXTERNAL_ID_PREFIX.length),
+          label: region ? `${name} (${region})` : name,
+        };
+      });
 
     return NextResponse.json({ stores });
   } catch (err) {
