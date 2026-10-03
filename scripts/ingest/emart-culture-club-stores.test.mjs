@@ -75,17 +75,20 @@ describe('buildDisplayName', () => {
 });
 
 describe('buildOpenSpaceRow', () => {
+  const SERVICE_CATEGORY_ID = 'ad36cf12-821e-4cca-929d-c7e6242a8a4f';
+
   it('지오코딩 결과를 open_spaces 행 형식으로 변환한다', () => {
     const store = { store_code: '180', store_name: '춘천', store_center: 'emart' };
     const geo = { placeName: '이마트 춘천점', address: '강원특별자치도 춘천시 경춘로 2353', lng: 127.7186, lat: 37.8638 };
 
-    const row = buildOpenSpaceRow(store, geo);
+    const row = buildOpenSpaceRow(store, geo, SERVICE_CATEGORY_ID);
 
     expect(row).toMatchObject({
       external_id: 'EMART_STORE_180',
       source: 'emart_culture_club',
       category: '대형마트',
       category_min: '대형마트문화센터',
+      service_category_id: SERVICE_CATEGORY_ID,
       name: '이마트 춘천점',
       display_name: '이마트 춘천점',
       address: '강원특별자치도 춘천시 경춘로 2353',
@@ -95,11 +98,26 @@ describe('buildOpenSpaceRow', () => {
     });
   });
 
+  // [노출중분류 누락 버그 수정 — 실측 확인](2026-10-03 사용자 지시: "스팟픽에는
+  // 노출중분류가 있는것들만 보여줘야해.. 이런 노출중분류는 없을텐데?") — 첫
+  // 실행 때 service_category_id를 안 채워 64건 전부 노출 중분류 미지정 상태로
+  // 들어갔던 버그의 회귀 테스트.
+  it('service_category_id가 누락되면 안 된다(노출 중분류 미지정 방지)', () => {
+    const store = { store_code: '180', store_name: '춘천', store_center: 'emart' };
+    const geo = { placeName: '이마트 춘천점', address: '강원특별자치도 춘천시 경춘로 2353', lng: 127.7186, lat: 37.8638 };
+
+    const row = buildOpenSpaceRow(store, geo, SERVICE_CATEGORY_ID);
+
+    expect(row.service_category_id).toBe(SERVICE_CATEGORY_ID);
+    expect(row.service_category_id).not.toBeNull();
+    expect(row.service_category_id).not.toBeUndefined();
+  });
+
   it('display_name은 괄호를 제거하고 "이마트 {지점명}점" 형식으로 만든다', () => {
     const store = { store_code: '490', store_name: '천안(쌍용)', store_center: 'emart' };
     const geo = { placeName: '이마트 천안점', address: '충남 천안시 서북구 충무로 187', lng: 127.127, lat: 36.7961 };
 
-    const row = buildOpenSpaceRow(store, geo);
+    const row = buildOpenSpaceRow(store, geo, SERVICE_CATEGORY_ID);
 
     expect(row.display_name).toBe('이마트 천안점');
   });

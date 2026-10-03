@@ -128,13 +128,19 @@ export function buildDisplayName(store) {
   return `이마트 ${noParen}점`;
 }
 
-export function buildOpenSpaceRow(store, geo) {
+export function buildOpenSpaceRow(store, geo, serviceCategoryId) {
   return {
     external_id: `EMART_STORE_${store.store_code}`,
     source: 'emart_culture_club',
     source_type: 'EMART_CULTURE_CLUB_STORE',
     category: '대형마트',
     category_min: CATEGORY_MIN,
+    // [노출중분류 누락 버그 수정 — 실측 확인](2026-10-03 사용자 지시: "스팟픽에는
+    // 노출중분류가 있는것들만 보여줘야해.. 이런 노출중분류는 없을텐데?") —
+    // service_category_id를 안 채우면 category_min만 있고 실제로는 스팟픽에
+    // 노출되지 않는다(노출 중분류 미지정 상태) — 첫 실행 때 이 필드를 빠뜨려
+    // 64건 전부 null로 들어갔던 걸 사용자가 직접 지적해 발견했다.
+    service_category_id: serviceCategoryId,
     name: geo.placeName,
     display_name: buildDisplayName(store),
     address: geo.address,
@@ -144,6 +150,21 @@ export function buildOpenSpaceRow(store, geo) {
     operating_hours: null,
     info_url: null,
   };
+}
+
+async function fetchServiceCategoryId(client) {
+  const { data, error } = await client
+    .from('service_categories')
+    .select('id')
+    .eq('parent_category', '문화시설')
+    .eq('category_name', CATEGORY_MIN)
+    .single();
+  if (error || !data) {
+    throw new Error(
+      `service_categories에서 '문화시설/${CATEGORY_MIN}' 조회 실패 — 마이그레이션(2026-10-03-emart-store-category-registration.sql)이 적용됐는지 확인 필요: ${error?.message ?? 'NOT_FOUND'}`
+    );
+  }
+  return data.id;
 }
 
 async function postPipelineLog(client, { status, errorMessage = null, metaData = null }) {
@@ -166,8 +187,9 @@ export async function run({ dryRun = false } = {}) {
   console.log(`▶ 이마트 컬처클럽 지점 지오코딩 수집 시작 (dry-run: ${dryRun})`);
 
   const client = createAdminClient();
+  const serviceCategoryId = await fetchServiceCategoryId(client);
   const stores = await fetchDistinctStores(client);
-  console.log(`  → 지점 ${stores.length}개 발견`);
+  console.log(`  → 지점 ${stores.length}개 발견 (service_category_id=${serviceCategoryId})`);
 
   const rows = [];
   const failed = [];
@@ -187,7 +209,7 @@ export async function run({ dryRun = false } = {}) {
       console.error(`⚠️ ${store.store_code}(${store.store_name}) 검색 결과 없음`);
     } else {
       console.log(`  ${store.store_code}(${store.store_name}) → ${geo.placeName} | ${geo.address}`);
-      rows.push(buildOpenSpaceRow(store, geo));
+      rows.push(buildOpenSpaceRow(store, geo, serviceCategoryId));
     }
     await sleep(REQUEST_PACING_MS);
   }

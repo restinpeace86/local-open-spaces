@@ -69,6 +69,46 @@
 - `npx tsc --noEmit` / `npm run test`(256개 파일 2,695개) / `npm run build`
   전부 통과.
 
+## 후속 수정 1 — 독립 칩으로 분리(2026-10-03)
+사용자 지적: "거기에 기존에 있던 데이터들은? 문화센터/문화의집은? 거기에
+데이터 섞이면 내가 작업하기가 어려운데.. 문화센터/문화의집 칩에 편입은
+뭔말이야?" — `category_min` 값 자체는 처음부터 별개였지만(DB 레벨 혼동
+아님), 소비자 화면 필터 칩('문화센터/문화의집')에 세 번째 minor로 편입한
+탓에 유저가 그 칩을 누르면 기존 문화의집/문화원과 이마트 지점이 한 검색
+결과에 섞여 나오는 문제가 있었다. `src/lib/spaces/spot-category-groups.ts`
+에서 "대형마트문화센터"를 완전히 독립된 신규 칩(`mart-culture-center`)으로
+분리했다 — `spot-category-groups.test.ts`의 대분류/중분류 교차 검증(18개)은
+그대로 통과(문화시설 대분류 전체 합집합은 변함없음, 칩 배분만 재조정).
+
+## 후속 수정 2 — 노출중분류(service_category_id) 누락 버그(2026-10-03)
+사용자 지적: "계속 언급하지만 스팟픽에는 노출중분류가 있는것들만 보여줘야해..
+현재 문화의집+문화원 이런 노출중분류는 없을텐데?" — 실제로 DB를 직접
+조회해 확인한 결과, **첫 실행 때 넣은 64건 전부 `service_category_id`가
+null**이었다(표준중분류만 있고 노출중분류 미지정 상태 — 스팟픽에 실제로는
+전혀 노출되지 않는 상태였다). `service_categories`에는 미리 등록해뒀지만
+`buildOpenSpaceRow()`가 그 ID를 실제 행에 채우는 걸 빠뜨린 버그였다.
+
+### 수정
+- `scripts/ingest/emart-culture-club-stores.mjs`: `fetchServiceCategoryId()`
+  추가(`service_categories`에서 `문화시설/대형마트문화센터` 행의 id를 조회),
+  `buildOpenSpaceRow()`에 `service_category_id` 파라미터 추가해 매 행에
+  채우도록 수정.
+- 회귀 테스트 추가(service_category_id가 null/undefined면 안 된다는 전용
+  테스트) — 13개로 재구성.
+- 재실행으로 기존 64건 전부 백필, DB 직접 조회로 `service_category_id` null
+  0건 확인.
+
+(참고: 기존 문화의집/문화원 레거시 데이터도 `service_category_id`가 null인
+것으로 확인했다 — 이건 이번에 새로 생긴 문제가 아니라 원래 그랬던 상태이고,
+이번 작업 범위(이마트 신규 등록) 밖이라 손대지 않았다.)
+
+### 검증
+- `npx vitest run emart-culture-club-stores.test.mjs` 13개 통과.
+- 실제 DB 재조회로 64건 전부 `service_category_id` 정상 채워짐 확인(수정
+  전/후 대조).
+- `npx tsc --noEmit` / `npm run test`(256개 파일 2,696개) / `npm run build`
+  전부 통과.
+
 ## 특이 사항
 - `name` 필드는 카카오가 실제로 반환한 등록 장소명을 그대로 쓰고(예: "트레이더스
   홀세일 클럽 김포점"), `display_name`은 일관된 브랜드 접두사 형식으로 정리한
