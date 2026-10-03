@@ -1,7 +1,7 @@
 // [이마트 컬처클럽 강좌 리스트 수집](2026-10-03 사용자 지시) — transform() 단위 테스트.
 // 실측 표본 그대로(2026-10-03 getClassByFiltering 직접 호출, 응답 그대로 복사).
 import { describe, expect, it } from 'vitest';
-import { transform, parseRegisterStartAt } from './emart-culture-club.mjs';
+import { transform, parseRegisterStartAt, diagnoseRegisterWindowCapture } from './emart-culture-club.mjs';
 
 const SAMPLE_ITEM = {
   classId: '4065WabI62026S3964',
@@ -118,5 +118,45 @@ describe('parseRegisterStartAt', () => {
   it('길이가 12자가 아니면(실측상 항상 12자지만 방어적으로) null을 반환한다', () => {
     expect(parseRegisterStartAt('20261003')).toBeNull();
     expect(parseRegisterStartAt('2026081010000')).toBeNull();
+  });
+});
+
+// [접수대기 포착 가능성 진단](2026-10-03 사용자 지시: "당일 등록+당일 오픈이거나
+// 우리의 배치주기보다 짧아서 우리가 캐치못할수 있는지에 대하여 데이터 가져오면서
+// 확인해") — 기존 class_id와 비교해 "이번에 처음 나타난 강좌" 중, 처음 본 시점에
+// 이미 접수 시작을 지나 있었는지(= 접수대기로 포착할 기회조차 없었던 것)를 가려낸다.
+describe('diagnoseRegisterWindowCapture', () => {
+  const now = new Date('2026-10-03T00:00:00Z');
+
+  it('기존에 없던(신규) 강좌이고 접수 시작이 이미 지났으면 missedWindow로 센다', () => {
+    const rows = [{ class_id: 'new-1', register_start_at: '2026-10-02T23:00:00Z' }]; // 1시간 전
+    const result = diagnoseRegisterWindowCapture(rows, new Set(), now);
+    expect(result.newCount).toBe(1);
+    expect(result.missedWindowCount).toBe(1);
+    expect(result.caughtInTimeCount).toBe(0);
+    expect(result.missedWindowSampleClassIds).toEqual(['new-1']);
+  });
+
+  it('기존에 없던(신규) 강좌이고 접수 시작이 아직 안 지났으면 리드타임을 계산한다', () => {
+    const rows = [{ class_id: 'new-2', register_start_at: '2026-10-05T00:00:00Z' }]; // 48시간 후
+    const result = diagnoseRegisterWindowCapture(rows, new Set(), now);
+    expect(result.caughtInTimeCount).toBe(1);
+    expect(result.missedWindowCount).toBe(0);
+    expect(result.leadTimeHoursMin).toBe(48);
+  });
+
+  it('이미 기존 DB에 있던(신규가 아닌) 강좌는 진단 대상에서 제외한다', () => {
+    const rows = [{ class_id: 'existing-1', register_start_at: '2026-10-02T23:00:00Z' }];
+    const result = diagnoseRegisterWindowCapture(rows, new Set(['existing-1']), now);
+    expect(result.newCount).toBe(0);
+    expect(result.missedWindowCount).toBe(0);
+  });
+
+  it('register_start_at이 없는 신규 강좌는 newCount엔 포함되지만 리드타임 계산에선 제외된다', () => {
+    const rows = [{ class_id: 'new-3', register_start_at: null }];
+    const result = diagnoseRegisterWindowCapture(rows, new Set(), now);
+    expect(result.newCount).toBe(1);
+    expect(result.missedWindowCount).toBe(0);
+    expect(result.caughtInTimeCount).toBe(0);
   });
 });

@@ -37,6 +37,7 @@ const SOURCE_KEY = 'EMART_CULTURE_CLUB';
 const GRAPHQL_URL = 'https://wrihg4edszhmvagptse4t4eggi.appsync-api.ap-northeast-2.amazonaws.com/graphql';
 const PAGE_SIZE = 100;
 const UPSERT_CHUNK_SIZE = 500;
+const EXISTING_ID_PAGE_SIZE = 1000;
 const REQUEST_PACING_MIN_MS = 1000;
 const REQUEST_PACING_MAX_MS = 1500;
 const BROWSER_LIKE_HEADERS = {
@@ -237,6 +238,52 @@ export function transform(item, filterStatus) {
   };
 }
 
+// [접수대기 포착 가능성 진단](2026-10-03 사용자 지시): "당일 등록+당일 오픈이거나
+// 우리의 배치주기보다 짧아서 우리가 캐치못할수 있는지에 대하여 데이터 가져오면서
+// 확인해" — 실측으로 이미 확인한 사실: 전체 6,520건 중 접수대기 상태로 한 번이라도
+// 잡힌 적이 단 한 번도 없었고(전부 이미 열린 뒤 최소 14.8시간 지나서 처음 수집됨),
+// 전국 기준 라이브 조회로도 현재 접수대기는 단 1건(10일 뒤 오픈 예정)뿐이었다. 다만
+// 이건 1회성 스냅샷이라 "매일 배치가 신규 강좌를 접수대기 상태로 포착할 기회가
+// 실제로 얼마나 되는지"는 여러 날의 실제 배치 실행 결과가 쌓여야 알 수 있다 —
+// created_at은 upsert payload에 포함하지 않아(기존 관례, transform() 참고) 각 행의
+// "최초 수집 시각"을 그대로 보존한다(upsert 시 재작성되지 않음). 이 함수는 매 실행마다
+// "이번에 새로 나타난 강좌 중 몇 건이 이미 접수 시작을 지난 채로 처음 보였는지"
+// (= 접수대기로 포착할 기회조차 없었던 건)와 "아직 안 지나서 알람이 가능한 건"의
+// 리드타임을 pipeline_logs에 남긴다 — 며칠 쌓이면 배치 주기를 줄여야 하는지 실측으로
+// 판단할 수 있다.
+async function fetchExistingClassIds(client) {
+  const ids = new Set();
+  for (let from = 0; ; from += EXISTING_ID_PAGE_SIZE) {
+    const { data, error } = await client
+      .from('emart_culture_club_classes')
+      .select('class_id')
+      .range(from, from + EXISTING_ID_PAGE_SIZE - 1);
+    if (error) throw new Error(`기존 class_id 조회 실패: ${error.message}`);
+    for (const row of data) ids.add(row.class_id);
+    if (data.length < EXISTING_ID_PAGE_SIZE) break;
+  }
+  return ids;
+}
+
+export function diagnoseRegisterWindowCapture(rows, existingClassIds, now = new Date()) {
+  const newRows = rows.filter((r) => !existingClassIds.has(r.class_id));
+  const withRegisterAt = newRows.filter((r) => r.register_start_at);
+  const missed = withRegisterAt.filter((r) => new Date(r.register_start_at) <= now);
+  const caughtInTime = withRegisterAt.filter((r) => new Date(r.register_start_at) > now);
+  const leadTimeHours = caughtInTime
+    .map((r) => (new Date(r.register_start_at) - now) / (1000 * 60 * 60))
+    .sort((a, b) => a - b);
+
+  return {
+    newCount: newRows.length,
+    missedWindowCount: missed.length,
+    caughtInTimeCount: caughtInTime.length,
+    missedWindowSampleClassIds: missed.slice(0, 10).map((r) => r.class_id),
+    leadTimeHoursMin: leadTimeHours.length > 0 ? Number(leadTimeHours[0].toFixed(1)) : null,
+    leadTimeHoursMedian: leadTimeHours.length > 0 ? Number(leadTimeHours[Math.floor(leadTimeHours.length / 2)].toFixed(1)) : null,
+  };
+}
+
 async function postPipelineLog(client, { status, errorMessage = null, metaData = null }) {
   try {
     const { error } = await client.from('pipeline_logs').insert({
@@ -273,12 +320,27 @@ export async function run({ dryRun = false } = {}) {
   const rows = [...new Map(allRows.map((row) => [row.class_id, row])).values()];
   console.log(`✅ 전체 수신 ${allRows.length}건, 중복 제거 후 ${rows.length}건`);
 
+  const client = createAdminClient();
+
+  // [접수대기 포착 가능성 진단] 업서트 전에 "기존에 이미 있던 강좌인지"를 먼저 확인해야
+  // "이번에 처음 보인 강좌"를 정확히 가려낼 수 있다(업서트 후에 확인하면 전부 "존재"로
+  // 잡혀 의미가 없어짐).
+  const existingClassIds = await fetchExistingClassIds(client);
+  const registerWindowDiagnostic = diagnoseRegisterWindowCapture(rows, existingClassIds);
+  if (registerWindowDiagnostic.missedWindowCount > 0) {
+    console.log(
+      `⚠️ 신규 강좌 ${registerWindowDiagnostic.newCount}건 중 ${registerWindowDiagnostic.missedWindowCount}건은 처음 본 시점에 이미 접수가 시작돼 있었음(접수대기로 포착 못 함) — 샘플: ${registerWindowDiagnostic.missedWindowSampleClassIds.join(', ')}`
+    );
+  }
+  console.log(
+    `[진단] 신규 ${registerWindowDiagnostic.newCount}건 — 아직 안 지남(알람 가능) ${registerWindowDiagnostic.caughtInTimeCount}건(최소 리드타임 ${registerWindowDiagnostic.leadTimeHoursMin}시간), 이미 지남(놓침) ${registerWindowDiagnostic.missedWindowCount}건`
+  );
+
   if (dryRun) {
     console.log(JSON.stringify(rows.slice(0, 3), null, 2));
-    return { sourceKey: SOURCE_KEY, count: rows.length, upserted: false };
+    return { sourceKey: SOURCE_KEY, count: rows.length, upserted: false, registerWindowDiagnostic };
   }
 
-  const client = createAdminClient();
   let upsertedCount = 0;
   try {
     for (let i = 0; i < rows.length; i += UPSERT_CHUNK_SIZE) {
@@ -297,10 +359,14 @@ export async function run({ dryRun = false } = {}) {
   console.log(`✅ Supabase(emart_culture_club_classes) upsert 완료: ${upsertedCount}건`);
   await postPipelineLog(client, {
     status: 'OK',
-    metaData: { count: upsertedCount, byStatus: TARGET_STATUSES.reduce((acc, s) => ({ ...acc, [s]: rows.filter((r) => r.filter_status === s).length }), {}) },
+    metaData: {
+      count: upsertedCount,
+      byStatus: TARGET_STATUSES.reduce((acc, s) => ({ ...acc, [s]: rows.filter((r) => r.filter_status === s).length }), {}),
+      registerWindowDiagnostic,
+    },
   });
 
-  return { sourceKey: SOURCE_KEY, count: upsertedCount, upserted: true };
+  return { sourceKey: SOURCE_KEY, count: upsertedCount, upserted: true, registerWindowDiagnostic };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
