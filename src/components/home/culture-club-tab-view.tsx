@@ -16,8 +16,17 @@ import {
 // 눌러 여는 바텀시트(culture-club-sheet.tsx)로 만들었는데, 그게 아니라 이벤트픽
 // 화면 자체를 "이벤트"/"문화센터" 2개 탭으로 나누고 싶다는 뜻이었다. 바텀시트
 // 오버레이(fixed inset-0, 배경 클릭으로 닫기)를 전부 제거하고, home-view.tsx의 탭
-// 전환으로 이 화면 전체가 바로 렌더링되는 평범한 인라인 컴포넌트로 바꿨다 — 필터
-// 칩/무한스크롤 로직 자체는 그대로다.
+// 전환으로 이 화면 전체가 바로 렌더링되는 평범한 인라인 컴포넌트로 바꿨다.
+//
+// [카드/레이아웃 재설계](2026-10-03 사용자 지시, 이마트 컬처클럽 실제 PC 화면 캡처
+// `reference/emart culture club.png` 참고): "스크롤내리면 위에 검색조건도 같이 위로
+// 딸려올라가고" — 필터 영역을 shrink-0으로 고정하지 않고, 필터+리스트를 하나의
+// 스크롤 컨테이너로 합쳤다(무한스크롤 트리거도 이 컨테이너 기준). 카드는 참고
+// 화면처럼 이미지(좌상단에 상태 뱃지) + 텍스트 영역(소분류·정원 / 제목(2줄 말줄임)
+// / 가격(+재료비)·찜 아이콘 / 구분선 / 접수기간 / 일정) 구조로 바꿨고, "지점"은 이미
+// 상단에서 선택돼 고정이라 카드에는 넣지 않는다(사용자 지시: "우리는 지점은
+// 고정이니 굳이 지점 나올필요없고"). 그리드는 PC 4열 참고화면과 달리 모바일 우선
+// 앱이라 2열(md 이상에서 4열)로 뒀다.
 const PAGE_SIZE = 20;
 // [광고 자리 스캐폴딩](2026-10-03 사용자 지시): "5번째 혹은 10번째 카드마다 ... 스폰서드/
 // 추천 상품 카드 자리 기능적으로 마련" — 실제 광고 콘텐츠/스폰서 테이블은 이번 범위가
@@ -34,13 +43,12 @@ type CultureClubClass = {
   start_time: string | null;
   end_time: string | null;
   sub_category_name: string | null;
-  store_name: string | null;
   class_fee: number | null;
+  class_material_fee: number | null;
   class_capacity: number | null;
   filter_status: '접수대기' | '접수중' | '정원마감';
   register_start_date: string | null;
-  class_start_date: string | null;
-  class_end_date: string | null;
+  register_end_date: string | null;
 };
 
 function formatTimeRange(start: string | null, end: string | null) {
@@ -53,14 +61,23 @@ function formatDateCompact(raw: string | null) {
   return `${raw.slice(0, 4)}.${raw.slice(4, 6)}.${raw.slice(6, 8)}`;
 }
 
+// [접수 시작 시각 표시](2026-10-03): register_start_date 원본("YYYYMMDDHHmm", 12자,
+// KST — 오늘 앞서 register_start_at 컬럼을 추가한 바로 그 필드)에 실제 시각이 있어
+// 날짜만 보여주면 "예약 시작 시각"이라는 중요 정보가 빠진다. 12자가 아니면(실측상
+// 항상 12자지만 방어적으로) 날짜만 보여준다.
+function formatRegisterStart(raw: string | null) {
+  if (!raw || raw.length !== 12) return formatDateCompact(raw);
+  return `${raw.slice(0, 4)}.${raw.slice(4, 6)}.${raw.slice(6, 8)} ${raw.slice(8, 10)}:${raw.slice(10, 12)}`;
+}
+
 function statusLabel(status: CultureClubClass['filter_status']) {
   return status === '정원마감' ? '대기접수 가능' : status;
 }
 
 function statusBadgeClassName(status: CultureClubClass['filter_status']) {
   if (status === '정원마감') return 'bg-amber-500 text-white';
-  if (status === '접수중') return 'bg-emerald-50 text-emerald-700';
-  return 'bg-gray-100 text-gray-600';
+  if (status === '접수중') return 'bg-emerald-600 text-white';
+  return 'bg-gray-700 text-white';
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -75,25 +92,66 @@ function toggleInSet<T>(set: Set<T>, value: T): Set<T> {
   return next;
 }
 
-function ClassRow({ item }: { item: CultureClubClass }) {
+// [이미지 — 미해결 블로커](2026-10-03 실측 확인): main_image_bucket/region/key가
+// 가리키는 S3 버킷(prod-cognitos3-master-imagestoragemaster...)은 명명 규칙상 AWS
+// Amplify Storage(Cognito Identity Pool 기반) 전용 버킷으로 보이고, 직접 GET 요청은
+// 여전히 403이다(실측 재확인 — scripts/ingest 내 모든 스크립트·어드민 패널을 찾아봐도
+// 우회 경로를 찾은 적이 없다). Amplify Storage는 보통 클라이언트가 Cognito 자격증명으로
+// 서명한 URL을 런타임에 발급받아 쓰는 방식이라, 우리가 추측으로 CDN 도메인을 지어내거나
+// 서드파티 JS 번들에서 인증 정보를 추출하는 건(이번 세션에서 이미 한 번 차단된 접근
+// 방식) 하지 않는다(제3장 제5조 추측 금지). 실제 동작하는 이미지 URL을 확보하기 전까지는
+// 플레이스홀더만 보여준다 — 상세보기(추후 구현) 해상도와 리스트 썸네일 해상도를 분리
+// 저장하는 건 그 URL을 확보한 뒤에 설계한다.
+function ClassImagePlaceholder({ status }: { status: CultureClubClass['filter_status'] }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-3">
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-sm font-medium text-gray-900">{item.class_title}</p>
-        <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${statusBadgeClassName(item.filter_status)}`}>
-          {statusLabel(item.filter_status)}
-        </span>
+    <div className="relative aspect-square w-full overflow-hidden rounded-t-xl bg-gray-100">
+      <span className={`absolute left-2 top-2 rounded px-1.5 py-0.5 text-[11px] font-semibold ${statusBadgeClassName(status)}`}>
+        {statusLabel(status)}
+      </span>
+      <div className="flex h-full w-full items-center justify-center text-3xl text-gray-300" aria-hidden>
+        🏫
       </div>
-      <p className="mt-1 text-xs text-gray-500">
-        {item.sub_category_name ?? '-'} · {(item.class_day ?? []).join(',')} {formatTimeRange(item.start_time, item.end_time)}
-      </p>
-      <p className="mt-1 text-xs text-gray-500">
-        {item.class_fee != null ? `${item.class_fee.toLocaleString('ko-KR')}원` : '무료'}
-        {item.class_capacity != null ? ` · 정원 ${item.class_capacity}명` : ''}
-      </p>
-      <p className="mt-1 text-xs text-gray-400">
-        강좌기간 {formatDateCompact(item.class_start_date)} ~ {formatDateCompact(item.class_end_date)}
-      </p>
+    </div>
+  );
+}
+
+function ClassCard({ item }: { item: CultureClubClass }) {
+  const hasMaterialFee = item.class_material_fee != null && item.class_material_fee > 0;
+  return (
+    <div className="flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <ClassImagePlaceholder status={item.filter_status} />
+      <div className="flex flex-col gap-1 p-2.5">
+        <div className="flex items-center justify-between">
+          <span className="text-[11px] text-gray-400">{item.sub_category_name ?? '-'}</span>
+          {item.class_capacity != null && <span className="text-[11px] text-gray-400">정원 {item.class_capacity}명</span>}
+        </div>
+        <p className="line-clamp-2 text-sm font-medium text-gray-900">{item.class_title}</p>
+        <div className="flex items-center justify-between">
+          <p className="text-sm font-semibold text-gray-900">
+            {item.class_fee != null ? `${item.class_fee.toLocaleString('ko-KR')}원` : '무료'}
+            {hasMaterialFee && (
+              <span className="ml-1 text-[11px] font-normal text-gray-400">
+                (재료비 {item.class_material_fee!.toLocaleString('ko-KR')}원 포함)
+              </span>
+            )}
+          </p>
+          {/* [찜 아이콘 — 비활성](2026-10-03 사용자 제안: "찜(하트)아이콘 넣으면 되지
+              않을까 싶은데") 이마트 클래스는 아직 user_bookmarks의 대상(spot/event)
+              구조에 들어있지 않다 — 레이아웃만 참고 화면과 맞추고, 실제 찜 동작은
+              스팟/이벤트처럼 별도 target 종류를 추가할지 테이블을 새로 만들지 결정된
+              뒤에 연결한다(제5장 제3조 — 데이터 구조 변경 임의 결정 금지). */}
+          <span className="shrink-0 text-base text-gray-300" aria-hidden title="찜 — 준비 중">
+            🤍
+          </span>
+        </div>
+        <hr className="my-0.5 border-gray-100" />
+        <p className="text-[11px] text-gray-400">
+          접수기간 {formatRegisterStart(item.register_start_date)} ~ {formatDateCompact(item.register_end_date)}
+        </p>
+        <p className="text-[11px] text-gray-400">
+          일정 {(item.class_day ?? []).join(',')} {formatTimeRange(item.start_time, item.end_time)}
+        </p>
+      </div>
     </div>
   );
 }
@@ -183,6 +241,9 @@ export function CultureClubTabView() {
   const isEmpty = !isLoading && !errorMessage && items.length === 0;
   const hasMorePages = items.length < total;
 
+  // [필터+리스트 단일 스크롤](2026-10-03 사용자 지시): "스크롤내리면 위에 검색조건도
+  // 같이 위로 딸려올라가고" — 필터 영역을 더 이상 shrink-0으로 고정하지 않고, 이
+  // 컨테이너 하나가 전체(필터+리스트)를 스크롤한다. 무한스크롤도 이 컨테이너 기준.
   function handleScroll(e: React.UIEvent<HTMLDivElement>) {
     if (!hasMorePages || isLoading) return;
     const el = e.currentTarget;
@@ -198,15 +259,22 @@ export function CultureClubTabView() {
   }
 
   return (
-    <div className="flex-1 flex flex-col overflow-hidden">
-      <div className="shrink-0 flex flex-col gap-2 p-3 border-b border-gray-100">
+    <div className="flex-1 overflow-y-auto" onScroll={handleScroll}>
+      <div className="flex flex-col gap-2 p-3 border-b border-gray-100">
         {/* 브랜드 세그먼트 — 지금은 1개뿐이라 선택 UI라기보다 라벨 표시. */}
-        <div className="flex items-center gap-2 px-1">
-          {CULTURE_CLUB_BRAND_OPTIONS.map((brand) => (
-            <span key={brand.key} className="rounded-full bg-gray-900 px-3 py-1 text-xs font-medium text-white">
-              {brand.label}
-            </span>
-          ))}
+        <div className="flex items-center justify-between px-1">
+          <div className="flex items-center gap-2">
+            {CULTURE_CLUB_BRAND_OPTIONS.map((brand) => (
+              <span key={brand.key} className="rounded-full bg-gray-900 px-3 py-1 text-xs font-medium text-white">
+                {brand.label}
+              </span>
+            ))}
+          </div>
+          {(selectedDays.size > 0 || selectedSubCategories.size > 0) && (
+            <button type="button" onClick={resetFilters} className="text-xs text-gray-400 hover:text-gray-600">
+              ↻ 초기화
+            </button>
+          )}
         </div>
 
         {/* 지점 선택 — 단일선택, 클릭 한 번으로 바로 전환된다(네이티브 select). */}
@@ -269,18 +337,27 @@ export function CultureClubTabView() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4" onScroll={handleScroll}>
+      <div className="p-3">
         {isLoading && items.length === 0 && <EventListSkeleton label="문화센터 강좌 불러오는 중" />}
         {errorMessage && <p className="text-sm text-red-500">{errorMessage}</p>}
         {isEmpty && <EmptyState onReset={resetFilters} />}
         {items.length > 0 && (
-          <div className="flex flex-col gap-2">
-            {items.map((item, index) => (
-              <div key={item.class_id}>
-                {(index + 1) % AD_SLOT_INTERVAL === 0 && <CultureClubAdSlot />}
-                <ClassRow item={item} />
-              </div>
-            ))}
+          // [그리드 반응형](2026-10-03 사용자 지시): "캡쳐한게 pc기준으로해서 이벤트
+          // 카드가 4개가 1row로 되어있는데... 모바일에선 2개정도가 한계이지 않을까?" —
+          // 모바일 2열, md 이상(태블릿/PC)에서 참고 화면과 동일하게 4열.
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {items.map((item, index) =>
+              (index + 1) % AD_SLOT_INTERVAL === 0 ? (
+                <div key={item.class_id} className="contents">
+                  <div className="col-span-full">
+                    <CultureClubAdSlot />
+                  </div>
+                  <ClassCard item={item} />
+                </div>
+              ) : (
+                <ClassCard key={item.class_id} item={item} />
+              )
+            )}
           </div>
         )}
         {isLoading && items.length > 0 && <p className="mt-4 text-center text-xs text-gray-400">불러오는 중...</p>}
