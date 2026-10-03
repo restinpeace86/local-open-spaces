@@ -7,10 +7,13 @@
 // 찜한것에 대하여만 알림오도록 하는거지" — 별도 구독 테이블(event_reservation_reminders,
 // 폐기함) 없이 이미 있는 user_bookmarks를 그대로 구독 신호로 재사용한다.
 //
-// [등급 정책 변경](2026-09-20 사용자 확인): "알림도 열심맙 이상만" — 애초에 찜 자체가
-// 열심맘(active) 이상만 가능하므로(src/lib/community/grades.ts canBookmark), 이 배치도
-// 동일한 기준으로 발송 대상을 좁힌다. 기존 mom-pick-push-send-batch.mjs(우수맘/excellent
-// 이상)보다 한 단계 낮은 문턱이다 — 서로 다른 기능이라 별도 기준을 쓴다.
+// [등급 정책 재개정 — 2단계 분기](2026-10-03 사용자 지시): "찜기능에대하여 2개로
+// 분기해서 우수회원들은 예약 알림기능까지.. 그 아래는.. 그냥 찜해서 찜한것
+// 마이페이지 같은데서 볼수 있는기능" — 찜(user_bookmarks에 담기는 것) 자체는
+// 그대로 열심맘(active) 이상이면 누구나 가능하지만, 예약 오픈 알림 발송은 그보다
+// 높은 우수맘(excellent) 이상만 받도록 분리한다(2026-09-20 당시엔 찜과 동일 기준
+// 이었음 — 이번 지시로 알림 쪽 문턱만 올림). 결과적으로 mom-pick-push-send-batch.mjs
+// (우수맘/excellent 이상)와 동일한 문턱이 됐다.
 //
 // [정밀도에 대한 정직한 기록] 이 배치는 GitHub Actions 스케줄(cron)로 10분마다 실행된다.
 // GitHub Actions의 스케줄 트리거는 공식적으로 "정확한 시각 실행을 보장하지 않으며 부하가
@@ -29,9 +32,9 @@ import { createAdminClient } from './lib/supabase-admin.mjs';
 
 const WINDOW_START_MINUTES = 5;
 const WINDOW_END_MINUTES = 15;
-// src/lib/community/grades.ts의 canBookmark(hasReachedGrade(grade, 'active'))와 동일한
-// 문턱 — GRADE_RANK 순서상 'active' 이상은 ['active','excellent','power'].
-const ELIGIBLE_GRADES = ['active', 'excellent', 'power'];
+// src/lib/community/grades.ts의 canReceivePushNotifications(hasReachedGrade(grade,
+// 'excellent'))와 동일한 문턱 — GRADE_RANK 순서상 'excellent' 이상은 ['excellent','power'].
+const ELIGIBLE_GRADES = ['excellent', 'power'];
 
 function configureWebPush() {
   const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
