@@ -184,14 +184,16 @@ describe('CultureClubTabView', () => {
       expect(screen.getByText('중국 여행을 떠나 짜장면을 만들어요', { exact: false })).toBeInTheDocument();
     });
 
-    it('신청하러 가기 버튼은 이마트 컬처클럽 enrolment 페이지로 새 탭 연결된다', async () => {
-      stubFetch([makeClass()]);
+    // [딥링크 확인됨](2026-10-03 사용자 제공 URL로 실측 확인): 강좌별 상세 페이지는
+    // /class/{classId} 형태로 바로 연결된다(이전엔 패턴을 몰라 검색 화면으로만 보냈음).
+    it('신청하러 가기 버튼은 class_id가 포함된 강좌별 상세 페이지로 새 탭 연결된다', async () => {
+      stubFetch([makeClass({ class_id: '403oo9Mze2026S3760' })]);
       render(<CultureClubTabView />);
       await screen.findByText(/두근두근/);
       fireEvent.click(screen.getAllByText(/두근두근/)[0]);
 
       const link = await screen.findByText('클래스 신청하러 가기 ↗');
-      expect(link.closest('a')).toHaveAttribute('href', 'https://www.cultureclub.emart.com/enrolment');
+      expect(link.closest('a')).toHaveAttribute('href', 'https://www.cultureclub.emart.com/class/403oo9Mze2026S3760');
       expect(link.closest('a')).toHaveAttribute('target', '_blank');
     });
 

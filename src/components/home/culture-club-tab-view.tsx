@@ -35,13 +35,15 @@ const PAGE_SIZE = 20;
 // 아니다(제5장 제7조 — 확장 구조는 허용, 확장 기능 자체는 구현하지 않음). 자리만 끼워
 // 두고 CultureClubAdSlot은 아직 null을 반환한다.
 const AD_SLOT_INTERVAL = 10;
-// [클래스 신청하러 가기](2026-10-03 사용자 지시, `reference/emart culture club
-// detail.png` 참고): "클래스 신청하러 가기버튼이 있으면 될꺼같아" — 실제 수강 신청은
-// 우리가 대행하지 않고 이마트 컬처클럽 사이트에서 처리한다. 강좌별 상세 페이지로
-// 바로 연결하는 URL 패턴(예: /enrolment/{classId})은 아직 확인하지 못해(추측으로
-// 만들지 않음, 제3장 제5조) 우선 검색/필터 화면인 /enrolment로 보낸다 — 사용자가
-// 실제 상세 페이지 URL 패턴을 확인해주면 class_id를 넣어 바로 연결할 수 있다.
-const EMART_ENROLMENT_URL = 'https://www.cultureclub.emart.com/enrolment';
+// [클래스 신청하러 가기 — 딥링크 확인됨](2026-10-03 사용자 제공 URL로 실측 확인):
+// "https://www.cultureclub.emart.com/class/{classId}" 형태로 강좌별 상세 페이지에
+// 바로 연결된다. curl로 직접 확인(브라우저 User-Agent 없이는 /enrolment 베이스
+// 페이지도 403이 나는 동일한 사이트 전역 봇 차단 때문이었고, User-Agent를 붙이면
+// /class/{classId}가 200을 반환함을 확인) — 이전엔 패턴을 몰라 검색 화면(/enrolment)
+// 으로만 보냈었다.
+function buildEmartClassUrl(classId: string) {
+  return `https://www.cultureclub.emart.com/class/${classId}`;
+}
 
 type StoreOption = { storeCode: string; label: string };
 
@@ -269,7 +271,7 @@ function CultureClubDetailSheet({ item, onClose }: { item: CultureClubClass; onC
                 <BookmarkButton target={{ kind: 'emart_class', emartClassId: item.class_id }} />
               </div>
               <a
-                href={EMART_ENROLMENT_URL}
+                href={buildEmartClassUrl(item.class_id)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex-1 rounded-lg bg-orange-500 px-4 py-2 text-center text-sm font-semibold text-white hover:bg-orange-600"
