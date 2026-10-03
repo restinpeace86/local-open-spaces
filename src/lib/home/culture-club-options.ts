@@ -26,3 +26,18 @@ export type CultureClubSubCategory = (typeof CULTURE_CLUB_SUB_CATEGORY_OPTIONS)[
 export const CULTURE_CLUB_DAY_OPTIONS = ['월', '화', '수', '목', '금', '토', '일'] as const;
 
 export type CultureClubDay = (typeof CULTURE_CLUB_DAY_OPTIONS)[number];
+
+// [이미지 — 썸네일 CDN 확인됨](2026-10-03 사용자 제공): main_image_bucket/region 자체(S3
+// 직접 접근)는 여전히 403(Amplify Cognito 인증 추정)이지만, 사용자가 실제 사이트에서 뜨는
+// 이미지의 실제 요청 URL을 찾아줬다 — `https://d24y2yfxh2iebm.cloudfront.net/resized/
+// thumbnail/{main_image_key}` 형태의 별도 공개 CloudFront 배포로, 인증 없이 바로
+// 접근 가능함을 실측 확인(두 가지 키 형태 "category/4/403/{uuid}"와 "classImages/{uuid}"
+// 모두에서 200 + 실제 JPEG 확인). 상세(큰) 해상도 경로는 아직 못 찾았다(resized/detail,
+// /large, /full, /original, /1200 등 전부 404 — 추측으로 더 시도하지 않음, 제3장 제5조) —
+// 사용자가 상세 화면용 URL을 하나 더 제공하면 그 때 추가한다.
+const CULTURE_CLUB_IMAGE_CDN_BASE = 'https://d24y2yfxh2iebm.cloudfront.net/resized';
+
+export function buildCultureClubThumbnailUrl(imageKey: string | null | undefined): string | null {
+  if (!imageKey) return null;
+  return `${CULTURE_CLUB_IMAGE_CDN_BASE}/thumbnail/${imageKey}`;
+}

@@ -18,6 +18,7 @@ type ClassFixture = {
   filter_status: '접수대기' | '접수중' | '정원마감';
   register_start_date: string;
   register_end_date: string;
+  main_image_key: string | null;
 };
 
 function makeClass(overrides: Partial<ClassFixture> = {}): ClassFixture {
@@ -34,6 +35,7 @@ function makeClass(overrides: Partial<ClassFixture> = {}): ClassFixture {
     filter_status: '접수중',
     register_start_date: '202607231000',
     register_end_date: '20261013',
+    main_image_key: 'classImages/6450c059-7f36-47e0-8c2e-670eeb1aed31',
     ...overrides,
   };
 }
@@ -80,6 +82,23 @@ describe('CultureClubTabView', () => {
 
     await screen.findByText(/두근두근/);
     expect(screen.queryByText(/재료비/)).not.toBeInTheDocument();
+  });
+
+  it('main_image_key가 있으면 CDN 썸네일 URL로 이미지를 렌더링한다', async () => {
+    stubFetch([makeClass({ main_image_key: 'classImages/abc-123' })]);
+    const { container } = render(<CultureClubTabView />);
+
+    await screen.findByText(/두근두근/);
+    const img = container.querySelector('img');
+    expect(img).toHaveAttribute('src', 'https://d24y2yfxh2iebm.cloudfront.net/resized/thumbnail/classImages/abc-123');
+  });
+
+  it('main_image_key가 없으면 플레이스홀더를 보여준다(이미지 태그 없음)', async () => {
+    stubFetch([makeClass({ main_image_key: null })]);
+    const { container } = render(<CultureClubTabView />);
+
+    await screen.findByText(/두근두근/);
+    expect(container.querySelector('img')).toBeNull();
   });
 
   it('정원마감이면 "대기접수 가능"으로 표시한다', async () => {

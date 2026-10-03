@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { EmptyState } from '@/components/map/empty-state';
 import { EventListSkeleton } from '@/components/cards/event-list-skeleton';
 import {
+  buildCultureClubThumbnailUrl,
   CULTURE_CLUB_BRAND_OPTIONS,
   CULTURE_CLUB_DAY_OPTIONS,
   CULTURE_CLUB_SUB_CATEGORY_OPTIONS,
@@ -49,6 +50,7 @@ type CultureClubClass = {
   filter_status: '접수대기' | '접수중' | '정원마감';
   register_start_date: string | null;
   register_end_date: string | null;
+  main_image_key: string | null;
 };
 
 function formatTimeRange(start: string | null, end: string | null) {
@@ -92,25 +94,28 @@ function toggleInSet<T>(set: Set<T>, value: T): Set<T> {
   return next;
 }
 
-// [이미지 — 미해결 블로커](2026-10-03 실측 확인): main_image_bucket/region/key가
-// 가리키는 S3 버킷(prod-cognitos3-master-imagestoragemaster...)은 명명 규칙상 AWS
-// Amplify Storage(Cognito Identity Pool 기반) 전용 버킷으로 보이고, 직접 GET 요청은
-// 여전히 403이다(실측 재확인 — scripts/ingest 내 모든 스크립트·어드민 패널을 찾아봐도
-// 우회 경로를 찾은 적이 없다). Amplify Storage는 보통 클라이언트가 Cognito 자격증명으로
-// 서명한 URL을 런타임에 발급받아 쓰는 방식이라, 우리가 추측으로 CDN 도메인을 지어내거나
-// 서드파티 JS 번들에서 인증 정보를 추출하는 건(이번 세션에서 이미 한 번 차단된 접근
-// 방식) 하지 않는다(제3장 제5조 추측 금지). 실제 동작하는 이미지 URL을 확보하기 전까지는
-// 플레이스홀더만 보여준다 — 상세보기(추후 구현) 해상도와 리스트 썸네일 해상도를 분리
-// 저장하는 건 그 URL을 확보한 뒤에 설계한다.
-function ClassImagePlaceholder({ status }: { status: CultureClubClass['filter_status'] }) {
+// [이미지 — 썸네일 CDN 확인됨](2026-10-03 사용자 제공 URL로 실측 확인): main_image_bucket
+// 직접 접근(S3)은 여전히 403이지만, 사용자가 실제 사이트에서 뜨는 이미지의 실제 요청
+// URL(`https://d24y2yfxh2iebm.cloudfront.net/resized/thumbnail/{main_image_key}`)을
+// 찾아줘서 공개 CDN으로 접근 가능함을 확인했다(buildCultureClubThumbnailUrl 참고).
+// 상세(큰) 해상도 경로는 아직 못 찾았다 — 상세보기 자체도 이번 범위에 없어 지금은
+// 리스트 썸네일만 적용한다. main_image_key가 없는 행(드묾, 상세 백필 전 상태 등)은
+// 플레이스홀더로 폴백한다.
+function ClassImage({ imageKey, status }: { imageKey: string | null; status: CultureClubClass['filter_status'] }) {
+  const thumbnailUrl = buildCultureClubThumbnailUrl(imageKey);
   return (
     <div className="relative aspect-square w-full overflow-hidden rounded-t-xl bg-gray-100">
-      <span className={`absolute left-2 top-2 rounded px-1.5 py-0.5 text-[11px] font-semibold ${statusBadgeClassName(status)}`}>
+      <span className={`absolute left-2 top-2 z-10 rounded px-1.5 py-0.5 text-[11px] font-semibold ${statusBadgeClassName(status)}`}>
         {statusLabel(status)}
       </span>
-      <div className="flex h-full w-full items-center justify-center text-3xl text-gray-300" aria-hidden>
-        🏫
-      </div>
+      {thumbnailUrl ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={thumbnailUrl} alt="" loading="lazy" className="h-full w-full object-cover" />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center text-3xl text-gray-300" aria-hidden>
+          🏫
+        </div>
+      )}
     </div>
   );
 }
@@ -119,7 +124,7 @@ function ClassCard({ item }: { item: CultureClubClass }) {
   const hasMaterialFee = item.class_material_fee != null && item.class_material_fee > 0;
   return (
     <div className="flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white">
-      <ClassImagePlaceholder status={item.filter_status} />
+      <ClassImage imageKey={item.main_image_key} status={item.filter_status} />
       <div className="flex flex-col gap-1 p-2.5">
         <div className="flex items-center justify-between">
           <span className="text-[11px] text-gray-400">{item.sub_category_name ?? '-'}</span>
