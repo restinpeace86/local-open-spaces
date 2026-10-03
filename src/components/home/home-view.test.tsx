@@ -802,4 +802,37 @@ describe('HomeView', () => {
     });
   });
 
+  // [이벤트픽 메인 탭](2026-10-03 사용자 지시): "이벤트픽 화면에서 현재꺼에 대하여
+  // 탭으로 하나있고 문화센터로 탭하나 만들자는 얘기였는데" — 바텀시트가 아니라 화면
+  // 전체를 "이벤트"/"문화센터" 2개 탭으로 전환하는 구조인지 검증한다.
+  describe('이벤트픽 메인 탭(이벤트/문화센터)', () => {
+    it('기본값은 "이벤트" 탭이라 카테고리별 행사 그리드가 보인다', () => {
+      const { container } = render(<HomeView initialHeroEvents={[]} />);
+      expect(screen.getByText('이벤트')).toBeInTheDocument();
+      expect(screen.getByText('🏫 문화센터')).toBeInTheDocument();
+      expect(container.querySelector('section[aria-label="카테고리별 행사"]')).not.toBeNull();
+    });
+
+    it('"🏫 문화센터" 탭을 누르면 문화센터 필터 UI가 보이고 기존 이벤트 콘텐츠는 사라진다', async () => {
+      const { container } = render(<HomeView initialHeroEvents={[]} />);
+
+      fireEvent.click(screen.getByText('🏫 문화센터'));
+
+      expect(await screen.findByText('지점')).toBeInTheDocument();
+      expect(screen.getByText('이마트 컬처클럽')).toBeInTheDocument();
+      expect(container.querySelector('section[aria-label="카테고리별 행사"]')).toBeNull();
+    });
+
+    it('문화센터 탭에서 "이벤트" 탭을 다시 누르면 기존 화면으로 돌아온다', async () => {
+      const { container } = render(<HomeView initialHeroEvents={[]} />);
+
+      fireEvent.click(screen.getByText('🏫 문화센터'));
+      expect(await screen.findByText('지점')).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText('이벤트'));
+      expect(screen.queryByText('지점')).not.toBeInTheDocument();
+      expect(container.querySelector('section[aria-label="카테고리별 행사"]')).not.toBeNull();
+    });
+  });
+
 });

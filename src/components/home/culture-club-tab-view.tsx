@@ -11,6 +11,13 @@ import {
   CultureClubSubCategory,
 } from '@/lib/home/culture-club-options';
 
+// [탭 구조 재수정](2026-10-03 사용자 지시): "이벤트픽 화면에서 현재꺼에 대하여 탭으로
+// 하나있고 문화센터로 탭하나 만들자는 얘기였는데" — 처음엔 중분류 그리드 아래 버튼을
+// 눌러 여는 바텀시트(culture-club-sheet.tsx)로 만들었는데, 그게 아니라 이벤트픽
+// 화면 자체를 "이벤트"/"문화센터" 2개 탭으로 나누고 싶다는 뜻이었다. 바텀시트
+// 오버레이(fixed inset-0, 배경 클릭으로 닫기)를 전부 제거하고, home-view.tsx의 탭
+// 전환으로 이 화면 전체가 바로 렌더링되는 평범한 인라인 컴포넌트로 바꿨다 — 필터
+// 칩/무한스크롤 로직 자체는 그대로다.
 const PAGE_SIZE = 20;
 // [광고 자리 스캐폴딩](2026-10-03 사용자 지시): "5번째 혹은 10번째 카드마다 ... 스폰서드/
 // 추천 상품 카드 자리 기능적으로 마련" — 실제 광고 콘텐츠/스폰서 테이블은 이번 범위가
@@ -91,7 +98,7 @@ function ClassRow({ item }: { item: CultureClubClass }) {
   );
 }
 
-export function CultureClubSheet({ onClose }: { onClose: () => void }) {
+export function CultureClubTabView() {
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [storeCode, setStoreCode] = useState<string | null>(null);
   const [selectedDays, setSelectedDays] = useState<Set<CultureClubDay>>(new Set());
@@ -128,8 +135,7 @@ export function CultureClubSheet({ onClose }: { onClose: () => void }) {
     [storeCode, selectedDays, selectedSubCategories]
   );
 
-  // 지점/요일/카테고리 필터가 바뀌면 항상 1페이지부터 새로 조회한다(event-browse-sheet.tsx와
-  // 동일한 패턴).
+  // 지점/요일/카테고리 필터가 바뀌면 항상 1페이지부터 새로 조회한다.
   useEffect(() => {
     if (!storeCode) return;
     let cancelled = false;
@@ -192,104 +198,92 @@ export function CultureClubSheet({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center" onClick={onClose}>
-      <div
-        className="w-full md:w-[640px] max-h-[85vh] md:max-h-[75vh] flex flex-col bg-white rounded-t-2xl md:rounded-2xl shadow-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="shrink-0 p-4 border-b border-gray-100 flex items-center justify-between">
-          <span className="text-base font-bold text-gray-900">🏫 문화센터 강좌</span>
-          <button type="button" onClick={onClose} className="shrink-0 text-gray-400 hover:text-gray-600" aria-label="닫기">
-            ✕
-          </button>
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="shrink-0 flex flex-col gap-2 p-3 border-b border-gray-100">
+        {/* 브랜드 세그먼트 — 지금은 1개뿐이라 선택 UI라기보다 라벨 표시. */}
+        <div className="flex items-center gap-2 px-1">
+          {CULTURE_CLUB_BRAND_OPTIONS.map((brand) => (
+            <span key={brand.key} className="rounded-full bg-gray-900 px-3 py-1 text-xs font-medium text-white">
+              {brand.label}
+            </span>
+          ))}
         </div>
 
-        <div className="shrink-0 flex flex-col gap-2 p-3 border-b border-gray-100">
-          {/* 브랜드 세그먼트 — 지금은 1개뿐이라 선택 UI라기보다 라벨 표시. */}
-          <div className="flex items-center gap-2 px-1">
-            {CULTURE_CLUB_BRAND_OPTIONS.map((brand) => (
-              <span key={brand.key} className="rounded-full bg-gray-900 px-3 py-1 text-xs font-medium text-white">
-                {brand.label}
-              </span>
+        {/* 지점 선택 — 단일선택, 클릭 한 번으로 바로 전환된다(네이티브 select). */}
+        <div className="flex items-center gap-2 px-1">
+          <label htmlFor="culture-club-store" className="text-sm text-gray-500 shrink-0">
+            지점
+          </label>
+          <select
+            id="culture-club-store"
+            value={storeCode ?? ''}
+            onChange={(e) => setStoreCode(e.target.value)}
+            className="flex-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+          >
+            {stores.map((store) => (
+              <option key={store.storeCode} value={store.storeCode}>
+                {store.label}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {/* 요일 필터 — 다중선택 OR. */}
+        <div className="flex gap-1.5 overflow-x-auto px-1">
+          {CULTURE_CLUB_DAY_OPTIONS.map((day) => {
+            const isActive = selectedDays.has(day);
+            return (
+              <button
+                key={day}
+                type="button"
+                aria-pressed={isActive}
+                onClick={() => setSelectedDays((prev) => toggleInSet(prev, day))}
+                className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  isActive ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {day}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* 카테고리 필터 — 다중선택 OR. */}
+        <div className="flex gap-1.5 overflow-x-auto px-1 pb-1">
+          {CULTURE_CLUB_SUB_CATEGORY_OPTIONS.map((category) => {
+            const isActive = selectedSubCategories.has(category);
+            return (
+              <button
+                key={category}
+                type="button"
+                aria-pressed={isActive}
+                onClick={() => setSelectedSubCategories((prev) => toggleInSet(prev, category))}
+                className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  isActive ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {category}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4" onScroll={handleScroll}>
+        {isLoading && items.length === 0 && <EventListSkeleton label="문화센터 강좌 불러오는 중" />}
+        {errorMessage && <p className="text-sm text-red-500">{errorMessage}</p>}
+        {isEmpty && <EmptyState onReset={resetFilters} />}
+        {items.length > 0 && (
+          <div className="flex flex-col gap-2">
+            {items.map((item, index) => (
+              <div key={item.class_id}>
+                {(index + 1) % AD_SLOT_INTERVAL === 0 && <CultureClubAdSlot />}
+                <ClassRow item={item} />
+              </div>
             ))}
           </div>
-
-          {/* 지점 선택 — 단일선택, 클릭 한 번으로 바로 전환된다(네이티브 select). */}
-          <div className="flex items-center gap-2 px-1">
-            <label htmlFor="culture-club-store" className="text-sm text-gray-500 shrink-0">
-              지점
-            </label>
-            <select
-              id="culture-club-store"
-              value={storeCode ?? ''}
-              onChange={(e) => setStoreCode(e.target.value)}
-              className="flex-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
-            >
-              {stores.map((store) => (
-                <option key={store.storeCode} value={store.storeCode}>
-                  {store.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* 요일 필터 — 다중선택 OR. */}
-          <div className="flex gap-1.5 overflow-x-auto px-1">
-            {CULTURE_CLUB_DAY_OPTIONS.map((day) => {
-              const isActive = selectedDays.has(day);
-              return (
-                <button
-                  key={day}
-                  type="button"
-                  aria-pressed={isActive}
-                  onClick={() => setSelectedDays((prev) => toggleInSet(prev, day))}
-                  className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                    isActive ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  {day}
-                </button>
-              );
-            })}
-          </div>
-
-          {/* 카테고리 필터 — 다중선택 OR. */}
-          <div className="flex gap-1.5 overflow-x-auto px-1 pb-1">
-            {CULTURE_CLUB_SUB_CATEGORY_OPTIONS.map((category) => {
-              const isActive = selectedSubCategories.has(category);
-              return (
-                <button
-                  key={category}
-                  type="button"
-                  aria-pressed={isActive}
-                  onClick={() => setSelectedSubCategories((prev) => toggleInSet(prev, category))}
-                  className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                    isActive ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                  }`}
-                >
-                  {category}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-4" onScroll={handleScroll}>
-          {isLoading && items.length === 0 && <EventListSkeleton label="문화센터 강좌 불러오는 중" />}
-          {errorMessage && <p className="text-sm text-red-500">{errorMessage}</p>}
-          {isEmpty && <EmptyState onReset={resetFilters} />}
-          {items.length > 0 && (
-            <div className="flex flex-col gap-2">
-              {items.map((item, index) => (
-                <div key={item.class_id}>
-                  {(index + 1) % AD_SLOT_INTERVAL === 0 && <CultureClubAdSlot />}
-                  <ClassRow item={item} />
-                </div>
-              ))}
-            </div>
-          )}
-          {isLoading && items.length > 0 && <p className="mt-4 text-center text-xs text-gray-400">불러오는 중...</p>}
-        </div>
+        )}
+        {isLoading && items.length > 0 && <p className="mt-4 text-center text-xs text-gray-400">불러오는 중...</p>}
       </div>
     </div>
   );
