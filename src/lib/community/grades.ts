@@ -45,26 +45,34 @@ export const FREE_CHATBOT_USES_BEFORE_SPROUT = 1;
 export type GradeCalcInput = {
   /** 평생 누적: 후기/체크리스트를 한 번이라도 작성한 적이 있는지(새싹맘 승급은 1회성, 강등되지 않음) */
   hasEverPosted: boolean;
-  /** 이번 달(달력월) 누적 작성 건수 — 열심맘(2건 이상) 판정 기준 */
-  monthlyPostCount: number;
+  /** [Decision 027 개정](2026-10-03 사용자 지시): "우수맘 빼고는 그냥 매월 안하고
+   * 한번만 횟수채워도 되는거 아니야?" — 열심맘도 새싹맘처럼 평생 누적 2건 작성이면
+   * 영구 달성(매월 재충족 불필요, 강등 없음)으로 바뀌었다. 평생 누적 글 수가 2건
+   * 이상인지만 본다(월 기준 아님).
+   */
+  hasReachedActiveLifetime: boolean;
   /** [Decision 019 개정 — 우수맘 조건](2026-10-03 사용자 지시): "월 5개 스팟 리뷰
    * (이미지 포함)인거야" — 글 건수가 아니라 "사진이 포함된 리뷰를 작성한 서로 다른
-   * 스팟 수"(이번 달, 중복 스팟은 1개로만 집계). 우수맘(5개 이상) 판정 기준. */
+   * 스팟 수"(이번 달, 중복 스팟은 1개로만 집계). 우수맘(5개 이상) 판정 기준 — 이것만
+   * 매월 재평가한다(유일하게 강등 가능한 등급). */
   monthlySpotPhotoReviewCount: number;
   /** 이번 달 파워맘 정원(N명) 선발 대상으로 뽑혔는지 — 우수맘 조건을 만족하는 사람 중에서만 의미 있음 */
   isPowerMomThisMonth: boolean;
 };
 
-// 달력월 기준 등급 재계산(Decision 019: 즉시 강등, 당월 실적만 반영, 유예 없음 — 자동
-// 배치 재계산 방식 자체는 2026-10-03 개정에서도 유지된다, 관리자 수동 검수는 보류).
+// [Decision 027](2026-10-03): 새싹맘(평생 1회)·열심맘(평생 누적 2건)은 한 번 달성하면
+// 영구 유지되고, 우수맘/파워맘(월 5개 스팟 사진 리뷰)만 달력월 기준으로 매일 재평가해
+// 강등될 수 있다(제5장 — "지난달 열심히 썼는데 이번 달 1일부터 새싹맘으로 보인다"는
+// 실제 사용자 경험 문제를 고치기 위한 개정, Decision 019의 "즉시 강등, 유예 없음"
+// 원칙은 우수맘/파워맘에만 남는다).
 export function calculateGrade({
   hasEverPosted,
-  monthlyPostCount,
+  hasReachedActiveLifetime,
   monthlySpotPhotoReviewCount,
   isPowerMomThisMonth,
 }: GradeCalcInput): MomPickGrade {
   if (!hasEverPosted) return 'signed_up';
   if (monthlySpotPhotoReviewCount >= 5) return isPowerMomThisMonth ? 'power' : 'excellent';
-  if (monthlyPostCount >= 2) return 'active';
+  if (hasReachedActiveLifetime) return 'active';
   return 'sprout';
 }

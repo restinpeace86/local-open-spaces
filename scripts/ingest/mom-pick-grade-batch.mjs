@@ -1,14 +1,22 @@
 // [Decision 019](2026-09-02) / spec/community/mom-pick-grades.md 2.4·3-3·3-7: 맘스픽 등급
-// 배치 — 달력월 기준으로 열심맘/우수맘/파워맘 승급·강등을 매일 재계산한다. 새싹맘 승급
-// (첫 글 작성)은 별도 DB 트리거(promote_to_sprout_on_first_post)가 즉시 처리하므로, 이
-// 배치는 이미 sprout 이상인 프로필만 다룬다(signed_up은 아직 한 번도 글을 안 써서 계산할
-// 이번 달 실적 자체가 없다).
+// 배치 — 우수맘/파워맘(당월 5개 스팟 사진 리뷰 기준)만 달력월 기준으로 매일 재계산한다.
+// 새싹맘 승급(평생 1회)은 promote_to_sprout_on_first_post 트리거가, 열심맘 승급(평생
+// 누적 2건)은 promote_to_active_on_lifetime_second_post 트리거가 각각 즉시 처리하므로,
+// 이 배치는 이미 sprout 이상인 프로필만 다룬다(signed_up은 아직 한 번도 글을 안 써서
+// 계산할 실적 자체가 없다).
 //
-// [파워맘 정원제] 우수맘 조건(당월 5개 스팟 사진 리뷰 이상 — 2026-10-03 Decision 019
-// 개정)을 만족하는 사용자 중 당월 채택 수 상위 N명(기본 10명, MOM_PICK_POWER_MOM_QUOTA
-// 환경변수로 관리자가 조정 가능 — 제5장 제6조 하드코딩 최소화)만 파워맘으로 승급한다.
-// 동점자는 먼저 그 채택을 받은(더 이른 시점에 조건을 채운) 사용자를 우선한다 —
-// adopted_count로 정렬 후 author_id 정렬은 결정성만 위한 타이브레이커다.
+// [Decision 027 — 열심맘 영구 달성](2026-10-03 사용자 지시): "우수맘 빼고는 그냥 매월
+// 안하고 한번만 횟수채워도 되는거 아니야?" — 열심맘은 더 이상 매월 재충족이 필요
+// 없고(위 트리거가 평생 누적 2건째에 영구 승급시킴), 이 배치는 열심맘을 다시 새싹맘으로
+// 강등시키지 않는다(calculateGrade가 hasReachedActiveLifetime을 그대로 참조해 매번
+// 같은 결론을 낸다 — 배치가 이걸 따로 보호할 필요 없이 자연히 그렇게 동작함). 우수맘/
+// 파워맘만 매일 재평가해 조건 미달 시 열심맘으로 돌아간다(새싹맘으로는 안 내려감).
+//
+// [파워맘 정원제] 우수맘 조건(당월 5개 스팟 사진 리뷰 이상)을 만족하는 사용자 중 당월
+// 채택 수 상위 N명(기본 10명, MOM_PICK_POWER_MOM_QUOTA 환경변수로 관리자가 조정 가능 —
+// 제5장 제6조 하드코딩 최소화)만 파워맘으로 승급한다. 동점자는 먼저 그 채택을 받은
+// (더 이른 시점에 조건을 채운) 사용자를 우선한다 — adopted_count로 정렬 후 author_id
+// 정렬은 결정성만 위한 타이브레이커다.
 import { pathToFileURL } from 'url';
 import { loadEnv } from '../lib/load-env.mjs';
 import { createAdminClient } from './lib/supabase-admin.mjs';
@@ -25,8 +33,8 @@ function getPowerMomQuota() {
 export async function run() {
   const admin = createAdminClient();
 
-  const { data: activity, error: activityError } = await admin.rpc('get_monthly_mom_pick_activity');
-  if (activityError) throw new Error(`이번 달 활동 집계 조회 실패: ${activityError.message}`);
+  const { data: activity, error: activityError } = await admin.rpc('get_mom_pick_activity_summary');
+  if (activityError) throw new Error(`활동 집계 조회 실패: ${activityError.message}`);
 
   const activityByAuthor = new Map((activity ?? []).map((row) => [row.author_id, row]));
 
@@ -53,11 +61,11 @@ export async function run() {
 
   for (const profile of profiles ?? []) {
     const activityRow = activityByAuthor.get(profile.id);
-    const monthlyPostCount = activityRow ? Number(activityRow.post_count) : 0;
+    const lifetimePostCount = activityRow ? Number(activityRow.lifetime_post_count) : 0;
     const monthlySpotPhotoReviewCount = activityRow ? Number(activityRow.spot_photo_review_count) : 0;
     const nextGrade = calculateGrade({
       hasEverPosted: true, // neq('signed_up')로 이미 필터링됨 — sprout 이상은 반드시 1회 이상 작성한 적 있음
-      monthlyPostCount,
+      hasReachedActiveLifetime: lifetimePostCount >= 2,
       monthlySpotPhotoReviewCount,
       isPowerMomThisMonth: powerMomIds.has(profile.id),
     });
@@ -73,7 +81,7 @@ export async function run() {
       }
       updatedCount += 1;
       console.log(
-        `[MOM_PICK_GRADE_BATCH] ${profile.id}: ${profile.grade} → ${nextGrade} (이번 달 글 ${monthlyPostCount}건, 사진 포함 스팟 리뷰 ${monthlySpotPhotoReviewCount}곳)`
+        `[MOM_PICK_GRADE_BATCH] ${profile.id}: ${profile.grade} → ${nextGrade} (평생 글 ${lifetimePostCount}건, 이번 달 사진 포함 스팟 리뷰 ${monthlySpotPhotoReviewCount}곳)`
       );
     }
   }

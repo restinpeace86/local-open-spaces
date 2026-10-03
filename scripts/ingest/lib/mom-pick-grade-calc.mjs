@@ -5,13 +5,14 @@
 // 독립 구현이다). 등급 규칙을 바꿀 때는 두 파일을 함께 수정해야 한다(양쪽 다 소규모
 // 순수 함수라 drift 위험은 낮다 — grades.test.ts가 TS 쪽 회귀를 잡아준다).
 //
-// [Decision 019 개정 — 우수맘 조건](2026-10-03 사용자 지시): "월 5개 스팟 리뷰(이미지
-// 포함)인거야" — monthlyPostCount(글 건수, 열심맘 기준은 그대로)와 별개로
-// monthlySpotPhotoReviewCount(이번 달 사진 포함 리뷰를 작성한 서로 다른 스팟 수)를
-// 우수맘 기준으로 쓴다.
-export function calculateGrade({ hasEverPosted, monthlyPostCount, monthlySpotPhotoReviewCount, isPowerMomThisMonth }) {
+// [Decision 027 — 열심맘을 평생 1회성 달성으로 변경](2026-10-03 사용자 지시): "우수맘
+// 빼고는 그냥 매월 안하고 한번만 횟수채워도 되는거 아니야?" — 새싹맘처럼 열심맘도
+// 평생 누적 2건 작성이면 영구 달성(매월 재충족 불필요)으로 바뀌었다.
+// hasReachedActiveLifetime(평생 누적 글 수 >= 2)만 보고, monthlySpotPhotoReviewCount
+// (우수맘, 월 5개 스팟 사진 리뷰)만 계속 매월 재평가해 강등될 수 있다.
+export function calculateGrade({ hasEverPosted, hasReachedActiveLifetime, monthlySpotPhotoReviewCount, isPowerMomThisMonth }) {
   if (!hasEverPosted) return 'signed_up';
   if (monthlySpotPhotoReviewCount >= 5) return isPowerMomThisMonth ? 'power' : 'excellent';
-  if (monthlyPostCount >= 2) return 'active';
+  if (hasReachedActiveLifetime) return 'active';
   return 'sprout';
 }
