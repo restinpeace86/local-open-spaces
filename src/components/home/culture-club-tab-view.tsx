@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { EmptyState } from '@/components/map/empty-state';
 import { EventListSkeleton } from '@/components/cards/event-list-skeleton';
+import { BookmarkButton } from '@/components/community/bookmark-button';
 import {
   buildCultureClubThumbnailUrl,
   CULTURE_CLUB_BRAND_OPTIONS,
@@ -140,14 +141,11 @@ function ClassCard({ item }: { item: CultureClubClass }) {
               </span>
             )}
           </p>
-          {/* [찜 아이콘 — 비활성](2026-10-03 사용자 제안: "찜(하트)아이콘 넣으면 되지
-              않을까 싶은데") 이마트 클래스는 아직 user_bookmarks의 대상(spot/event)
-              구조에 들어있지 않다 — 레이아웃만 참고 화면과 맞추고, 실제 찜 동작은
-              스팟/이벤트처럼 별도 target 종류를 추가할지 테이블을 새로 만들지 결정된
-              뒤에 연결한다(제5장 제3조 — 데이터 구조 변경 임의 결정 금지). */}
-          <span className="shrink-0 text-base text-gray-300" aria-hidden title="찜 — 준비 중">
-            🤍
-          </span>
+          {/* [찜 아이콘 — 연결됨](2026-10-03 사용자 지시: "찜/알람은 같은 기능이니깐
+              두 테이블 데이터 전부 참조할 수 있도록 확장") user_bookmarks가
+              emart_class_id로 확장돼 스팟/이벤트와 동일한 BookmarkButton을 그대로
+              쓴다(열심맘 이상 노출, 우수맘 이상은 예약 알람 20개 캡 대상에도 합산). */}
+          <BookmarkButton target={{ kind: 'emart_class', emartClassId: item.class_id }} />
         </div>
         <hr className="my-0.5 border-gray-100" />
         <p className="text-[11px] text-gray-400">

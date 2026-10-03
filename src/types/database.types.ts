@@ -305,7 +305,9 @@ export type Database = {
           min_class_capacity: number | null
           occupied_full_flag: boolean | null
           register_end_date: string | null
+          register_start_at: string | null
           register_start_date: string | null
+          reservation_open_reminder_sent_at: string | null
           semester: string | null
           semester_year: string | null
           start_time: string | null
@@ -348,7 +350,9 @@ export type Database = {
           min_class_capacity?: number | null
           occupied_full_flag?: boolean | null
           register_end_date?: string | null
+          register_start_at?: string | null
           register_start_date?: string | null
+          reservation_open_reminder_sent_at?: string | null
           semester?: string | null
           semester_year?: string | null
           start_time?: string | null
@@ -391,7 +395,9 @@ export type Database = {
           min_class_capacity?: number | null
           occupied_full_flag?: boolean | null
           register_end_date?: string | null
+          register_start_at?: string | null
           register_start_date?: string | null
+          reservation_open_reminder_sent_at?: string | null
           semester?: string | null
           semester_year?: string | null
           start_time?: string | null
@@ -1791,6 +1797,7 @@ export type Database = {
       user_bookmarks: {
         Row: {
           created_at: string
+          emart_class_id: string | null
           event_id: string | null
           id: string
           spot_id: string | null
@@ -1798,6 +1805,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          emart_class_id?: string | null
           event_id?: string | null
           id?: string
           spot_id?: string | null
@@ -1805,12 +1813,20 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          emart_class_id?: string | null
           event_id?: string | null
           id?: string
           spot_id?: string | null
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "user_bookmarks_emart_class_id_fkey"
+            columns: ["emart_class_id"]
+            isOneToOne: false
+            referencedRelation: "emart_culture_club_classes"
+            referencedColumns: ["class_id"]
+          },
           {
             foreignKeyName: "user_bookmarks_event_id_fkey"
             columns: ["event_id"]
@@ -2269,6 +2285,7 @@ export type Database = {
           adopted_count: number
           author_id: string
           post_count: number
+          spot_photo_review_count: number
         }[]
       }
       get_nearby_parking_lots: {

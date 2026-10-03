@@ -7,6 +7,17 @@ import { addBookmark, BookmarkCapExceededError, BookmarkTarget, getMyBookmarkedI
 import { canBookmark } from '@/lib/community/grades';
 import { Toast } from '@/components/map/toast';
 
+// [이마트 문화센터 클래스 찜 추가](2026-10-03) — target 3종(spot/event/emart_class)에서
+// id/판별 로직이 늘어 삼항식이 2개씩 겹치면 가독성이 떨어져 작은 헬퍼로 뺐다.
+function isBookmarkedFor(
+  target: BookmarkTarget,
+  ids: { spotIds: Set<string>; eventIds: Set<string>; emartClassIds: Set<string> }
+): boolean {
+  if (target.kind === 'spot') return ids.spotIds.has(target.spotId);
+  if (target.kind === 'event') return ids.eventIds.has(target.eventId);
+  return ids.emartClassIds.has(target.emartClassId);
+}
+
 // [Decision 019](2026-09-02) / spec/community/mom-pick-grades.md: 찜은 열심맘 이상만
 // 가능하다. 자기완결적 컴포넌트로 둬 상세 모달(detail-modal.tsx)이 로그인/등급 상태를
 // 알 필요 없게 한다 — 조건 미달이면 조용히 아무것도 렌더링하지 않는다(비대상 사용자를
@@ -27,8 +38,7 @@ export function BookmarkButton({ target }: { target: BookmarkTarget }) {
     Promise.all([getMyProfile(), getMyBookmarkedIds()]).then(([profile, ids]) => {
       if (cancelled) return;
       setCanShow(Boolean(profile && canBookmark(profile.grade)));
-      const id = target.kind === 'spot' ? target.spotId : target.eventId;
-      setIsBookmarked(target.kind === 'spot' ? ids.spotIds.has(id) : ids.eventIds.has(id));
+      setIsBookmarked(isBookmarkedFor(target, ids));
     });
     return () => {
       cancelled = true;

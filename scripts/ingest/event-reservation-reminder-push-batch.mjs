@@ -15,16 +15,24 @@
 // 이었음 — 이번 지시로 알림 쪽 문턱만 올림). 결과적으로 mom-pick-push-send-batch.mjs
 // (우수맘/excellent 이상)와 동일한 문턱이 됐다.
 //
+// [이마트 문화센터 클래스까지 확장](2026-10-03 사용자 지시): "문화센터 데이터는 별도
+// 테이블로 관리하고, 찜/알람은 같은 기능이니깐 두 테이블 데이터 전부 참조할 수 있도록
+// 확장" — emart_culture_club_classes는 그대로 독립 테이블이지만(events와 파이프라인이
+// 안 섞이게), 찜/알람 메커니즘 자체는 동일하므로 user_bookmarks.emart_class_id를 통해
+// 같은 방식으로 처리한다. 반복되는 로직(대상 조회 → 찜한 유저 조회 → 등급 필터 →
+// 구독 조회 → 발송 → 발송 완료 표시)을 processSource()로 뽑아 두 소스가 공유한다
+// (events는 관리자 수동 입력 next_reservation_open_at, 문화센터 클래스는 자동 파싱된
+// register_start_at — "언제 시각을 보는지"만 다르고 나머지 로직은 동일).
+//
 // [정밀도에 대한 정직한 기록] 이 배치는 GitHub Actions 스케줄(cron)로 10분마다 실행된다.
 // GitHub Actions의 스케줄 트리거는 공식적으로 "정확한 시각 실행을 보장하지 않으며 부하가
 // 높을 때 지연될 수 있다"고 명시돼 있어(제3장 제5조 추측 금지 — 정밀 타이머인 척하지
 // 않음), "정확히 10분 전"이 아니라 "약 5~15분 전" 사이에 발송된다. 창(window)을 실행
 // 주기보다 넓게 잡아(15분 폭, 10분 주기) 지연이 있어도 이벤트를 놓치지 않게 한다.
 //
-// [중복 발송 방지] reservation_open_reminder_sent_at이 next_reservation_open_at과 정확히
-// 같으면 "이미 이 회차를 처리했다"로 간주하고 건너뛴다 — 관리자가 다음 회차 시각으로
-// 갱신하면(값이 달라짐) 자연히 다시 발송 대상이 된다(별도 boolean 리셋 로직 불필요, 이미
-// PATCH /api/admin/data-grid/reservation-open-at가 저장 시 이 컬럼을 null로 되돌려둔다).
+// [중복 발송 방지] reservation_open_reminder_sent_at이 기준 시각 컬럼과 정확히 같으면
+// "이미 이 회차를 처리했다"로 간주하고 건너뛴다 — 값이 달라지면 자연히 다시 발송
+// 대상이 된다(별도 boolean 리셋 로직 불필요).
 import { pathToFileURL } from 'url';
 import webpush from 'web-push';
 import { loadEnv } from '../lib/load-env.mjs';
@@ -45,36 +53,30 @@ function configureWebPush() {
   webpush.setVapidDetails('mailto:no-reply@example.com', publicKey, privateKey);
 }
 
-export async function run() {
-  configureWebPush();
-  const admin = createAdminClient();
+// config: { sourceLabel, table, idColumn, titleColumn, timeColumn, sentAtColumn, bookmarkColumn }
+async function processSource(admin, config, windowStart, windowEnd) {
+  const { sourceLabel, table, idColumn, titleColumn, timeColumn, sentAtColumn, bookmarkColumn } = config;
 
-  const now = Date.now();
-  const windowStart = new Date(now + WINDOW_START_MINUTES * 60 * 1000).toISOString();
-  const windowEnd = new Date(now + WINDOW_END_MINUTES * 60 * 1000).toISOString();
+  const { data: candidates, error: candidatesError } = await admin
+    .from(table)
+    .select(`${idColumn}, ${titleColumn}, ${timeColumn}, ${sentAtColumn}`)
+    .gte(timeColumn, windowStart)
+    .lt(timeColumn, windowEnd);
+  if (candidatesError) throw new Error(`[${sourceLabel}] 대상 조회 실패: ${candidatesError.message}`);
 
-  const { data: candidateEvents, error: eventsError } = await admin
-    .from('events')
-    .select('id, title, next_reservation_open_at, reservation_open_reminder_sent_at')
-    .gte('next_reservation_open_at', windowStart)
-    .lt('next_reservation_open_at', windowEnd);
-  if (eventsError) throw new Error(`대상 이벤트 조회 실패: ${eventsError.message}`);
-
-  const targetEvents = (candidateEvents ?? []).filter(
-    (event) => event.reservation_open_reminder_sent_at !== event.next_reservation_open_at
-  );
+  const targets = (candidates ?? []).filter((row) => row[sentAtColumn] !== row[timeColumn]);
 
   let sentCount = 0;
   let expiredCount = 0;
-  let eventsProcessed = 0;
+  let processedCount = 0;
 
-  for (const event of targetEvents) {
+  for (const row of targets) {
     const { data: bookmarks, error: bookmarksError } = await admin
       .from('user_bookmarks')
       .select('user_id')
-      .eq('event_id', event.id);
+      .eq(bookmarkColumn, row[idColumn]);
     if (bookmarksError) {
-      console.error(`[EVENT_RESERVATION_REMINDER] ${event.id} 찜 조회 실패: ${bookmarksError.message}`);
+      console.error(`[${sourceLabel}] ${row[idColumn]} 찜 조회 실패: ${bookmarksError.message}`);
       continue;
     }
 
@@ -87,7 +89,7 @@ export async function run() {
         ? await admin.from('profiles').select('id').in('id', bookmarkedUserIds).in('grade', ELIGIBLE_GRADES)
         : { data: [], error: null };
     if (profilesError) {
-      console.error(`[EVENT_RESERVATION_REMINDER] ${event.id} 찜한 유저 등급 조회 실패: ${profilesError.message}`);
+      console.error(`[${sourceLabel}] ${row[idColumn]} 찜한 유저 등급 조회 실패: ${profilesError.message}`);
       continue;
     }
 
@@ -97,13 +99,13 @@ export async function run() {
         ? await admin.from('push_subscriptions').select('id, endpoint, p256dh, auth_key').in('user_id', userIds)
         : { data: [], error: null };
     if (subsError) {
-      console.error(`[EVENT_RESERVATION_REMINDER] ${event.id} 구독 정보 조회 실패: ${subsError.message}`);
+      console.error(`[${sourceLabel}] ${row[idColumn]} 구독 정보 조회 실패: ${subsError.message}`);
       continue;
     }
 
     const payload = JSON.stringify({
       title: '🔔 예약 오픈 알림',
-      body: `"${event.title}" 예약이 곧 열려요! 서두르세요.`,
+      body: `"${row[titleColumn]}" 예약이 곧 열려요! 서두르세요.`,
       url: '/',
     });
 
@@ -116,28 +118,77 @@ export async function run() {
           await admin.from('push_subscriptions').delete().eq('id', sub.id);
           expiredCount += 1;
         } else {
-          console.error(`[EVENT_RESERVATION_REMINDER] ${sub.id} 발송 실패(${err.statusCode ?? 'unknown'}): ${err.message}`);
+          console.error(`[${sourceLabel}] ${sub.id} 발송 실패(${err.statusCode ?? 'unknown'}): ${err.message}`);
         }
       }
     }
 
     // 구독자가 0명이었어도 이 회차는 처리된 것으로 표시한다 — 다음 tick에서 같은
-    // 이벤트를 다시 조회/재처리하지 않기 위함(창이 넓어 여러 tick에 걸쳐 잡힐 수 있음).
+    // 대상을 다시 조회/재처리하지 않기 위함(창이 넓어 여러 tick에 걸쳐 잡힐 수 있음).
     const { error: markError } = await admin
-      .from('events')
-      .update({ reservation_open_reminder_sent_at: event.next_reservation_open_at })
-      .eq('id', event.id);
+      .from(table)
+      .update({ [sentAtColumn]: row[timeColumn] })
+      .eq(idColumn, row[idColumn]);
     if (markError) {
-      console.error(`[EVENT_RESERVATION_REMINDER] ${event.id} 발송 완료 표시 실패: ${markError.message}`);
+      console.error(`[${sourceLabel}] ${row[idColumn]} 발송 완료 표시 실패: ${markError.message}`);
       continue;
     }
-    eventsProcessed += 1;
+    processedCount += 1;
   }
 
   console.log(
-    `[EVENT_RESERVATION_REMINDER] 완료 — 대상 이벤트 ${targetEvents.length}건 중 처리 ${eventsProcessed}건, 발송 ${sentCount}건, 만료 정리 ${expiredCount}건`
+    `[${sourceLabel}] 완료 — 대상 ${targets.length}건 중 처리 ${processedCount}건, 발송 ${sentCount}건, 만료 정리 ${expiredCount}건`
   );
-  return { targetEventCount: targetEvents.length, eventsProcessed, sentCount, expiredCount };
+  return { targetCount: targets.length, processedCount, sentCount, expiredCount };
+}
+
+export async function run() {
+  configureWebPush();
+  const admin = createAdminClient();
+
+  const now = Date.now();
+  const windowStart = new Date(now + WINDOW_START_MINUTES * 60 * 1000).toISOString();
+  const windowEnd = new Date(now + WINDOW_END_MINUTES * 60 * 1000).toISOString();
+
+  const eventsResult = await processSource(
+    admin,
+    {
+      sourceLabel: 'EVENT_RESERVATION_REMINDER',
+      table: 'events',
+      idColumn: 'id',
+      titleColumn: 'title',
+      timeColumn: 'next_reservation_open_at',
+      sentAtColumn: 'reservation_open_reminder_sent_at',
+      bookmarkColumn: 'event_id',
+    },
+    windowStart,
+    windowEnd
+  );
+
+  const emartClassResult = await processSource(
+    admin,
+    {
+      sourceLabel: 'EMART_CLASS_RESERVATION_REMINDER',
+      table: 'emart_culture_club_classes',
+      idColumn: 'class_id',
+      titleColumn: 'class_title',
+      timeColumn: 'register_start_at',
+      sentAtColumn: 'reservation_open_reminder_sent_at',
+      bookmarkColumn: 'emart_class_id',
+    },
+    windowStart,
+    windowEnd
+  );
+
+  const sentCount = eventsResult.sentCount + emartClassResult.sentCount;
+  const expiredCount = eventsResult.expiredCount + emartClassResult.expiredCount;
+  const processedCount = eventsResult.processedCount + emartClassResult.processedCount;
+  const targetCount = eventsResult.targetCount + emartClassResult.targetCount;
+
+  console.log(
+    `[EVENT_RESERVATION_REMINDER] 전체 완료 — 대상 ${targetCount}건(이벤트 ${eventsResult.targetCount} + 문화센터 클래스 ${emartClassResult.targetCount}) 중 처리 ${processedCount}건, 발송 ${sentCount}건, 만료 정리 ${expiredCount}건`
+  );
+  return { targetEventCount: targetCount, eventsProcessed: processedCount, sentCount, expiredCount };
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {

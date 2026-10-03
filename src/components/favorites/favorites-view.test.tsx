@@ -29,8 +29,10 @@ function makeBookmark(overrides: Partial<MyBookmark>): MyBookmark {
     created_at: '2026-10-01T00:00:00Z',
     spot_id: null,
     event_id: null,
+    emart_class_id: null,
     open_spaces: null,
     events: null,
+    emart_culture_club_classes: null,
     ...overrides,
   };
 }
@@ -81,5 +83,50 @@ describe('FavoritesView', () => {
 
     fireEvent.click(screen.getByText('찜한 이벤트 0'));
     expect(screen.getByText('아직 찜한 이벤트가 없어요.')).toBeTruthy();
+  });
+
+  // [이마트 문화센터 클래스 찜 추가](2026-10-03 사용자 지시): "찜/알람은 같은 기능이니깐
+  // 두 테이블 데이터 전부 참조할 수 있도록 확장" — 3번째 탭(문화센터)도 동일하게
+  // emart_class_id 기준으로 걸러지는지 검증한다.
+  it('문화센터 탭은 emart_class_id 기준으로 걸러지고 강좌명/지점명을 보여준다', async () => {
+    mockUser.current = { id: 'user-1' };
+    getMyProfileMock.mockResolvedValue({ grade: 'active' });
+    listMyBookmarksMock.mockResolvedValue([
+      makeBookmark({ id: 'spot-bm', spot_id: 'spot-1', open_spaces: { id: 'spot-1', name: '인사동 스팟', address: '서울', category: '공원' } }),
+      makeBookmark({
+        id: 'emart-bm',
+        emart_class_id: 'class-1',
+        emart_culture_club_classes: { class_id: 'class-1', class_title: '토요 엉클짐', store_name: '스타필드 안성점' },
+      }),
+    ]);
+
+    render(<FavoritesView />);
+    await waitFor(() => expect(screen.getByText('인사동 스팟')).toBeTruthy());
+
+    fireEvent.click(screen.getByText('찜한 문화센터 1'));
+
+    await waitFor(() => expect(screen.getByText('토요 엉클짐')).toBeTruthy());
+    expect(screen.getByText('스타필드 안성점')).toBeTruthy();
+    expect(screen.queryByText('인사동 스팟')).toBeNull();
+  });
+
+  it('문화센터 찜 삭제 시 emart_class 타입으로 removeBookmark를 호출한다', async () => {
+    mockUser.current = { id: 'user-1' };
+    getMyProfileMock.mockResolvedValue({ grade: 'active' });
+    listMyBookmarksMock.mockResolvedValue([
+      makeBookmark({
+        id: 'emart-bm',
+        emart_class_id: 'class-1',
+        emart_culture_club_classes: { class_id: 'class-1', class_title: '토요 엉클짐', store_name: '스타필드 안성점' },
+      }),
+    ]);
+
+    render(<FavoritesView />);
+    fireEvent.click(await screen.findByText('찜한 문화센터 1'));
+    await screen.findByText('토요 엉클짐');
+
+    fireEvent.click(screen.getByLabelText('찜 삭제'));
+
+    expect(removeBookmarkMock).toHaveBeenCalledWith({ kind: 'emart_class', emartClassId: 'class-1' });
   });
 });

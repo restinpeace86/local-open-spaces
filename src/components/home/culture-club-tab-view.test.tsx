@@ -5,6 +5,13 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { describe, expect, it, vi } from 'vitest';
 import { CultureClubTabView } from './culture-club-tab-view';
 
+// [찜 아이콘 연결](2026-10-03): 각 카드가 이제 실제 BookmarkButton(useUser() 사용)을
+// 렌더링한다 — 비로그인으로 고정해 Supabase 클라이언트 생성까지 가지 않게 한다
+// (home-view.test.tsx와 동일한 이유의 동일 패턴).
+vi.mock('@/hooks/use-user', () => ({
+  useUser: () => ({ user: null, isLoading: false }),
+}));
+
 type ClassFixture = {
   class_id: string;
   class_title: string;

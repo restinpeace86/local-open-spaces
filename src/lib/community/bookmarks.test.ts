@@ -17,7 +17,7 @@ function makeCountBuilder(count: number) {
   return {
     select: () => ({
       eq: () => ({
-        not: () => Promise.resolve({ count, error: null }),
+        or: () => Promise.resolve({ count, error: null }),
       }),
     }),
   };
@@ -93,5 +93,47 @@ describe('addBookmark', () => {
     fromMock.mockReturnValueOnce(makeCountBuilder(5));
 
     await expect(addBookmark({ kind: 'event', eventId: 'event-1' })).rejects.toThrow('최대 5개');
+  });
+
+  // [이마트 문화센터 클래스 찜 추가](2026-10-03 사용자 지시): "찜/알람은 같은 기능이니깐
+  // 두 테이블 데이터 전부 참조할 수 있도록 확장" — emart_class 찜도 이벤트 찜과 동일한
+  // 캡 로직(우수맘 이상만 체크)을 탄다.
+  it('문화센터 클래스 찜도 우수맘 이상이면 캡 체크를 거친다', async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
+    getMyProfileMock.mockResolvedValue({ grade: 'excellent' });
+    fromMock.mockReturnValueOnce(makeCountBuilder(20));
+
+    await expect(addBookmark({ kind: 'emart_class', emartClassId: 'class-1' })).rejects.toThrow(BookmarkCapExceededError);
+  });
+
+  it('문화센터 클래스 찜인데 열심맘(우수맘 미달)이면 캡 체크 없이 바로 insert한다', async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
+    getMyProfileMock.mockResolvedValue({ grade: 'active' });
+    fromMock.mockReturnValue(makeInsertBuilder());
+
+    await addBookmark({ kind: 'emart_class', emartClassId: 'class-1' });
+
+    expect(fromMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('캡 카운트는 event_id와 emart_class_id를 합산한다(같은 알람 슬롯이므로)', async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
+    getMyProfileMock.mockResolvedValue({ grade: 'excellent' });
+    let capturedOrFilter: string | undefined;
+    const countBuilder = {
+      select: () => ({
+        eq: () => ({
+          or: (filter: string) => {
+            capturedOrFilter = filter;
+            return Promise.resolve({ count: 0, error: null });
+          },
+        }),
+      }),
+    };
+    fromMock.mockReturnValueOnce(countBuilder).mockReturnValueOnce(makeInsertBuilder());
+
+    await addBookmark({ kind: 'event', eventId: 'event-1' });
+
+    expect(capturedOrFilter).toBe('event_id.not.is.null,emart_class_id.not.is.null');
   });
 });
