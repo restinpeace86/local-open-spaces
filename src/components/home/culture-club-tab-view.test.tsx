@@ -6,11 +6,24 @@ import { describe, expect, it, vi } from 'vitest';
 import { CultureClubTabView } from './culture-club-tab-view';
 
 // [찜 아이콘 연결](2026-10-03): 각 카드가 이제 실제 BookmarkButton(useUser() 사용)을
-// 렌더링한다 — 비로그인으로 고정해 Supabase 클라이언트 생성까지 가지 않게 한다
-// (home-view.test.tsx와 동일한 이유의 동일 패턴).
+// 렌더링한다 — 기본은 비로그인으로 고정해 Supabase 클라이언트 생성까지 가지 않게
+// 한다(home-view.test.tsx와 동일한 이유의 동일 패턴). 찜 버튼의 stopPropagation을
+// 검증하는 테스트에서만 mockUser.current를 채워 실제로 버튼이 렌더링되게 한다.
+const mockUser = { current: null as { id: string } | null };
 vi.mock('@/hooks/use-user', () => ({
-  useUser: () => ({ user: null, isLoading: false }),
+  useUser: () => ({ user: mockUser.current, isLoading: false }),
 }));
+const getMyProfileMock = vi.fn();
+vi.mock('@/lib/auth/profile', () => ({
+  getMyProfile: () => getMyProfileMock(),
+}));
+vi.mock('@/lib/community/bookmarks', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/community/bookmarks')>();
+  return {
+    ...actual,
+    getMyBookmarkedIds: () => Promise.resolve({ spotIds: new Set(), eventIds: new Set(), emartClassIds: new Set() }),
+  };
+});
 
 type ClassFixture = {
   class_id: string;
@@ -27,6 +40,9 @@ type ClassFixture = {
   register_end_date: string;
   main_image_key: string | null;
   collected_at: string;
+  store_name: string | null;
+  class_detail_title: string | null;
+  class_detail_content: string | null;
 };
 
 function makeClass(overrides: Partial<ClassFixture> = {}): ClassFixture {
@@ -45,6 +61,9 @@ function makeClass(overrides: Partial<ClassFixture> = {}): ClassFixture {
     register_end_date: '20261013',
     main_image_key: 'classImages/6450c059-7f36-47e0-8c2e-670eeb1aed31',
     collected_at: '2026-10-03T04:12:00+00:00',
+    store_name: '울산점',
+    class_detail_title: '햇살아이 오감나무',
+    class_detail_content: '중국 여행을 떠나 짜장면을 만들어요\n\n*준비물: 쪽쪽이, 물티슈',
     ...overrides,
   };
 }
@@ -145,5 +164,73 @@ describe('CultureClubTabView', () => {
     fireEvent.click(screen.getByText('↻ 초기화'));
     await waitFor(() => expect(screen.getByText('토')).toHaveAttribute('aria-pressed', 'false'));
     expect(screen.queryByText('↻ 초기화')).not.toBeInTheDocument();
+  });
+
+  // [클래스 상세 바텀시트](2026-10-03 사용자 지적): "왜 눌렀을때 반응이 없어? 누르면
+  // 상세페이지가 바텀시트로 나와야 하는거 아니야?" — 카드 클릭 시 상세 시트가 열리고,
+  // 참고 화면(reference/emart culture club detail.png)의 핵심 요소(지점/찜/신청하기/
+  // 클래스소개)가 보이는지 검증한다.
+  describe('클래스 상세 바텀시트', () => {
+    it('카드를 클릭하면 상세 시트가 열리고 지점/신청 버튼/클래스소개가 보인다', async () => {
+      stubFetch([makeClass()]);
+      render(<CultureClubTabView />);
+      await screen.findByText(/두근두근/);
+
+      fireEvent.click(screen.getAllByText(/두근두근/)[0]);
+
+      expect(await screen.findByText('클래스 상세')).toBeInTheDocument();
+      expect(screen.getByText('접수가능지점 울산점')).toBeInTheDocument();
+      expect(screen.getByText('클래스 신청하러 가기 ↗')).toBeInTheDocument();
+      expect(screen.getByText('중국 여행을 떠나 짜장면을 만들어요', { exact: false })).toBeInTheDocument();
+    });
+
+    it('신청하러 가기 버튼은 이마트 컬처클럽 enrolment 페이지로 새 탭 연결된다', async () => {
+      stubFetch([makeClass()]);
+      render(<CultureClubTabView />);
+      await screen.findByText(/두근두근/);
+      fireEvent.click(screen.getAllByText(/두근두근/)[0]);
+
+      const link = await screen.findByText('클래스 신청하러 가기 ↗');
+      expect(link.closest('a')).toHaveAttribute('href', 'https://www.cultureclub.emart.com/enrolment');
+      expect(link.closest('a')).toHaveAttribute('target', '_blank');
+    });
+
+    it('클래스소개는 기본 펼쳐진 상태이고, 다시 누르면 접힌다', async () => {
+      stubFetch([makeClass()]);
+      render(<CultureClubTabView />);
+      await screen.findByText(/두근두근/);
+      fireEvent.click(screen.getAllByText(/두근두근/)[0]);
+
+      expect(await screen.findByText('중국 여행을 떠나 짜장면을 만들어요', { exact: false })).toBeInTheDocument();
+
+      fireEvent.click(screen.getByText('클래스소개'));
+      expect(screen.queryByText('중국 여행을 떠나 짜장면을 만들어요', { exact: false })).not.toBeInTheDocument();
+    });
+
+    it('찜 버튼을 눌러도 상세 시트가 열리지 않는다(이벤트 버블링 차단)', async () => {
+      mockUser.current = { id: 'user-1' };
+      getMyProfileMock.mockResolvedValue({ grade: 'active' });
+      stubFetch([makeClass()]);
+      render(<CultureClubTabView />);
+      await screen.findByText(/두근두근/);
+
+      const bookmarkButton = await screen.findByLabelText('찜하기');
+      fireEvent.click(bookmarkButton);
+
+      expect(screen.queryByText('클래스 상세')).not.toBeInTheDocument();
+      mockUser.current = null;
+    });
+
+    it('✕를 누르면 상세 시트가 닫힌다', async () => {
+      stubFetch([makeClass()]);
+      render(<CultureClubTabView />);
+      await screen.findByText(/두근두근/);
+      fireEvent.click(screen.getAllByText(/두근두근/)[0]);
+      await screen.findByText('클래스 상세');
+
+      fireEvent.click(screen.getByLabelText('닫기'));
+
+      expect(screen.queryByText('클래스 상세')).not.toBeInTheDocument();
+    });
   });
 });
