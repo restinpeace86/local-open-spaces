@@ -85,13 +85,16 @@ function stubFetch(classes: ClassFixture[]) {
 }
 
 describe('CultureClubTabView', () => {
-  it('카드에 지점은 보이지 않고 접수기간/일정이 보인다', async () => {
+  // [접수기간 비노출](2026-10-03 사용자 지시: "접수 기간은 우리도 숨기도록 하자") —
+  // 이마트 실제 사이트도 상세 화면에 접수기간을 노출하지 않아, 카드/상세 양쪽에서
+  // 숨겼다(접수대기 상태에서 우수맘에게만 보이는 안내는 별도 describe 참고).
+  it('카드에 지점/접수기간은 보이지 않고 일정만 보인다', async () => {
     stubFetch([makeClass()]);
     render(<CultureClubTabView />);
 
     const title = await screen.findByText(/두근두근 무지개 레이저쇼/);
     const card = title.closest('.rounded-xl') as HTMLElement;
-    expect(within(card).getByText(/접수기간 2026\.07\.23 10:00 ~ 2026\.10\.13/)).toBeInTheDocument();
+    expect(within(card).queryByText(/접수기간/)).not.toBeInTheDocument();
     expect(within(card).getByText(/일정 토 11:00 ~ 11:40/)).toBeInTheDocument();
     expect(within(card).queryByText(/이마트 춘천점/)).not.toBeInTheDocument();
   });
@@ -233,6 +236,53 @@ describe('CultureClubTabView', () => {
       fireEvent.click(screen.getByLabelText('닫기'));
 
       expect(screen.queryByText('클래스 상세')).not.toBeInTheDocument();
+    });
+  });
+
+  // [접수 시작 안내 — 우수맘 전용](2026-10-03 사용자 지시: "접수대기인 것들에
+  // 대하여 찜할때.. 우수맘등급? 그 알람받는 등급한테는 몇시에 접수예정이라.. 몇일
+  // 몇시에 열립니다.라는 인폼주는데 사용하자") — 접수기간은 숨기되 접수대기 상태
+  // 강좌는 우수맘 이상에게만 별도 안내를 보여준다.
+  describe('접수 시작 안내(우수맘 전용)', () => {
+    const FAR_FUTURE_REGISTER_START = '209901011000'; // 2099.01.01 10:00 — 실제 시간 흐름과 무관하게 항상 미래
+
+    it('우수맘이고 접수대기 상태면 접수 시작 안내가 보인다', async () => {
+      mockUser.current = { id: 'user-1' };
+      getMyProfileMock.mockResolvedValue({ grade: 'excellent' });
+      stubFetch([makeClass({ filter_status: '접수대기', register_start_date: FAR_FUTURE_REGISTER_START })]);
+      render(<CultureClubTabView />);
+      await screen.findByText(/두근두근/);
+      fireEvent.click(screen.getAllByText(/두근두근/)[0]);
+
+      expect(await screen.findByText('🔔 접수 시작 안내')).toBeInTheDocument();
+      expect(screen.getByText(/2099\.01\.01 10:00에 접수가 시작돼요/)).toBeInTheDocument();
+      mockUser.current = null;
+    });
+
+    it('열심맘(우수맘 미만)이면 접수대기여도 안내가 보이지 않는다', async () => {
+      mockUser.current = { id: 'user-1' };
+      getMyProfileMock.mockResolvedValue({ grade: 'active' });
+      stubFetch([makeClass({ filter_status: '접수대기', register_start_date: FAR_FUTURE_REGISTER_START })]);
+      render(<CultureClubTabView />);
+      await screen.findByText(/두근두근/);
+      fireEvent.click(screen.getAllByText(/두근두근/)[0]);
+      await screen.findByText('클래스 상세');
+
+      expect(screen.queryByText('🔔 접수 시작 안내')).not.toBeInTheDocument();
+      mockUser.current = null;
+    });
+
+    it('우수맘이어도 이미 접수중 상태면 안내가 보이지 않는다', async () => {
+      mockUser.current = { id: 'user-1' };
+      getMyProfileMock.mockResolvedValue({ grade: 'excellent' });
+      stubFetch([makeClass({ filter_status: '접수중', register_start_date: FAR_FUTURE_REGISTER_START })]);
+      render(<CultureClubTabView />);
+      await screen.findByText(/두근두근/);
+      fireEvent.click(screen.getAllByText(/두근두근/)[0]);
+      await screen.findByText('클래스 상세');
+
+      expect(screen.queryByText('🔔 접수 시작 안내')).not.toBeInTheDocument();
+      mockUser.current = null;
     });
   });
 });

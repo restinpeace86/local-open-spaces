@@ -4,6 +4,9 @@ import { useCallback, useEffect, useState } from 'react';
 import { EmptyState } from '@/components/map/empty-state';
 import { EventListSkeleton } from '@/components/cards/event-list-skeleton';
 import { BookmarkButton } from '@/components/community/bookmark-button';
+import { useUser } from '@/hooks/use-user';
+import { getMyProfile } from '@/lib/auth/profile';
+import { canReceivePushNotifications } from '@/lib/community/grades';
 import {
   buildCultureClubThumbnailUrl,
   CULTURE_CLUB_BRAND_OPTIONS,
@@ -25,10 +28,17 @@ import {
 // 딸려올라가고" — 필터 영역을 shrink-0으로 고정하지 않고, 필터+리스트를 하나의
 // 스크롤 컨테이너로 합쳤다(무한스크롤 트리거도 이 컨테이너 기준). 카드는 참고
 // 화면처럼 이미지(좌상단에 상태 뱃지) + 텍스트 영역(소분류·정원 / 제목(2줄 말줄임)
-// / 가격(+재료비)·찜 아이콘 / 구분선 / 접수기간 / 일정) 구조로 바꿨고, "지점"은 이미
+// / 가격(+재료비)·찜 아이콘 / 구분선 / 일정) 구조로 바꿨고, "지점"은 이미
 // 상단에서 선택돼 고정이라 카드에는 넣지 않는다(사용자 지시: "우리는 지점은
 // 고정이니 굳이 지점 나올필요없고"). 그리드는 PC 4열 참고화면과 달리 모바일 우선
 // 앱이라 2열(md 이상에서 4열)로 뒀다.
+//
+// [접수기간 비노출](2026-10-03 사용자 지시): "접수 기간은 우리도 숨기도록 하자.
+// 괜히 노출시킬필요는 없어보여" — 이마트 실제 사이트도 상세 화면에 접수기간을
+// 노출하지 않는다(상태 뱃지로 충분하다고 판단한 것으로 보임, reference/emart
+// culture club detail.png 참고). 다만 내부적으로는 아는 정보이니 "접수대기" 상태
+// 강좌에 한해 우수맘 이상에게만 "몇일 몇시에 열립니다 — 찜하면 알림 드려요"
+// 인폼으로 활용한다(아래 CultureClubReservationHint).
 const PAGE_SIZE = 20;
 // [광고 자리 스캐폴딩](2026-10-03 사용자 지시): "5번째 혹은 10번째 카드마다 ... 스폰서드/
 // 추천 상품 카드 자리 기능적으로 마련" — 실제 광고 콘텐츠/스폰서 테이블은 이번 범위가
@@ -84,6 +94,16 @@ function formatDateCompact(raw: string | null) {
 function formatRegisterStart(raw: string | null) {
   if (!raw || raw.length !== 12) return formatDateCompact(raw);
   return `${raw.slice(0, 4)}.${raw.slice(4, 6)}.${raw.slice(6, 8)} ${raw.slice(8, 10)}:${raw.slice(10, 12)}`;
+}
+
+// register_start_date("YYYYMMDDHHmm", KST)를 실제 Date로 파싱한다 — "아직 접수
+// 시작 전인지" 비교할 때 쓴다(emart-culture-club.mjs의 parseRegisterStartAt와
+// 동일한 파싱 규칙, 프론트는 서버의 register_start_at 대신 이미 로드된
+// register_start_date 원본에서 바로 계산한다).
+function parseRegisterStartDate(raw: string | null): Date | null {
+  if (!raw || raw.length !== 12) return null;
+  const iso = `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}T${raw.slice(8, 10)}:${raw.slice(10, 12)}:00+09:00`;
+  return new Date(iso);
 }
 
 // [데이터 신선도 안내](2026-10-03 사용자 지적): "우린 하루에 한번 가져오는데 .. 접수중
@@ -190,12 +210,51 @@ function ClassCard({ item, onSelect }: { item: CultureClubClass; onSelect: (item
         </div>
         <hr className="my-0.5 border-gray-100" />
         <p className="text-[11px] text-gray-400">
-          접수기간 {formatRegisterStart(item.register_start_date)} ~ {formatDateCompact(item.register_end_date)}
-        </p>
-        <p className="text-[11px] text-gray-400">
           일정 {(item.class_day ?? []).join(',')} {formatTimeRange(item.start_time, item.end_time)}
         </p>
       </div>
+    </div>
+  );
+}
+
+// [접수 시작 안내 — 우수맘 전용](2026-10-03 사용자 지시): "그 접수대기상태라면
+// 우리도 그 접수기간을 내부적으로 알고 있으니.. 현재 접수대기인 것들에 대하여
+// 찜할때.. 우수맘등급? 그 알람받는 등급한테는 몇시에 접수예정이라 ... 찜할때 해당
+// 강좌는 몇일 몇시에 열립니다.라는 인폼주는데 사용하자" — 접수기간 자체는 숨기되,
+// "접수대기" 상태인 강좌에 한해 예약 알람 대상 등급(우수맘 이상,
+// canReceivePushNotifications)에게만 "언제 열리는지 + 찜하면 알림 준다"는 안내를
+// 보여준다. event-reservation-reminder-hint.tsx와 동일한 패턴(자기완결적 — 로그인/
+// 등급을 스스로 확인)이지만, 이미 로드된 item.register_start_date를 그대로 쓰므로
+// 별도 API 호출은 필요 없다.
+function CultureClubReservationHint({ item }: { item: CultureClubClass }) {
+  const { user } = useUser();
+  const [canShow, setCanShow] = useState(false);
+
+  useEffect(() => {
+    if (!user) {
+      setCanShow(false);
+      return;
+    }
+    let cancelled = false;
+    getMyProfile().then((profile) => {
+      if (!cancelled) setCanShow(Boolean(profile && canReceivePushNotifications(profile.grade)));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
+
+  const registerStart = parseRegisterStartDate(item.register_start_date);
+  const isUpcoming = item.filter_status === '접수대기' && registerStart != null && registerStart.getTime() > Date.now();
+
+  if (!canShow || !isUpcoming) return null;
+
+  return (
+    <div className="mt-3 rounded-xl border border-amber-100 bg-amber-50 p-3">
+      <p className="text-sm font-medium text-amber-900">🔔 접수 시작 안내</p>
+      <p className="mt-0.5 text-xs text-amber-700">
+        {formatRegisterStart(item.register_start_date)}에 접수가 시작돼요 — 찜(❤️)해두면 10분 전에 알림을 보내드려요.
+      </p>
     </div>
   );
 }
@@ -260,9 +319,6 @@ function CultureClubDetailSheet({ item, onClose }: { item: CultureClubClass; onC
             <p className="text-sm text-gray-500">
               일정 {(item.class_day ?? []).join(',')} {formatTimeRange(item.start_time, item.end_time)}
             </p>
-            <p className="text-sm text-gray-500">
-              접수기간 {formatRegisterStart(item.register_start_date)} ~ {formatDateCompact(item.register_end_date)}
-            </p>
             {item.store_name && <p className="text-sm text-gray-500">접수가능지점 {item.store_name}</p>}
             {item.class_capacity != null && <p className="text-sm text-gray-500">정원 {item.class_capacity}명</p>}
 
@@ -279,6 +335,7 @@ function CultureClubDetailSheet({ item, onClose }: { item: CultureClubClass; onC
                 클래스 신청하러 가기 ↗
               </a>
             </div>
+            <CultureClubReservationHint item={item} />
           </div>
         </div>
 
