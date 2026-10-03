@@ -1194,6 +1194,7 @@ export type Database = {
           birth_years: number[]
           created_at: string
           grade: string
+          grade_override: string | null
           grade_updated_at: string | null
           id: string
           nickname: string | null
@@ -1204,6 +1205,7 @@ export type Database = {
           birth_years?: number[]
           created_at?: string
           grade?: string
+          grade_override?: string | null
           grade_updated_at?: string | null
           id: string
           nickname?: string | null
@@ -1214,6 +1216,7 @@ export type Database = {
           birth_years?: number[]
           created_at?: string
           grade?: string
+          grade_override?: string | null
           grade_updated_at?: string | null
           id?: string
           nickname?: string | null
@@ -2279,11 +2282,12 @@ export type Database = {
           svc_stat_nms: string[]
         }[]
       }
-      get_monthly_mom_pick_activity: {
+      get_mom_pick_activity_summary: {
         Args: never
         Returns: {
           adopted_count: number
           author_id: string
+          lifetime_post_count: number
           post_count: number
           spot_photo_review_count: number
         }[]

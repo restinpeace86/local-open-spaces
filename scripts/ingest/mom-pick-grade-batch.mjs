@@ -17,6 +17,10 @@
 // 제5장 제6조 하드코딩 최소화)만 파워맘으로 승급한다. 동점자는 먼저 그 채택을 받은
 // (더 이른 시점에 조건을 채운) 사용자를 우선한다 — adopted_count로 정렬 후 author_id
 // 정렬은 결정성만 위한 타이브레이커다.
+//
+// [관리자/테스트 계정 등급 고정](2026-10-03 사용자 지시): "내 계정은 관리자 계정이니
+// 그냥 예외처리로 파워맘으로 해줘 모든 기능들 볼수있어야할거아니야" —
+// profiles.grade_override가 채워진 계정은 실적 계산을 건너뛰고 그 값을 그대로 쓴다.
 import { pathToFileURL } from 'url';
 import { loadEnv } from '../lib/load-env.mjs';
 import { createAdminClient } from './lib/supabase-admin.mjs';
@@ -42,12 +46,16 @@ export async function run() {
   // 실적이 없다(새싹맘 승급은 트리거가 즉시 처리).
   const { data: profiles, error: profilesError } = await admin
     .from('profiles')
-    .select('id, grade')
+    .select('id, grade, grade_override')
     .neq('grade', 'signed_up');
   if (profilesError) throw new Error(`프로필 조회 실패: ${profilesError.message}`);
 
+  // grade_override가 있는 계정(관리자/테스트용 고정 등급)은 파워맘 정원 선발 대상에서도
+  // 제외한다 — 실적과 무관하게 고정된 등급이라 "우수맘 조건을 만족해서" 뽑힌 게 아니다.
+  const normalProfiles = (profiles ?? []).filter((p) => !p.grade_override);
+
   // 우수맘 조건(당월 5개 스팟 사진 리뷰 이상)을 만족하는 사용자 중 채택 수 상위 N명만 파워맘.
-  const excellentEligible = (profiles ?? [])
+  const excellentEligible = normalProfiles
     .map((p) => ({ id: p.id, activity: activityByAuthor.get(p.id) }))
     .filter(({ activity: a }) => (a ? Number(a.spot_photo_review_count) : 0) >= 5)
     .sort((a, b) => {
@@ -60,6 +68,22 @@ export async function run() {
   const nowIso = new Date().toISOString();
 
   for (const profile of profiles ?? []) {
+    if (profile.grade_override) {
+      if (profile.grade !== profile.grade_override) {
+        const { error: overrideError } = await admin
+          .from('profiles')
+          .update({ grade: profile.grade_override, grade_updated_at: nowIso })
+          .eq('id', profile.id);
+        if (overrideError) {
+          console.error(`[MOM_PICK_GRADE_BATCH] ${profile.id} 고정 등급 동기화 실패: ${overrideError.message}`);
+          continue;
+        }
+        updatedCount += 1;
+        console.log(`[MOM_PICK_GRADE_BATCH] ${profile.id}: ${profile.grade} → ${profile.grade_override}(관리자 고정 등급 동기화)`);
+      }
+      continue;
+    }
+
     const activityRow = activityByAuthor.get(profile.id);
     const lifetimePostCount = activityRow ? Number(activityRow.lifetime_post_count) : 0;
     const monthlySpotPhotoReviewCount = activityRow ? Number(activityRow.spot_photo_review_count) : 0;
