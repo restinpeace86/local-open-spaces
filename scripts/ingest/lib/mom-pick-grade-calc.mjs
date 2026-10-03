@@ -4,9 +4,14 @@
 // `@/` 별칭으로 src/ 코드를 가져올 수 없다(기존 모든 배치 스크립트가 동일한 이유로
 // 독립 구현이다). 등급 규칙을 바꿀 때는 두 파일을 함께 수정해야 한다(양쪽 다 소규모
 // 순수 함수라 drift 위험은 낮다 — grades.test.ts가 TS 쪽 회귀를 잡아준다).
-export function calculateGrade({ hasEverPosted, monthlyPostCount, isPowerMomThisMonth }) {
+//
+// [Decision 019 개정 — 우수맘 조건](2026-10-03 사용자 지시): "월 5개 스팟 리뷰(이미지
+// 포함)인거야" — monthlyPostCount(글 건수, 열심맘 기준은 그대로)와 별개로
+// monthlySpotPhotoReviewCount(이번 달 사진 포함 리뷰를 작성한 서로 다른 스팟 수)를
+// 우수맘 기준으로 쓴다.
+export function calculateGrade({ hasEverPosted, monthlyPostCount, monthlySpotPhotoReviewCount, isPowerMomThisMonth }) {
   if (!hasEverPosted) return 'signed_up';
-  if (monthlyPostCount >= 5) return isPowerMomThisMonth ? 'power' : 'excellent';
+  if (monthlySpotPhotoReviewCount >= 5) return isPowerMomThisMonth ? 'power' : 'excellent';
   if (monthlyPostCount >= 2) return 'active';
   return 'sprout';
 }

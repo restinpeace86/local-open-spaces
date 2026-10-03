@@ -45,16 +45,26 @@ export const FREE_CHATBOT_USES_BEFORE_SPROUT = 1;
 export type GradeCalcInput = {
   /** 평생 누적: 후기/체크리스트를 한 번이라도 작성한 적이 있는지(새싹맘 승급은 1회성, 강등되지 않음) */
   hasEverPosted: boolean;
-  /** 이번 달(달력월) 누적 작성 건수 — 열심맘(2건)/우수맘(5건) 판정 기준 */
+  /** 이번 달(달력월) 누적 작성 건수 — 열심맘(2건 이상) 판정 기준 */
   monthlyPostCount: number;
+  /** [Decision 019 개정 — 우수맘 조건](2026-10-03 사용자 지시): "월 5개 스팟 리뷰
+   * (이미지 포함)인거야" — 글 건수가 아니라 "사진이 포함된 리뷰를 작성한 서로 다른
+   * 스팟 수"(이번 달, 중복 스팟은 1개로만 집계). 우수맘(5개 이상) 판정 기준. */
+  monthlySpotPhotoReviewCount: number;
   /** 이번 달 파워맘 정원(N명) 선발 대상으로 뽑혔는지 — 우수맘 조건을 만족하는 사람 중에서만 의미 있음 */
   isPowerMomThisMonth: boolean;
 };
 
-// 달력월 기준 등급 재계산(Decision 019: 즉시 강등, 당월 실적만 반영, 유예 없음).
-export function calculateGrade({ hasEverPosted, monthlyPostCount, isPowerMomThisMonth }: GradeCalcInput): MomPickGrade {
+// 달력월 기준 등급 재계산(Decision 019: 즉시 강등, 당월 실적만 반영, 유예 없음 — 자동
+// 배치 재계산 방식 자체는 2026-10-03 개정에서도 유지된다, 관리자 수동 검수는 보류).
+export function calculateGrade({
+  hasEverPosted,
+  monthlyPostCount,
+  monthlySpotPhotoReviewCount,
+  isPowerMomThisMonth,
+}: GradeCalcInput): MomPickGrade {
   if (!hasEverPosted) return 'signed_up';
-  if (monthlyPostCount >= 5) return isPowerMomThisMonth ? 'power' : 'excellent';
+  if (monthlySpotPhotoReviewCount >= 5) return isPowerMomThisMonth ? 'power' : 'excellent';
   if (monthlyPostCount >= 2) return 'active';
   return 'sprout';
 }

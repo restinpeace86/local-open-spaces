@@ -4,11 +4,11 @@
 // 배치는 이미 sprout 이상인 프로필만 다룬다(signed_up은 아직 한 번도 글을 안 써서 계산할
 // 이번 달 실적 자체가 없다).
 //
-// [파워맘 정원제] 우수맘 조건(당월 5건 이상)을 만족하는 사용자 중 당월 채택 수 상위
-// N명(기본 10명, MOM_PICK_POWER_MOM_QUOTA 환경변수로 관리자가 조정 가능 — 제5장 제6조
-// 하드코딩 최소화)만 파워맘으로 승급한다. 동점자는 먼저 그 채택을 받은(더 이른 시점에
-// 조건을 채운) 사용자를 우선한다 — adopted_count로 정렬 후 author_id 정렬은 결정성만
-// 위한 타이브레이커다.
+// [파워맘 정원제] 우수맘 조건(당월 5개 스팟 사진 리뷰 이상 — 2026-10-03 Decision 019
+// 개정)을 만족하는 사용자 중 당월 채택 수 상위 N명(기본 10명, MOM_PICK_POWER_MOM_QUOTA
+// 환경변수로 관리자가 조정 가능 — 제5장 제6조 하드코딩 최소화)만 파워맘으로 승급한다.
+// 동점자는 먼저 그 채택을 받은(더 이른 시점에 조건을 채운) 사용자를 우선한다 —
+// adopted_count로 정렬 후 author_id 정렬은 결정성만 위한 타이브레이커다.
 import { pathToFileURL } from 'url';
 import { loadEnv } from '../lib/load-env.mjs';
 import { createAdminClient } from './lib/supabase-admin.mjs';
@@ -38,10 +38,10 @@ export async function run() {
     .neq('grade', 'signed_up');
   if (profilesError) throw new Error(`프로필 조회 실패: ${profilesError.message}`);
 
-  // 우수맘 조건(당월 5건 이상)을 만족하는 사용자 중 채택 수 상위 N명만 파워맘.
+  // 우수맘 조건(당월 5개 스팟 사진 리뷰 이상)을 만족하는 사용자 중 채택 수 상위 N명만 파워맘.
   const excellentEligible = (profiles ?? [])
     .map((p) => ({ id: p.id, activity: activityByAuthor.get(p.id) }))
-    .filter(({ activity: a }) => (a ? Number(a.post_count) : 0) >= 5)
+    .filter(({ activity: a }) => (a ? Number(a.spot_photo_review_count) : 0) >= 5)
     .sort((a, b) => {
       const adoptedDiff = Number(b.activity?.adopted_count ?? 0) - Number(a.activity?.adopted_count ?? 0);
       return adoptedDiff !== 0 ? adoptedDiff : a.id.localeCompare(b.id);
@@ -54,9 +54,11 @@ export async function run() {
   for (const profile of profiles ?? []) {
     const activityRow = activityByAuthor.get(profile.id);
     const monthlyPostCount = activityRow ? Number(activityRow.post_count) : 0;
+    const monthlySpotPhotoReviewCount = activityRow ? Number(activityRow.spot_photo_review_count) : 0;
     const nextGrade = calculateGrade({
       hasEverPosted: true, // neq('signed_up')로 이미 필터링됨 — sprout 이상은 반드시 1회 이상 작성한 적 있음
       monthlyPostCount,
+      monthlySpotPhotoReviewCount,
       isPowerMomThisMonth: powerMomIds.has(profile.id),
     });
 
@@ -70,7 +72,9 @@ export async function run() {
         continue;
       }
       updatedCount += 1;
-      console.log(`[MOM_PICK_GRADE_BATCH] ${profile.id}: ${profile.grade} → ${nextGrade} (이번 달 ${monthlyPostCount}건)`);
+      console.log(
+        `[MOM_PICK_GRADE_BATCH] ${profile.id}: ${profile.grade} → ${nextGrade} (이번 달 글 ${monthlyPostCount}건, 사진 포함 스팟 리뷰 ${monthlySpotPhotoReviewCount}곳)`
+      );
     }
   }
 
