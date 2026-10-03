@@ -183,6 +183,22 @@ function toBoolOrNull(value) {
   return null;
 }
 
+// [접수 시작 시각 파싱](2026-10-03 사용자 지시): "예약 시작시간이니 이 부분
+// 파싱해서 따로 컬럼으로 가지고 있든 해야할거같은데?" — register_start_date 원본은
+// "YYYYMMDDHHmm"(실측 확인, 항상 12자) KST 문자열이다(사용자 확인: "1000은
+// 10:00 (kst)를 의미하는걸텐데"). 접수 마감 예정 알람 기능에 쓸 timestamptz로
+// 변환한다. 다른 날짜 필드(class_start_date 등)는 시각 정보가 없어(8자, 날짜만)
+// 이번 파싱 대상이 아니다 — 원본 register_start_date 컬럼은 그대로 보존한다.
+export function parseRegisterStartAt(raw) {
+  if (!raw || raw.length !== 12) return null;
+  const year = raw.slice(0, 4);
+  const month = raw.slice(4, 6);
+  const day = raw.slice(6, 8);
+  const hour = raw.slice(8, 10);
+  const minute = raw.slice(10, 12);
+  return `${year}-${month}-${day}T${hour}:${minute}:00+09:00`;
+}
+
 export function transform(item, filterStatus) {
   if (!item.classId || !item.classTitle) return null;
 
@@ -212,6 +228,7 @@ export function transform(item, filterStatus) {
     channel_online: toBoolOrNull(item.channel?.online),
     channel_offline: toBoolOrNull(item.channel?.offline),
     register_start_date: item.classDateInfo?.classRegisterStartDate ?? null,
+    register_start_at: parseRegisterStartAt(item.classDateInfo?.classRegisterStartDate ?? null),
     register_end_date: item.classDateInfo?.classRegisterEndDate ?? null,
     class_start_date: item.classDateInfo?.classStartDate ?? null,
     class_end_date: item.classDateInfo?.classEndDate ?? null,
