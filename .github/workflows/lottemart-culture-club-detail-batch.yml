@@ -1,0 +1,36 @@
+name: Lottemart Culture Club Detail Batch
+
+# [롯데마트 문화센터 강좌 상세정보 1회성 수집](2026-10-04 사용자 지시): "상세정보
+# 롯데마트 문화센터는 클래스 상세정보같은거왜 안나와?" — 목록 배치(lottemart-
+# culture-club-batch.yml, KST 01:00)가 끝난 뒤 실행해 class_id별 강좌코드/
+# 강의실/소개/Tip을 증분으로 채운다(이미 채워진 class_id는 다시 조회하지 않음 —
+# 정적 콘텐츠라 한 번이면 충분, 이마트 emart-culture-club-detail-batch.yml과
+# 동일한 설계).
+#
+# [첫날 소요 시간 안내] 처음 실행 시 기존 15,000여 건을 전부 백필하므로
+# 300ms~1초 랜덤 간격 기준 약 2~3시간 소요될 수 있다(이마트보다 건수가 많아
+# 더 오래 걸림) — 이후로는 그날 새로 추가된 강좌만 대상이라 훨씬 빨리 끝난다.
+on:
+  schedule:
+    - cron: '30 16 * * *'
+  workflow_dispatch:
+
+jobs:
+  lottemart-culture-club-detail-batch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Lottemart Culture Club detail collection
+        run: node scripts/ingest/lottemart-culture-club-detail.mjs

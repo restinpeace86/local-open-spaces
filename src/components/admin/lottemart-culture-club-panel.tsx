@@ -39,6 +39,14 @@ type ClassRow = {
   target_name: string;
   is_excluded: boolean;
   collected_at: string;
+  // [상세정보 1회성 수집](2026-10-04 사용자 지시): "상세정보 롯데마트 문화센터는
+  // 클래스 상세정보같은거왜 안나와?.. 강좌코드나 강의실이나 강좌소개나 강좌수강
+  // Tip이랄던가" — lottemart-culture-club-detail.mjs가 채워주는 컬럼들.
+  class_code: string | null;
+  classroom: string | null;
+  class_intro: string | null;
+  class_tip: string | null;
+  detail_fetched_at: string | null;
 };
 
 const STATUS_OPTIONS: ClassRow['registration_status'][] = ['바로신청', '대기자신청', '접수마감', '전화문의', '현장접수'];
@@ -52,9 +60,13 @@ function formatDate(raw: string | null) {
   return `${raw.slice(0, 4)}.${raw.slice(4, 6)}.${raw.slice(6, 8)}`;
 }
 
-// [상세보기 모달] 사용자가 이마트와 동일하게 row를 눌러 상세를 볼 수 있어야 한다.
-// 롯데마트는 상세 페이지를 별도로 긁지 않아(2026-10-04 구현 범위 — 리스트 응답
-// 필드만 사용) emart의 class_detail_content/이미지 섹션에 대응하는 항목이 없다.
+// [상세보기 모달 — 강좌코드/강의실/소개/Tip 추가](2026-10-04 사용자 지시):
+// "상세정보 롯데마트 문화센터는 클래스 상세정보같은거왜 안나와?.. 강좌코드나
+// 강의실이나 강좌소개나 강좌수강 Tip이랄던가 상세들어가면 다 있던데" —
+// lottemart-culture-club-detail.mjs가 class_id당 한 번만 채우는 정적 필드.
+// 이마트의 class_detail_content/detail_fetched_at 안내 패턴과 동일하게,
+// 아직 상세정보가 안 채워진 행(detail_fetched_at null)에는 안내 문구를
+// 보여준다.
 function DetailModal({ row, onClose }: { row: ClassRow; onClose: () => void }) {
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={onClose}>
@@ -83,6 +95,10 @@ function DetailModal({ row, onClose }: { row: ClassRow; onClose: () => void }) {
           <dd>{row.age_range_text ?? '-'}</dd>
           <dt className="text-gray-400">강사</dt>
           <dd>{row.instructor_name ?? '-'}</dd>
+          <dt className="text-gray-400">강좌코드</dt>
+          <dd>{row.class_code ?? '-'}</dd>
+          <dt className="text-gray-400">강의실</dt>
+          <dd>{row.classroom ?? '-'}</dd>
           <dt className="text-gray-400">개강일/요일/시간</dt>
           <dd>
             {formatDate(row.class_start_date)} ({(row.class_day ?? []).join(',')}) {row.start_time ?? '-'}~{row.end_time ?? '-'}
@@ -104,6 +120,27 @@ function DetailModal({ row, onClose }: { row: ClassRow; onClose: () => void }) {
           <dt className="text-gray-400">학기</dt>
           <dd>{row.semester_code}</dd>
         </dl>
+
+        {row.detail_fetched_at ? (
+          <div className="mt-4 flex flex-col gap-3">
+            {row.class_intro && (
+              <div>
+                <p className="text-xs font-semibold text-gray-900 mb-1">강좌소개</p>
+                <p className="text-xs text-gray-600 whitespace-pre-wrap">{row.class_intro}</p>
+              </div>
+            )}
+            {row.class_tip && (
+              <div>
+                <p className="text-xs font-semibold text-gray-900 mb-1">강좌 수강 Tip</p>
+                <p className="text-xs text-gray-600 whitespace-pre-wrap">{row.class_tip}</p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <p className="mt-4 text-xs text-gray-400">
+            아직 상세정보가 수집되지 않았습니다(scripts/ingest/lottemart-culture-club-detail.mjs가 매일 새벽 증분 수집합니다).
+          </p>
+        )}
       </div>
     </div>
   );
