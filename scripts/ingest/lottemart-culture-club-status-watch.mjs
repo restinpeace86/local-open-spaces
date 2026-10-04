@@ -148,7 +148,7 @@ async function postPipelineLog(client, { status, errorMessage = null, metaData =
       error_message: errorMessage,
       meta_data: metaData,
       description: '찜한 롯데마트 문화센터 강좌만 상세 페이지로 재확인해 접수 가능 전환 시 푸시',
-      // [period 정정](2026-10-04): 이 배치는 15분 주기인데 'daily'로 잘못
+      // [period 정정](2026-10-04): 이 배치는 5분 주기인데 'daily'로 잘못
       // 달아뒀었다(pipeline_logs.period CHECK 제약이 'daily'/'monthly'/null만
       // 허용해 에러는 안 났지만 라벨 자체가 거짓이었음 — ping 배치 작업 중
       // 재확인하면서 발견). null로 정정한다(제3장 제5조).
