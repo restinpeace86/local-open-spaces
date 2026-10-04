@@ -38,10 +38,11 @@ type LottemartClass = {
   is_closing_soon: boolean;
   is_new: boolean;
   like_count: number | null;
-  registration_status: '바로신청' | '대기자신청' | '접수마감' | '전화문의';
+  registration_status: '바로신청' | '대기자신청' | '접수마감' | '전화문의' | '현장접수';
   semester_code: string;
   target_code: string;
   target_name: string;
+  collected_at: string;
 };
 
 type StoreOption = { storeCode: string; label: string };
@@ -51,6 +52,19 @@ function formatStartDate(raw: string | null) {
   return `${raw.slice(0, 4)}.${raw.slice(4, 6)}.${raw.slice(6, 8)}`;
 }
 
+// [데이터 신선도 안내](2026-10-04 사용자 지시): "하루에 한번 업데이트 됩니다 하고 ...
+// 상태에 대한 실시간감지는 찜한 것만 가능합니다. 이런식의 알림?" — 이마트
+// culture-club-tab-view.tsx의 formatUpdatedAt과 동일한 패턴(실시간인 척하지
+// 않고 실제 배치 수집 시각을 그대로 보여줌). 두 번째 줄은 찜한 강좌만 별도
+// 배치(lottemart-culture-club-status-watch.mjs, 15분 주기)로 더 자주
+// 재확인됨을 알려준다 — 전체 목록은 하루 1회지만 찜하면 그보다 빠르게 상태
+// 변화를 알 수 있다는 차이를 숨기지 않는다.
+function formatUpdatedAt(raw: string) {
+  const date = new Date(raw);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getMonth() + 1}.${date.getDate()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 function statusLabel(status: LottemartClass['registration_status']) {
   if (status === '대기자신청') return '대기자 신청';
   return status;
@@ -58,13 +72,16 @@ function statusLabel(status: LottemartClass['registration_status']) {
 
 // [실측 확인](2026-10-04): 접수마감 상태 버튼을 눌러도 "온라인 접수가
 // 마감되었습니다" 안내만 뜨고 실제 신청으로 이어지지 않는다 — 접수마감일 때만
-// 액션 버튼을 비활성 처리한다. 나머지(바로신청/대기자신청/전화문의)는 전부
-// 롯데마트 상세 페이지(courseview.do)로 보내면 그 페이지의 실제 버튼이 상태에
-// 맞게 동작한다(로그인/접수시간대 확인 등은 롯데마트 쪽에서 자연스럽게 처리).
+// 액션 버튼을 비활성 처리한다. 나머지(바로신청/대기자신청/전화문의/현장접수)는
+// 전부 롯데마트 상세 페이지(courseview.do)로 보내면 그 페이지의 실제 버튼이
+// 상태에 맞게 동작한다(로그인/접수시간대 확인 등은 롯데마트 쪽에서 자연스럽게
+// 처리). [현장접수 추가](2026-10-04): 60개 지점 전수 스캔(15,101행)으로 발견한
+// 5번째 상태 — onclick 자체가 없는 순수 안내 문구라 전화문의와 같은 비활성
+// 톤(회색)으로 묶는다.
 function statusBadgeClassName(status: LottemartClass['registration_status']) {
   if (status === '바로신청') return 'bg-emerald-600 text-white';
   if (status === '대기자신청') return 'bg-amber-500 text-white';
-  if (status === '전화문의') return 'bg-gray-500 text-white';
+  if (status === '전화문의' || status === '현장접수') return 'bg-gray-500 text-white';
   return 'bg-gray-300 text-gray-600';
 }
 
@@ -361,6 +378,11 @@ export function LottemartCultureClubView() {
         {isLoading && items.length === 0 && <EventListSkeleton label="문화센터 강좌 불러오는 중" />}
         {errorMessage && <p className="text-sm text-red-500">{errorMessage}</p>}
         {isEmpty && <EmptyState onReset={resetFilters} />}
+        {items.length > 0 && (
+          <p className="mb-2 text-[11px] text-gray-400">
+            ⏱ 마지막 업데이트 {formatUpdatedAt(items[0].collected_at)} · 전체 목록은 하루 1회 갱신돼요 — 찜하면 그 강좌만 더 자주 확인해 알려드려요
+          </p>
+        )}
         {items.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             {items.map((item) => (

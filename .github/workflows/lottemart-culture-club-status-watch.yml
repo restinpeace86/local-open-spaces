@@ -1,0 +1,37 @@
+name: Lottemart Culture Club Status Watch (Every 15 min)
+
+# [찜한 롯데마트 강좌 상태 변화 알림](2026-10-04 사용자 지시): "나도 상태
+# 변화 알림이 좋을것 같지만 그경우 일 1회 배치로는 크게 의미가 없어 이경우 좀
+# 자주 가져오던가 해야해" — 전체 카탈로그(60개 지점)를 자주 재스캔하는 대신,
+# 찜한 소수 class_id만 상세 페이지로 개별 재확인한다(요청량이 찜 개수에
+# 비례해 작음 — 전체 재스캔의 15~20분/650여 요청과 달리 자주 돌려도 부담이
+# 적다). 15분 주기는 이벤트 예약 알림(10분)보다 약간 느슨하게 잡았다 — 상태
+# 변화가 그 정도로 초단위를 다투는 성격은 아니라고 판단(필요시 조정).
+permissions:
+  contents: read
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+jobs:
+  lottemart-culture-club-status-watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Watch bookmarked Lottemart classes for status changes
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          NEXT_PUBLIC_VAPID_PUBLIC_KEY: ${{ secrets.NEXT_PUBLIC_VAPID_PUBLIC_KEY }}
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+        run: node scripts/ingest/lottemart-culture-club-status-watch.mjs

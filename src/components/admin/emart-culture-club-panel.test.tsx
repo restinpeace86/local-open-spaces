@@ -60,7 +60,7 @@ describe('EmartCultureClubPanel', () => {
     vi.stubGlobal('fetch', mockFetch([ROW], 1));
 
     render(<EmartCultureClubPanel />);
-    expect(screen.getByText("카테고리/상태를 선택하고 '조회하기'를 눌러 수집 결과를 불러오세요.")).toBeInTheDocument();
+    expect(screen.getByText("카테고리/상태/지점을 선택하고 '조회하기'를 눌러 수집 결과를 불러오세요.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('조회하기'));
 
@@ -78,7 +78,10 @@ describe('EmartCultureClubPanel', () => {
     fireEvent.click(screen.getByText('조회하기'));
 
     await screen.findByText('키즈 댄스 클래스');
-    const calledUrl = fetchMock.mock.calls[0][0] as string;
+    // 마운트 시 지점 목록도 함께 조회해(/api/culture-club/stores) 호출이
+    // 2건이 된다 — 쿼리 파라미터가 실제로 붙는 "조회하기" 클릭발 호출(마지막
+    // 호출)만 검사한다.
+    const calledUrl = fetchMock.mock.calls.at(-1)?.[0] as string;
     expect(calledUrl).toContain('sub_category_code=404');
     expect(calledUrl).toContain('filter_status=%EC%A0%91%EC%88%98%EC%A4%91');
   });

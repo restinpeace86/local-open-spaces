@@ -98,6 +98,31 @@ const TR_CLOSED_WITH_WAITLIST = `
   </td>
 </tr>`;
 
+// 현장접수 (실측: 2026-10-04, 60개 지점 전수 스캔 15,101행 중 14건 발견 —
+// onclick 자체가 없어 텍스트로만 판별 가능)
+const TR_ONSITE_ONLY = `
+<tr>
+  <td class="align-l dis-first">
+    <div class="info-ico"></div>
+    <div class="info-txt">
+      <a href="#none" onclick="fn_clsView('20260346537541')">
+        <span>[송도점]</span>
+        테스트 현장접수 강좌
+      </a>
+      <p>유아강좌 > 신체건강</p>
+    </div>
+    <ul class="table-tit-list">
+      <li class="dis-block dis-tablet">강사명 : 박현장 / 개강일 : 2026.09.20</li>
+      <li class="bg-none dis-block dis-tablet">요일 / 시간 : (금) 10:00~10:40</li>
+      <li class="bg-none dis-block dis-tablet">수강료 : 8회 70,000원</li>
+      <li class="bg-none dis-block dis-last td-status">
+        <a href="#none" id="" class="btn-status">현장접수</a>
+        <a href="#none" onclick="fn_courseCart('20260346537541', 'F');" class="btn-cart" title="강좌바구니에 담기">강좌바구니에 담기</a>
+      </li>
+    </ul>
+  </td>
+</tr>`;
+
 // 전화문의 (실측: 2026-10-04)
 const TR_PHONE_INQUIRY = `
 <tr>
@@ -168,6 +193,12 @@ describe('lottemart-culture-club parseRow', () => {
     expect(row.registration_status).toBe('대기자신청');
     expect(row.class_original_fee).toBe(140000);
     expect(row.class_fee).toBe(91000);
+  });
+
+  it('현장접수(onclick 없음, 텍스트만 존재)를 접수마감과 구분해 인식한다', () => {
+    const row = parseRow(trFromHtml(TR_ONSITE_ONLY), CONTEXT);
+    expect(row.registration_status).toBe('현장접수');
+    expect(row.class_fee).toBe(70000);
   });
 
   it('전화문의 상태를 접수마감과 구분해 인식한다', () => {

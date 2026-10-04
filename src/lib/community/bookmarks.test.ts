@@ -116,7 +116,7 @@ describe('addBookmark', () => {
     expect(fromMock).toHaveBeenCalledTimes(1);
   });
 
-  it('캡 카운트는 event_id와 emart_class_id를 합산한다(같은 알람 슬롯이므로)', async () => {
+  it('캡 카운트는 event_id/emart_class_id/lottemart_class_id를 합산한다(같은 알람 슬롯이므로)', async () => {
     getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
     getMyProfileMock.mockResolvedValue({ grade: 'excellent' });
     let capturedOrFilter: string | undefined;
@@ -134,6 +134,27 @@ describe('addBookmark', () => {
 
     await addBookmark({ kind: 'event', eventId: 'event-1' });
 
-    expect(capturedOrFilter).toBe('event_id.not.is.null,emart_class_id.not.is.null');
+    expect(capturedOrFilter).toBe('event_id.not.is.null,emart_class_id.not.is.null,lottemart_class_id.not.is.null');
+  });
+
+  // [롯데마트 상태 변화 알림 추가](2026-10-04 사용자 지시): "찜한거에 대하여서는
+  // 동일하게 알람해야하는거 아니야?" — lottemart-culture-club-status-watch.mjs
+  // 추가로 롯데마트 찜도 알람 대상이 됐으니 이벤트/이마트와 동일하게 캡을 탄다.
+  it('롯데마트 문화센터 클래스 찜도 우수맘 이상이면 캡 체크를 거친다', async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
+    getMyProfileMock.mockResolvedValue({ grade: 'excellent' });
+    fromMock.mockReturnValueOnce(makeCountBuilder(20));
+
+    await expect(addBookmark({ kind: 'lottemart_class', lottemartClassId: 'class-1' })).rejects.toThrow(BookmarkCapExceededError);
+  });
+
+  it('롯데마트 문화센터 클래스 찜인데 열심맘(우수맘 미달)이면 캡 체크 없이 바로 insert한다', async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
+    getMyProfileMock.mockResolvedValue({ grade: 'active' });
+    fromMock.mockReturnValue(makeInsertBuilder());
+
+    await addBookmark({ kind: 'lottemart_class', lottemartClassId: 'class-1' });
+
+    expect(fromMock).toHaveBeenCalledTimes(1);
   });
 });

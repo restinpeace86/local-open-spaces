@@ -145,15 +145,28 @@ function parseDayAndTime(text) {
   return { classDay, startTime: m[2], endTime: m[3] };
 }
 
-// [실측 확인] 상태 판별 우선순위: 바로신청(fn_courseApp) > 대기자신청
-// (fn_waitAppPopOpen) > 전화문의(fn_fieldCnsl('')) > 접수마감
-// (fn_fieldCnsl('close'), class="btn-status finish"). 한 행에 접수마감 라벨과
-// 대기자신청 버튼이 동시에 있을 수 있어(실측 확인) 텍스트 존재 여부가 아니라
-// onclick 패턴으로 우선순위를 매긴다.
+// [실측 확인 — 2026-10-04, 15,101행 전수 스캔으로 5번째 상태 발견] 사용자 지시:
+// "접수상태/수강신청쪽에 상태쪽은 어떤것들이 있지?" — 처음 투입 때 만든 4분류
+// (바로신청/대기자신청/전화문의/접수마감)가 실제로는 하나를 놓치고 있었다.
+// 전체 60개 지점 × 대상 3 × 학기 2 조합을 모두 스캔해 버튼 텍스트를 전수
+// 집계한 결과 정확히 5개뿐임을 확인했다: 바로신청(3,374) / 전화문의(5,209) /
+// 접수마감(6,504) / 대기자 신청(295) / 현장접수(14, 희귀). "현장접수"는
+// `<a class="btn-status">현장접수</a>`로 onclick 자체가 아예 없다(전화문의의
+// fn_fieldCnsl('')처럼 빈 함수 호출도 아님) — 그래서 onclick 패턴이 아니라
+// 텍스트로 직접 판별해야 한다. 이 버그로 기존 수집분의 현장접수 14건은
+// 접수마감(기본 폴백)으로 잘못 분류돼 있었다 — 마이그레이션 후 재수집으로
+// 교정한다.
+//
+// 상태 판별 우선순위: 바로신청(fn_courseApp) > 대기자신청(fn_waitAppPopOpen) >
+// 전화문의(fn_fieldCnsl('')) > 현장접수(텍스트 "현장접수") > 접수마감
+// (fn_fieldCnsl('close'), class="btn-status finish", 그 외 전부). 한 행에
+// 접수마감 라벨과 대기자신청 버튼이 동시에 있을 수 있어(실측 확인) 텍스트
+// 존재 여부가 아니라 onclick 패턴으로 우선순위를 매긴다(현장접수만 예외).
 function parseRegistrationStatus(statusLiHtml) {
   if (/fn_courseApp\(/.test(statusLiHtml)) return '바로신청';
   if (/fn_waitAppPopOpen\(/.test(statusLiHtml)) return '대기자신청';
   if (/fn_fieldCnsl\(\s*['"]{2}\s*\)/.test(statusLiHtml)) return '전화문의';
+  if (/>현장접수</.test(statusLiHtml)) return '현장접수';
   return '접수마감';
 }
 

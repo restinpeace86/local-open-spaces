@@ -1,6 +1,7 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { StoreMultiSelect, StoreOption } from '@/components/admin/store-multiselect';
 
 // [이마트 컬처클럽 강좌 리스트 — data-grid 탭](2026-10-03 사용자 지시): "이마트
 // 문화센터 등 다른곳에 대하여 홈플러스처럼 진행할예정이야" — 홈플러스 탭
@@ -141,7 +142,18 @@ export function EmartCultureClubPanel() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const [storeFilter, setStoreFilter] = useState<Set<string>>(new Set());
+  const [stores, setStores] = useState<StoreOption[]>([]);
   const [selectedRow, setSelectedRow] = useState<ClassRow | null>(null);
+
+  // [지점별 다중선택 필터](2026-10-04) — 기존 공개 지점 목록 API를 그대로
+  // 재사용한다(제5장 제4조 — 지점 데이터를 또 조회하는 경로를 새로 안 만듦).
+  useEffect(() => {
+    fetch('/api/culture-club/stores')
+      .then((res) => res.json())
+      .then((data: { stores?: StoreOption[] }) => setStores(data.stores ?? []))
+      .catch(() => setStores([]));
+  }, []);
 
   function loadRows() {
     setIsLoading(true);
@@ -149,6 +161,7 @@ export function EmartCultureClubPanel() {
     const params = new URLSearchParams();
     if (categoryFilter) params.set('sub_category_code', categoryFilter);
     if (statusFilter) params.set('filter_status', statusFilter);
+    if (storeFilter.size > 0) params.set('store_code', [...storeFilter].join(','));
 
     fetch(`/api/admin/emart-culture-club?${params.toString()}`)
       .then((res) => res.json())
@@ -215,6 +228,7 @@ export function EmartCultureClubPanel() {
             </option>
           ))}
         </select>
+        <StoreMultiSelect stores={stores} selected={storeFilter} onChange={setStoreFilter} />
         <button
           type="button"
           onClick={loadRows}
@@ -232,7 +246,7 @@ export function EmartCultureClubPanel() {
 
       {errorMessage && <p className="text-sm text-red-500 mb-3">{errorMessage}</p>}
       {rows === null && !errorMessage && !isLoading && (
-        <p className="text-sm text-gray-400">카테고리/상태를 선택하고 &apos;조회하기&apos;를 눌러 수집 결과를 불러오세요.</p>
+        <p className="text-sm text-gray-400">카테고리/상태/지점을 선택하고 &apos;조회하기&apos;를 눌러 수집 결과를 불러오세요.</p>
       )}
 
       {rows !== null && (

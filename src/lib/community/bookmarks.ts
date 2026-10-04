@@ -15,11 +15,13 @@ import { canReceivePushNotifications } from '@/lib/community/grades';
 // 넓혔다(제5장 제4조 기존 구조 우선 — spot_id/event_id와 동일한 패턴).
 //
 // [롯데마트 문화센터 클래스 찜 추가](2026-10-04 사용자 지시): "우리껀 찜 목록
-// 필요해" — 네 번째 nullable FK(lottemart_class_id)로 동일하게 확장. 다만
-// 이마트와 달리 롯데마트는 접수 시작 시각 필드 자체가 없어(실측 확인 — "접수준비"
-// 상태 사례가 실질적으로 없음) 찜이 알람 구독으로 이어지지 않는다 — 순수 "관심
-// 강좌 저장" 용도라 아래 예약-알람 캡 대상에서 제외한다(캡의 취지 자체가 "알람
-// 무분별 등록 방지"라서, 알람 메커니즘이 없는 대상까지 캡을 걸면 취지에 안 맞음).
+// 필요해" — 네 번째 nullable FK(lottemart_class_id)로 동일하게 확장. 처음엔
+// 롯데마트에 접수 시작 시각 필드가 없어(실측 확인 — "접수준비" 상태 사례가
+// 실질적으로 없음) 예약-알람 캡 대상에서 제외했었다. 이후 사용자 지시
+// ("찜한거에 대하여서는 동일하게 알람해야하는거 아니야?")로 다른 종류의 알람
+// (상태 변화 알림 — lottemart-culture-club-status-watch.mjs)을 붙였으므로,
+// 캡의 원래 취지("알람 무분별 등록 방지")가 다시 적용된다 — 아래에서 이벤트/
+// 이마트와 동일하게 캡 대상에 포함시킨다.
 export type BookmarkTarget =
   | { kind: 'spot'; spotId: string }
   | { kind: 'event'; eventId: string }
@@ -59,15 +61,15 @@ export async function addBookmark(target: BookmarkTarget): Promise<void> {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) throw new Error('로그인이 필요합니다.');
 
-  if (target.kind === 'event' || target.kind === 'emart_class') {
+  if (target.kind === 'event' || target.kind === 'emart_class' || target.kind === 'lottemart_class') {
     const profile = await getMyProfile();
     if (profile && canReceivePushNotifications(profile.grade)) {
-      // 이벤트 찜과 문화센터 클래스 찜을 합산한 개수(둘 다 예약-알람 대상이라 같은 캡 적용).
+      // 이벤트/이마트/롯데마트 문화센터 클래스 찜을 합산한 개수(셋 다 알람 대상이라 같은 캡 적용).
       const { count, error: countError } = await supabase
         .from('user_bookmarks')
         .select('id', { count: 'exact', head: true })
         .eq('user_id', userData.user.id)
-        .or('event_id.not.is.null,emart_class_id.not.is.null');
+        .or('event_id.not.is.null,emart_class_id.not.is.null,lottemart_class_id.not.is.null');
       if (countError) throw new Error(`찜 개수 확인 실패: ${countError.message}`);
       const cap = getEventBookmarkCap();
       if ((count ?? 0) >= cap) {

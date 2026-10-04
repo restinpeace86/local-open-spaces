@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { LOTTEMART_TARGET_OPTIONS } from '@/lib/home/culture-club-options';
+import { StoreMultiSelect, StoreOption } from '@/components/admin/store-multiselect';
 
 // [롯데마트 문화센터 강좌 리스트 — data-grid 탭](2026-10-04 사용자 지시): "지금 내가
 // 확인해보려는데 관리자화면에 롯데마트쪽 탭이 안보이는데?" — 이마트 컬처클럽 탭
@@ -32,7 +33,7 @@ type ClassRow = {
   is_closing_soon: boolean;
   is_new: boolean;
   like_count: number | null;
-  registration_status: '바로신청' | '대기자신청' | '접수마감' | '전화문의';
+  registration_status: '바로신청' | '대기자신청' | '접수마감' | '전화문의' | '현장접수';
   semester_code: string;
   target_code: string;
   target_name: string;
@@ -40,7 +41,7 @@ type ClassRow = {
   collected_at: string;
 };
 
-const STATUS_OPTIONS: ClassRow['registration_status'][] = ['바로신청', '대기자신청', '접수마감', '전화문의'];
+const STATUS_OPTIONS: ClassRow['registration_status'][] = ['바로신청', '대기자신청', '접수마감', '전화문의', '현장접수'];
 
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' });
@@ -115,7 +116,18 @@ export function LottemartCultureClubPanel() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [targetFilter, setTargetFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('');
+  const [storeFilter, setStoreFilter] = useState<Set<string>>(new Set());
+  const [stores, setStores] = useState<StoreOption[]>([]);
   const [selectedRow, setSelectedRow] = useState<ClassRow | null>(null);
+
+  // [지점별 다중선택 필터](2026-10-04) — 기존 공개 지점 목록 API를 그대로
+  // 재사용한다(제5장 제4조).
+  useEffect(() => {
+    fetch('/api/culture-club/lottemart-stores')
+      .then((res) => res.json())
+      .then((data: { stores?: StoreOption[] }) => setStores(data.stores ?? []))
+      .catch(() => setStores([]));
+  }, []);
 
   function loadRows() {
     setIsLoading(true);
@@ -123,6 +135,7 @@ export function LottemartCultureClubPanel() {
     const params = new URLSearchParams();
     if (targetFilter) params.set('target_code', targetFilter);
     if (statusFilter) params.set('registration_status', statusFilter);
+    if (storeFilter.size > 0) params.set('store_code', [...storeFilter].join(','));
 
     fetch(`/api/admin/lottemart-culture-club?${params.toString()}`)
       .then((res) => res.json())
@@ -185,6 +198,7 @@ export function LottemartCultureClubPanel() {
             </option>
           ))}
         </select>
+        <StoreMultiSelect stores={stores} selected={storeFilter} onChange={setStoreFilter} />
         <button
           type="button"
           onClick={loadRows}
@@ -202,7 +216,7 @@ export function LottemartCultureClubPanel() {
 
       {errorMessage && <p className="text-sm text-red-500 mb-3">{errorMessage}</p>}
       {rows === null && !errorMessage && !isLoading && (
-        <p className="text-sm text-gray-400">대상/상태를 선택하고 &apos;조회하기&apos;를 눌러 수집 결과를 불러오세요.</p>
+        <p className="text-sm text-gray-400">대상/상태/지점을 선택하고 &apos;조회하기&apos;를 눌러 수집 결과를 불러오세요.</p>
       )}
 
       {rows !== null && (
@@ -252,7 +266,7 @@ export function LottemartCultureClubPanel() {
                           ? 'bg-emerald-600 text-white'
                           : row.registration_status === '대기자신청'
                             ? 'bg-amber-500 text-white'
-                            : row.registration_status === '전화문의'
+                            : row.registration_status === '전화문의' || row.registration_status === '현장접수'
                               ? 'bg-gray-500 text-white'
                               : 'bg-gray-200 text-gray-600'
                       }`}

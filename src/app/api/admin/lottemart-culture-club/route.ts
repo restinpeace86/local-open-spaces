@@ -14,7 +14,10 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const targetCode = searchParams.get('target_code');
   const registrationStatus = searchParams.get('registration_status');
-  const storeCode = searchParams.get('store_code');
+  // [지점별 다중선택 필터](2026-10-04 사용자 지시): "지점별로도 보는거 가능하게
+  // 좀 필터조건 추가해줘.. 전체도 다볼수 있지만 지점별(복수선택 가능)으로도
+  // 볼수있는 조건 추가" — 콤마 구분 다중 지점 코드를 받아 .in()으로 처리한다.
+  const storeCodes = (searchParams.get('store_code') ?? '').split(',').filter(Boolean);
 
   let query = supabase
     .from('lottemart_culture_club_classes')
@@ -24,7 +27,7 @@ export async function GET(request: NextRequest) {
 
   if (targetCode) query = query.eq('target_code', targetCode);
   if (registrationStatus) query = query.eq('registration_status', registrationStatus);
-  if (storeCode) query = query.eq('store_code', storeCode);
+  if (storeCodes.length > 0) query = query.in('store_code', storeCodes);
 
   const { data, error, count } = await query;
 
