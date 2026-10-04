@@ -1,0 +1,46 @@
+name: Lottemart Culture Club Batch
+
+# [롯데마트 문화센터 강좌 리스트 일일 배치](2026-10-04 사용자 지시): "롯데마트 문화센터
+# 확인좀 해줘" — 이마트 컬처클럽과 동일하게 로그인/세션/Playwright가 전혀 필요
+# 없다(실측 확인: searchList.do는 쿠키 없이도 동일 응답). 다만 이마트와 달리 다중값
+# 배치 조회가 안 돼 지점 60 × 대상 3 × 학기 2 = 360개 조합을 순회해야 해서 실행
+# 시간이 더 길다 — timeout-minutes를 넉넉히 둔다.
+#
+# 크론 시간: 이마트(04:00 KST)와 겹치지 않게 KST 새벽 5시(UTC 20:00)로 분산.
+on:
+  schedule:
+    - cron: '0 20 * * *'
+  workflow_dispatch:
+
+jobs:
+  lottemart-culture-club-batch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      # [가벼운 1회 재시도] 이마트/홈플러스/서울 공영주차장과 동일한 사유 — 선택자/
+      # 타이밍성이 아니라 외부 서버 일시 장애만 흡수하면 되는 배치라 짧게(2분) 대기
+      # 후 1회만 재시도한다.
+      - name: Run Lottemart Culture Club collection
+        run: |
+          set +e
+          node scripts/ingest/lottemart-culture-club.mjs
+          exit_code=$?
+          if [ $exit_code -ne 0 ]; then
+            echo "⚠️ 1차 실행 실패(exit $exit_code) — 2분 대기 후 1회 재시도합니다."
+            sleep 120
+            node scripts/ingest/lottemart-culture-club.mjs
+            exit_code=$?
+          fi
+          exit $exit_code
