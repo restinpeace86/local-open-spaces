@@ -205,7 +205,9 @@ function ClassCard({ item, onSelect }: { item: CultureClubClass; onSelect: (item
           {/* [찜 아이콘 — 연결됨](2026-10-03 사용자 지시: "찜/알람은 같은 기능이니깐
               두 테이블 데이터 전부 참조할 수 있도록 확장") user_bookmarks가
               emart_class_id로 확장돼 스팟/이벤트와 동일한 BookmarkButton을 그대로
-              쓴다(열심맘 이상 노출, 우수맘 이상은 예약 알람 20개 캡 대상에도 합산). */}
+              쓴다(열심맘 이상 노출, 우수맘 이상은 예약 알람 캡 대상에도 합산 —
+              2026-10-04 사용자 지시로 캡 20→10개 하향, DEFAULT_EVENT_BOOKMARK_CAP
+              참고). */}
           <span onClick={(e) => e.stopPropagation()}>
             <BookmarkButton target={{ kind: 'emart_class', emartClassId: item.class_id }} />
           </span>

@@ -18,12 +18,15 @@ import { pathToFileURL } from 'url';
 import { loadEnv } from '../lib/load-env.mjs';
 import { fetchWithTimeout } from './lib/fetch-with-timeout.mjs';
 import { createAdminClient } from './lib/supabase-admin.mjs';
+import { applyRandomStartupDelay } from './lib/random-startup-delay.mjs';
 
 const env = loadEnv();
 const SOURCE_KEY = 'EMART_CULTURE_CLUB_DETAIL';
 const GRAPHQL_URL = 'https://wrihg4edszhmvagptse4t4eggi.appsync-api.ap-northeast-2.amazonaws.com/graphql';
 const REQUEST_PACING_MIN_MS = 300;
 const REQUEST_PACING_MAX_MS = 1000;
+// [랜덤 시작 지연](2026-10-04 사용자 지시) — 일 1회 배치, 넉넉하게 최대 10분.
+const MAX_STARTUP_DELAY_MS = 10 * 60 * 1000;
 const BROWSER_LIKE_HEADERS = {
   Origin: 'https://www.cultureclub.emart.com',
   Referer: 'https://www.cultureclub.emart.com/enrolment',
@@ -196,8 +199,10 @@ export async function run({ dryRun = false } = {}) {
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const dryRun = process.argv.includes('--dry-run');
-  run({ dryRun }).catch((err) => {
-    console.error(`❌ 이마트 컬처클럽 상세정보 수집 실패: ${err.message}`);
-    process.exit(1);
-  });
+  applyRandomStartupDelay(MAX_STARTUP_DELAY_MS)
+    .then(() => run({ dryRun }))
+    .catch((err) => {
+      console.error(`❌ 이마트 컬처클럽 상세정보 수집 실패: ${err.message}`);
+      process.exit(1);
+    });
 }

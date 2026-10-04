@@ -35,7 +35,7 @@ describe('BookmarkButton', () => {
     mockUser.current = { id: 'user-1' };
     getMyProfileMock.mockResolvedValue({ grade: 'excellent' });
     getMyBookmarkedIdsMock.mockResolvedValue({ spotIds: new Set(), eventIds: new Set() });
-    addBookmarkMock.mockRejectedValue(new BookmarkCapExceededError('예약 알람은 최대 20개까지 찜할 수 있어요.'));
+    addBookmarkMock.mockRejectedValue(new BookmarkCapExceededError('예약 알람은 최대 10개까지 찜할 수 있어요.'));
 
     render(<BookmarkButton target={{ kind: 'event', eventId: 'event-1' }} />);
     await waitFor(() => expect(screen.getByLabelText('찜하기')).toBeTruthy());
@@ -44,7 +44,7 @@ describe('BookmarkButton', () => {
       fireEvent.click(screen.getByLabelText('찜하기'));
     });
 
-    await waitFor(() => expect(screen.getByText('예약 알람은 최대 20개까지 찜할 수 있어요.')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('예약 알람은 최대 10개까지 찜할 수 있어요.')).toBeTruthy());
   });
 
   it('일반 에러(네트워크 오류 등)는 토스트 없이 조용히 무시한다', async () => {

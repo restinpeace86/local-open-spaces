@@ -37,7 +37,14 @@ export type BookmarkTarget =
 // 적용한다. 스팟 찜에는 캡이 없다(알람과 무관). 제5장 제6조 하드코딩 최소화 —
 // mom-pick-grade-batch.mjs의 파워맘 정원제(DEFAULT_POWER_MOM_QUOTA) 상수 패턴과
 // 동일하게 env override를 둔다.
-const DEFAULT_EVENT_BOOKMARK_CAP = 20;
+//
+// [20 → 10으로 하향](2026-10-04 사용자 지시): 롯데마트 배치들에 랜덤 시작
+// 지연을 적용한 직후 "이렇게 되면 찜한도를 일단 20개에서 10개로 줄이는게
+// 좋을꺼같아 우수맘 대상으로" — 찜한 강좌가 많을수록 찜-상태감시 배치
+// (lottemart-culture-club-status-watch.mjs 등)가 개별 조회해야 할 class_id
+// 수가 늘어나는데, 유저 1인당 알람 슬롯을 줄이면 전체 찜 총량의 상한도
+// 같이 낮아져 그 배치의 장기적 요청량 증가 폭을 줄일 수 있다는 맥락.
+const DEFAULT_EVENT_BOOKMARK_CAP = 10;
 
 function getEventBookmarkCap(): number {
   const raw = process.env.NEXT_PUBLIC_EVENT_BOOKMARK_CAP;
