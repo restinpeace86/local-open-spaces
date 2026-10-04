@@ -1,0 +1,38 @@
+name: Lottemart Culture Club Ping (Hourly)
+
+# [변화 감지 ping](2026-10-04 사용자 지시): "좀더 자주 가져올수 있으면
+# 자주가져오는게 맞아.. 단 가져오는쪽에 성능이슈 줄정도라거나 우리가 봇이라는
+# 걸 알아채게 하면안돼" — 지점당 1페이지만 보는 가벼운 ping이라 매시간
+# 돌려도 하루 총 요청이 지점 수(60)×24회 = 1,440건 수준(기존 일 1회 전체
+# 수집 650~700건의 약 2배)이라 부담이 크지 않다고 판단해 매시간으로 잡았다.
+# 변화가 감지된 지점만 그 지점 전체를 재수집하므로, 변화가 거의 없는 날은
+# 이 숫자보다도 적게 나간다.
+#
+# [범위 축소로 요청량 대폭 감소](2026-10-04 사용자 확정): 원래는 지점×대상×
+# 학기 360개 조합이 필요했지만, 가을학기만(겨울학기는 데이터 자체가 아직
+# 없음을 실측 확인) + 대상 필터 없이(성인 포함 혼합 응답, 오탐 허용) 조회해
+# 60개 조합으로 줄였다.
+on:
+  schedule:
+    - cron: '7 * * * *'
+  workflow_dispatch:
+
+jobs:
+  lottemart-culture-club-ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Ping Lottemart stores for changes
+        run: node scripts/ingest/lottemart-culture-club-ping.mjs

@@ -52,7 +52,9 @@ const REQUEST_PACING_MIN_MS = 1000;
 const REQUEST_PACING_MAX_MS = 1500;
 const PAGE_SIZE = 20;
 
-const STORES = [
+// [ping 배치 재사용](2026-10-04) — lottemart-culture-club-ping.mjs가 동일한
+// 60개 지점 목록을 그대로 쓴다(제5장 제4조 — 지점 목록을 두 번 관리하지 않음).
+export const STORES = [
   ['103', 'MAXX영등포점'], ['322', '송파점'], ['328', '양평점'], ['342', '은평점'], ['307', '중계점'],
   ['455', '고양점'], ['463', '광교점'], ['405', '구리점'], ['458', '권선점'], ['479', '김포한강점'],
   ['435', '동두천점'], ['446', '롯데몰수지점'], ['476', '시흥배곧점'], ['468', '신갈점'], ['415', '안산점'],
@@ -68,7 +70,7 @@ const STORES = [
 ];
 const STORE_NAME_BY_CODE = new Map(STORES);
 
-const TARGETS = [
+export const TARGETS = [
   ['2', '어린이청소년'],
   ['3', '유아'],
   ['4', '엄마와함께'],
@@ -84,7 +86,9 @@ function randomPacingDelay() {
   return REQUEST_PACING_MIN_MS + Math.random() * (REQUEST_PACING_MAX_MS - REQUEST_PACING_MIN_MS);
 }
 
-async function fetchPage(storeCode, targetCode, termCode, pageNo) {
+// [ping 배치 재사용](2026-10-04 사용자 지시로 추가될 lottemart-culture-club-
+// ping.mjs가 이 함수를 그대로 가져다 쓴다 — 요청 로직을 두 번 안 만듦).
+export async function fetchPage(storeCode, targetCode, termCode, pageNo) {
   const body = new URLSearchParams({
     currPageNo: String(pageNo),
     search_str_cd: storeCode,
@@ -264,15 +268,24 @@ export function parseRow(tr, context) {
   };
 }
 
-function parsePageInfo(html) {
-  // [실측 확인] "1|18|354|34|0|320" 형태의 문자열이 hidden input 등에 그대로 박혀
-  // 있다 — "{currPage}|{totalPage}|{totalCnt}|...". totalPage만 쓰면 된다.
-  const m = html.match(/(\d+)\|(\d+)\|(\d+)\|/);
-  if (!m) return { totalPage: 1 };
-  return { totalPage: Number(m[2]) };
+// [실측 확인] "1|18|354|34|0|320" 형태의 문자열이 hidden input 등에 그대로 박혀
+// 있다 — "{currPage}|{totalPage}|{totalCnt}|{acceptTotalCnt}|
+// {onlnCloseTotalCnt}|{acceptCloseTotalCnt}"(접수가능/온라인마감/접수마감
+// 3개 버킷 건수 — search_reg_status='1'/'2'/'3' 필터와 1:1 대응, 2026-10-04
+// 실측 확인). ping 배치는 이 3개 버킷 건수만으로 "뭔가 바뀌었는지"를 감지한다
+// (바로신청→전화문의 같은 개별 강좌 상태 전환도 버킷 합계가 바뀌므로 잡힘).
+export function parsePageInfo(html) {
+  const m = html.match(/(\d+)\|(\d+)\|(\d+)\|(\d+)\|(\d+)\|(\d+)/);
+  if (!m) return { totalPage: 1, acceptTotalCnt: 0, onlnCloseTotalCnt: 0, acceptCloseTotalCnt: 0 };
+  return {
+    totalPage: Number(m[2]),
+    acceptTotalCnt: Number(m[4]),
+    onlnCloseTotalCnt: Number(m[5]),
+    acceptCloseTotalCnt: Number(m[6]),
+  };
 }
 
-async function fetchAllForCombo(storeCode, storeName, targetCode, targetName, semesterCode) {
+export async function fetchAllForCombo(storeCode, storeName, targetCode, targetName, semesterCode) {
   const rows = [];
   let page = 1;
   // eslint-disable-next-line no-constant-condition

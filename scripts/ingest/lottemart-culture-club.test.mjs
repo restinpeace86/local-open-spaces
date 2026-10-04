@@ -2,7 +2,7 @@
 // 실측 표본 그대로(2026-10-04 searchList.do 직접 호출, 응답 그대로 복사한 <tr>).
 import { describe, expect, it } from 'vitest';
 import { parse } from 'node-html-parser';
-import { parseRow } from './lottemart-culture-club.mjs';
+import { parsePageInfo, parseRow } from './lottemart-culture-club.mjs';
 
 const CONTEXT = {
   storeCode: '455',
@@ -217,5 +217,23 @@ describe('lottemart-culture-club parseRow', () => {
   it('class_id를 못 찾으면 null을 반환한다', () => {
     const tr = trFromHtml('<tr><td class="align-l dis-first"><div class="info-txt"></div></td></tr>');
     expect(parseRow(tr, CONTEXT)).toBeNull();
+  });
+});
+
+// [ping 배치용 버킷 건수 추출](2026-10-04) — lottemart-culture-club-ping.mjs가
+// 이 함수로 접수가능/온라인마감/접수마감 3개 버킷 건수를 읽어 변화를 감지한다.
+describe('lottemart-culture-club parsePageInfo', () => {
+  it('실측 pageInfo 문자열에서 totalPage와 3개 버킷 건수를 전부 추출한다', () => {
+    const html = '<input type="hidden" id="pageInfo" value="1|18|354|34|0|320">';
+    expect(parsePageInfo(html)).toEqual({
+      totalPage: 18,
+      acceptTotalCnt: 34,
+      onlnCloseTotalCnt: 0,
+      acceptCloseTotalCnt: 320,
+    });
+  });
+
+  it('pageInfo가 없으면(겨울학기 등 빈 응답) 전부 0으로 반환한다', () => {
+    expect(parsePageInfo('')).toEqual({ totalPage: 1, acceptTotalCnt: 0, onlnCloseTotalCnt: 0, acceptCloseTotalCnt: 0 });
   });
 });

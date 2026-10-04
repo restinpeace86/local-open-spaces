@@ -716,15 +716,20 @@ export type Database = {
       lottemart_culture_club_classes: {
         Row: {
           age_range_text: string | null
+          class_code: string | null
           class_day: string[] | null
           class_fee: number | null
           class_id: string
+          class_intro: string | null
           class_material_fee: number | null
           class_original_fee: number | null
           class_start_date: string | null
+          class_tip: string | null
           class_title: string
+          classroom: string | null
           collected_at: string
           created_at: string
+          detail_fetched_at: string | null
           discount_badge_text: string | null
           end_time: string | null
           id: number
@@ -747,15 +752,20 @@ export type Database = {
         }
         Insert: {
           age_range_text?: string | null
+          class_code?: string | null
           class_day?: string[] | null
           class_fee?: number | null
           class_id: string
+          class_intro?: string | null
           class_material_fee?: number | null
           class_original_fee?: number | null
           class_start_date?: string | null
+          class_tip?: string | null
           class_title: string
+          classroom?: string | null
           collected_at?: string
           created_at?: string
+          detail_fetched_at?: string | null
           discount_badge_text?: string | null
           end_time?: string | null
           id?: never
@@ -778,15 +788,20 @@ export type Database = {
         }
         Update: {
           age_range_text?: string | null
+          class_code?: string | null
           class_day?: string[] | null
           class_fee?: number | null
           class_id?: string
+          class_intro?: string | null
           class_material_fee?: number | null
           class_original_fee?: number | null
           class_start_date?: string | null
+          class_tip?: string | null
           class_title?: string
+          classroom?: string | null
           collected_at?: string
           created_at?: string
+          detail_fetched_at?: string | null
           discount_badge_text?: string | null
           end_time?: string | null
           id?: never
@@ -806,6 +821,33 @@ export type Database = {
           target_code?: string
           target_name?: string
           updated_at?: string
+        }
+        Relationships: []
+      }
+      lottemart_culture_club_store_ping_state: {
+        Row: {
+          accept_close_total_cnt: number
+          accept_total_cnt: number
+          changed_at: string | null
+          checked_at: string
+          onln_close_total_cnt: number
+          store_code: string
+        }
+        Insert: {
+          accept_close_total_cnt?: number
+          accept_total_cnt?: number
+          changed_at?: string | null
+          checked_at?: string
+          onln_close_total_cnt?: number
+          store_code: string
+        }
+        Update: {
+          accept_close_total_cnt?: number
+          accept_total_cnt?: number
+          changed_at?: string | null
+          checked_at?: string
+          onln_close_total_cnt?: number
+          store_code?: string
         }
         Relationships: []
       }
