@@ -826,27 +826,18 @@ export type Database = {
       }
       lottemart_culture_club_store_ping_state: {
         Row: {
-          accept_close_total_cnt: number
-          accept_total_cnt: number
           changed_at: string | null
           checked_at: string
-          onln_close_total_cnt: number
           store_code: string
         }
         Insert: {
-          accept_close_total_cnt?: number
-          accept_total_cnt?: number
           changed_at?: string | null
           checked_at?: string
-          onln_close_total_cnt?: number
           store_code: string
         }
         Update: {
-          accept_close_total_cnt?: number
-          accept_total_cnt?: number
           changed_at?: string | null
           checked_at?: string
-          onln_close_total_cnt?: number
           store_code?: string
         }
         Relationships: []
