@@ -12,9 +12,11 @@ import {
   CULTURE_CLUB_BRAND_OPTIONS,
   CULTURE_CLUB_DAY_OPTIONS,
   CULTURE_CLUB_SUB_CATEGORY_OPTIONS,
+  CultureClubBrandKey,
   CultureClubDay,
   CultureClubSubCategory,
 } from '@/lib/home/culture-club-options';
+import { LottemartCultureClubView } from '@/components/home/lottemart-culture-club-view';
 
 // [탭 구조 재수정](2026-10-03 사용자 지시): "이벤트픽 화면에서 현재꺼에 대하여 탭으로
 // 하나있고 문화센터로 탭하나 만들자는 얘기였는데" — 처음엔 중분류 그리드 아래 버튼을
@@ -362,7 +364,39 @@ function CultureClubDetailSheet({ item, onClose }: { item: CultureClubClass; onC
   );
 }
 
+// [브랜드 전환](2026-10-04 사용자 지시로 롯데마트 추가): 저장 스키마가 브랜드마다
+// 완전히 달라(2026-10-04 사용자 확인 — 억지로 표준화하지 않음) 공통 컴포넌트로
+// 묶지 않고, 최상단 브랜드 pill로 어느 브랜드의 화면(이마트=이 파일의
+// EmartCultureClubView, 롯데마트=LottemartCultureClubView)을 보여줄지만 전환한다.
 export function CultureClubTabView() {
+  const [brandKey, setBrandKey] = useState<CultureClubBrandKey>('emart');
+
+  return (
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex items-center gap-2 border-b border-gray-100 p-3 pb-2">
+        {CULTURE_CLUB_BRAND_OPTIONS.map((brand) => {
+          const isActive = brandKey === brand.key;
+          return (
+            <button
+              key={brand.key}
+              type="button"
+              aria-pressed={isActive}
+              onClick={() => setBrandKey(brand.key)}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                isActive ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+              }`}
+            >
+              {brand.label}
+            </button>
+          );
+        })}
+      </div>
+      {brandKey === 'emart' ? <EmartCultureClubView /> : <LottemartCultureClubView />}
+    </div>
+  );
+}
+
+function EmartCultureClubView() {
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [storeCode, setStoreCode] = useState<string | null>(null);
   const [selectedDays, setSelectedDays] = useState<Set<CultureClubDay>>(new Set());
@@ -374,8 +408,8 @@ export function CultureClubTabView() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<CultureClubClass | null>(null);
 
-  // 지점 목록은 한 번만 불러온다(브랜드가 1개뿐이라 전환 시 재조회 불필요 — 브랜드가
-  // 늘어나면 이 effect에 brandKey 의존성을 추가한다).
+  // 지점 목록은 마운트 시 한 번만 불러온다(브랜드 전환은 상위 CultureClubTabView가
+  // 이 컴포넌트 자체를 언마운트/재마운트하는 방식이라 별도 brandKey 의존성 불필요).
   useEffect(() => {
     fetch('/api/culture-club/stores')
       .then((res) => res.json())
@@ -468,21 +502,13 @@ export function CultureClubTabView() {
   return (
     <div className="flex-1 overflow-y-auto" onScroll={handleScroll}>
       <div className="flex flex-col gap-2 p-3 border-b border-gray-100">
-        {/* 브랜드 세그먼트 — 지금은 1개뿐이라 선택 UI라기보다 라벨 표시. */}
-        <div className="flex items-center justify-between px-1">
-          <div className="flex items-center gap-2">
-            {CULTURE_CLUB_BRAND_OPTIONS.map((brand) => (
-              <span key={brand.key} className="rounded-full bg-gray-900 px-3 py-1 text-xs font-medium text-white">
-                {brand.label}
-              </span>
-            ))}
-          </div>
-          {(selectedDays.size > 0 || selectedSubCategories.size > 0) && (
+        {(selectedDays.size > 0 || selectedSubCategories.size > 0) && (
+          <div className="flex items-center justify-end px-1">
             <button type="button" onClick={resetFilters} className="text-xs text-gray-400 hover:text-gray-600">
               ↻ 초기화
             </button>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* 지점 선택 — 단일선택, 클릭 한 번으로 바로 전환된다(네이티브 select). */}
         <div className="flex items-center gap-2 px-1">

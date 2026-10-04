@@ -11,8 +11,18 @@ import { canBookmark, GRADE_LABEL } from '@/lib/community/grades';
 // [Decision 019](2026-09-02) / spec/community/mom-pick-grades.md: 찜(북마크)은 열심맘(active)
 // 이상 부여 권한. Decision 003이 지정한 ENABLE_USER_BOOKMARK 플래그의 실제 화면이다.
 function BookmarkCard({ bookmark, onRemove }: { bookmark: MyBookmark; onRemove: () => void }) {
-  const name = bookmark.open_spaces?.name ?? bookmark.events?.title ?? bookmark.emart_culture_club_classes?.class_title ?? '알 수 없는 항목';
-  const subtitle = bookmark.open_spaces?.address ?? bookmark.events?.venue_name ?? bookmark.emart_culture_club_classes?.store_name ?? '';
+  const name =
+    bookmark.open_spaces?.name ??
+    bookmark.events?.title ??
+    bookmark.emart_culture_club_classes?.class_title ??
+    bookmark.lottemart_culture_club_classes?.class_title ??
+    '알 수 없는 항목';
+  const subtitle =
+    bookmark.open_spaces?.address ??
+    bookmark.events?.venue_name ??
+    bookmark.emart_culture_club_classes?.store_name ??
+    bookmark.lottemart_culture_club_classes?.store_name ??
+    '';
 
   return (
     <div className="flex items-center justify-between rounded-xl border border-gray-200 bg-white p-4">
@@ -35,7 +45,11 @@ function BookmarkCard({ bookmark, onRemove }: { bookmark: MyBookmark; onRemove: 
 // [문화센터 탭 추가](2026-10-03 사용자 지시): "찜/알람은 같은 기능이니깐 두 테이블
 // 데이터 전부 참조할 수 있도록 확장" — user_bookmarks가 emart_class_id로도 확장돼
 // 세 번째 탭을 추가한다.
-type BookmarkTab = 'spot' | 'event' | 'emart_class';
+// [롯데마트 합류](2026-10-04): "각각에 맞는 형태내에서 ... 비슷하게 보여줄수 있는
+// 만큼만 화면에서 어레인지"(2026-10-04 사용자 확인) — 저장은 별도 테이블이지만
+// 사용자 입장에선 둘 다 "문화센터" 찜이라 탭을 5번째로 늘리지 않고 culture_club
+// 탭 하나에 이마트+롯데마트를 합쳐서 보여준다.
+type BookmarkTab = 'spot' | 'event' | 'culture_club';
 
 export function FavoritesView() {
   const { user, isLoading: isUserLoading } = useUser();
@@ -78,7 +92,9 @@ export function FavoritesView() {
         ? { kind: 'spot', spotId: bookmark.spot_id }
         : bookmark.event_id
           ? { kind: 'event', eventId: bookmark.event_id }
-          : { kind: 'emart_class', emartClassId: bookmark.emart_class_id! };
+          : bookmark.emart_class_id
+            ? { kind: 'emart_class', emartClassId: bookmark.emart_class_id }
+            : { kind: 'lottemart_class', lottemartClassId: bookmark.lottemart_class_id! };
       await removeBookmark(target);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : '찜 삭제에 실패했습니다.');
@@ -129,9 +145,9 @@ export function FavoritesView() {
 
   const spotBookmarks = bookmarks.filter((b) => b.spot_id);
   const eventBookmarks = bookmarks.filter((b) => b.event_id);
-  const emartClassBookmarks = bookmarks.filter((b) => b.emart_class_id);
+  const cultureClubBookmarks = bookmarks.filter((b) => b.emart_class_id || b.lottemart_class_id);
   const visibleBookmarks =
-    activeTab === 'spot' ? spotBookmarks : activeTab === 'event' ? eventBookmarks : emartClassBookmarks;
+    activeTab === 'spot' ? spotBookmarks : activeTab === 'event' ? eventBookmarks : cultureClubBookmarks;
   const emptyLabel =
     activeTab === 'spot' ? '아직 찜한 스팟이 없어요.' : activeTab === 'event' ? '아직 찜한 이벤트가 없어요.' : '아직 찜한 문화센터 강좌가 없어요.';
 
@@ -143,7 +159,7 @@ export function FavoritesView() {
           [
             ['spot', `찜한 스팟 ${spotBookmarks.length}`],
             ['event', `찜한 이벤트 ${eventBookmarks.length}`],
-            ['emart_class', `찜한 문화센터 ${emartClassBookmarks.length}`],
+            ['culture_club', `찜한 문화센터 ${cultureClubBookmarks.length}`],
           ] as [BookmarkTab, string][]
         ).map(([tab, label]) => {
           const isActive = activeTab === tab;

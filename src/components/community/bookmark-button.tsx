@@ -9,13 +9,15 @@ import { Toast } from '@/components/map/toast';
 
 // [이마트 문화센터 클래스 찜 추가](2026-10-03) — target 3종(spot/event/emart_class)에서
 // id/판별 로직이 늘어 삼항식이 2개씩 겹치면 가독성이 떨어져 작은 헬퍼로 뺐다.
+// [롯데마트 문화센터 클래스 찜 추가](2026-10-04) — 4종으로 확장.
 function isBookmarkedFor(
   target: BookmarkTarget,
-  ids: { spotIds: Set<string>; eventIds: Set<string>; emartClassIds: Set<string> }
+  ids: { spotIds: Set<string>; eventIds: Set<string>; emartClassIds: Set<string>; lottemartClassIds: Set<string> }
 ): boolean {
   if (target.kind === 'spot') return ids.spotIds.has(target.spotId);
   if (target.kind === 'event') return ids.eventIds.has(target.eventId);
-  return ids.emartClassIds.has(target.emartClassId);
+  if (target.kind === 'emart_class') return ids.emartClassIds.has(target.emartClassId);
+  return ids.lottemartClassIds.has(target.lottemartClassId);
 }
 
 // [Decision 019](2026-09-02) / spec/community/mom-pick-grades.md: 찜은 열심맘 이상만

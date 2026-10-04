@@ -30,9 +30,11 @@ function makeBookmark(overrides: Partial<MyBookmark>): MyBookmark {
     spot_id: null,
     event_id: null,
     emart_class_id: null,
+    lottemart_class_id: null,
     open_spaces: null,
     events: null,
     emart_culture_club_classes: null,
+    lottemart_culture_club_classes: null,
     ...overrides,
   };
 }
@@ -128,5 +130,55 @@ describe('FavoritesView', () => {
     fireEvent.click(screen.getByLabelText('찜 삭제'));
 
     expect(removeBookmarkMock).toHaveBeenCalledWith({ kind: 'emart_class', emartClassId: 'class-1' });
+  });
+
+  // [롯데마트 합류](2026-10-04 사용자 지시): "우리껀 찜 목록 필요해" — 저장은 별도
+  // 테이블(lottemart_class_id)이지만 화면에선 이마트와 같은 "찜한 문화센터" 탭에
+  // 합쳐서 보여준다(탭을 5개로 늘리지 않음).
+  it('롯데마트 문화센터 찜도 같은 "찜한 문화센터" 탭에 이마트와 함께 합산된다', async () => {
+    mockUser.current = { id: 'user-1' };
+    getMyProfileMock.mockResolvedValue({ grade: 'active' });
+    listMyBookmarksMock.mockResolvedValue([
+      makeBookmark({
+        id: 'emart-bm',
+        emart_class_id: 'class-1',
+        emart_culture_club_classes: { class_id: 'class-1', class_title: '토요 엉클짐', store_name: '스타필드 안성점' },
+      }),
+      makeBookmark({
+        id: 'lottemart-bm',
+        lottemart_class_id: 'class-2',
+        lottemart_culture_club_classes: { class_id: 'class-2', class_title: '랄랄라 코알라', store_name: '고양점' },
+      }),
+    ]);
+
+    render(<FavoritesView />);
+
+    await waitFor(() => expect(screen.getByText('찜한 문화센터 2')).toBeTruthy());
+
+    fireEvent.click(screen.getByText('찜한 문화센터 2'));
+
+    await waitFor(() => expect(screen.getByText('토요 엉클짐')).toBeTruthy());
+    expect(screen.getByText('랄랄라 코알라')).toBeTruthy();
+    expect(screen.getByText('고양점')).toBeTruthy();
+  });
+
+  it('롯데마트 문화센터 찜 삭제 시 lottemart_class 타입으로 removeBookmark를 호출한다', async () => {
+    mockUser.current = { id: 'user-1' };
+    getMyProfileMock.mockResolvedValue({ grade: 'active' });
+    listMyBookmarksMock.mockResolvedValue([
+      makeBookmark({
+        id: 'lottemart-bm',
+        lottemart_class_id: 'class-2',
+        lottemart_culture_club_classes: { class_id: 'class-2', class_title: '랄랄라 코알라', store_name: '고양점' },
+      }),
+    ]);
+
+    render(<FavoritesView />);
+    fireEvent.click(await screen.findByText('찜한 문화센터 1'));
+    await screen.findByText('랄랄라 코알라');
+
+    fireEvent.click(screen.getByLabelText('찜 삭제'));
+
+    expect(removeBookmarkMock).toHaveBeenCalledWith({ kind: 'lottemart_class', lottemartClassId: 'class-2' });
   });
 });

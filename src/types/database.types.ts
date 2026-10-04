@@ -713,6 +713,102 @@ export type Database = {
         }
         Relationships: []
       }
+      lottemart_culture_club_classes: {
+        Row: {
+          age_range_text: string | null
+          class_day: string[] | null
+          class_fee: number | null
+          class_id: string
+          class_material_fee: number | null
+          class_original_fee: number | null
+          class_start_date: string | null
+          class_title: string
+          collected_at: string
+          created_at: string
+          discount_badge_text: string | null
+          end_time: string | null
+          id: number
+          instructor_name: string | null
+          is_closing_soon: boolean
+          is_excluded: boolean
+          is_new: boolean
+          like_count: number | null
+          main_category_name: string | null
+          registration_status: string
+          semester_code: string
+          session_count: number | null
+          start_time: string | null
+          store_code: string
+          store_name: string
+          sub_category_name: string | null
+          target_code: string
+          target_name: string
+          updated_at: string
+        }
+        Insert: {
+          age_range_text?: string | null
+          class_day?: string[] | null
+          class_fee?: number | null
+          class_id: string
+          class_material_fee?: number | null
+          class_original_fee?: number | null
+          class_start_date?: string | null
+          class_title: string
+          collected_at?: string
+          created_at?: string
+          discount_badge_text?: string | null
+          end_time?: string | null
+          id?: never
+          instructor_name?: string | null
+          is_closing_soon?: boolean
+          is_excluded?: boolean
+          is_new?: boolean
+          like_count?: number | null
+          main_category_name?: string | null
+          registration_status: string
+          semester_code: string
+          session_count?: number | null
+          start_time?: string | null
+          store_code: string
+          store_name: string
+          sub_category_name?: string | null
+          target_code: string
+          target_name: string
+          updated_at?: string
+        }
+        Update: {
+          age_range_text?: string | null
+          class_day?: string[] | null
+          class_fee?: number | null
+          class_id?: string
+          class_material_fee?: number | null
+          class_original_fee?: number | null
+          class_start_date?: string | null
+          class_title?: string
+          collected_at?: string
+          created_at?: string
+          discount_badge_text?: string | null
+          end_time?: string | null
+          id?: never
+          instructor_name?: string | null
+          is_closing_soon?: boolean
+          is_excluded?: boolean
+          is_new?: boolean
+          like_count?: number | null
+          main_category_name?: string | null
+          registration_status?: string
+          semester_code?: string
+          session_count?: number | null
+          start_time?: string | null
+          store_code?: string
+          store_name?: string
+          sub_category_name?: string | null
+          target_code?: string
+          target_name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       mom_pick_likes: {
         Row: {
           created_at: string
@@ -1803,6 +1899,7 @@ export type Database = {
           emart_class_id: string | null
           event_id: string | null
           id: string
+          lottemart_class_id: string | null
           spot_id: string | null
           user_id: string
         }
@@ -1811,6 +1908,7 @@ export type Database = {
           emart_class_id?: string | null
           event_id?: string | null
           id?: string
+          lottemart_class_id?: string | null
           spot_id?: string | null
           user_id: string
         }
@@ -1819,6 +1917,7 @@ export type Database = {
           emart_class_id?: string | null
           event_id?: string | null
           id?: string
+          lottemart_class_id?: string | null
           spot_id?: string | null
           user_id?: string
         }
@@ -1836,6 +1935,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "events"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_bookmarks_lottemart_class_id_fkey"
+            columns: ["lottemart_class_id"]
+            isOneToOne: false
+            referencedRelation: "lottemart_culture_club_classes"
+            referencedColumns: ["class_id"]
           },
           {
             foreignKeyName: "user_bookmarks_spot_id_fkey"

@@ -39,8 +39,11 @@
 // is_excluded로 관리자가 개별 배제하거나 후속 지시로 기본 수집 범위를 좁힌다.
 import { pathToFileURL } from 'url';
 import { parse } from 'node-html-parser';
+import { loadEnv } from '../lib/load-env.mjs';
 import { fetchWithTimeout } from './lib/fetch-with-timeout.mjs';
 import { createAdminClient } from './lib/supabase-admin.mjs';
+
+loadEnv();
 
 const SOURCE_KEY = 'LOTTEMART_CULTURE_CLUB';
 const LIST_URL = 'https://culture.lottemart.com/cu/gus/course/courseinfo/searchList.do';

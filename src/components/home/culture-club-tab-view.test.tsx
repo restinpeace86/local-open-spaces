@@ -286,3 +286,73 @@ describe('CultureClubTabView', () => {
     });
   });
 });
+
+// [브랜드 전환](2026-10-04 사용자 지시로 롯데마트 추가): 최상단 브랜드 pill로
+// 이마트/롯데마트 화면이 실제로 전환되는지 검증한다.
+describe('CultureClubTabView 브랜드 전환', () => {
+  function stubBrandFetch() {
+    const fetchMock = vi.fn((url: string) => {
+      if (url.startsWith('/api/culture-club/stores')) {
+        return Promise.resolve({ json: () => Promise.resolve({ stores: [{ storeCode: '180', label: '이마트 춘천점' }] }) } as Response);
+      }
+      if (url.startsWith('/api/culture-club/classes')) {
+        return Promise.resolve({ json: () => Promise.resolve({ items: [makeClass()], total: 1 }) } as Response);
+      }
+      if (url.startsWith('/api/culture-club/lottemart-stores')) {
+        return Promise.resolve({ json: () => Promise.resolve({ stores: [{ storeCode: '455', label: '고양점' }] }) } as Response);
+      }
+      if (url.startsWith('/api/culture-club/lottemart-classes')) {
+        return Promise.resolve({
+          json: () =>
+            Promise.resolve({
+              items: [
+                {
+                  class_id: 'lm-1',
+                  class_title: '랄랄라 코알라',
+                  store_code: '455',
+                  store_name: '고양점',
+                  main_category_name: '영아강좌',
+                  sub_category_name: '오감자극',
+                  age_range_text: '5~9개월',
+                  instructor_name: '문화센터',
+                  class_day: ['목'],
+                  start_time: '11:20',
+                  end_time: '12:00',
+                  class_start_date: '20260903',
+                  session_count: 12,
+                  class_original_fee: 140000,
+                  class_fee: 91000,
+                  class_material_fee: null,
+                  discount_badge_text: '35% 할인',
+                  is_closing_soon: false,
+                  is_new: false,
+                  like_count: 1,
+                  registration_status: '대기자신청',
+                  semester_code: '202603',
+                  target_code: '4',
+                  target_name: '엄마와함께',
+                },
+              ],
+              total: 1,
+            }),
+        } as Response);
+      }
+      return Promise.resolve({ json: () => Promise.resolve({}) } as Response);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+
+  it('기본값은 이마트고, 롯데마트 pill을 누르면 롯데마트 화면으로 전환된다', async () => {
+    stubBrandFetch();
+    render(<CultureClubTabView />);
+
+    await screen.findByText(/두근두근/);
+
+    fireEvent.click(screen.getByText('롯데마트 문화센터'));
+
+    await screen.findByText('랄랄라 코알라');
+    expect(screen.queryByText(/두근두근/)).not.toBeInTheDocument();
+    expect(screen.getByText('대기자 신청')).toBeTruthy();
+  });
+});

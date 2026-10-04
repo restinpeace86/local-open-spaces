@@ -13,10 +13,18 @@ import { canReceivePushNotifications } from '@/lib/community/grades';
 // 확장" — emart_culture_club_classes는 독립 테이블로 그대로 두고(데이터 파이프라인이
 // events와 섞이지 않게), user_bookmarks만 세 번째 nullable FK(emart_class_id)로
 // 넓혔다(제5장 제4조 기존 구조 우선 — spot_id/event_id와 동일한 패턴).
+//
+// [롯데마트 문화센터 클래스 찜 추가](2026-10-04 사용자 지시): "우리껀 찜 목록
+// 필요해" — 네 번째 nullable FK(lottemart_class_id)로 동일하게 확장. 다만
+// 이마트와 달리 롯데마트는 접수 시작 시각 필드 자체가 없어(실측 확인 — "접수준비"
+// 상태 사례가 실질적으로 없음) 찜이 알람 구독으로 이어지지 않는다 — 순수 "관심
+// 강좌 저장" 용도라 아래 예약-알람 캡 대상에서 제외한다(캡의 취지 자체가 "알람
+// 무분별 등록 방지"라서, 알람 메커니즘이 없는 대상까지 캡을 걸면 취지에 안 맞음).
 export type BookmarkTarget =
   | { kind: 'spot'; spotId: string }
   | { kind: 'event'; eventId: string }
-  | { kind: 'emart_class'; emartClassId: string };
+  | { kind: 'emart_class'; emartClassId: string }
+  | { kind: 'lottemart_class'; lottemartClassId: string };
 
 // [우수맘 전용 예약-알람 슬롯 캡](2026-10-03 사용자 지시): "혜택 제한: 우수회원에게는
 // 알림 리마인더 슬롯 최대 20개 제한을 두어 무분별한 등록 방지." 이벤트/문화센터 클래스
@@ -68,11 +76,18 @@ export async function addBookmark(target: BookmarkTarget): Promise<void> {
     }
   }
 
-  const row: { user_id: string; spot_id: string | null; event_id: string | null; emart_class_id: string | null } = {
+  const row: {
+    user_id: string;
+    spot_id: string | null;
+    event_id: string | null;
+    emart_class_id: string | null;
+    lottemart_class_id: string | null;
+  } = {
     user_id: userData.user.id,
     spot_id: target.kind === 'spot' ? target.spotId : null,
     event_id: target.kind === 'event' ? target.eventId : null,
     emart_class_id: target.kind === 'emart_class' ? target.emartClassId : null,
+    lottemart_class_id: target.kind === 'lottemart_class' ? target.lottemartClassId : null,
   };
 
   const { error } = await supabase.from('user_bookmarks').insert(row);
@@ -87,7 +102,8 @@ export async function removeBookmark(target: BookmarkTarget): Promise<void> {
   let query = supabase.from('user_bookmarks').delete().eq('user_id', userData.user.id);
   if (target.kind === 'spot') query = query.eq('spot_id', target.spotId);
   else if (target.kind === 'event') query = query.eq('event_id', target.eventId);
-  else query = query.eq('emart_class_id', target.emartClassId);
+  else if (target.kind === 'emart_class') query = query.eq('emart_class_id', target.emartClassId);
+  else query = query.eq('lottemart_class_id', target.lottemartClassId);
 
   const { error } = await query;
   if (error) throw new Error(`찜 삭제 실패: ${error.message}`);
@@ -99,9 +115,11 @@ export type MyBookmark = {
   spot_id: string | null;
   event_id: string | null;
   emart_class_id: string | null;
+  lottemart_class_id: string | null;
   open_spaces: { id: string; name: string; address: string | null; category: string } | null;
   events: { id: string; title: string; venue_name: string | null; thumbnail_url: string | null } | null;
   emart_culture_club_classes: { class_id: string; class_title: string; store_name: string | null } | null;
+  lottemart_culture_club_classes: { class_id: string; class_title: string; store_name: string | null } | null;
 };
 
 export async function listMyBookmarks(): Promise<MyBookmark[]> {
@@ -109,7 +127,7 @@ export async function listMyBookmarks(): Promise<MyBookmark[]> {
   const { data, error } = await supabase
     .from('user_bookmarks')
     .select(
-      'id, created_at, spot_id, event_id, emart_class_id, open_spaces(id, name, address, category), events(id, title, venue_name, thumbnail_url), emart_culture_club_classes(class_id, class_title, store_name)'
+      'id, created_at, spot_id, event_id, emart_class_id, lottemart_class_id, open_spaces(id, name, address, category), events(id, title, venue_name, thumbnail_url), emart_culture_club_classes(class_id, class_title, store_name), lottemart_culture_club_classes(class_id, class_title, store_name)'
     )
     .order('created_at', { ascending: false });
 
@@ -117,24 +135,31 @@ export async function listMyBookmarks(): Promise<MyBookmark[]> {
   return (data ?? []) as unknown as MyBookmark[];
 }
 
-export async function getMyBookmarkedIds(): Promise<{ spotIds: Set<string>; eventIds: Set<string>; emartClassIds: Set<string> }> {
+export async function getMyBookmarkedIds(): Promise<{
+  spotIds: Set<string>;
+  eventIds: Set<string>;
+  emartClassIds: Set<string>;
+  lottemartClassIds: Set<string>;
+}> {
   const supabase = createClient();
   const { data: userData } = await supabase.auth.getUser();
-  if (!userData.user) return { spotIds: new Set(), eventIds: new Set(), emartClassIds: new Set() };
+  if (!userData.user) return { spotIds: new Set(), eventIds: new Set(), emartClassIds: new Set(), lottemartClassIds: new Set() };
 
   const { data, error } = await supabase
     .from('user_bookmarks')
-    .select('spot_id, event_id, emart_class_id')
+    .select('spot_id, event_id, emart_class_id, lottemart_class_id')
     .eq('user_id', userData.user.id);
   if (error) throw new Error(`찜 상태 조회 실패: ${error.message}`);
 
   const spotIds = new Set<string>();
   const eventIds = new Set<string>();
   const emartClassIds = new Set<string>();
+  const lottemartClassIds = new Set<string>();
   for (const row of data ?? []) {
     if (row.spot_id) spotIds.add(row.spot_id);
     if (row.event_id) eventIds.add(row.event_id);
     if (row.emart_class_id) emartClassIds.add(row.emart_class_id);
+    if (row.lottemart_class_id) lottemartClassIds.add(row.lottemart_class_id);
   }
-  return { spotIds, eventIds, emartClassIds };
+  return { spotIds, eventIds, emartClassIds, lottemartClassIds };
 }
