@@ -20,6 +20,7 @@ import { parse } from 'node-html-parser';
 import { loadEnv } from '../lib/load-env.mjs';
 import { fetchWithTimeout } from './lib/fetch-with-timeout.mjs';
 import { createAdminClient } from './lib/supabase-admin.mjs';
+import { applyRandomStartupDelay } from './lib/random-startup-delay.mjs';
 
 // [loadEnv 누락 버그 재발 방지](2026-10-04 — lottemart-culture-club.mjs에서
 // 이미 한 번 겪은 실수): run()이 entry-point 가드 밖에서도 직접 import돼
@@ -31,6 +32,8 @@ const SOURCE_KEY = 'LOTTEMART_CULTURE_CLUB_DETAIL';
 const DETAIL_URL = 'https://culture.lottemart.com/cu/gus/course/courseinfo/courseview.do';
 const REQUEST_PACING_MIN_MS = 300;
 const REQUEST_PACING_MAX_MS = 1000;
+// [랜덤 시작 지연](2026-10-04 사용자 지시) — 하루 1회 배치, 넉넉하게 최대 10분.
+const MAX_STARTUP_DELAY_MS = 10 * 60 * 1000;
 const PENDING_PAGE_SIZE = 1000;
 const BR_PLACEHOLDER = '\u0000BR\u0000';
 
@@ -179,8 +182,10 @@ export async function run({ dryRun = false } = {}) {
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const dryRun = process.argv.includes('--dry-run');
-  run({ dryRun }).catch((err) => {
-    console.error(`❌ 롯데마트 문화센터 상세정보 수집 실패: ${err.message}`);
-    process.exit(1);
-  });
+  applyRandomStartupDelay(MAX_STARTUP_DELAY_MS)
+    .then(() => run({ dryRun }))
+    .catch((err) => {
+      console.error(`❌ 롯데마트 문화센터 상세정보 수집 실패: ${err.message}`);
+      process.exit(1);
+    });
 }

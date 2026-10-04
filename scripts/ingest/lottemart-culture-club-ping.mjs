@@ -32,6 +32,7 @@ import { pathToFileURL } from 'url';
 import { parse } from 'node-html-parser';
 import { loadEnv } from '../lib/load-env.mjs';
 import { createAdminClient } from './lib/supabase-admin.mjs';
+import { applyRandomStartupDelay } from './lib/random-startup-delay.mjs';
 import { fetchAllForCombo, fetchPage, parseRow, STORES, TARGETS } from './lottemart-culture-club.mjs';
 
 loadEnv();
@@ -41,6 +42,12 @@ const CURRENT_SEMESTER = '202603';
 const ADULT_CATEGORY = '성인강좌';
 const REQUEST_PACING_MIN_MS = 1000;
 const REQUEST_PACING_MAX_MS = 1500;
+// [랜덤 시작 지연](2026-10-04 사용자 지시): "매시 7분이면 이것도 기계적인건
+// 아닌건가" — 매시 정각에서 7분으로 고정 오프셋만 준 것도 결국 매번 똑같이
+// 규칙적이라는 지적. 트리거(cron)는 고정이어도 실제 요청이 나가는 시각은
+// 매번 흔들리도록, 최대 5분까지 추가로 랜덤 대기한다(다음 ping까지 1시간
+// 여유가 있어 5분 정도는 안전하게 흡수됨).
+const MAX_STARTUP_DELAY_MS = 5 * 60 * 1000;
 const UPSERT_CHUNK_SIZE = 500;
 
 function sleep(ms) {
@@ -171,8 +178,10 @@ export async function run() {
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  run().catch((err) => {
-    console.error(`❌ 롯데마트 문화센터 ping 실패: ${err.message}`);
-    process.exit(1);
-  });
+  applyRandomStartupDelay(MAX_STARTUP_DELAY_MS)
+    .then(() => run())
+    .catch((err) => {
+      console.error(`❌ 롯데마트 문화센터 ping 실패: ${err.message}`);
+      process.exit(1);
+    });
 }

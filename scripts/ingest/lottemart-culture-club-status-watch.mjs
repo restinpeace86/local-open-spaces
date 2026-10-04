@@ -29,10 +29,15 @@ import { parse } from 'node-html-parser';
 import { loadEnv } from '../lib/load-env.mjs';
 import { fetchWithTimeout } from './lib/fetch-with-timeout.mjs';
 import { createAdminClient } from './lib/supabase-admin.mjs';
+import { applyRandomStartupDelay } from './lib/random-startup-delay.mjs';
 
 const DETAIL_URL = 'https://culture.lottemart.com/cu/gus/course/courseinfo/courseview.do';
 const REQUEST_PACING_MIN_MS = 1000;
 const REQUEST_PACING_MAX_MS = 1500;
+// [랜덤 시작 지연](2026-10-04 사용자 지시) — 5분 주기라 다른 배치들처럼 몇
+// 분씩 늘리면 "5분마다"라는 약속이 무너지거나 다음 실행과 겹칠 수 있다 —
+// 최대 30초로 작게만 흔든다.
+const MAX_STARTUP_DELAY_MS = 30 * 1000;
 const ELIGIBLE_GRADES = ['excellent', 'power'];
 const ACTIONABLE_STATUSES = new Set(['바로신청', '대기자신청']);
 
@@ -229,7 +234,8 @@ export async function run() {
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   loadEnv();
-  run()
+  applyRandomStartupDelay(MAX_STARTUP_DELAY_MS)
+    .then(() => run())
     .then(({ sentCount }) => {
       console.log(`▶▶▶ [LOTTEMART_STATUS_WATCH] 종료: ${sentCount}건 발송`);
       process.exitCode = 0;

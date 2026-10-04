@@ -42,6 +42,7 @@ import { parse } from 'node-html-parser';
 import { loadEnv } from '../lib/load-env.mjs';
 import { fetchWithTimeout } from './lib/fetch-with-timeout.mjs';
 import { createAdminClient } from './lib/supabase-admin.mjs';
+import { applyRandomStartupDelay } from './lib/random-startup-delay.mjs';
 
 loadEnv();
 
@@ -50,6 +51,9 @@ const LIST_URL = 'https://culture.lottemart.com/cu/gus/course/courseinfo/searchL
 const UPSERT_CHUNK_SIZE = 500;
 const REQUEST_PACING_MIN_MS = 1000;
 const REQUEST_PACING_MAX_MS = 1500;
+// [랜덤 시작 지연](2026-10-04 사용자 지시) — 하루 1회 배치라 다음 배치(상세
+// 수집, KST 01:30)까지 충분히 여유가 있어 넉넉하게(최대 10분) 둔다.
+const MAX_STARTUP_DELAY_MS = 10 * 60 * 1000;
 const PAGE_SIZE = 20;
 
 // [ping 배치 재사용](2026-10-04) — lottemart-culture-club-ping.mjs가 동일한
@@ -386,8 +390,10 @@ export async function run({ dryRun = false, storesLimit = null } = {}) {
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const dryRun = process.argv.includes('--dry-run');
-  run({ dryRun }).catch((err) => {
-    console.error(`❌ 롯데마트 문화센터 수집 실패: ${err.message}`);
-    process.exit(1);
-  });
+  applyRandomStartupDelay(MAX_STARTUP_DELAY_MS)
+    .then(() => run({ dryRun }))
+    .catch((err) => {
+      console.error(`❌ 롯데마트 문화센터 수집 실패: ${err.message}`);
+      process.exit(1);
+    });
 }
