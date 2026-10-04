@@ -45,9 +45,10 @@
 - `scripts/ingest/lottemart-culture-club.test.mjs`(신규): 실측 표본 HTML을
   그대로 fixture로 써서 `parseRow()` 6개 테스트(재료비/할인+마감임박 동시/
   접수마감+대기자신청 동시/전화문의/이미지 없음 전제/class_id 없을 때 null).
-- `.github/workflows/lottemart-culture-club-batch.yml`(신규): 매일 KST 05:00
-  (이마트 04:00과 분산), timeout 45분(요청량이 더 많아 이마트의 기본 타임아웃보다
-  넉넉히 둠), 1회 재시도.
+- `.github/workflows/lottemart-culture-club-batch.yml`(신규): 매일 KST 01:00
+  (2026-10-04 사용자 지시로 최초 04:00에서 변경 — 기존 배치 전체의 UTC 크론을
+  KST로 환산해 겹치지 않는 자리로 재배치), timeout 45분(요청량이 더 많아 이마트의
+  기본 타임아웃보다 넉넉히 둠), 1회 재시도.
 
 ## 검증
 - `npx tsc --noEmit`: 통과.
@@ -56,6 +57,22 @@
 - 실제 라이브 사이트로 dry-run 실측 2회(지점 2개 한정 409건, 지점 3개 혼합
   샘플 40건) — 재료비/할인/마감임박/신설/대기자신청/전화문의/좋아요 등 모든
   변형이 기대대로 파싱됨을 직접 확인(테스트 작성 전 실측 선행).
+
+## 추가 확인 (2026-10-04, 사용자 제공 상세 URL 기반)
+- 사용자 지시: "목록에 썸네일 없더라. 하기가 상세 url이야 여기에는 이미지
+  나와" + `courseview.do` URL 제공. 실측 확인: `courseview.do?...&cls_cd=
+  {class_id}&...`(목록과 동일한 파라미터 세트 + cls_cd) 응답의
+  `div.lct-visual img`에 실제 강좌 이미지가 있다(정적 경로 `https://
+  culture.lottemart.com/files/culture/LMC/Storage/attach/Lecture/...`,
+  `onerror`로 카테고리별 기본 이미지 폴백). 이미지는 class_id로 바로 구성 불가 —
+  상세 페이지를 직접 불러와 파싱해야 한다(이마트의 list+detail 2단계 수집
+  패턴, emart-culture-club-detail.mjs와 구조적으로 유사). 이번 커밋에는 아직
+  반영하지 않음 — 이미지 수집을 실제로 추가할지는 사용자의 후속 지시를
+  기다린다(제3장 제5조).
+- 사용자가 접수마감+대기자신청 동시 노출 행의 실물을 확인하려 함 — 실측 재확인
+  결과(2026-10-04, 여전히 동일 상태): 고양점(455) / "[8주]랄랄라 코알라" /
+  class_id `20260345524010` / 대상=엄마와함께(4) / 학기=202603. 확인용 URL:
+  `https://culture.lottemart.com/cu/gus/course/courseinfo/courseview.do?currPageNo=1&search_list_type=&search_str_cd=455&search_order_gbn=&search_reg_status=&is_category_open=N&search_child_age=&from_fg=&cls_cd=20260345524010&fam_no=&wish_typ=&search_term_cd=202603&search_cls_fg=&search_fee_min=&search_fee_max=&search_day_fg=&search_cls_time=&search_cls_target=4&search_birth_date=&search_cls_nm=&search_cat_cd=&search_opt_cd=&search_tit_cd=`
 
 ## 특이 사항
 - **접수마감을 기본 제외하지 않음**: 이마트는 사용자가 "데이터가 너무 많다"며

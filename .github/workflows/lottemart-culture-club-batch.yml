@@ -6,10 +6,14 @@ name: Lottemart Culture Club Batch
 # 배치 조회가 안 돼 지점 60 × 대상 3 × 학기 2 = 360개 조합을 순회해야 해서 실행
 # 시간이 더 길다 — timeout-minutes를 넉넉히 둔다.
 #
-# 크론 시간: 이마트(04:00 KST)와 겹치지 않게 KST 새벽 5시(UTC 20:00)로 분산.
+# 크론 시간(2026-10-04 사용자 지시: "새벽4시말고 새벽1시라던가 ... 우리 배치들
+# 있는거 시간 봐서 좀 분산해서 하자"): 기존 배치 전체의 UTC 크론을 KST로 환산해
+# 겹치지 않는 자리를 찾았다 — ingest-daily 02:47, mom-pick-grade 04:23, 이마트
+# 컬처클럽 04:00, 이마트 컬처클럽 상세 05:00, ingest-monthly 03:52, ingest-weather
+# 05/11/17/23시. KST 새벽 1시(UTC 16:00)가 비어 있어 여기로 잡는다.
 on:
   schedule:
-    - cron: '0 20 * * *'
+    - cron: '0 16 * * *'
   workflow_dispatch:
 
 jobs:
