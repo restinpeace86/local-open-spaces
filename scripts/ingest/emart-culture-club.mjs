@@ -71,6 +71,21 @@ const STORE_CODES = [
 const CATEGORY_CODES = ['101', '402', '403', '404', '406'];
 const TARGET_STATUSES = ['접수대기', '접수중', '정원마감'];
 
+// [지점 분할 요청 — WAF 403 대응](2026-10-05 사용자 지시): "메인 배치의 요청을
+// 지점 10~20개씩 쪼개서 해봐" — GitHub Actions에서만 `WAFForbiddenException`
+// (403)이 나는데, 동일 IP/키/엔드포인트를 쓰는 상세정보 배치(단건 조회,
+// emart-culture-club-detail.mjs)는 매번 성공했다 — IP 자체가 막힌 게 아니라
+// 지점 64개를 한 요청에 다 담는 "넓은" 쿼리가 걸릴 가능성이 있어, 요청마다
+// 지점을 더 작은 묶음으로 나눠 보낸다(프록시 도입 전에 먼저 시도해보는
+// 비용 없는 수정).
+const STORE_CHUNK_SIZE = 15;
+
+function chunkArray(arr, size) {
+  const chunks = [];
+  for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
+  return chunks;
+}
+
 const QUERY = `query getClassByFiltering($keyword: String, $filterData: [FilterData], $sortKey: String, $from: Int, $size: Int) {
   getClassByFiltering(keyword: $keyword, filterData: $filterData, sortKey: $sortKey, from: $from, size: $size) {
     total
@@ -112,15 +127,15 @@ function randomPacingDelay() {
   return REQUEST_PACING_MIN_MS + Math.random() * (REQUEST_PACING_MAX_MS - REQUEST_PACING_MIN_MS);
 }
 
-function buildFilterData(status) {
+function buildFilterData(status, storeCodes) {
   return [
-    { type: 'mainStoreInfo.storeCode', data: STORE_CODES },
+    { type: 'mainStoreInfo.storeCode', data: storeCodes },
     { type: 'subCategory', data: CATEGORY_CODES },
     { type: 'classStatus', data: [status] },
   ];
 }
 
-async function fetchPage(status, from, size) {
+async function fetchPage(status, storeCodes, from, size) {
   const apiKey = env.EMART_CULTURE_CLUB_API_KEY;
   if (!apiKey) {
     throw new Error('EMART_CULTURE_CLUB_API_KEY 환경변수가 설정되지 않았습니다.');
@@ -131,7 +146,7 @@ async function fetchPage(status, from, size) {
     headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, ...BROWSER_LIKE_HEADERS },
     body: JSON.stringify({
       query: QUERY,
-      variables: { keyword: '', filterData: buildFilterData(status), sortKey: 'deadline', from, size },
+      variables: { keyword: '', filterData: buildFilterData(status, storeCodes), sortKey: 'deadline', from, size },
     }),
   });
 
@@ -154,13 +169,13 @@ async function fetchPage(status, from, size) {
   return json.data.getClassByFiltering;
 }
 
-async function fetchAllForStatus(status) {
+async function fetchAllForStatus(status, storeCodes) {
   const items = [];
   let from = 0;
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const page = await fetchPage(status, from, PAGE_SIZE);
+    const page = await fetchPage(status, storeCodes, from, PAGE_SIZE);
     items.push(...page.data);
     if (page.data.length < PAGE_SIZE) break;
     from += PAGE_SIZE;
@@ -309,14 +324,19 @@ async function postPipelineLog(client, { status, errorMessage = null, metaData =
 export async function run({ dryRun = false } = {}) {
   console.log(`▶ 이마트 컬처클럽 강좌 리스트 수집 시작 (dry-run: ${dryRun})`);
 
+  const storeChunks = chunkArray(STORE_CODES, STORE_CHUNK_SIZE);
   const allRows = [];
   for (const status of TARGET_STATUSES) {
-    console.log(`  [${status}] 수집 시작`);
-    const items = await fetchAllForStatus(status);
-    console.log(`  [${status}] ${items.length}건 수신`);
-    const rows = items.map((item) => transform(item, status)).filter(Boolean);
-    allRows.push(...rows);
-    await sleep(randomPacingDelay());
+    console.log(`  [${status}] 수집 시작 (지점 ${STORE_CODES.length}개를 ${storeChunks.length}묶음으로 분할)`);
+    let statusItemCount = 0;
+    for (const storeChunk of storeChunks) {
+      const items = await fetchAllForStatus(status, storeChunk);
+      statusItemCount += items.length;
+      const rows = items.map((item) => transform(item, status)).filter(Boolean);
+      allRows.push(...rows);
+      await sleep(randomPacingDelay());
+    }
+    console.log(`  [${status}] ${statusItemCount}건 수신`);
   }
 
   // 동일 classId가 상태 전환 중 두 상태 조회 사이에 걸쳐 중복 수신될 가능성에 대비
