@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { applyRandomStartupDelay, randomStartupDelayMs } from './random-startup-delay.mjs';
 
 describe('randomStartupDelayMs', () => {
@@ -22,7 +22,18 @@ describe('randomStartupDelayMs', () => {
 });
 
 describe('applyRandomStartupDelay', () => {
-  it('지연 후 실제로 기다린 시간(ms)을 반환한다', async () => {
+  const originalEventName = process.env.GITHUB_EVENT_NAME;
+
+  afterEach(() => {
+    if (originalEventName === undefined) {
+      delete process.env.GITHUB_EVENT_NAME;
+    } else {
+      process.env.GITHUB_EVENT_NAME = originalEventName;
+    }
+  });
+
+  it('예약 실행(schedule)일 때는 지연 후 실제로 기다린 시간(ms)을 반환한다', async () => {
+    process.env.GITHUB_EVENT_NAME = 'schedule';
     vi.useFakeTimers();
     const log = vi.fn();
     const promise = applyRandomStartupDelay(1000, { log });
@@ -35,11 +46,29 @@ describe('applyRandomStartupDelay', () => {
     vi.useRealTimers();
   });
 
-  it('maxMs가 0이면 지연 로그를 남기지 않는다', async () => {
+  it('maxMs가 0이면(예약 실행이어도) 지연 로그를 남기지 않는다', async () => {
+    process.env.GITHUB_EVENT_NAME = 'schedule';
     const log = vi.fn();
     const delayMs = await applyRandomStartupDelay(0, { log });
 
     expect(delayMs).toBe(0);
     expect(log).not.toHaveBeenCalled();
+  });
+
+  it('GITHUB_EVENT_NAME이 schedule이 아니면(수동 트리거/로컬 실행) 지연을 생략한다', async () => {
+    delete process.env.GITHUB_EVENT_NAME;
+    const log = vi.fn();
+    const delayMs = await applyRandomStartupDelay(1000, { log });
+
+    expect(delayMs).toBe(0);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('생략'));
+  });
+
+  it('GITHUB_EVENT_NAME이 workflow_dispatch면 지연을 생략한다', async () => {
+    process.env.GITHUB_EVENT_NAME = 'workflow_dispatch';
+    const log = vi.fn();
+    const delayMs = await applyRandomStartupDelay(1000, { log });
+
+    expect(delayMs).toBe(0);
   });
 });
