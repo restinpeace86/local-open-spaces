@@ -33,7 +33,11 @@ type ClassRow = {
   is_closing_soon: boolean;
   is_new: boolean;
   like_count: number | null;
-  registration_status: '바로신청' | '대기자신청' | '접수마감' | '전화문의' | '현장접수';
+  // [접수불가 추가](2026-10-04 사용자 지시): search_reg_status=1만 수집하도록
+  // 범위를 좁힌 뒤, 거기서 빠진(예전엔 바로신청/대기자신청이었지만 지금은 1번
+  // 버킷에 없는) 강좌를 표시하는 값 — 정확히 접수마감/대기자신청/전화문의 중
+  // 무엇이 됐는지는 모른다는 걸 정직하게 나타낸다(제3장 제5조 추측 금지).
+  registration_status: '바로신청' | '대기자신청' | '접수마감' | '전화문의' | '현장접수' | '접수불가';
   semester_code: string;
   target_code: string;
   target_name: string;
@@ -49,7 +53,7 @@ type ClassRow = {
   detail_fetched_at: string | null;
 };
 
-const STATUS_OPTIONS: ClassRow['registration_status'][] = ['바로신청', '대기자신청', '접수마감', '전화문의', '현장접수'];
+const STATUS_OPTIONS: ClassRow['registration_status'][] = ['바로신청', '대기자신청', '접수마감', '전화문의', '현장접수', '접수불가'];
 
 function formatDateTime(iso: string) {
   return new Date(iso).toLocaleString('ko-KR', { dateStyle: 'short', timeStyle: 'short' });

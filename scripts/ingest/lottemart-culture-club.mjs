@@ -49,6 +49,7 @@ loadEnv();
 const SOURCE_KEY = 'LOTTEMART_CULTURE_CLUB';
 const LIST_URL = 'https://culture.lottemart.com/cu/gus/course/courseinfo/searchList.do';
 const UPSERT_CHUNK_SIZE = 500;
+const EXISTING_ID_PAGE_SIZE = 1000;
 const REQUEST_PACING_MIN_MS = 1000;
 const REQUEST_PACING_MAX_MS = 1500;
 // [랜덤 시작 지연](2026-10-04 사용자 지시) — 하루 1회 배치라 다음 배치(상세
@@ -92,12 +93,24 @@ function randomPacingDelay() {
 
 // [ping 배치 재사용](2026-10-04 사용자 지시로 추가될 lottemart-culture-club-
 // ping.mjs가 이 함수를 그대로 가져다 쓴다 — 요청 로직을 두 번 안 만듦).
+//
+// [수집 범위 축소 — search_reg_status=1 고정](2026-10-04 사용자 지시): "여기에
+// 대하여 1인 것만 우리가 받아도 문제 없을까? 조금이라도 비용을 줄여볼까해서" —
+// 실측 확인(5개 지점): 2번(온라인마감/현장접수) 버킷은 전부 0건, 1번(접수가능/
+// 접수준비 — 바로신청/마감임박) 버킷 비율은 6.4%~23.6%(평균 10%대)뿐이라, 1번만
+// 받으면 페이지네이션 요청량이 85~93% 줄어든다. 3번(접수마감/대기자신청/전화문의)
+// 은 더 이상 수집하지 않는다 — 대기자신청 전용 강좌를 새로 발견하는 경로는
+// 없어지지만(사용자가 수용한 트레이드오프), 이미 찜한 강좌는 찜-상태감시
+// (lottemart-culture-club-status-watch.mjs)가 상세페이지를 직접 찔러 확인하므로
+// 영향이 없다. 1번 버킷에서 빠진 기존 행은 run()의 markFallenOutRowsAsUnavailable
+// 이 '접수불가'로 정리한다.
 export async function fetchPage(storeCode, targetCode, termCode, pageNo) {
   const body = new URLSearchParams({
     currPageNo: String(pageNo),
     search_str_cd: storeCode,
     search_term_cd: termCode,
     search_cls_target: targetCode,
+    search_reg_status: '1',
   });
 
   const res = await fetchWithTimeout(LIST_URL, {
@@ -311,6 +324,50 @@ export async function fetchAllForCombo(storeCode, storeName, targetCode, targetN
   return rows;
 }
 
+// [1번 버킷에서 빠진 행 정리](2026-10-04 사용자 지시): "뭉뚱그려서 현재
+// 바로신청 안되는상태가 되었다.. 즉 온라인으로 할수있는게 없다"로 처리 —
+// 이번에 새로 받은(1번 버킷) class_id 목록과, DB에 '바로신청'/'대기자신청'
+// 으로 저장돼 있던 기존 행을 대조해서 빠진 것만 '접수불가'로 갱신한다.
+// 롯데마트에 추가 요청을 보내지 않는다(우리 DB끼리 비교) — 찜-상태감시가
+// 이미 정확히 추적 중인 class_id는 건드리지 않는다(덮어써서 되돌리지 않기
+// 위함 — status-watch가 5분마다 더 정확하게 알고 있는 걸 하루 1번 배치가
+// 뭉개면 안 됨).
+export async function markFallenOutRowsAsUnavailable(client, freshClassIds, storeCodes) {
+  const { data: bookmarkedRows, error: bookmarkError } = await client
+    .from('user_bookmarks')
+    .select('lottemart_class_id')
+    .not('lottemart_class_id', 'is', null);
+  if (bookmarkError) throw new Error(`찜한 class_id 조회 실패: ${bookmarkError.message}`);
+  const bookmarkedIds = new Set((bookmarkedRows ?? []).map((r) => r.lottemart_class_id));
+
+  // [부분 실행 안전장치] storesLimit으로 일부 지점만 돈 실행에서는 돌지 않은
+  // 지점의 접수가능 행까지 "빠졌다"고 오판하면 안 되므로, 이번에 실제로 조회한
+  // 지점(storeCodes)으로만 비교 범위를 좁힌다.
+  const currentlyBookableIds = [];
+  for (let from = 0; ; from += EXISTING_ID_PAGE_SIZE) {
+    const { data, error } = await client
+      .from('lottemart_culture_club_classes')
+      .select('class_id')
+      .in('registration_status', ['바로신청', '대기자신청'])
+      .in('store_code', storeCodes)
+      .range(from, from + EXISTING_ID_PAGE_SIZE - 1);
+    if (error) throw new Error(`기존 접수가능 목록 조회 실패: ${error.message}`);
+    currentlyBookableIds.push(...data.map((r) => r.class_id));
+    if (data.length < EXISTING_ID_PAGE_SIZE) break;
+  }
+
+  const freshSet = new Set(freshClassIds);
+  const staleIds = currentlyBookableIds.filter((id) => !freshSet.has(id) && !bookmarkedIds.has(id));
+  if (staleIds.length === 0) return 0;
+
+  for (let i = 0; i < staleIds.length; i += UPSERT_CHUNK_SIZE) {
+    const chunk = staleIds.slice(i, i + UPSERT_CHUNK_SIZE);
+    const { error } = await client.from('lottemart_culture_club_classes').update({ registration_status: '접수불가' }).in('class_id', chunk);
+    if (error) throw new Error(`접수불가 갱신 실패: ${error.message}`);
+  }
+  return staleIds.length;
+}
+
 async function postPipelineLog(client, { status, errorMessage = null, metaData = null }) {
   try {
     const { error } = await client.from('pipeline_logs').insert({
@@ -374,11 +431,31 @@ export async function run({ dryRun = false, storesLimit = null } = {}) {
   }
 
   console.log(`✅ Supabase(lottemart_culture_club_classes) upsert 완료: ${upsertedCount}건`);
+
+  let unavailableCount = 0;
+  try {
+    unavailableCount = await markFallenOutRowsAsUnavailable(
+      client,
+      rows.map((r) => r.class_id),
+      stores.map(([storeCode]) => storeCode)
+    );
+    if (unavailableCount > 0) {
+      console.log(`  → 1번 버킷에서 빠진 ${unavailableCount}건을 '접수불가'로 갱신`);
+    }
+  } catch (err) {
+    console.error(`⚠️ 접수불가 갱신 실패(배치 자체는 성공으로 처리): ${err.message}`);
+  }
+
   await postPipelineLog(client, {
     status: 'OK',
     metaData: {
+      unavailableCount,
       count: upsertedCount,
-      byStatus: ['바로신청', '대기자신청', '접수마감', '전화문의'].reduce(
+      // [search_reg_status=1 고정 이후] 신규 수신분은 거의 항상 바로신청/대기자신청
+      // 뿐이지만, 혹시 다른 상태가 섞여 들어오면(실측과 다른 경우) 0이 아닌 값으로
+      // 바로 드러나도록 5개 상태 전부 센다(접수불가는 신규 수신이 아니라 갱신
+      // 전용이라 제외).
+      byStatus: ['바로신청', '대기자신청', '접수마감', '전화문의', '현장접수'].reduce(
         (acc, s) => ({ ...acc, [s]: rows.filter((r) => r.registration_status === s).length }),
         {}
       ),

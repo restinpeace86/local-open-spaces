@@ -1,8 +1,8 @@
 // [롯데마트 문화센터 강좌 리스트 수집](2026-10-04) — parseRow() 단위 테스트.
 // 실측 표본 그대로(2026-10-04 searchList.do 직접 호출, 응답 그대로 복사한 <tr>).
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { parse } from 'node-html-parser';
-import { parsePageInfo, parseRow } from './lottemart-culture-club.mjs';
+import { markFallenOutRowsAsUnavailable, parsePageInfo, parseRow } from './lottemart-culture-club.mjs';
 
 const CONTEXT = {
   storeCode: '455',
@@ -235,5 +235,87 @@ describe('lottemart-culture-club parsePageInfo', () => {
 
   it('pageInfo가 없으면(겨울학기 등 빈 응답) 전부 0으로 반환한다', () => {
     expect(parsePageInfo('')).toEqual({ totalPage: 1, acceptTotalCnt: 0, onlnCloseTotalCnt: 0, acceptCloseTotalCnt: 0 });
+  });
+});
+
+// [수집 범위 축소 — search_reg_status=1만](2026-10-04 사용자 지시) —
+// markFallenOutRowsAsUnavailable() 단위 테스트. 롯데마트에 추가 요청 없이
+// 우리 DB끼리만 비교하는 함수라 Supabase 클라이언트를 모킹한다.
+describe('markFallenOutRowsAsUnavailable', () => {
+  function makeClient({ bookmarkedIds = [], bookableIds = [], updateError = null }) {
+    const updateCalls = [];
+    let selectCallCount = 0;
+
+    const client = {
+      from: vi.fn((table) => {
+        if (table === 'user_bookmarks') {
+          return {
+            select: () => ({
+              not: () => Promise.resolve({ data: bookmarkedIds.map((id) => ({ lottemart_class_id: id })), error: null }),
+            }),
+          };
+        }
+        // lottemart_culture_club_classes — select(페이지네이션 조회) 또는 update.
+        return {
+          select: () => ({
+            in: () => ({
+              in: () => ({
+                range: () => {
+                  selectCallCount += 1;
+                  // 테스트 데이터가 작아 항상 1페이지에서 끝난다(길이 < PAGE_SIZE).
+                  if (selectCallCount > 1) return Promise.resolve({ data: [], error: null });
+                  return Promise.resolve({ data: bookableIds.map((id) => ({ class_id: id })), error: null });
+                },
+              }),
+            }),
+          }),
+          update: (payload) => ({
+            in: (_column, ids) => {
+              updateCalls.push({ payload, ids });
+              return Promise.resolve({ error: updateError });
+            },
+          }),
+        };
+      }),
+    };
+    return { client, updateCalls };
+  }
+
+  it('1번 버킷에서 빠진(신선하지 않은) 접수가능 행만 접수불가로 갱신한다', async () => {
+    const { client, updateCalls } = makeClient({ bookableIds: ['a', 'b', 'c'] });
+
+    const count = await markFallenOutRowsAsUnavailable(client, ['a'], ['455']);
+
+    expect(count).toBe(2);
+    expect(updateCalls).toHaveLength(1);
+    expect(updateCalls[0].payload).toEqual({ registration_status: '접수불가' });
+    expect(updateCalls[0].ids.sort()).toEqual(['b', 'c']);
+  });
+
+  it('찜한 class_id는 빠졌어도 갱신하지 않는다(찜-상태감시가 더 정확히 추적 중)', async () => {
+    const { client, updateCalls } = makeClient({ bookableIds: ['a', 'b'], bookmarkedIds: ['b'] });
+
+    const count = await markFallenOutRowsAsUnavailable(client, [], ['455']);
+
+    expect(count).toBe(1);
+    expect(updateCalls[0].ids).toEqual(['a']);
+  });
+
+  it('신선한 목록에 전부 남아있으면 갱신하지 않는다', async () => {
+    const { client, updateCalls } = makeClient({ bookableIds: ['a', 'b'] });
+
+    const count = await markFallenOutRowsAsUnavailable(client, ['a', 'b'], ['455']);
+
+    expect(count).toBe(0);
+    expect(updateCalls).toHaveLength(0);
+  });
+
+  it('기존 접수가능 행 자체가 없으면 아무 것도 하지 않는다', async () => {
+    const { client, updateCalls } = makeClient({ bookableIds: [] });
+
+    const count = await markFallenOutRowsAsUnavailable(client, ['a'], ['455']);
+
+    expect(count).toBe(0);
+    expect(updateCalls).toHaveLength(0);
   });
 });

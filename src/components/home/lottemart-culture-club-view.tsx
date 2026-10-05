@@ -38,7 +38,7 @@ type LottemartClass = {
   is_closing_soon: boolean;
   is_new: boolean;
   like_count: number | null;
-  registration_status: '바로신청' | '대기자신청' | '접수마감' | '전화문의' | '현장접수';
+  registration_status: '바로신청' | '대기자신청' | '접수마감' | '전화문의' | '현장접수' | '접수불가';
   semester_code: string;
   target_code: string;
   target_name: string;
@@ -156,7 +156,9 @@ function LottemartDetailSheet({ item, onClose }: { item: LottemartClass; onClose
     semesterCode: item.semester_code,
     targetCode: item.target_code,
   });
-  const isClosed = item.registration_status === '접수마감';
+  // [접수불가 추가](2026-10-04 사용자 지시 — 수집 범위를 search_reg_status=1로
+  // 좁힌 뒤 거기서 빠진 강좌를 표시하는 상태) 접수마감과 동일하게 비활성 처리.
+  const isClosed = item.registration_status === '접수마감' || item.registration_status === '접수불가';
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center" onClick={onClose}>
@@ -191,7 +193,9 @@ function LottemartDetailSheet({ item, onClose }: { item: LottemartClass; onClose
               <BookmarkButton target={{ kind: 'lottemart_class', lottemartClassId: item.class_id }} />
             </div>
             {isClosed ? (
-              <span className="flex-1 rounded-lg bg-gray-200 px-4 py-2 text-center text-sm font-semibold text-gray-500">접수마감</span>
+              <span className="flex-1 rounded-lg bg-gray-200 px-4 py-2 text-center text-sm font-semibold text-gray-500">
+                {item.registration_status}
+              </span>
             ) : (
               <a
                 href={courseViewUrl}
