@@ -100,7 +100,11 @@ export function MyPageView() {
             // 리마운트되게 한다.
             <>
               <NicknameEditor key={profile ? `nick-loaded` : 'nick-pending'} initialNickname={profile?.nickname ?? null} />
-              <BirthYearsEditor key={profile ? 'loaded' : 'pending'} initialBirthYears={profile?.birth_years ?? []} />
+              <BirthYearsEditor
+                key={profile ? 'loaded' : 'pending'}
+                initialBirthYears={profile?.birth_years ?? []}
+                initialBirthMonths={profile?.birth_months ?? []}
+              />
             </>
           )}
 

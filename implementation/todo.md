@@ -164,6 +164,12 @@ PC를 켜두거나 작업하시는 시간에 스크립트가 백그라운드에�
 [구현 참고 사항]
 - Next.js (App Router) 및 TypeScript 환경을 기준으로, 관련 컴포넌트 코드 및 폼 핸들링 로직을 작성해줘.
 
+### 진행 상태: 완료(2026-10-06) — implementation/2026-10-06-profile-birth-year-month.md 참고
+- profiles.birth_years(기존, 여러 파일이 "연 나이" 계산에 씀)는 그대로 두고
+  birth_months를 병렬 컬럼으로 추가. 온보딩/마이페이지 양쪽 UI에 월 선택 추가.
+  총 개월 수 환산 유틸(calculateTotalMonthsFromBirth) 신규 — culture-club
+  강좌의 min/max_age_months와 같은 단위.
+
 
 이마트 컬처클럽과 롯데마트 문화센터의 강좌 원문 데이터(HTML 또는 텍스트)에서 서비스 운영 및 유저 알림에 필수적인 4가지 핵심 필드(`status`, `instructor`, `url`, `fee`/`materialFee`)를 파싱하여 정형화하는 유틸리티 함수 및 정규식 로직을 구현해줘.
 

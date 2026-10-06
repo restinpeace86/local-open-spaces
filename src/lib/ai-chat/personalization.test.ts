@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { ageToKidsAgeGroup, buildPersonalizedGreeting, calculateAgesFromBirthYears, deriveKidsAgeGroup } from './personalization';
+import {
+  ageToKidsAgeGroup,
+  buildPersonalizedGreeting,
+  calculateAgesFromBirthYears,
+  calculateTotalMonthsFromBirth,
+  calculateTotalMonthsFromBirthYearsAndMonths,
+  deriveKidsAgeGroup,
+} from './personalization';
 
 describe('calculateAgesFromBirthYears', () => {
   it('현재 연도 - 출생년도로 연 나이를 계산한다', () => {
@@ -8,6 +15,28 @@ describe('calculateAgesFromBirthYears', () => {
 
   it('미래 출생년도(음수 나이)는 걸러낸다', () => {
     expect(calculateAgesFromBirthYears([2030], new Date('2026-01-01'))).toEqual([]);
+  });
+});
+
+describe('calculateTotalMonthsFromBirth', () => {
+  it('생일이 지난 경우 정확한 총 개월 수를 계산한다', () => {
+    // 2020년 3월생, 기준일 2026년 10월 → 6년 7개월 = 79개월
+    expect(calculateTotalMonthsFromBirth(2020, 3, new Date('2026-10-06'))).toBe(79);
+  });
+
+  it('생일이 아직 안 지난 달이어도 음수 없이 정확히 계산한다', () => {
+    // 2020년 12월생, 기준일 2026년 1월 → 5년 1개월 = 61개월
+    expect(calculateTotalMonthsFromBirth(2020, 12, new Date('2026-01-15'))).toBe(61);
+  });
+});
+
+describe('calculateTotalMonthsFromBirthYearsAndMonths', () => {
+  it('배열 전체를 같은 인덱스로 대응해 환산한다', () => {
+    expect(calculateTotalMonthsFromBirthYearsAndMonths([2020, 2024], [3, 7], new Date('2026-10-06'))).toEqual([79, 27]);
+  });
+
+  it('두 배열의 길이가 어긋나면(레거시 데이터) 계산 불가능한 항목만 걸러낸다', () => {
+    expect(calculateTotalMonthsFromBirthYearsAndMonths([2020, 2024], [3], new Date('2026-10-06'))).toEqual([79]);
   });
 });
 

@@ -89,27 +89,47 @@ describe('CompleteProfileView', () => {
 
     const optionLabels = Array.from(yearSelect.querySelectorAll('option')).map((o) => o.textContent);
     expect(optionLabels).toHaveLength(13);
-    expect(optionLabels[0]).toBe(`${currentYear}년생`);
-    expect(optionLabels[12]).toBe(`${currentYear - 12}년생 (초등 6학년)`);
+    expect(optionLabels[0]).toBe(`${currentYear}년`);
+    expect(optionLabels[12]).toBe(`${currentYear - 12}년 (초등 6학년)`);
   });
 
-  it('"+ 아이 추가"로 여러 명을 입력하고 제출하면 두 값 모두 저장한 뒤 next로 이동한다', async () => {
+  // [개선사항4 - 출생 연+월 수집](2026-10-06 todo.md): "'몇 년 몇 월생'까지 상세히
+  // 수집" — 연도 옆에 월 선택지(1~12월)도 함께 제공해야 한다.
+  it('출생월 드롭박스는 1월~12월 12개 옵션을 제공한다', async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
+    fromMock.mockReturnValue(makeProfilesFrom({ id: 'user-1', nickname: null, birth_years: [], birth_months: [] }));
+
+    render(<CompleteProfileView />);
+    const monthSelect = await screen.findByLabelText('아이 1 출생월');
+
+    const optionLabels = Array.from(monthSelect.querySelectorAll('option')).map((o) => o.textContent);
+    expect(optionLabels).toEqual(Array.from({ length: 12 }, (_, i) => `${i + 1}월`));
+  });
+
+  it('"+ 아이 추가"로 여러 명을 입력하고 제출하면 연도/월 두 쌍 모두 저장한 뒤 next로 이동한다', async () => {
     const currentYear = new Date().getFullYear();
     getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
-    fromMock.mockReturnValue(makeProfilesFrom({ id: 'user-1', nickname: null, birth_years: [] }));
+    const profile = { id: 'user-1', nickname: null, birth_years: [], birth_months: [] };
+    const chain = makeProfilesFrom(profile);
+    fromMock.mockReturnValue(chain);
     mockSearchParams = new URLSearchParams('next=%2Fmom-pick');
 
     render(<CompleteProfileView />);
     const nicknameInput = await screen.findByLabelText('닉네임');
     fireEvent.change(nicknameInput, { target: { value: '민지맘' } });
     fireEvent.change(screen.getByLabelText('아이 1 출생년도'), { target: { value: String(currentYear - 4) } });
+    fireEvent.change(screen.getByLabelText('아이 1 출생월'), { target: { value: '5' } });
 
     fireEvent.click(screen.getByText('+ 아이 추가'));
     fireEvent.change(screen.getByLabelText('아이 2 출생년도'), { target: { value: String(currentYear - 6) } });
+    fireEvent.change(screen.getByLabelText('아이 2 출생월'), { target: { value: '11' } });
 
     fireEvent.click(screen.getByText('시작하기'));
 
     await waitFor(() => expect(replaceMock).toHaveBeenCalledWith('/mom-pick'));
+    expect(chain.update).toHaveBeenCalledWith(
+      expect.objectContaining({ birth_years: [currentYear - 4, currentYear - 6], birth_months: [5, 11] })
+    );
   });
 
   it('저장이 실패하면 에러 메시지를 보여주고 이동하지 않는다', async () => {
@@ -137,6 +157,6 @@ describe('CompleteProfileView', () => {
     const yearSelect = await screen.findByLabelText('아이 1 출생년도');
 
     expect((yearSelect as HTMLSelectElement).value).toBe('1999');
-    expect(screen.getByText('1999년생')).toBeInTheDocument();
+    expect(screen.getByText('1999년')).toBeInTheDocument();
   });
 });

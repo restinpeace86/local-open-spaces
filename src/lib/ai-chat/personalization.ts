@@ -10,6 +10,28 @@ export function calculateAgesFromBirthYears(birthYears: number[], now: Date = ne
   return birthYears.map((y) => currentYear - y).filter((age) => age >= 0);
 }
 
+// [출생 연+월 정밀화](2026-10-06 todo.md 개선사항 4): birth_years만으로는 위
+// "연 나이" 단순화(±1세 오차)를 피할 수 없었다 — profiles.birth_months를
+// 함께 저장하면 정확한 "총 개월 수"를 계산할 수 있고, 이는 culture-club
+// 강좌의 min_age_months/max_age_months(scripts/ingest/lib/age-range-
+// parser.mjs, 2026-10-06 개선사항2)와 같은 단위라 "내 아이에게 맞는 강좌"
+// 필터링에 바로 비교할 수 있다. 현재 시점 기준으로 매번 다시 계산하는
+// 순수 함수로 둔다 — 저장 시점 스냅샷을 컬럼에 박아두면 한 달만 지나도
+// 값이 거짓이 되므로(제3장 제5조) 의도적으로 영속화하지 않는다.
+export function calculateTotalMonthsFromBirth(birthYear: number, birthMonth: number, now: Date = new Date()): number {
+  return (now.getFullYear() - birthYear) * 12 + (now.getMonth() + 1 - birthMonth);
+}
+
+export function calculateTotalMonthsFromBirthYearsAndMonths(
+  birthYears: number[],
+  birthMonths: number[],
+  now: Date = new Date()
+): number[] {
+  return birthYears
+    .map((year, i) => calculateTotalMonthsFromBirth(year, birthMonths[i], now))
+    .filter((months) => Number.isFinite(months) && months >= 0);
+}
+
 // 나이 → open_spaces/events의 실제 target_age_group 도메인(영유아/초등/전연령, project/
 // database_schema.md 확인된 값)에 매핑한다. "영유아"는 한국 법령(영유아보육법)상 통상
 // 취학 전(만 6세 이하)을 가리키는 정의를 그대로 따랐다(임의 경계값이 아님).

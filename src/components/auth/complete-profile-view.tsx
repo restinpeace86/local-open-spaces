@@ -3,10 +3,14 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useUser } from '@/hooks/use-user';
-import { getMyProfile, updateBirthYears, updateNickname } from '@/lib/auth/profile';
+import { getMyProfile, updateBirthYearsAndMonths, updateNickname } from '@/lib/auth/profile';
 
 const MAX_NICKNAME_LENGTH = 20;
 const CURRENT_YEAR = new Date().getFullYear();
+const CURRENT_MONTH = new Date().getMonth() + 1;
+// [개선사항4 - 출생 연+월 수집](2026-10-06 todo.md): "'몇 년 몇 월생'까지 상세히
+// 수집" — 연도 선택지는 기존과 동일, 월 선택지(1~12)만 추가한다.
+const MONTH_OPTIONS = Array.from({ length: 12 }, (_, i) => i + 1);
 // [개선사항5 - 출생년도 드롭박스 개편](2026-09-04 todo.md): "자유 타이핑 방식 ➔
 // 드롭박스(Select) 방식으로 전면 전환. 상한선: 최근 연도부터 시작. 하한선: 서비스
 // 타겟인 초등학교 6학년 기준 연도까지." 하한 연도는 "초등 6학년"이라는 학년 기준에
@@ -40,6 +44,7 @@ export function CompleteProfileView() {
   const [isProfileLoading, setIsProfileLoading] = useState(true);
   const [nickname, setNickname] = useState('');
   const [birthYears, setBirthYears] = useState<number[]>([CURRENT_YEAR]);
+  const [birthMonths, setBirthMonths] = useState<number[]>([CURRENT_MONTH]);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -54,7 +59,15 @@ export function CompleteProfileView() {
       .then((profile) => {
         if (cancelled) return;
         if (profile?.nickname) setNickname(profile.nickname);
-        if (profile?.birth_years && profile.birth_years.length > 0) setBirthYears(profile.birth_years);
+        if (profile?.birth_years && profile.birth_years.length > 0) {
+          setBirthYears(profile.birth_years);
+          // [레거시 데이터 방어] birth_months를 모르던 시절 저장된 프로필은
+          // birth_years보다 짧거나(또는 전혀 없을) 수 있다 — 모자란 자리는
+          // 추측 없이 CURRENT_MONTH로 채워 UI가 깨지지 않게 한다(실제 월은
+          // 사용자가 다시 선택해 바로잡을 수 있음).
+          const months = profile.birth_months ?? [];
+          setBirthMonths(profile.birth_years.map((_, i) => months[i] ?? CURRENT_MONTH));
+        }
       })
       .catch(() => {
         // 조회 실패해도 빈 폼으로 그대로 입력을 받을 수 있게 둔다(제5장 제11조 —
@@ -73,13 +86,20 @@ export function CompleteProfileView() {
     setBirthYears((prev) => prev.map((y, i) => (i === index ? year : y)));
   }
 
+  function handleChangeMonth(index: number, value: string) {
+    const month = Number(value);
+    setBirthMonths((prev) => prev.map((m, i) => (i === index ? month : m)));
+  }
+
   function handleAddChild() {
     setBirthYears((prev) => [...prev, CURRENT_YEAR]);
+    setBirthMonths((prev) => [...prev, CURRENT_MONTH]);
   }
 
   function handleRemoveChild(index: number) {
     // 최소 1명은 남겨둔다 — 전부 지우면 "필수" 요건과 모순된다.
     setBirthYears((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
+    setBirthMonths((prev) => (prev.length > 1 ? prev.filter((_, i) => i !== index) : prev));
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -89,9 +109,13 @@ export function CompleteProfileView() {
       setErrorMessage('닉네임을 입력해주세요.');
       return;
     }
-    const validYears = birthYears.filter((y) => Number.isFinite(y) && y >= 1900 && y <= CURRENT_YEAR);
-    if (validYears.length === 0) {
-      setErrorMessage('아이 출생년도를 최소 1명 입력해주세요.');
+    // [개선사항4] 연도와 월을 모두 선택해야 유효한 한 쌍으로 본다 — 인덱스
+    // 대응이 깨지지 않도록 두 배열을 함께 필터링한다.
+    const validPairs = birthYears
+      .map((year, i) => ({ year, month: birthMonths[i] }))
+      .filter(({ year, month }) => Number.isFinite(year) && year >= 1900 && year <= CURRENT_YEAR && Number.isInteger(month) && month >= 1 && month <= 12);
+    if (validPairs.length === 0) {
+      setErrorMessage('아이 출생년도와 월을 최소 1명 입력해주세요.');
       return;
     }
 
@@ -99,7 +123,7 @@ export function CompleteProfileView() {
     setErrorMessage(null);
     try {
       await updateNickname(trimmedNickname);
-      await updateBirthYears(validYears);
+      await updateBirthYearsAndMonths(validPairs.map((p) => p.year), validPairs.map((p) => p.month));
       router.replace(next);
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : '저장에 실패했습니다.');
@@ -120,7 +144,7 @@ export function CompleteProfileView() {
     <div className="flex-1 flex flex-col overflow-y-auto p-5">
       <h1 className="mb-1 text-lg font-bold text-gray-900">환영해요! 프로필을 완성해주세요</h1>
       <p className="mb-5 text-sm text-gray-500">
-        닉네임과 아이 출생년도를 알려주시면 연령에 맞는 나들이를 추천해드려요.
+        닉네임과 아이 출생년월을 알려주시면 연령에 맞는 나들이를 추천해드려요.
       </p>
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-6">
@@ -139,25 +163,38 @@ export function CompleteProfileView() {
         </div>
 
         <div className="flex flex-col gap-2">
-          <span className="text-sm font-medium text-gray-700">아이 출생년도</span>
-          <p className="text-xs text-gray-400">아이가 여러 명이면 출생년도를 각각 추가해주세요.</p>
+          <span className="text-sm font-medium text-gray-700">아이 출생년월</span>
+          <p className="text-xs text-gray-400">아이가 여러 명이면 출생년월을 각각 추가해주세요.</p>
           {birthYears.map((year, i) => {
             // 과거 자유 입력 시절에 저장된 값이 지금의 표준 범위(최근 13년)를 벗어날
             // 수 있다 — 그런 경우 드롭박스에 없는 값이라고 조용히 다른 값으로
             // 바뀌어버리면 안 되므로(추측 금지·데이터 임의 변경 금지), 목록에 없는
             // 기존 값은 맨 앞에 추가로 끼워 넣어 그대로 보존한다.
             const options = BIRTH_YEAR_OPTIONS.includes(year) ? BIRTH_YEAR_OPTIONS : [year, ...BIRTH_YEAR_OPTIONS];
+            const month = birthMonths[i] ?? CURRENT_MONTH;
             return (
             <div key={i} className="flex items-center gap-2">
               <select
                 value={year}
                 onChange={(e) => handleChangeYear(i, e.target.value)}
                 aria-label={`아이 ${i + 1} 출생년도`}
-                className="w-40 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                className="w-32 rounded-lg border border-gray-300 px-3 py-2 text-sm"
               >
                 {options.map((y) => (
                   <option key={y} value={y}>
-                    {y}년생{y === OLDEST_BIRTH_YEAR ? ' (초등 6학년)' : ''}
+                    {y}년{y === OLDEST_BIRTH_YEAR ? ' (초등 6학년)' : ''}
+                  </option>
+                ))}
+              </select>
+              <select
+                value={month}
+                onChange={(e) => handleChangeMonth(i, e.target.value)}
+                aria-label={`아이 ${i + 1} 출생월`}
+                className="w-20 rounded-lg border border-gray-300 px-3 py-2 text-sm"
+              >
+                {MONTH_OPTIONS.map((m) => (
+                  <option key={m} value={m}>
+                    {m}월
                   </option>
                 ))}
               </select>

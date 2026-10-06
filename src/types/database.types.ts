@@ -296,18 +296,26 @@ export type Database = {
           end_time: string | null
           filter_status: string
           id: number
+          instructor_name: string | null
           is_excluded: boolean
           main_category_code: string | null
           main_category_name: string | null
           main_image_bucket: string | null
           main_image_key: string | null
           main_image_region: string | null
+          max_age_months: number | null
+          min_age_months: number | null
           min_class_capacity: number | null
+          normalized_status: string | null
           occupied_full_flag: boolean | null
           register_end_date: string | null
           register_start_at: string | null
           register_start_date: string | null
           reservation_open_reminder_sent_at: string | null
+          round: number | null
+          schedule_days_code: string[] | null
+          schedule_end_date: string | null
+          schedule_start_date: string | null
           semester: string | null
           semester_year: string | null
           start_time: string | null
@@ -316,6 +324,7 @@ export type Database = {
           store_name: string | null
           sub_category_code: string | null
           sub_category_name: string | null
+          total_sessions: number | null
           updated_at: string
         }
         Insert: {
@@ -341,18 +350,26 @@ export type Database = {
           end_time?: string | null
           filter_status: string
           id?: never
+          instructor_name?: string | null
           is_excluded?: boolean
           main_category_code?: string | null
           main_category_name?: string | null
           main_image_bucket?: string | null
           main_image_key?: string | null
           main_image_region?: string | null
+          max_age_months?: number | null
+          min_age_months?: number | null
           min_class_capacity?: number | null
+          normalized_status?: string | null
           occupied_full_flag?: boolean | null
           register_end_date?: string | null
           register_start_at?: string | null
           register_start_date?: string | null
           reservation_open_reminder_sent_at?: string | null
+          round?: number | null
+          schedule_days_code?: string[] | null
+          schedule_end_date?: string | null
+          schedule_start_date?: string | null
           semester?: string | null
           semester_year?: string | null
           start_time?: string | null
@@ -361,6 +378,7 @@ export type Database = {
           store_name?: string | null
           sub_category_code?: string | null
           sub_category_name?: string | null
+          total_sessions?: number | null
           updated_at?: string
         }
         Update: {
@@ -386,18 +404,26 @@ export type Database = {
           end_time?: string | null
           filter_status?: string
           id?: never
+          instructor_name?: string | null
           is_excluded?: boolean
           main_category_code?: string | null
           main_category_name?: string | null
           main_image_bucket?: string | null
           main_image_key?: string | null
           main_image_region?: string | null
+          max_age_months?: number | null
+          min_age_months?: number | null
           min_class_capacity?: number | null
+          normalized_status?: string | null
           occupied_full_flag?: boolean | null
           register_end_date?: string | null
           register_start_at?: string | null
           register_start_date?: string | null
           reservation_open_reminder_sent_at?: string | null
+          round?: number | null
+          schedule_days_code?: string[] | null
+          schedule_end_date?: string | null
+          schedule_start_date?: string | null
           semester?: string | null
           semester_year?: string | null
           start_time?: string | null
@@ -406,6 +432,7 @@ export type Database = {
           store_name?: string | null
           sub_category_code?: string | null
           sub_category_name?: string | null
+          total_sessions?: number | null
           updated_at?: string
         }
         Relationships: []
@@ -739,7 +766,14 @@ export type Database = {
           is_new: boolean
           like_count: number | null
           main_category_name: string | null
+          max_age_months: number | null
+          min_age_months: number | null
+          normalized_status: string | null
           registration_status: string
+          round: number | null
+          schedule_days_code: string[] | null
+          schedule_end_date: string | null
+          schedule_start_date: string | null
           semester_code: string
           session_count: number | null
           start_time: string | null
@@ -748,6 +782,7 @@ export type Database = {
           sub_category_name: string | null
           target_code: string
           target_name: string
+          total_sessions: number | null
           updated_at: string
         }
         Insert: {
@@ -775,7 +810,14 @@ export type Database = {
           is_new?: boolean
           like_count?: number | null
           main_category_name?: string | null
+          max_age_months?: number | null
+          min_age_months?: number | null
+          normalized_status?: string | null
           registration_status: string
+          round?: number | null
+          schedule_days_code?: string[] | null
+          schedule_end_date?: string | null
+          schedule_start_date?: string | null
           semester_code: string
           session_count?: number | null
           start_time?: string | null
@@ -784,6 +826,7 @@ export type Database = {
           sub_category_name?: string | null
           target_code: string
           target_name: string
+          total_sessions?: number | null
           updated_at?: string
         }
         Update: {
@@ -811,7 +854,14 @@ export type Database = {
           is_new?: boolean
           like_count?: number | null
           main_category_name?: string | null
+          max_age_months?: number | null
+          min_age_months?: number | null
+          normalized_status?: string | null
           registration_status?: string
+          round?: number | null
+          schedule_days_code?: string[] | null
+          schedule_end_date?: string | null
+          schedule_start_date?: string | null
           semester_code?: string
           session_count?: number | null
           start_time?: string | null
@@ -820,6 +870,7 @@ export type Database = {
           sub_category_name?: string | null
           target_code?: string
           target_name?: string
+          total_sessions?: number | null
           updated_at?: string
         }
         Relationships: []
@@ -1320,6 +1371,7 @@ export type Database = {
       profiles: {
         Row: {
           ai_chat_free_uses_used: number
+          birth_months: number[]
           birth_years: number[]
           created_at: string
           grade: string
@@ -1331,6 +1383,7 @@ export type Database = {
         }
         Insert: {
           ai_chat_free_uses_used?: number
+          birth_months?: number[]
           birth_years?: number[]
           created_at?: string
           grade?: string
@@ -1342,6 +1395,7 @@ export type Database = {
         }
         Update: {
           ai_chat_free_uses_used?: number
+          birth_months?: number[]
           birth_years?: number[]
           created_at?: string
           grade?: string

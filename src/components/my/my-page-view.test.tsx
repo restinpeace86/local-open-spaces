@@ -56,7 +56,7 @@ describe('MyPageView', () => {
 
     await waitFor(() => expect(screen.getByText('test@example.com')).toBeInTheDocument());
     await waitFor(() => expect(screen.getByDisplayValue('2021')).toBeInTheDocument());
-    expect(screen.getByText('자녀 출생년도')).toBeInTheDocument();
+    expect(screen.getByText('자녀 출생년월')).toBeInTheDocument();
     expect(screen.getByText('로그아웃')).toBeInTheDocument();
   });
 

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getMyProfile, updateBirthYears } from './profile';
+import { getMyProfile, updateBirthYearsAndMonths } from './profile';
 
 const getUserMock = vi.fn();
 const fromMock = vi.fn();
@@ -48,7 +48,7 @@ describe('getMyProfile', () => {
   });
 });
 
-describe('updateBirthYears', () => {
+describe('updateBirthYearsAndMonths', () => {
   afterEach(() => {
     getUserMock.mockReset();
     fromMock.mockReset();
@@ -56,26 +56,30 @@ describe('updateBirthYears', () => {
 
   it('로그인하지 않은 상태면 에러를 던진다', async () => {
     getUserMock.mockResolvedValue({ data: { user: null } });
-    await expect(updateBirthYears([2020])).rejects.toThrow('로그인이 필요합니다.');
+    await expect(updateBirthYearsAndMonths([2020], [5])).rejects.toThrow('로그인이 필요합니다.');
     expect(fromMock).not.toHaveBeenCalled();
   });
 
-  it('로그인 상태면 본인 id 행의 birth_years를 갱신한다', async () => {
+  it('로그인 상태면 본인 id 행의 birth_years/birth_months를 함께 갱신한다', async () => {
     getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
     const singleMock = vi.fn(() =>
-      Promise.resolve({ data: { id: 'user-1', birth_years: [2020, 2022], created_at: 't1', updated_at: 't2' }, error: null })
+      Promise.resolve({
+        data: { id: 'user-1', birth_years: [2020, 2022], birth_months: [3, 7], created_at: 't1', updated_at: 't2' },
+        error: null,
+      })
     );
     const selectMock = vi.fn(() => ({ single: singleMock }));
     const eqMock = vi.fn(() => ({ select: selectMock }));
     const updateMock = vi.fn(() => ({ eq: eqMock }));
     fromMock.mockReturnValue({ update: updateMock });
 
-    const result = await updateBirthYears([2020, 2022]);
+    const result = await updateBirthYearsAndMonths([2020, 2022], [3, 7]);
 
     expect(fromMock).toHaveBeenCalledWith('profiles');
-    expect(updateMock).toHaveBeenCalledWith(expect.objectContaining({ birth_years: [2020, 2022] }));
+    expect(updateMock).toHaveBeenCalledWith(expect.objectContaining({ birth_years: [2020, 2022], birth_months: [3, 7] }));
     expect(eqMock).toHaveBeenCalledWith('id', 'user-1');
     expect(result.birth_years).toEqual([2020, 2022]);
+    expect(result.birth_months).toEqual([3, 7]);
   });
 
   it('저장 중 에러가 나면 명확한 메시지로 던진다', async () => {
@@ -84,6 +88,6 @@ describe('updateBirthYears', () => {
       update: () => ({ eq: () => ({ select: () => ({ single: () => Promise.resolve({ data: null, error: { message: '저장 오류' } }) }) }) }),
     });
 
-    await expect(updateBirthYears([2020])).rejects.toThrow('프로필 저장 실패: 저장 오류');
+    await expect(updateBirthYearsAndMonths([2020], [3])).rejects.toThrow('프로필 저장 실패: 저장 오류');
   });
 });
