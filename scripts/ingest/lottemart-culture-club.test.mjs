@@ -259,7 +259,11 @@ describe('markFallenOutRowsAsUnavailable', () => {
         if (table === 'user_bookmarks') {
           return {
             select: () => ({
-              not: () => Promise.resolve({ data: bookmarkedIds.map((id) => ({ lottemart_class_id: id })), error: null }),
+              not: () =>
+                Promise.resolve({
+                  data: bookmarkedIds.map((id) => ({ culture_club_classes: { brand: 'lottemart', source_class_id: id } })),
+                  error: null,
+                }),
             }),
           };
         }

@@ -17,12 +17,19 @@
 //
 // [이마트 문화센터 클래스까지 확장](2026-10-03 사용자 지시): "문화센터 데이터는 별도
 // 테이블로 관리하고, 찜/알람은 같은 기능이니깐 두 테이블 데이터 전부 참조할 수 있도록
-// 확장" — emart_culture_club_classes는 그대로 독립 테이블이지만(events와 파이프라인이
-// 안 섞이게), 찜/알람 메커니즘 자체는 동일하므로 user_bookmarks.emart_class_id를 통해
-// 같은 방식으로 처리한다. 반복되는 로직(대상 조회 → 찜한 유저 조회 → 등급 필터 →
-// 구독 조회 → 발송 → 발송 완료 표시)을 processSource()로 뽑아 두 소스가 공유한다
-// (events는 관리자 수동 입력 next_reservation_open_at, 문화센터 클래스는 자동 파싱된
-// register_start_at — "언제 시각을 보는지"만 다르고 나머지 로직은 동일).
+// 확장" — 처음엔 emart_culture_club_classes를 직접 봤다. 반복되는 로직(대상 조회 →
+// 찜한 유저 조회 → 등급 필터 → 구독 조회 → 발송 → 발송 완료 표시)을 processSource()로
+// 뽑아 두 소스가 공유한다(events는 관리자 수동 입력 next_reservation_open_at, 문화센터
+// 클래스는 자동 파싱된 register_start_at — "언제 시각을 보는지"만 다르고 나머지 로직은
+// 동일).
+//
+// [통합 테이블로 전환](2026-10-06, project/decision-log.md Decision 028): 최소
+// 5개 브랜드(이마트/롯데마트/AK플라자/신세계/현대백화점)로 문화센터 데이터를 모을
+// 예정이라, emart_culture_club_classes 전용 조회를 culture_club_classes(brand 무관,
+// register_start_at이 있는 행 전체) 조회로 바꿨다 — user_bookmarks도
+// emart_class_id → culture_club_class_id로 통합됐다. 지금은 이마트만 register_
+// start_at을 채우지만, 다른 브랜드가 같은 컬럼을 채우기 시작하면 이 배치는 코드
+// 변경 없이 자동으로 그 브랜드도 알림 대상으로 포함한다.
 //
 // [정밀도에 대한 정직한 기록] 이 배치는 GitHub Actions 스케줄(cron)로 10분마다 실행된다.
 // GitHub Actions의 스케줄 트리거는 공식적으로 "정확한 시각 실행을 보장하지 않으며 부하가
@@ -165,28 +172,33 @@ export async function run() {
     windowEnd
   );
 
-  const emartClassResult = await processSource(
+  // [문화센터 통합 테이블로 전환](2026-10-06, project/decision-log.md Decision
+  // 028): emart_culture_club_classes 대신 culture_club_classes(brand 무관,
+  // register_start_at이 있는 행 전체)를 본다 — 지금은 이마트만 이 값을 채우지만
+  // (register_start_at은 공통 컬럼으로 이미 추가돼 있음), 다른 브랜드가 같은
+  // 방식으로 값을 채우면 코드 변경 없이 자동으로 알림 대상이 된다.
+  const cultureClubClassResult = await processSource(
     admin,
     {
-      sourceLabel: 'EMART_CLASS_RESERVATION_REMINDER',
-      table: 'emart_culture_club_classes',
-      idColumn: 'class_id',
+      sourceLabel: 'CULTURE_CLUB_CLASS_RESERVATION_REMINDER',
+      table: 'culture_club_classes',
+      idColumn: 'id',
       titleColumn: 'class_title',
       timeColumn: 'register_start_at',
       sentAtColumn: 'reservation_open_reminder_sent_at',
-      bookmarkColumn: 'emart_class_id',
+      bookmarkColumn: 'culture_club_class_id',
     },
     windowStart,
     windowEnd
   );
 
-  const sentCount = eventsResult.sentCount + emartClassResult.sentCount;
-  const expiredCount = eventsResult.expiredCount + emartClassResult.expiredCount;
-  const processedCount = eventsResult.processedCount + emartClassResult.processedCount;
-  const targetCount = eventsResult.targetCount + emartClassResult.targetCount;
+  const sentCount = eventsResult.sentCount + cultureClubClassResult.sentCount;
+  const expiredCount = eventsResult.expiredCount + cultureClubClassResult.expiredCount;
+  const processedCount = eventsResult.processedCount + cultureClubClassResult.processedCount;
+  const targetCount = eventsResult.targetCount + cultureClubClassResult.targetCount;
 
   console.log(
-    `[EVENT_RESERVATION_REMINDER] 전체 완료 — 대상 ${targetCount}건(이벤트 ${eventsResult.targetCount} + 문화센터 클래스 ${emartClassResult.targetCount}) 중 처리 ${processedCount}건, 발송 ${sentCount}건, 만료 정리 ${expiredCount}건`
+    `[EVENT_RESERVATION_REMINDER] 전체 완료 — 대상 ${targetCount}건(이벤트 ${eventsResult.targetCount} + 문화센터 클래스 ${cultureClubClassResult.targetCount}) 중 처리 ${processedCount}건, 발송 ${sentCount}건, 만료 정리 ${expiredCount}건`
   );
   return { targetEventCount: targetCount, eventsProcessed: processedCount, sentCount, expiredCount };
 }

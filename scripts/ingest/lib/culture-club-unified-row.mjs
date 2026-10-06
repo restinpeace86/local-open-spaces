@@ -1,0 +1,135 @@
+// [문화센터 통합 테이블 매핑 — 공유](2026-10-06, project/decision-log.md
+// Decision 028): emart_culture_club_classes/lottemart_culture_club_classes의
+// 한 행을 culture_club_classes 행 모양으로 변환한다. 1회성 복사 스크립트
+// (scripts/migrations/2026-10-06-backfill-culture-club-classes-unified.mjs)
+// 와 매일 도는 ingest 스크립트(emart-culture-club.mjs/lottemart-culture-
+// club.mjs)의 "이중 쓰기"가 이 함수를 공유해 매핑 로직이 둘로 갈라지지
+// 않게 한다.
+//
+// [실측으로 발견한 버그] collected_at/created_at/updated_at/detail_fetched_at은
+// 원본 ingest 스크립트의 upsert payload에 원래 없는 키다(DB 기본값/보존 동작에
+// 맡기려는 의도 — "created_at은 upsert payload에 포함하지 않아 각 행의 '최초
+// 수집 시각'을 보존한다" 주석 참고). 이 함수가 `collected_at: row.collected_at`
+// 처럼 값이 undefined여도 키 자체를 만들어 반환하면, Supabase 대량 upsert가
+// (단일 행 insert와 달리) 그 키를 명시적 null로 보내 NOT NULL 제약을 위반한다
+// (실제 라이브 실행 중 발견: "null value in column \"collected_at\" ..." 에러).
+// 그래서 반환 직전에 undefined 값을 가진 키를 전부 제거해, 정말로 "키가 없던"
+// 원본과 동일하게 만든다.
+function omitUndefinedKeys(obj) {
+  return Object.fromEntries(Object.entries(obj).filter(([, value]) => value !== undefined));
+}
+
+export function toUnifiedEmartRow(row) {
+  return omitUndefinedKeys(buildUnifiedEmartRow(row));
+}
+
+function buildUnifiedEmartRow(row) {
+  return {
+    brand: 'emart',
+    source_class_id: row.class_id,
+    class_title: row.class_title,
+    store_code: row.store_code,
+    store_name: row.store_name,
+    main_category_name: row.main_category_name,
+    sub_category_name: row.sub_category_name,
+    classroom: row.classroom,
+    class_day: row.class_day,
+    start_time: row.start_time,
+    end_time: row.end_time,
+    class_original_fee: row.class_original_fee,
+    class_fee: row.class_fee,
+    class_material_fee: row.class_material_fee,
+    instructor_name: row.instructor_name,
+    min_age_months: row.min_age_months,
+    max_age_months: row.max_age_months,
+    schedule_start_date: row.schedule_start_date,
+    schedule_end_date: row.schedule_end_date,
+    schedule_days_code: row.schedule_days_code,
+    round: row.round,
+    total_sessions: row.total_sessions,
+    normalized_status: row.normalized_status,
+    raw_status: row.filter_status,
+    register_start_at: row.register_start_at,
+    is_excluded: row.is_excluded ?? false,
+    raw_extra: {
+      main_category_code: row.main_category_code,
+      sub_category_code: row.sub_category_code,
+      store_center: row.store_center,
+      min_class_capacity: row.min_class_capacity,
+      class_capacity: row.class_capacity,
+      semester_year: row.semester_year,
+      semester: row.semester,
+      class_type: row.class_type,
+      occupied_full_flag: row.occupied_full_flag,
+      channel_online: row.channel_online,
+      channel_offline: row.channel_offline,
+      register_start_date: row.register_start_date,
+      register_end_date: row.register_end_date,
+      class_start_date: row.class_start_date,
+      class_end_date: row.class_end_date,
+      class_closed_date: row.class_closed_date,
+      class_detail_title: row.class_detail_title,
+      class_detail_content: row.class_detail_content,
+      main_image_bucket: row.main_image_bucket,
+      main_image_region: row.main_image_region,
+      main_image_key: row.main_image_key,
+    },
+    detail_fetched_at: row.detail_fetched_at,
+    collected_at: row.collected_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
+export function toUnifiedLottemartRow(row) {
+  return omitUndefinedKeys(buildUnifiedLottemartRow(row));
+}
+
+function buildUnifiedLottemartRow(row) {
+  return {
+    brand: 'lottemart',
+    source_class_id: row.class_id,
+    class_title: row.class_title,
+    store_code: row.store_code,
+    store_name: row.store_name,
+    main_category_name: row.main_category_name,
+    sub_category_name: row.sub_category_name,
+    classroom: row.classroom,
+    class_day: row.class_day,
+    start_time: row.start_time,
+    end_time: row.end_time,
+    class_original_fee: row.class_original_fee,
+    class_fee: row.class_fee,
+    class_material_fee: row.class_material_fee,
+    instructor_name: row.instructor_name,
+    min_age_months: row.min_age_months,
+    max_age_months: row.max_age_months,
+    schedule_start_date: row.schedule_start_date,
+    schedule_end_date: row.schedule_end_date,
+    schedule_days_code: row.schedule_days_code,
+    round: row.round,
+    total_sessions: row.total_sessions,
+    normalized_status: row.normalized_status,
+    raw_status: row.registration_status,
+    register_start_at: null, // 롯데마트는 이 개념 자체가 없다(실측 확인)
+    is_excluded: row.is_excluded ?? false,
+    raw_extra: {
+      age_range_text: row.age_range_text,
+      session_count: row.session_count,
+      discount_badge_text: row.discount_badge_text,
+      is_closing_soon: row.is_closing_soon,
+      is_new: row.is_new,
+      like_count: row.like_count,
+      semester_code: row.semester_code,
+      target_code: row.target_code,
+      target_name: row.target_name,
+      class_code: row.class_code,
+      class_intro: row.class_intro,
+      class_tip: row.class_tip,
+    },
+    detail_fetched_at: row.detail_fetched_at,
+    collected_at: row.collected_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}

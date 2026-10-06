@@ -9,119 +9,13 @@
 // 안전하다(원본 테이블이 그 사이 갱신됐으면 최신 값으로 덮어씀).
 import { loadEnv } from '../lib/load-env.mjs';
 import { createAdminClient } from '../ingest/lib/supabase-admin.mjs';
+import { toUnifiedEmartRow, toUnifiedLottemartRow } from '../ingest/lib/culture-club-unified-row.mjs';
 
 loadEnv();
 
 const dryRun = process.argv.includes('--dry-run');
 const PAGE_SIZE = 500;
 const UPSERT_CHUNK_SIZE = 500;
-
-function toEmartRow(row) {
-  return {
-    brand: 'emart',
-    source_class_id: row.class_id,
-    class_title: row.class_title,
-    store_code: row.store_code,
-    store_name: row.store_name,
-    main_category_name: row.main_category_name,
-    sub_category_name: row.sub_category_name,
-    classroom: row.classroom,
-    class_day: row.class_day,
-    start_time: row.start_time,
-    end_time: row.end_time,
-    class_original_fee: row.class_original_fee,
-    class_fee: row.class_fee,
-    class_material_fee: row.class_material_fee,
-    instructor_name: row.instructor_name,
-    min_age_months: row.min_age_months,
-    max_age_months: row.max_age_months,
-    schedule_start_date: row.schedule_start_date,
-    schedule_end_date: row.schedule_end_date,
-    schedule_days_code: row.schedule_days_code,
-    round: row.round,
-    total_sessions: row.total_sessions,
-    normalized_status: row.normalized_status,
-    raw_status: row.filter_status,
-    register_start_at: row.register_start_at,
-    is_excluded: row.is_excluded,
-    raw_extra: {
-      main_category_code: row.main_category_code,
-      sub_category_code: row.sub_category_code,
-      store_center: row.store_center,
-      min_class_capacity: row.min_class_capacity,
-      class_capacity: row.class_capacity,
-      semester_year: row.semester_year,
-      semester: row.semester,
-      class_type: row.class_type,
-      occupied_full_flag: row.occupied_full_flag,
-      channel_online: row.channel_online,
-      channel_offline: row.channel_offline,
-      register_start_date: row.register_start_date,
-      register_end_date: row.register_end_date,
-      class_start_date: row.class_start_date,
-      class_end_date: row.class_end_date,
-      class_closed_date: row.class_closed_date,
-      class_detail_title: row.class_detail_title,
-      class_detail_content: row.class_detail_content,
-      main_image_bucket: row.main_image_bucket,
-      main_image_region: row.main_image_region,
-      main_image_key: row.main_image_key,
-    },
-    detail_fetched_at: row.detail_fetched_at,
-    collected_at: row.collected_at,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-  };
-}
-
-function toLottemartRow(row) {
-  return {
-    brand: 'lottemart',
-    source_class_id: row.class_id,
-    class_title: row.class_title,
-    store_code: row.store_code,
-    store_name: row.store_name,
-    main_category_name: row.main_category_name,
-    sub_category_name: row.sub_category_name,
-    classroom: row.classroom,
-    class_day: row.class_day,
-    start_time: row.start_time,
-    end_time: row.end_time,
-    class_original_fee: row.class_original_fee,
-    class_fee: row.class_fee,
-    class_material_fee: row.class_material_fee,
-    instructor_name: row.instructor_name,
-    min_age_months: row.min_age_months,
-    max_age_months: row.max_age_months,
-    schedule_start_date: row.schedule_start_date,
-    schedule_end_date: row.schedule_end_date,
-    schedule_days_code: row.schedule_days_code,
-    round: row.round,
-    total_sessions: row.total_sessions,
-    normalized_status: row.normalized_status,
-    raw_status: row.registration_status,
-    register_start_at: null, // 롯데마트는 이 개념 자체가 없다(실측 확인)
-    is_excluded: row.is_excluded,
-    raw_extra: {
-      age_range_text: row.age_range_text,
-      session_count: row.session_count,
-      discount_badge_text: row.discount_badge_text,
-      is_closing_soon: row.is_closing_soon,
-      is_new: row.is_new,
-      like_count: row.like_count,
-      semester_code: row.semester_code,
-      target_code: row.target_code,
-      target_name: row.target_name,
-      class_code: row.class_code,
-      class_intro: row.class_intro,
-      class_tip: row.class_tip,
-    },
-    detail_fetched_at: row.detail_fetched_at,
-    collected_at: row.collected_at,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-  };
-}
 
 async function copyTable(client, { table, mapFn, label }) {
   let lastId = null;
@@ -164,8 +58,8 @@ async function main() {
   console.log(`▶ 문화센터 통합 테이블 데이터 복사 시작 (dry-run: ${dryRun})`);
 
   const results = [];
-  results.push(await copyTable(client, { table: 'emart_culture_club_classes', mapFn: toEmartRow, label: 'emart' }));
-  results.push(await copyTable(client, { table: 'lottemart_culture_club_classes', mapFn: toLottemartRow, label: 'lottemart' }));
+  results.push(await copyTable(client, { table: 'emart_culture_club_classes', mapFn: toUnifiedEmartRow, label: 'emart' }));
+  results.push(await copyTable(client, { table: 'lottemart_culture_club_classes', mapFn: toUnifiedLottemartRow, label: 'lottemart' }));
 
   console.log(JSON.stringify(results, null, 2));
   return results;

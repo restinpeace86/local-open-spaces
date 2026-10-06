@@ -40,6 +40,7 @@ import {
   yyyymmddToIso,
 } from './lib/schedule-normalizer.mjs';
 import { normalizeEmartStatus, parseInstructorFromTitle } from './lib/culture-club-common.mjs';
+import { toUnifiedEmartRow } from './lib/culture-club-unified-row.mjs';
 
 const env = loadEnv();
 const SOURCE_KEY = 'EMART_CULTURE_CLUB';
@@ -406,6 +407,24 @@ export async function run({ dryRun = false } = {}) {
   }
 
   console.log(`✅ Supabase(emart_culture_club_classes) upsert 완료: ${upsertedCount}건`);
+
+  // [통합 테이블 이중 쓰기](2026-10-06, project/decision-log.md Decision 028):
+  // culture_club_classes를 찜/상태감시/예약알림이 이미 쓰고 있다 — 메인 테이블
+  // upsert가 끝나면 같은 행을 통합 테이블에도 반영한다. 실패해도 메인 배치는
+  // 성공으로 처리한다(markFallenOutRowsAsUnavailable과 동일한 "부가 작업" 패턴
+  // — 다음 실행에서 다시 맞춰짐).
+  try {
+    const unifiedRows = rows.map(toUnifiedEmartRow);
+    for (let i = 0; i < unifiedRows.length; i += UPSERT_CHUNK_SIZE) {
+      const chunk = unifiedRows.slice(i, i + UPSERT_CHUNK_SIZE);
+      const { error: unifiedError } = await client.from('culture_club_classes').upsert(chunk, { onConflict: 'brand,source_class_id' });
+      if (unifiedError) throw new Error(unifiedError.message);
+    }
+    console.log(`✅ Supabase(culture_club_classes) 이중 쓰기 완료: ${unifiedRows.length}건`);
+  } catch (err) {
+    console.error(`⚠️ culture_club_classes 이중 쓰기 실패(메인 배치는 성공으로 처리): ${err.message}`);
+  }
+
   await postPipelineLog(client, {
     status: 'OK',
     metaData: {

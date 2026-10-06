@@ -46,6 +46,7 @@ import { applyRandomStartupDelay } from './lib/random-startup-delay.mjs';
 import { parseAgeRangeToMonths } from './lib/age-range-parser.mjs';
 import { normalizeDaysToCodes, yyyymmddToIso } from './lib/schedule-normalizer.mjs';
 import { normalizeLottemartStatus } from './lib/culture-club-common.mjs';
+import { toUnifiedLottemartRow } from './lib/culture-club-unified-row.mjs';
 
 loadEnv();
 
@@ -104,7 +105,7 @@ function randomPacingDelay() {
 // 받으면 페이지네이션 요청량이 85~93% 줄어든다. 3번(접수마감/대기자신청/전화문의)
 // 은 더 이상 수집하지 않는다 — 대기자신청 전용 강좌를 새로 발견하는 경로는
 // 없어지지만(사용자가 수용한 트레이드오프), 이미 찜한 강좌는 찜-상태감시
-// (lottemart-culture-club-status-watch.mjs)가 상세페이지를 직접 찔러 확인하므로
+// (culture-club-status-watch.mjs)가 상세페이지를 직접 찔러 확인하므로
 // 영향이 없다. 1번 버킷에서 빠진 기존 행은 run()의 markFallenOutRowsAsUnavailable
 // 이 '접수불가'로 정리한다.
 export async function fetchPage(storeCode, targetCode, termCode, pageNo) {
@@ -357,12 +358,19 @@ export async function fetchAllForCombo(storeCode, storeName, targetCode, targetN
 // 위함 — status-watch가 5분마다 더 정확하게 알고 있는 걸 하루 1번 배치가
 // 뭉개면 안 됨).
 export async function markFallenOutRowsAsUnavailable(client, freshClassIds, storeCodes) {
+  // [찜 FK 통합](2026-10-06, Decision 028): user_bookmarks.lottemart_class_id가
+  // culture_club_class_id로 통합됐다 — culture_club_classes를 조인해 브랜드가
+  // 롯데마트인 것만 골라 원본 class_id(source_class_id)를 뽑는다.
   const { data: bookmarkedRows, error: bookmarkError } = await client
     .from('user_bookmarks')
-    .select('lottemart_class_id')
-    .not('lottemart_class_id', 'is', null);
+    .select('culture_club_classes(brand, source_class_id)')
+    .not('culture_club_class_id', 'is', null);
   if (bookmarkError) throw new Error(`찜한 class_id 조회 실패: ${bookmarkError.message}`);
-  const bookmarkedIds = new Set((bookmarkedRows ?? []).map((r) => r.lottemart_class_id));
+  const bookmarkedIds = new Set(
+    (bookmarkedRows ?? [])
+      .filter((r) => r.culture_club_classes?.brand === 'lottemart')
+      .map((r) => r.culture_club_classes.source_class_id)
+  );
 
   // [부분 실행 안전장치] storesLimit으로 일부 지점만 돈 실행에서는 돌지 않은
   // 지점의 접수가능 행까지 "빠졌다"고 오판하면 안 되므로, 이번에 실제로 조회한
@@ -458,6 +466,20 @@ export async function run({ dryRun = false, storesLimit = null } = {}) {
   }
 
   console.log(`✅ Supabase(lottemart_culture_club_classes) upsert 완료: ${upsertedCount}건`);
+
+  // [통합 테이블 이중 쓰기](2026-10-06, project/decision-log.md Decision 028):
+  // emart-culture-club.mjs와 동일한 패턴 — 실패해도 메인 배치는 성공으로 처리.
+  try {
+    const unifiedRows = rows.map(toUnifiedLottemartRow);
+    for (let i = 0; i < unifiedRows.length; i += UPSERT_CHUNK_SIZE) {
+      const chunk = unifiedRows.slice(i, i + UPSERT_CHUNK_SIZE);
+      const { error: unifiedError } = await client.from('culture_club_classes').upsert(chunk, { onConflict: 'brand,source_class_id' });
+      if (unifiedError) throw new Error(unifiedError.message);
+    }
+    console.log(`✅ Supabase(culture_club_classes) 이중 쓰기 완료: ${unifiedRows.length}건`);
+  } catch (err) {
+    console.error(`⚠️ culture_club_classes 이중 쓰기 실패(메인 배치는 성공으로 처리): ${err.message}`);
+  }
 
   let unavailableCount = 0;
   try {

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { addBookmark, BookmarkCapExceededError } from './bookmarks';
+import { addBookmark, BookmarkCapExceededError, removeBookmark } from './bookmarks';
 
 const getUserMock = vi.fn();
 const fromMock = vi.fn();
@@ -26,6 +26,20 @@ function makeCountBuilder(count: number) {
 function makeInsertBuilder() {
   const insertMock = vi.fn(() => Promise.resolve({ error: null }));
   return { insert: insertMock };
+}
+
+// [찜 FK 통합](2026-10-06): emart_class/lottemart_class 찜은 addBookmark 내부에서
+// culture_club_classes(brand, source_class_id)로 surrogate id를 먼저 조회한다.
+function makeResolveClassIdBuilder(resolvedId: number) {
+  return {
+    select: () => ({
+      eq: () => ({
+        eq: () => ({
+          single: () => Promise.resolve({ data: { id: resolvedId }, error: null }),
+        }),
+      }),
+    }),
+  };
 }
 
 // [우수맘 전용 예약-알람 슬롯 캡](2026-10-03 사용자 지시): "알림 리마인더 슬롯 최대 20개
@@ -108,17 +122,17 @@ describe('addBookmark', () => {
     await expect(addBookmark({ kind: 'emart_class', emartClassId: 'class-1' })).rejects.toThrow(BookmarkCapExceededError);
   });
 
-  it('문화센터 클래스 찜인데 열심맘(우수맘 미달)이면 캡 체크 없이 바로 insert한다', async () => {
+  it('문화센터 클래스 찜인데 열심맘(우수맘 미달)이면 캡 체크 없이 바로 insert한다(surrogate id 조회 후)', async () => {
     getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
     getMyProfileMock.mockResolvedValue({ grade: 'active' });
-    fromMock.mockReturnValue(makeInsertBuilder());
+    fromMock.mockReturnValueOnce(makeResolveClassIdBuilder(42)).mockReturnValueOnce(makeInsertBuilder());
 
     await addBookmark({ kind: 'emart_class', emartClassId: 'class-1' });
 
-    expect(fromMock).toHaveBeenCalledTimes(1);
+    expect(fromMock).toHaveBeenCalledTimes(2);
   });
 
-  it('캡 카운트는 event_id/emart_class_id/lottemart_class_id를 합산한다(같은 알람 슬롯이므로)', async () => {
+  it('캡 카운트는 event_id/culture_club_class_id를 합산한다(같은 알람 슬롯이므로)', async () => {
     getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
     getMyProfileMock.mockResolvedValue({ grade: 'excellent' });
     let capturedOrFilter: string | undefined;
@@ -136,7 +150,7 @@ describe('addBookmark', () => {
 
     await addBookmark({ kind: 'event', eventId: 'event-1' });
 
-    expect(capturedOrFilter).toBe('event_id.not.is.null,emart_class_id.not.is.null,lottemart_class_id.not.is.null');
+    expect(capturedOrFilter).toBe('event_id.not.is.null,culture_club_class_id.not.is.null');
   });
 
   // [롯데마트 상태 변화 알림 추가](2026-10-04 사용자 지시): "찜한거에 대하여서는
@@ -150,13 +164,56 @@ describe('addBookmark', () => {
     await expect(addBookmark({ kind: 'lottemart_class', lottemartClassId: 'class-1' })).rejects.toThrow(BookmarkCapExceededError);
   });
 
-  it('롯데마트 문화센터 클래스 찜인데 열심맘(우수맘 미달)이면 캡 체크 없이 바로 insert한다', async () => {
+  it('롯데마트 문화센터 클래스 찜인데 열심맘(우수맘 미달)이면 캡 체크 없이 바로 insert한다(surrogate id 조회 후)', async () => {
     getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
     getMyProfileMock.mockResolvedValue({ grade: 'active' });
-    fromMock.mockReturnValue(makeInsertBuilder());
+    fromMock.mockReturnValueOnce(makeResolveClassIdBuilder(43)).mockReturnValueOnce(makeInsertBuilder());
 
     await addBookmark({ kind: 'lottemart_class', lottemartClassId: 'class-1' });
 
-    expect(fromMock).toHaveBeenCalledTimes(1);
+    expect(fromMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+// [찜 FK 통합](2026-10-06): removeBookmark도 emart_class/lottemart_class는
+// culture_club_classes에서 surrogate id를 먼저 조회한 뒤 그 id로 삭제한다.
+describe('removeBookmark', () => {
+  afterEach(() => {
+    getUserMock.mockReset();
+    fromMock.mockReset();
+  });
+
+  function makeDeleteBuilder() {
+    const eqCalls: unknown[][] = [];
+    const builder = {
+      delete: () => builder,
+      eq: (...args: unknown[]) => {
+        eqCalls.push(args);
+        return eqCalls.length < 2 ? builder : Promise.resolve({ error: null });
+      },
+    };
+    return { builder, eqCalls };
+  }
+
+  it('이마트 문화센터 클래스 찜 삭제는 surrogate id를 조회한 뒤 그 id로 삭제한다', async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
+    const { builder, eqCalls } = makeDeleteBuilder();
+    // 실제 호출 순서: delete 쿼리 빌더 생성(from #1) → resolveCultureClubClassId(from #2).
+    fromMock.mockReturnValueOnce(builder).mockReturnValueOnce(makeResolveClassIdBuilder(99));
+
+    await removeBookmark({ kind: 'emart_class', emartClassId: 'class-1' });
+
+    expect(fromMock).toHaveBeenCalledTimes(2);
+    expect(eqCalls[1]).toEqual(['culture_club_class_id', 99]);
+  });
+
+  it('롯데마트 문화센터 클래스 찜 삭제도 동일하게 동작한다', async () => {
+    getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
+    const { builder, eqCalls } = makeDeleteBuilder();
+    fromMock.mockReturnValueOnce(builder).mockReturnValueOnce(makeResolveClassIdBuilder(100));
+
+    await removeBookmark({ kind: 'lottemart_class', lottemartClassId: 'class-1' });
+
+    expect(eqCalls[1]).toEqual(['culture_club_class_id', 100]);
   });
 });

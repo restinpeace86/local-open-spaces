@@ -1,3 +1,12 @@
+# [GitHub Actions에서 비활성화](2026-10-06, project/decision-log.md Decision
+# 028): emart-culture-club-status-watch.mjs/lottemart-culture-club-status-
+# watch.mjs 두 스크립트가 culture-club-status-watch.mjs(통합, 브랜드별 분기)
+# 로 합쳐졌다. 이마트 쪽 재확인이 GitHub Actions에서 WAFForbiddenException
+# (403)에 막히기 때문에(emart-culture-club-batch.yml.disabled와 동일한
+# 이유) — 롯데마트만 보면 GitHub Actions에서 문제없이 동작했지만, 통합
+# 스크립트가 두 브랜드를 한 번에 처리하므로 더 제약이 큰 쪽(로컬 PC)에
+# 맞춰야 한다. 통합 스크립트는 Windows 작업 스케줄러
+# "LocalOpenSpaces-CultureClubStatusWatch"(5분마다)로 실행한다.
 name: Lottemart Culture Club Status Watch (Every 5 min)
 
 # [찜한 롯데마트 강좌 상태 변화 알림](2026-10-04 사용자 지시): "나도 상태

@@ -2088,6 +2088,7 @@ export type Database = {
       user_bookmarks: {
         Row: {
           created_at: string
+          culture_club_class_id: number | null
           emart_class_id: string | null
           event_id: string | null
           id: string
@@ -2097,6 +2098,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          culture_club_class_id?: number | null
           emart_class_id?: string | null
           event_id?: string | null
           id?: string
@@ -2106,6 +2108,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          culture_club_class_id?: number | null
           emart_class_id?: string | null
           event_id?: string | null
           id?: string
@@ -2114,6 +2117,13 @@ export type Database = {
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "user_bookmarks_culture_club_class_id_fkey"
+            columns: ["culture_club_class_id"]
+            isOneToOne: false
+            referencedRelation: "culture_club_classes"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "user_bookmarks_emart_class_id_fkey"
             columns: ["emart_class_id"]
