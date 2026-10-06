@@ -79,21 +79,15 @@ const STORE_CODES = [
 const CATEGORY_CODES = ['101', '402', '403', '404', '406'];
 const TARGET_STATUSES = ['접수대기', '접수중', '정원마감'];
 
-// [지점 분할 요청 — WAF 403 대응](2026-10-05 사용자 지시): "메인 배치의 요청을
-// 지점 10~20개씩 쪼개서 해봐" — GitHub Actions에서만 `WAFForbiddenException`
-// (403)이 나는데, 동일 IP/키/엔드포인트를 쓰는 상세정보 배치(단건 조회,
-// emart-culture-club-detail.mjs)는 매번 성공했다 — IP 자체가 막힌 게 아니라
-// 지점 64개를 한 요청에 다 담는 "넓은" 쿼리가 걸릴 가능성이 있어, 요청마다
-// 지점을 더 작은 묶음으로 나눠 보낸다(프록시 도입 전에 먼저 시도해보는
-// 비용 없는 수정).
-const STORE_CHUNK_SIZE = 15;
-
-function chunkArray(arr, size) {
-  const chunks = [];
-  for (let i = 0; i < arr.length; i += size) chunks.push(arr.slice(i, i + size));
-  return chunks;
-}
-
+// [지점 분할 요청 — 되돌림](2026-10-06 사용자 지시: "PC로 완전히 옮긴 이상,
+// 한번에 가져오도록") — 2026-10-05에 GitHub Actions의 WAFForbiddenException
+// (403) 회피 목적으로 지점을 15개씩 쪼개 보냈었지만, 그 시도도 결국 실패했고
+// (사용자가 workflow_dispatch로 재현해 확인) 이마트 메인 배치는 이제 GitHub
+// Actions를 완전히 떠나 로컬 PC 작업 스케줄러로만 실행된다(.github/workflows/
+// emart-culture-club-batch.yml.disabled). 로컬 PC는 애초에 WAF에 막힌 적이
+// 없었으므로(쪼개기 이전 원래 코드로도 로컬에서는 항상 성공) 쪼개는 이유가
+// 없어졌다 — 상태(TARGET_STATUSES)당 지점 64개 전체를 한 번에 요청하도록
+// 되돌린다(요청 수 감소).
 const QUERY = `query getClassByFiltering($keyword: String, $filterData: [FilterData], $sortKey: String, $from: Int, $size: Int) {
   getClassByFiltering(keyword: $keyword, filterData: $filterData, sortKey: $sortKey, from: $from, size: $size) {
     total
@@ -360,19 +354,14 @@ async function postPipelineLog(client, { status, errorMessage = null, metaData =
 export async function run({ dryRun = false } = {}) {
   console.log(`▶ 이마트 컬처클럽 강좌 리스트 수집 시작 (dry-run: ${dryRun})`);
 
-  const storeChunks = chunkArray(STORE_CODES, STORE_CHUNK_SIZE);
   const allRows = [];
   for (const status of TARGET_STATUSES) {
-    console.log(`  [${status}] 수집 시작 (지점 ${STORE_CODES.length}개를 ${storeChunks.length}묶음으로 분할)`);
-    let statusItemCount = 0;
-    for (const storeChunk of storeChunks) {
-      const items = await fetchAllForStatus(status, storeChunk);
-      statusItemCount += items.length;
-      const rows = items.map((item) => transform(item, status)).filter(Boolean);
-      allRows.push(...rows);
-      await sleep(randomPacingDelay());
-    }
-    console.log(`  [${status}] ${statusItemCount}건 수신`);
+    console.log(`  [${status}] 수집 시작 (지점 ${STORE_CODES.length}개 전체를 한 번에 요청)`);
+    const items = await fetchAllForStatus(status, STORE_CODES);
+    const rows = items.map((item) => transform(item, status)).filter(Boolean);
+    allRows.push(...rows);
+    console.log(`  [${status}] ${items.length}건 수신`);
+    await sleep(randomPacingDelay());
   }
 
   // 동일 classId가 상태 전환 중 두 상태 조회 사이에 걸쳐 중복 수신될 가능성에 대비
