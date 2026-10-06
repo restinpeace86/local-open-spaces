@@ -4,79 +4,103 @@ import { useCallback, useEffect, useState } from 'react';
 import { EmptyState } from '@/components/map/empty-state';
 import { EventListSkeleton } from '@/components/cards/event-list-skeleton';
 import { BookmarkButton } from '@/components/community/bookmark-button';
+import { BookmarkTarget } from '@/lib/community/bookmarks';
 import { useUser } from '@/hooks/use-user';
 import { getMyProfile } from '@/lib/auth/profile';
 import { canReceivePushNotifications } from '@/lib/community/grades';
+import { formatAgeRangeMonths } from '@/lib/home/culture-club-age-format';
 import {
   buildCultureClubThumbnailUrl,
+  buildLottemartCourseViewUrl,
   CULTURE_CLUB_BRAND_OPTIONS,
   CULTURE_CLUB_DAY_OPTIONS,
   CULTURE_CLUB_SUB_CATEGORY_OPTIONS,
   CultureClubBrandKey,
   CultureClubDay,
   CultureClubSubCategory,
+  LOTTEMART_TARGET_OPTIONS,
 } from '@/lib/home/culture-club-options';
-import { LottemartCultureClubView } from '@/components/home/lottemart-culture-club-view';
 
-// [탭 구조 재수정](2026-10-03 사용자 지시): "이벤트픽 화면에서 현재꺼에 대하여 탭으로
-// 하나있고 문화센터로 탭하나 만들자는 얘기였는데" — 처음엔 중분류 그리드 아래 버튼을
-// 눌러 여는 바텀시트(culture-club-sheet.tsx)로 만들었는데, 그게 아니라 이벤트픽
-// 화면 자체를 "이벤트"/"문화센터" 2개 탭으로 나누고 싶다는 뜻이었다. 바텀시트
-// 오버레이(fixed inset-0, 배경 클릭으로 닫기)를 전부 제거하고, home-view.tsx의 탭
-// 전환으로 이 화면 전체가 바로 렌더링되는 평범한 인라인 컴포넌트로 바꿨다.
-//
-// [카드/레이아웃 재설계](2026-10-03 사용자 지시, 이마트 컬처클럽 실제 PC 화면 캡처
-// `reference/emart culture club.png` 참고): "스크롤내리면 위에 검색조건도 같이 위로
-// 딸려올라가고" — 필터 영역을 shrink-0으로 고정하지 않고, 필터+리스트를 하나의
-// 스크롤 컨테이너로 합쳤다(무한스크롤 트리거도 이 컨테이너 기준). 카드는 참고
-// 화면처럼 이미지(좌상단에 상태 뱃지) + 텍스트 영역(소분류·정원 / 제목(2줄 말줄임)
-// / 가격(+재료비)·찜 아이콘 / 구분선 / 일정) 구조로 바꿨고, "지점"은 이미
-// 상단에서 선택돼 고정이라 카드에는 넣지 않는다(사용자 지시: "우리는 지점은
-// 고정이니 굳이 지점 나올필요없고"). 그리드는 PC 4열 참고화면과 달리 모바일 우선
-// 앱이라 2열(md 이상에서 4열)로 뒀다.
-//
-// [접수기간 비노출](2026-10-03 사용자 지시): "접수 기간은 우리도 숨기도록 하자.
-// 괜히 노출시킬필요는 없어보여" — 이마트 실제 사이트도 상세 화면에 접수기간을
-// 노출하지 않는다(상태 뱃지로 충분하다고 판단한 것으로 보임, reference/emart
-// culture club detail.png 참고). 다만 내부적으로는 아는 정보이니 "접수대기" 상태
-// 강좌에 한해 우수맘 이상에게만 "몇일 몇시에 열립니다 — 찜하면 알림 드려요"
-// 인폼으로 활용한다(아래 CultureClubReservationHint).
+// [문화센터 통합검색](2026-10-06 사용자 지시, project/decision-log.md Decision
+// 028): "동일하게 가는게 낫겠지.. 5개면 5개 탭하는것보다.. 전체 통합검색 및
+// 롯데마트나 이마트 필터검색도 가능하게" — 이마트/롯데마트 전용 화면 2개
+// (culture-club-tab-view.tsx의 EmartCultureClubView + lottemart-culture-
+// club-view.tsx)를 이 파일 하나로 합쳤다. culture_club_classes(brand 컬럼)
+// 단일 테이블을 보는 단일 화면으로, 브랜드는 "전체/이마트/롯데마트" 필터
+// pill 중 하나일 뿐이다 — 브랜드가 늘어나도(AK플라자 등) CULTURE_CLUB_
+// BRAND_OPTIONS에 원소만 추가하면 된다. 지점/카테고리 필터는 브랜드마다
+// 코드 체계가 달라 "전체" 선택 시에는 숨기고, 특정 브랜드를 골랐을 때만
+// 그 브랜드의 기존 필터(이마트 sub_category_name 5종 / 롯데마트 target_code
+// 3종)를 보여준다(제3장 제5조 — 억지로 통일된 카테고리를 지어내지 않음).
 const PAGE_SIZE = 20;
-// [광고 자리 스캐폴딩](2026-10-03 사용자 지시): "5번째 혹은 10번째 카드마다 ... 스폰서드/
-// 추천 상품 카드 자리 기능적으로 마련" — 실제 광고 콘텐츠/스폰서 테이블은 이번 범위가
-// 아니다(제5장 제7조 — 확장 구조는 허용, 확장 기능 자체는 구현하지 않음). 자리만 끼워
-// 두고 CultureClubAdSlot은 아직 null을 반환한다.
 const AD_SLOT_INTERVAL = 10;
-// [클래스 신청하러 가기 — 딥링크 확인됨](2026-10-03 사용자 제공 URL로 실측 확인):
-// "https://www.cultureclub.emart.com/class/{classId}" 형태로 강좌별 상세 페이지에
-// 바로 연결된다. curl로 직접 확인(브라우저 User-Agent 없이는 /enrolment 베이스
-// 페이지도 403이 나는 동일한 사이트 전역 봇 차단 때문이었고, User-Agent를 붙이면
-// /class/{classId}가 200을 반환함을 확인) — 이전엔 패턴을 몰라 검색 화면(/enrolment)
-// 으로만 보냈었다.
-function buildEmartClassUrl(classId: string) {
-  return `https://www.cultureclub.emart.com/class/${classId}`;
+
+function buildEmartClassUrl(sourceClassId: string) {
+  return `https://www.cultureclub.emart.com/class/${sourceClassId}`;
+}
+
+// 브랜드마다 "신청하러 가기" 외부 링크를 만드는 방식이 다르다(이마트는
+// class_id만, 롯데마트는 store_code+semester_code+target_code도 필요 —
+// 뒤 둘은 공통 컬럼이 아니라 raw_extra에 있다) — 여기서만 분기한다.
+function buildExternalApplyUrl(item: CultureClubClass): string | null {
+  if (item.brand === 'emart') return buildEmartClassUrl(item.source_class_id);
+  if (item.brand === 'lottemart' && item.store_code) {
+    const semesterCode = item.raw_extra.semester_code;
+    const targetCode = item.raw_extra.target_code;
+    if (typeof semesterCode === 'string' && typeof targetCode === 'string') {
+      return buildLottemartCourseViewUrl({
+        storeCode: item.store_code,
+        classId: item.source_class_id,
+        semesterCode,
+        targetCode,
+      });
+    }
+  }
+  return null;
+}
+
+// 찜 기능은 아직 브랜드별 kind(emart_class/lottemart_class)를 쓴다 —
+// bookmarks.ts가 내부적으로 culture_club_classes.id로 변환해주므로 이 화면은
+// 기존 호출 방식을 그대로 재사용한다(2026-10-06 찜 FK 통합, Decision 028).
+function toBookmarkTarget(item: CultureClubClass): BookmarkTarget {
+  if (item.brand === 'emart') return { kind: 'emart_class', emartClassId: item.source_class_id };
+  return { kind: 'lottemart_class', lottemartClassId: item.source_class_id };
 }
 
 type StoreOption = { storeCode: string; label: string };
 
 type CultureClubClass = {
-  class_id: string;
+  id: number;
+  brand: 'emart' | 'lottemart';
+  source_class_id: string;
   class_title: string;
+  store_code: string | null;
+  store_name: string | null;
+  main_category_name: string | null;
+  sub_category_name: string | null;
+  classroom: string | null;
   class_day: string[] | null;
   start_time: string | null;
   end_time: string | null;
-  sub_category_name: string | null;
+  class_original_fee: number | null;
   class_fee: number | null;
   class_material_fee: number | null;
-  class_capacity: number | null;
-  filter_status: '접수대기' | '접수중' | '정원마감';
-  register_start_date: string | null;
-  register_end_date: string | null;
-  main_image_key: string | null;
+  instructor_name: string | null;
+  min_age_months: number | null;
+  max_age_months: number | null;
+  schedule_start_date: string | null;
+  total_sessions: number | null;
+  normalized_status: 'OPEN' | 'CLOSED' | 'WAITING';
+  raw_status: string | null;
+  register_start_at: string | null;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  raw_extra: Record<string, any>;
   collected_at: string;
-  store_name: string | null;
-  class_detail_title: string | null;
-  class_detail_content: string | null;
+};
+
+const BRAND_LABELS: Record<CultureClubClass['brand'], string> = {
+  emart: '이마트',
+  lottemart: '롯데마트',
 };
 
 function formatTimeRange(start: string | null, end: string | null) {
@@ -84,50 +108,36 @@ function formatTimeRange(start: string | null, end: string | null) {
   return `${fmt(start)} ~ ${fmt(end)}`;
 }
 
-function formatDateCompact(raw: string | null) {
-  if (!raw || raw.length !== 8) return raw ?? '-';
-  return `${raw.slice(0, 4)}.${raw.slice(4, 6)}.${raw.slice(6, 8)}`;
+function formatScheduleDate(raw: string | null) {
+  return raw ? raw.replaceAll('-', '.') : '-';
 }
 
-// [접수 시작 시각 표시](2026-10-03): register_start_date 원본("YYYYMMDDHHmm", 12자,
-// KST — 오늘 앞서 register_start_at 컬럼을 추가한 바로 그 필드)에 실제 시각이 있어
-// 날짜만 보여주면 "예약 시작 시각"이라는 중요 정보가 빠진다. 12자가 아니면(실측상
-// 항상 12자지만 방어적으로) 날짜만 보여준다.
 function formatRegisterStart(raw: string | null) {
-  if (!raw || raw.length !== 12) return formatDateCompact(raw);
-  return `${raw.slice(0, 4)}.${raw.slice(4, 6)}.${raw.slice(6, 8)} ${raw.slice(8, 10)}:${raw.slice(10, 12)}`;
+  if (!raw) return '-';
+  const date = new Date(raw);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${date.getFullYear()}.${pad(date.getMonth() + 1)}.${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-// register_start_date("YYYYMMDDHHmm", KST)를 실제 Date로 파싱한다 — "아직 접수
-// 시작 전인지" 비교할 때 쓴다(emart-culture-club.mjs의 parseRegisterStartAt와
-// 동일한 파싱 규칙, 프론트는 서버의 register_start_at 대신 이미 로드된
-// register_start_date 원본에서 바로 계산한다).
-function parseRegisterStartDate(raw: string | null): Date | null {
-  if (!raw || raw.length !== 12) return null;
-  const iso = `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}T${raw.slice(8, 10)}:${raw.slice(10, 12)}:00+09:00`;
-  return new Date(iso);
-}
-
-// [데이터 신선도 안내](2026-10-03 사용자 지적): "우린 하루에 한번 가져오는데 .. 접수중
-// 이거 보여줘도 되려나? 이게 하루에 한번 업데이트되니 사람들이 좀 착각할거같은데" —
-// 상태(접수중/정원마감 등)가 실시간이 아니라 일 1회 배치 갱신임을 숨기지 않고 그대로
-// 보여준다(제3장 추측 금지 — 실시간인 척하지 않음, 제6장 제2조 사용자 경험). 새 쿼리를
-// 추가하지 않고 이미 응답에 포함된 각 행의 collected_at(배치가 실제로 수집한 시각)을
-// 그대로 쓴다 — 같은 배치 실행에서 수집됐으므로 지점 내 모든 행이 사실상 동일한 값이다.
+// [데이터 신선도 안내] 상태가 일 1회 배치 갱신임을 숨기지 않고 그대로 보여준다
+// (이전 두 화면의 동일 패턴 유지, 제3장 제5조 — 실시간인 척하지 않음).
 function formatUpdatedAt(raw: string) {
   const date = new Date(raw);
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${date.getMonth() + 1}.${date.getDate()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
-function statusLabel(status: CultureClubClass['filter_status']) {
-  return status === '정원마감' ? '대기접수 가능' : status;
+// [공통 상태 배지] 색상은 normalized_status(OPEN/WAITING/CLOSED) 3단계로
+// 통일하되, 라벨은 브랜드 고유 표기(raw_status, 예: "접수중"/"바로신청")를
+// 그대로 보여준다 — 색 체계는 통일하면서 브랜드별 구체적 표현은 잃지 않는다.
+function statusBadgeClassName(status: CultureClubClass['normalized_status']) {
+  if (status === 'OPEN') return 'bg-emerald-600 text-white';
+  if (status === 'WAITING') return 'bg-amber-500 text-white';
+  return 'bg-gray-400 text-white';
 }
 
-function statusBadgeClassName(status: CultureClubClass['filter_status']) {
-  if (status === '정원마감') return 'bg-amber-500 text-white';
-  if (status === '접수중') return 'bg-emerald-600 text-white';
-  return 'bg-gray-700 text-white';
+function statusLabel(item: CultureClubClass) {
+  return item.raw_status ?? item.normalized_status;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -142,19 +152,18 @@ function toggleInSet<T>(set: Set<T>, value: T): Set<T> {
   return next;
 }
 
-// [이미지 — 썸네일 CDN 확인됨](2026-10-03 사용자 제공 URL로 실측 확인): main_image_bucket
-// 직접 접근(S3)은 여전히 403이지만, 사용자가 실제 사이트에서 뜨는 이미지의 실제 요청
-// URL(`https://d24y2yfxh2iebm.cloudfront.net/resized/thumbnail/{main_image_key}`)을
-// 찾아줘서 공개 CDN으로 접근 가능함을 확인했다(buildCultureClubThumbnailUrl 참고).
-// 상세(큰) 해상도 경로는 아직 못 찾았다 — 상세보기 자체도 이번 범위에 없어 지금은
-// 리스트 썸네일만 적용한다. main_image_key가 없는 행(드묾, 상세 백필 전 상태 등)은
-// 플레이스홀더로 폴백한다.
-function ClassImage({ imageKey, status }: { imageKey: string | null; status: CultureClubClass['filter_status'] }) {
+function ClassImage({ item }: { item: CultureClubClass }) {
+  // [이미지 — 이마트만 있음, 실측 확인] 롯데마트 목록 응답에는 썸네일 이미지가
+  // 전혀 없다 — 다른 브랜드는 전부 플레이스홀더로 폴백한다.
+  const imageKey = item.brand === 'emart' ? (item.raw_extra.main_image_key as string | null | undefined) : null;
   const thumbnailUrl = buildCultureClubThumbnailUrl(imageKey);
   return (
     <div className="relative aspect-square w-full overflow-hidden rounded-t-xl bg-gray-100">
-      <span className={`absolute left-2 top-2 z-10 rounded px-1.5 py-0.5 text-[11px] font-semibold ${statusBadgeClassName(status)}`}>
-        {statusLabel(status)}
+      <span className={`absolute left-2 top-2 z-10 rounded px-1.5 py-0.5 text-[11px] font-semibold ${statusBadgeClassName(item.normalized_status)}`}>
+        {statusLabel(item)}
+      </span>
+      <span className="absolute right-2 top-2 z-10 rounded bg-black/50 px-1.5 py-0.5 text-[10px] font-medium text-white">
+        {BRAND_LABELS[item.brand]}
       </span>
       {thumbnailUrl ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -170,13 +179,13 @@ function ClassImage({ imageKey, status }: { imageKey: string | null; status: Cul
 
 function ClassCard({ item, onSelect }: { item: CultureClubClass; onSelect: (item: CultureClubClass) => void }) {
   const hasMaterialFee = item.class_material_fee != null && item.class_material_fee > 0;
+  const ageLabel = formatAgeRangeMonths(item.min_age_months, item.max_age_months);
+  // 롯데마트 전용 배지(할인/마감임박/신설)는 raw_extra에 있다 — 이마트는 해당 없음.
+  const discountBadge = item.brand === 'lottemart' ? (item.raw_extra.discount_badge_text as string | null) : null;
+  const isClosingSoon = item.brand === 'lottemart' ? Boolean(item.raw_extra.is_closing_soon) : false;
+  const isNew = item.brand === 'lottemart' ? Boolean(item.raw_extra.is_new) : false;
+
   return (
-    // [상세보기 — 클릭 반응 없음 수정](2026-10-03 사용자 지적): "왜 눌렀을때 반응이
-    // 없어? 누르면 상세페이지가 바텀시트로 나와야 하는거 아니야?" — 카드 전체를
-    // 클릭 가능하게 하되, 찜 버튼 클릭은 별도로 막아(아래 stopPropagation) 상세
-    // 시트가 함께 열리지 않게 한다. 카드 안에 찜 버튼(<button>)이 중첩되므로
-    // 카드 자체는 <button>이 아니라 role="button"인 <div>로 둔다(버튼 중첩은
-    // 유효한 HTML이 아님).
     <div
       role="button"
       tabIndex={0}
@@ -186,11 +195,20 @@ function ClassCard({ item, onSelect }: { item: CultureClubClass; onSelect: (item
       }}
       className="flex cursor-pointer flex-col overflow-hidden rounded-xl border border-gray-200 bg-white text-left"
     >
-      <ClassImage imageKey={item.main_image_key} status={item.filter_status} />
+      <ClassImage item={item} />
       <div className="flex flex-col gap-1 p-2.5">
+        {(discountBadge || isClosingSoon || isNew) && (
+          <div className="flex items-center gap-1">
+            {discountBadge && <span className="rounded bg-rose-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">{discountBadge}</span>}
+            {isClosingSoon && <span className="rounded bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">마감임박</span>}
+            {isNew && <span className="rounded bg-blue-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">신설</span>}
+          </div>
+        )}
         <div className="flex items-center justify-between">
-          <span className="text-[11px] text-gray-400">{item.sub_category_name ?? '-'}</span>
-          {item.class_capacity != null && <span className="text-[11px] text-gray-400">정원 {item.class_capacity}명</span>}
+          <span className="text-[11px] text-gray-400">
+            {item.sub_category_name ?? '-'}
+            {ageLabel ? ` · ${ageLabel}` : ''}
+          </span>
         </div>
         <p className="line-clamp-2 text-sm font-medium text-gray-900">{item.class_title}</p>
         <div className="flex items-center justify-between">
@@ -202,34 +220,21 @@ function ClassCard({ item, onSelect }: { item: CultureClubClass; onSelect: (item
               </span>
             )}
           </p>
-          {/* [찜 아이콘 — 연결됨](2026-10-03 사용자 지시: "찜/알람은 같은 기능이니깐
-              두 테이블 데이터 전부 참조할 수 있도록 확장") user_bookmarks가
-              emart_class_id로 확장돼 스팟/이벤트와 동일한 BookmarkButton을 그대로
-              쓴다(열심맘 이상 노출, 우수맘 이상은 예약 알람 캡 대상에도 합산 —
-              2026-10-04 사용자 지시로 캡 20→10개 하향, DEFAULT_EVENT_BOOKMARK_CAP
-              참고). */}
           <span onClick={(e) => e.stopPropagation()}>
-            <BookmarkButton target={{ kind: 'emart_class', emartClassId: item.class_id }} />
+            <BookmarkButton target={toBookmarkTarget(item)} />
           </span>
         </div>
         <hr className="my-0.5 border-gray-100" />
         <p className="text-[11px] text-gray-400">
-          일정 {(item.class_day ?? []).join(',')} {formatTimeRange(item.start_time, item.end_time)}
+          {item.store_name ?? ''} 일정 {(item.class_day ?? []).join(',')} {formatTimeRange(item.start_time, item.end_time)}
         </p>
       </div>
     </div>
   );
 }
 
-// [접수 시작 안내 — 우수맘 전용](2026-10-03 사용자 지시): "그 접수대기상태라면
-// 우리도 그 접수기간을 내부적으로 알고 있으니.. 현재 접수대기인 것들에 대하여
-// 찜할때.. 우수맘등급? 그 알람받는 등급한테는 몇시에 접수예정이라 ... 찜할때 해당
-// 강좌는 몇일 몇시에 열립니다.라는 인폼주는데 사용하자" — 접수기간 자체는 숨기되,
-// "접수대기" 상태인 강좌에 한해 예약 알람 대상 등급(우수맘 이상,
-// canReceivePushNotifications)에게만 "언제 열리는지 + 찜하면 알림 준다"는 안내를
-// 보여준다. event-reservation-reminder-hint.tsx와 동일한 패턴(자기완결적 — 로그인/
-// 등급을 스스로 확인)이지만, 이미 로드된 item.register_start_date를 그대로 쓰므로
-// 별도 API 호출은 필요 없다.
+// [접수 시작 안내 — 우수맘 전용] register_start_at이 아직 미래인 강좌에 한해
+// 예약 알람 대상 등급에게만 안내한다(기존 두 화면의 동일 패턴 유지).
 function CultureClubReservationHint({ item }: { item: CultureClubClass }) {
   const { user } = useUser();
   const [canShow, setCanShow] = useState(false);
@@ -248,35 +253,39 @@ function CultureClubReservationHint({ item }: { item: CultureClubClass }) {
     };
   }, [user]);
 
-  const registerStart = parseRegisterStartDate(item.register_start_date);
-  const isUpcoming = item.filter_status === '접수대기' && registerStart != null && registerStart.getTime() > Date.now();
-
+  const isUpcoming = item.register_start_at != null && new Date(item.register_start_at).getTime() > Date.now();
   if (!canShow || !isUpcoming) return null;
 
   return (
     <div className="mt-3 rounded-xl border border-amber-100 bg-amber-50 p-3">
       <p className="text-sm font-medium text-amber-900">🔔 접수 시작 안내</p>
       <p className="mt-0.5 text-xs text-amber-700">
-        {formatRegisterStart(item.register_start_date)}에 접수가 시작돼요 — 찜(❤️)해두면 10분 전에 알림을 보내드려요.
+        {formatRegisterStart(item.register_start_at)}에 접수가 시작돼요 — 찜(❤️)해두면 미리 알림을 보내드려요.
       </p>
     </div>
   );
 }
 
-// [클래스 상세 바텀시트](2026-10-03 사용자 지시, `reference/emart culture club
-// detail.png` 참고): "이미지 똑같은게 좀더 크게 좌측에 보이고 오른쪽도 목록
-// 리스트에 있는게 좀더 크게 보이는 구조" — 이미지(좌, 모바일에선 위) + 정보(우,
-// 모바일에선 아래) 2분할, 액션 2개(찜 = 참고 화면의 "클래스 담기"에 대응, "클래스
-// 신청하러 가기" = "클래스 신청하기"에 대응하되 실제 신청은 이마트 사이트에서
-// 처리하므로 외부 링크), 그 아래 "클래스소개"(실제로 수집된 class_detail_content)
-// 접이식 섹션. "강사정보"/"FAQ"는 참고 화면에 있지만 우리가 아직 그 데이터를
-// 수집하지 않아(현재 GraphQL 쿼리는 classDetail.classDetailInfo만 가져옴) 이번
-// 범위에서 제외했다 — 실제 쿼리를 확인하면 추가한다(추측으로 필드를 지어내지 않음,
-// 제3장 제5조).
 function CultureClubDetailSheet({ item, onClose }: { item: CultureClubClass; onClose: () => void }) {
   const [isIntroOpen, setIsIntroOpen] = useState(true);
   const hasMaterialFee = item.class_material_fee != null && item.class_material_fee > 0;
-  const thumbnailUrl = buildCultureClubThumbnailUrl(item.main_image_key);
+  const ageLabel = formatAgeRangeMonths(item.min_age_months, item.max_age_months);
+  const imageKey = item.brand === 'emart' ? (item.raw_extra.main_image_key as string | null | undefined) : null;
+  const thumbnailUrl = buildCultureClubThumbnailUrl(imageKey);
+  const externalUrl = buildExternalApplyUrl(item);
+  // 접수마감/접수불가(롯데마트) 상태일 땐 외부 신청 버튼을 비활성 처리한다
+  // (실측 확인 — 눌러도 "접수가 마감되었습니다" 안내만 뜨고 신청으로 안 이어짐).
+  const isClosed = item.raw_status === '접수마감' || item.raw_status === '접수불가';
+
+  // 브랜드마다 "소개" 텍스트가 다른 raw_extra 키에 있다(이마트: class_detail_title/
+  // content, 롯데마트: class_intro/class_tip) — 있는 쪽만 보여준다.
+  const introTitle = item.brand === 'emart' ? (item.raw_extra.class_detail_title as string | null) : null;
+  const introBody =
+    item.brand === 'emart' ? (item.raw_extra.class_detail_content as string | null) : (item.raw_extra.class_intro as string | null);
+  const introExtra = item.brand === 'lottemart' ? (item.raw_extra.class_tip as string | null) : null;
+
+  const capacity = item.brand === 'emart' ? (item.raw_extra.class_capacity as number | null) : null;
+  const likeCount = item.brand === 'lottemart' ? (item.raw_extra.like_count as number | null) : null;
 
   return (
     <div className="fixed inset-0 bg-black/40 z-50 flex items-end md:items-center justify-center" onClick={onClose}>
@@ -285,7 +294,7 @@ function CultureClubDetailSheet({ item, onClose }: { item: CultureClubClass; onC
         onClick={(e) => e.stopPropagation()}
       >
         <div className="shrink-0 p-4 border-b border-gray-100 flex items-center justify-between">
-          <span className="text-base font-bold text-gray-900">클래스 상세</span>
+          <span className="text-base font-bold text-gray-900">{BRAND_LABELS[item.brand]} 강좌 상세</span>
           <button type="button" onClick={onClose} className="shrink-0 text-gray-400 hover:text-gray-600" aria-label="닫기">
             ✕
           </button>
@@ -294,9 +303,9 @@ function CultureClubDetailSheet({ item, onClose }: { item: CultureClubClass; onC
         <div className="flex flex-col md:flex-row gap-4 p-4">
           <div className="relative aspect-square w-full md:w-1/2 overflow-hidden rounded-xl bg-gray-100 shrink-0">
             <span
-              className={`absolute left-2 top-2 z-10 rounded px-1.5 py-0.5 text-[11px] font-semibold ${statusBadgeClassName(item.filter_status)}`}
+              className={`absolute left-2 top-2 z-10 rounded px-1.5 py-0.5 text-[11px] font-semibold ${statusBadgeClassName(item.normalized_status)}`}
             >
-              {statusLabel(item.filter_status)}
+              {statusLabel(item)}
             </span>
             {thumbnailUrl ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -309,8 +318,12 @@ function CultureClubDetailSheet({ item, onClose }: { item: CultureClubClass; onC
           </div>
 
           <div className="flex flex-col gap-1.5 md:w-1/2">
-            <span className="text-xs text-gray-400">{item.sub_category_name ?? '-'}</span>
+            <span className="text-xs text-gray-400">
+              {item.sub_category_name ?? '-'}
+              {ageLabel ? ` · ${ageLabel}` : ''}
+            </span>
             <h2 className="text-lg font-bold text-gray-900">{item.class_title}</h2>
+            {item.instructor_name && <p className="text-sm text-gray-500">강사 {item.instructor_name}</p>}
             <p className="text-lg font-semibold text-gray-900">
               {item.class_fee != null ? `${item.class_fee.toLocaleString('ko-KR')}원` : '무료'}
               {hasMaterialFee && (
@@ -321,29 +334,37 @@ function CultureClubDetailSheet({ item, onClose }: { item: CultureClubClass; onC
             </p>
             <hr className="my-1 border-gray-100" />
             <p className="text-sm text-gray-500">
-              일정 {(item.class_day ?? []).join(',')} {formatTimeRange(item.start_time, item.end_time)}
+              {formatScheduleDate(item.schedule_start_date)} ({(item.class_day ?? []).join(',')}) {formatTimeRange(item.start_time, item.end_time)}
+              {item.total_sessions != null ? ` · 총 ${item.total_sessions}회` : ''}
             </p>
             {item.store_name && <p className="text-sm text-gray-500">접수가능지점 {item.store_name}</p>}
-            {item.class_capacity != null && <p className="text-sm text-gray-500">정원 {item.class_capacity}명</p>}
+            {capacity != null && <p className="text-sm text-gray-500">정원 {capacity}명</p>}
+            {likeCount != null && <p className="text-sm text-gray-500">좋아요 {likeCount}</p>}
 
             <div className="mt-2 flex items-center gap-2">
               <div className="flex items-center justify-center rounded-lg border border-gray-300 px-3 py-2">
-                <BookmarkButton target={{ kind: 'emart_class', emartClassId: item.class_id }} />
+                <BookmarkButton target={toBookmarkTarget(item)} />
               </div>
-              <a
-                href={buildEmartClassUrl(item.class_id)}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 rounded-lg bg-orange-500 px-4 py-2 text-center text-sm font-semibold text-white hover:bg-orange-600"
-              >
-                클래스 신청하러 가기 ↗
-              </a>
+              {externalUrl && !isClosed ? (
+                <a
+                  href={externalUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 rounded-lg bg-orange-500 px-4 py-2 text-center text-sm font-semibold text-white hover:bg-orange-600"
+                >
+                  {statusLabel(item)}하러 가기 ↗
+                </a>
+              ) : (
+                <span className="flex-1 rounded-lg bg-gray-200 px-4 py-2 text-center text-sm font-semibold text-gray-500">
+                  {statusLabel(item)}
+                </span>
+              )}
             </div>
             <CultureClubReservationHint item={item} />
           </div>
         </div>
 
-        {item.class_detail_content && (
+        {(introBody || introExtra) && (
           <div className="border-t border-gray-100 p-4">
             <button
               type="button"
@@ -355,8 +376,9 @@ function CultureClubDetailSheet({ item, onClose }: { item: CultureClubClass; onC
             </button>
             {isIntroOpen && (
               <div className="mt-2 whitespace-pre-wrap text-sm text-gray-600">
-                {item.class_detail_title && <p className="mb-1 font-medium text-gray-800">{item.class_detail_title}</p>}
-                {item.class_detail_content}
+                {introTitle && <p className="mb-1 font-medium text-gray-800">{introTitle}</p>}
+                {introBody}
+                {introExtra && <p className="mt-2 text-xs text-gray-500">{introExtra}</p>}
               </div>
             )}
           </div>
@@ -366,43 +388,13 @@ function CultureClubDetailSheet({ item, onClose }: { item: CultureClubClass; onC
   );
 }
 
-// [브랜드 전환](2026-10-04 사용자 지시로 롯데마트 추가): 저장 스키마가 브랜드마다
-// 완전히 달라(2026-10-04 사용자 확인 — 억지로 표준화하지 않음) 공통 컴포넌트로
-// 묶지 않고, 최상단 브랜드 pill로 어느 브랜드의 화면(이마트=이 파일의
-// EmartCultureClubView, 롯데마트=LottemartCultureClubView)을 보여줄지만 전환한다.
 export function CultureClubTabView() {
-  const [brandKey, setBrandKey] = useState<CultureClubBrandKey>('emart');
-
-  return (
-    <div className="flex flex-1 flex-col overflow-hidden">
-      <div className="flex items-center gap-2 border-b border-gray-100 p-3 pb-2">
-        {CULTURE_CLUB_BRAND_OPTIONS.map((brand) => {
-          const isActive = brandKey === brand.key;
-          return (
-            <button
-              key={brand.key}
-              type="button"
-              aria-pressed={isActive}
-              onClick={() => setBrandKey(brand.key)}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                isActive ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-              }`}
-            >
-              {brand.label}
-            </button>
-          );
-        })}
-      </div>
-      {brandKey === 'emart' ? <EmartCultureClubView /> : <LottemartCultureClubView />}
-    </div>
-  );
-}
-
-function EmartCultureClubView() {
+  const [brandKey, setBrandKey] = useState<CultureClubBrandKey>('all');
   const [stores, setStores] = useState<StoreOption[]>([]);
   const [storeCode, setStoreCode] = useState<string | null>(null);
   const [selectedDays, setSelectedDays] = useState<Set<CultureClubDay>>(new Set());
   const [selectedSubCategories, setSelectedSubCategories] = useState<Set<CultureClubSubCategory>>(new Set());
+  const [selectedTargets, setSelectedTargets] = useState<Set<string>>(new Set());
   const [items, setItems] = useState<CultureClubClass[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -410,35 +402,48 @@ function EmartCultureClubView() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<CultureClubClass | null>(null);
 
-  // 지점 목록은 마운트 시 한 번만 불러온다(브랜드 전환은 상위 CultureClubTabView가
-  // 이 컴포넌트 자체를 언마운트/재마운트하는 방식이라 별도 brandKey 의존성 불필요).
+  // [지점 — 브랜드별 전용 목록] 지점 코드 네임스페이스가 브랜드마다 달라 "전체"
+  // 선택 시에는 지점 필터 자체를 숨긴다(특정 브랜드를 짐작해서 보여주지 않음).
   useEffect(() => {
-    fetch('/api/culture-club/stores')
+    setStoreCode(null);
+    setSelectedSubCategories(new Set());
+    setSelectedTargets(new Set());
+    if (brandKey === 'all') {
+      setStores([]);
+      return;
+    }
+    const endpoint = brandKey === 'emart' ? '/api/culture-club/stores' : '/api/culture-club/lottemart-stores';
+    fetch(endpoint)
       .then((res) => res.json())
       .then((data: { stores?: StoreOption[] }) => {
         const list = data.stores ?? [];
         setStores(list);
-        setStoreCode((prev) => prev ?? list[0]?.storeCode ?? null);
+        setStoreCode(list[0]?.storeCode ?? null);
       })
       .catch(() => setStores([]));
-  }, []);
+  }, [brandKey]);
 
   const buildUrl = useCallback(
     (targetPage: number) => {
       const params = new URLSearchParams();
-      params.set('store_code', storeCode ?? '');
+      if (brandKey !== 'all') params.set('brand', brandKey);
+      if (brandKey !== 'all' && storeCode) params.set('store_code', storeCode);
       if (selectedDays.size > 0) params.set('days', [...selectedDays].join(','));
-      if (selectedSubCategories.size > 0) params.set('sub_category_name', [...selectedSubCategories].join(','));
+      if (brandKey === 'emart' && selectedSubCategories.size > 0) params.set('sub_category_name', [...selectedSubCategories].join(','));
+      if (brandKey === 'lottemart' && selectedTargets.size > 0) params.set('target_code', [...selectedTargets].join(','));
       params.set('page', String(targetPage));
       params.set('page_size', String(PAGE_SIZE));
-      return `/api/culture-club/classes?${params.toString()}`;
+      return `/api/culture-club/search?${params.toString()}`;
     },
-    [storeCode, selectedDays, selectedSubCategories]
+    [brandKey, storeCode, selectedDays, selectedSubCategories, selectedTargets]
   );
 
-  // 지점/요일/카테고리 필터가 바뀌면 항상 1페이지부터 새로 조회한다.
+  // 브랜드가 특정 마트인데 아직 지점 목록을 못 받아온 상태(storeCode가 아직
+  // null)에서는 조회하지 않는다 — "전체"는 지점이 필요 없으니 바로 조회한다.
+  const isWaitingForStore = brandKey !== 'all' && !storeCode;
+
   useEffect(() => {
-    if (!storeCode) return;
+    if (isWaitingForStore) return;
     let cancelled = false;
     setIsLoading(true);
     setErrorMessage(null);
@@ -464,7 +469,7 @@ function EmartCultureClubView() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [storeCode, selectedDays, selectedSubCategories]);
+  }, [brandKey, storeCode, selectedDays, selectedSubCategories, selectedTargets, isWaitingForStore]);
 
   const loadMore = useCallback(() => {
     const nextPage = page + 1;
@@ -483,10 +488,8 @@ function EmartCultureClubView() {
 
   const isEmpty = !isLoading && !errorMessage && items.length === 0;
   const hasMorePages = items.length < total;
+  const hasActiveFilters = selectedDays.size > 0 || selectedSubCategories.size > 0 || selectedTargets.size > 0;
 
-  // [필터+리스트 단일 스크롤](2026-10-03 사용자 지시): "스크롤내리면 위에 검색조건도
-  // 같이 위로 딸려올라가고" — 필터 영역을 더 이상 shrink-0으로 고정하지 않고, 이
-  // 컨테이너 하나가 전체(필터+리스트)를 스크롤한다. 무한스크롤도 이 컨테이너 기준.
   function handleScroll(e: React.UIEvent<HTMLDivElement>) {
     if (!hasMorePages || isLoading) return;
     const el = e.currentTarget;
@@ -499,108 +502,153 @@ function EmartCultureClubView() {
   function resetFilters() {
     setSelectedDays(new Set());
     setSelectedSubCategories(new Set());
+    setSelectedTargets(new Set());
   }
 
   return (
-    <div className="flex-1 overflow-y-auto" onScroll={handleScroll}>
-      <div className="flex flex-col gap-2 p-3 border-b border-gray-100">
-        {(selectedDays.size > 0 || selectedSubCategories.size > 0) && (
-          <div className="flex items-center justify-end px-1">
-            <button type="button" onClick={resetFilters} className="text-xs text-gray-400 hover:text-gray-600">
-              ↻ 초기화
-            </button>
+    <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex-1 overflow-y-auto" onScroll={handleScroll}>
+        <div className="flex flex-col gap-2 p-3 border-b border-gray-100">
+          {/* 브랜드 필터 — 전체(기본)/이마트/롯데마트. */}
+          <div className="flex items-center gap-2 px-1">
+            {CULTURE_CLUB_BRAND_OPTIONS.map((brand) => {
+              const isActive = brandKey === brand.key;
+              return (
+                <button
+                  key={brand.key}
+                  type="button"
+                  aria-pressed={isActive}
+                  onClick={() => setBrandKey(brand.key)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    isActive ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  {brand.label}
+                </button>
+              );
+            })}
           </div>
-        )}
 
-        {/* 지점 선택 — 단일선택, 클릭 한 번으로 바로 전환된다(네이티브 select). */}
-        <div className="flex items-center gap-2 px-1">
-          <label htmlFor="culture-club-store" className="text-sm text-gray-500 shrink-0">
-            지점
-          </label>
-          <select
-            id="culture-club-store"
-            value={storeCode ?? ''}
-            onChange={(e) => setStoreCode(e.target.value)}
-            className="flex-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
-          >
-            {stores.map((store) => (
-              <option key={store.storeCode} value={store.storeCode}>
-                {store.label}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {/* 요일 필터 — 다중선택 OR. */}
-        <div className="flex gap-1.5 overflow-x-auto px-1">
-          {CULTURE_CLUB_DAY_OPTIONS.map((day) => {
-            const isActive = selectedDays.has(day);
-            return (
-              <button
-                key={day}
-                type="button"
-                aria-pressed={isActive}
-                onClick={() => setSelectedDays((prev) => toggleInSet(prev, day))}
-                className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  isActive ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                {day}
+          {hasActiveFilters && (
+            <div className="flex items-center justify-end px-1">
+              <button type="button" onClick={resetFilters} className="text-xs text-gray-400 hover:text-gray-600">
+                ↻ 초기화
               </button>
-            );
-          })}
-        </div>
+            </div>
+          )}
 
-        {/* 카테고리 필터 — 다중선택 OR. */}
-        <div className="flex gap-1.5 overflow-x-auto px-1 pb-1">
-          {CULTURE_CLUB_SUB_CATEGORY_OPTIONS.map((category) => {
-            const isActive = selectedSubCategories.has(category);
-            return (
-              <button
-                key={category}
-                type="button"
-                aria-pressed={isActive}
-                onClick={() => setSelectedSubCategories((prev) => toggleInSet(prev, category))}
-                className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                  isActive ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
-                }`}
+          {/* 지점 선택 — "전체"일 땐 지점 네임스페이스가 브랜드마다 달라 숨긴다. */}
+          {brandKey !== 'all' && (
+            <div className="flex items-center gap-2 px-1">
+              <label htmlFor="culture-club-store" className="text-sm text-gray-500 shrink-0">
+                지점
+              </label>
+              <select
+                id="culture-club-store"
+                value={storeCode ?? ''}
+                onChange={(e) => setStoreCode(e.target.value)}
+                className="flex-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
               >
-                {category}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+                {stores.map((store) => (
+                  <option key={store.storeCode} value={store.storeCode}>
+                    {store.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
-      <div className="p-3">
-        {isLoading && items.length === 0 && <EventListSkeleton label="문화센터 강좌 불러오는 중" />}
-        {errorMessage && <p className="text-sm text-red-500">{errorMessage}</p>}
-        {isEmpty && <EmptyState onReset={resetFilters} />}
-        {items.length > 0 && (
-          <p className="mb-2 text-[11px] text-gray-400">
-            ⏱ 마지막 업데이트 {formatUpdatedAt(items[0].collected_at)} · 접수 상태는 하루 1회 갱신돼요
-          </p>
-        )}
-        {items.length > 0 && (
-          // [그리드 반응형](2026-10-03 사용자 지시): "캡쳐한게 pc기준으로해서 이벤트
-          // 카드가 4개가 1row로 되어있는데... 모바일에선 2개정도가 한계이지 않을까?" —
-          // 모바일 2열, md 이상(태블릿/PC)에서 참고 화면과 동일하게 4열.
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            {items.map((item, index) =>
-              (index + 1) % AD_SLOT_INTERVAL === 0 ? (
-                <div key={item.class_id} className="contents">
-                  <div className="col-span-full">
-                    <CultureClubAdSlot />
+          {/* 요일 필터 — 다중선택 OR, 모든 브랜드 공통. */}
+          <div className="flex gap-1.5 overflow-x-auto px-1">
+            {CULTURE_CLUB_DAY_OPTIONS.map((day) => {
+              const isActive = selectedDays.has(day);
+              return (
+                <button
+                  key={day}
+                  type="button"
+                  aria-pressed={isActive}
+                  onClick={() => setSelectedDays((prev) => toggleInSet(prev, day))}
+                  className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                    isActive ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                  }`}
+                >
+                  {day}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* 카테고리(이마트)/대상(롯데마트) 필터 — 분류 체계가 서로 달라 "전체"
+              에서는 숨기고, 해당 브랜드를 골랐을 때만 그 브랜드의 필터를 보여준다. */}
+          {brandKey === 'emart' && (
+            <div className="flex gap-1.5 overflow-x-auto px-1 pb-1">
+              {CULTURE_CLUB_SUB_CATEGORY_OPTIONS.map((category) => {
+                const isActive = selectedSubCategories.has(category);
+                return (
+                  <button
+                    key={category}
+                    type="button"
+                    aria-pressed={isActive}
+                    onClick={() => setSelectedSubCategories((prev) => toggleInSet(prev, category))}
+                    className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                      isActive ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {category}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {brandKey === 'lottemart' && (
+            <div className="flex gap-1.5 overflow-x-auto px-1 pb-1">
+              {LOTTEMART_TARGET_OPTIONS.map((target) => {
+                const isActive = selectedTargets.has(target.code);
+                return (
+                  <button
+                    key={target.code}
+                    type="button"
+                    aria-pressed={isActive}
+                    onClick={() => setSelectedTargets((prev) => toggleInSet(prev, target.code))}
+                    className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                      isActive ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
+                    {target.label}
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        <div className="p-3">
+          {isLoading && items.length === 0 && <EventListSkeleton label="문화센터 강좌 불러오는 중" />}
+          {errorMessage && <p className="text-sm text-red-500">{errorMessage}</p>}
+          {isEmpty && <EmptyState onReset={resetFilters} />}
+          {items.length > 0 && (
+            <p className="mb-2 text-[11px] text-gray-400">
+              ⏱ 마지막 업데이트 {formatUpdatedAt(items[0].collected_at)} · 접수 상태는 하루 1회 갱신돼요(찜하면 더 자주 확인해 알려드려요)
+            </p>
+          )}
+          {items.length > 0 && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {items.map((item, index) =>
+                (index + 1) % AD_SLOT_INTERVAL === 0 ? (
+                  <div key={item.id} className="contents">
+                    <div className="col-span-full">
+                      <CultureClubAdSlot />
+                    </div>
+                    <ClassCard item={item} onSelect={setSelectedItem} />
                   </div>
-                  <ClassCard item={item} onSelect={setSelectedItem} />
-                </div>
-              ) : (
-                <ClassCard key={item.class_id} item={item} onSelect={setSelectedItem} />
-              )
-            )}
-          </div>
-        )}
-        {isLoading && items.length > 0 && <p className="mt-4 text-center text-xs text-gray-400">불러오는 중...</p>}
+                ) : (
+                  <ClassCard key={item.id} item={item} onSelect={setSelectedItem} />
+                )
+              )}
+            </div>
+          )}
+          {isLoading && items.length > 0 && <p className="mt-4 text-center text-xs text-gray-400">불러오는 중...</p>}
+        </div>
       </div>
       {selectedItem && <CultureClubDetailSheet item={selectedItem} onClose={() => setSelectedItem(null)} />}
     </div>

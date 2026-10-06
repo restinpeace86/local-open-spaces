@@ -813,13 +813,17 @@ describe('HomeView', () => {
       expect(container.querySelector('section[aria-label="카테고리별 행사"]')).not.toBeNull();
     });
 
-    it('"🏫 문화센터" 탭을 누르면 문화센터 필터 UI가 보이고 기존 이벤트 콘텐츠는 사라진다', async () => {
+    // [통합검색으로 전환](2026-10-06, Decision 028): 문화센터 탭의 기본값이
+    // "이마트"에서 "전체"(브랜드 무관 통합검색)로 바뀌어, 더 이상 진입 즉시
+    // 지점 선택이 보이지 않는다(브랜드를 하나 골라야만 지점이 의미 있어짐).
+    it('"🏫 문화센터" 탭을 누르면 통합검색 브랜드 필터가 보이고 기존 이벤트 콘텐츠는 사라진다', async () => {
       const { container } = render(<HomeView initialHeroEvents={[]} />);
 
       fireEvent.click(screen.getByText('🏫 문화센터'));
 
-      expect(await screen.findByText('지점')).toBeInTheDocument();
+      expect(await screen.findByText('전체')).toBeInTheDocument();
       expect(screen.getByText('이마트 컬처클럽')).toBeInTheDocument();
+      expect(screen.getByText('롯데마트 문화센터')).toBeInTheDocument();
       expect(container.querySelector('section[aria-label="카테고리별 행사"]')).toBeNull();
     });
 
@@ -827,10 +831,10 @@ describe('HomeView', () => {
       const { container } = render(<HomeView initialHeroEvents={[]} />);
 
       fireEvent.click(screen.getByText('🏫 문화센터'));
-      expect(await screen.findByText('지점')).toBeInTheDocument();
+      await screen.findByText('이마트 컬처클럽');
 
       fireEvent.click(screen.getByText('이벤트'));
-      expect(screen.queryByText('지점')).not.toBeInTheDocument();
+      expect(screen.queryByText('이마트 컬처클럽')).not.toBeInTheDocument();
       expect(container.querySelector('section[aria-label="카테고리별 행사"]')).not.toBeNull();
     });
   });
