@@ -1029,7 +1029,7 @@ export function RawDataModal({
             </button>
           </div>
 
-          {table !== 'raw_ingest_data' && table !== 'curated_items' && table !== 'spot_curations' && table !== 'mom_pick_posts' && table !== 'mom_pick_unmapped_spots' && table !== 'spot_dedup' && table !== 'category_mapping' && table !== 'myrealtrip_search' && table !== 'spot_notices' && table !== 'emart_culture_club' && table !== 'lottemart_culture_club' && onCategoryMinUpdated && (
+          {table !== 'raw_ingest_data' && table !== 'curated_items' && table !== 'spot_curations' && table !== 'mom_pick_posts' && table !== 'mom_pick_unmapped_spots' && table !== 'spot_dedup' && table !== 'category_mapping' && table !== 'myrealtrip_search' && table !== 'spot_notices' && table !== 'culture_club' && onCategoryMinUpdated && (
             <CategoryMinEditor
               table={table}
               row={row as AdminOpenSpaceRow | AdminEventRow}

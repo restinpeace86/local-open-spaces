@@ -128,12 +128,10 @@ export default async function AdminDataGridPage() {
         // [네이버 플레이스 공지 온디맨드 레이더](2026-09-19): SpotNoticesPanel도
         // 동일하게 자기완결적이라 빈 객체만 넘긴다.
         spot_notices: {},
-        // [이마트 컬처클럽 강좌 리스트 탭](2026-10-03 사용자 지시): EmartCultureClubPanel도
-        // 동일하게 자기완결적이라 빈 객체만 넘긴다.
-        emart_culture_club: {},
-        // [롯데마트 문화센터 강좌 리스트 탭](2026-10-04 사용자 지시): LottemartCultureClubPanel도
-        // 동일하게 자기완결적이라 빈 객체만 넘긴다.
-        lottemart_culture_club: {},
+        // [문화센터 통합 관리자 탭](2026-10-06 사용자 지시, Decision 028):
+        // CultureClubPanel도 동일하게 자기완결적이라 빈 객체만 넘긴다(이마트/
+        // 롯데마트 전용 탭 2개를 하나로 합침).
+        culture_club: {},
       }}
     />
   );

@@ -19,8 +19,7 @@ import { SpotDedupPanel } from '@/components/admin/spot-dedup-panel';
 import { CategoryMappingPanel } from '@/components/admin/category-mapping-panel';
 import { MyRealTripSearchPanel } from '@/components/admin/myrealtrip-search-panel';
 import { SpotNoticesPanel } from '@/components/admin/spot-notices-panel';
-import { EmartCultureClubPanel } from '@/components/admin/emart-culture-club-panel';
-import { LottemartCultureClubPanel } from '@/components/admin/lottemart-culture-club-panel';
+import { CultureClubPanel } from '@/components/admin/culture-club-panel';
 import { ServiceCategory } from '@/lib/admin/service-category';
 import { isKidsSpaceReviewCandidate } from '@/lib/admin/kids-space-candidate';
 
@@ -60,8 +59,7 @@ export type AdminTable =
   | 'category_mapping'
   | 'myrealtrip_search'
   | 'spot_notices'
-  | 'emart_culture_club'
-  | 'lottemart_culture_club';
+  | 'culture_club';
 
 export type AdminOpenSpaceRow = {
   id: string;
@@ -232,8 +230,7 @@ type FilterOptions = {
   category_mapping: Record<string, never>;
   myrealtrip_search: Record<string, never>;
   spot_notices: Record<string, never>;
-  emart_culture_club: Record<string, never>;
-  lottemart_culture_club: Record<string, never>;
+  culture_club: Record<string, never>;
 };
 
 type TriState = 'all' | 'true' | 'false';
@@ -271,14 +268,10 @@ const TAB_LABEL: Record<AdminTable, string> = {
   // [네이버 플레이스 공지 온디맨드 레이더](2026-09-19 사용자 지시): "관리자 대시보드의
   // '임시 보관함(Staging)'" — 다른 자기완결 탭과 동일한 이유로 분리(제5장 제4조).
   spot_notices: '🔔 공지 스테이징함',
-  // [홈플러스 문화센터 강좌 리스트](2026-10-02 사용자 지시): "/admin/data-grid쪽에
-  // tab 하나 더 만들어서 하는건 안돼?" — 다른 자기완결 탭과 동일한 이유로 분리
-  // (제5장 제4조, homeplus-lecture-list-panel.tsx 주석 참고).
-  emart_culture_club: '🛒 이마트 컬처클럽',
-  // [롯데마트 문화센터 강좌 리스트](2026-10-04 사용자 지시): "관리자화면에
-  // 롯데마트쪽 탭이 안보이는데?" — 이마트 컬처클럽 탭과 동일한 이유로 분리
-  // (제5장 제4조, lottemart-culture-club-panel.tsx 주석 참고).
-  lottemart_culture_club: '🏪 롯데마트 문화센터',
+  // [문화센터 통합 관리자 화면](2026-10-06 사용자 지시, Decision 028): 이마트/
+  // 롯데마트 전용 탭 2개를 culture_club_classes 하나를 보는 탭 하나로 합쳤다
+  // (culture-club-panel.tsx 주석 참고).
+  culture_club: '🏫 문화센터',
 };
 
 // [타임존 버그 수정](2026-09-15 사용자 지시, todo.md [개선사항 4]): 기존
@@ -903,8 +896,7 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
     category_mapping: false,
     myrealtrip_search: false,
     spot_notices: false,
-    emart_culture_club: false,
-    lottemart_culture_club: false,
+    culture_club: false,
   });
 
   // [노출 중분류 개별 행 수정](2026-09-05 사용자 지시) 참고: open_spaces 행을 열 때
@@ -1292,10 +1284,8 @@ export function AdminDataGridClient({ filterOptions }: { filterOptions: FilterOp
         <MyRealTripSearchPanel />
       ) : tab === 'spot_notices' ? (
         <SpotNoticesPanel />
-      ) : tab === 'emart_culture_club' ? (
-        <EmartCultureClubPanel />
-      ) : tab === 'lottemart_culture_club' ? (
-        <LottemartCultureClubPanel />
+      ) : tab === 'culture_club' ? (
+        <CultureClubPanel />
       ) : (
       <>
       {/* [관리자 화면 모바일 필터 영역 축소](2026-09-06 사용자 지시, 2차 수정): "중분류나
