@@ -194,6 +194,7 @@ export type Database = {
           raw_extra: Json
           raw_status: string | null
           register_start_at: string | null
+          reservation_open_reminder_sent_at: string | null
           round: number | null
           schedule_days_code: string[] | null
           schedule_end_date: string | null
@@ -228,6 +229,7 @@ export type Database = {
           raw_extra?: Json
           raw_status?: string | null
           register_start_at?: string | null
+          reservation_open_reminder_sent_at?: string | null
           round?: number | null
           schedule_days_code?: string[] | null
           schedule_end_date?: string | null
@@ -262,6 +264,7 @@ export type Database = {
           raw_extra?: Json
           raw_status?: string | null
           register_start_at?: string | null
+          reservation_open_reminder_sent_at?: string | null
           round?: number | null
           schedule_days_code?: string[] | null
           schedule_end_date?: string | null
@@ -2089,30 +2092,24 @@ export type Database = {
         Row: {
           created_at: string
           culture_club_class_id: number | null
-          emart_class_id: string | null
           event_id: string | null
           id: string
-          lottemart_class_id: string | null
           spot_id: string | null
           user_id: string
         }
         Insert: {
           created_at?: string
           culture_club_class_id?: number | null
-          emart_class_id?: string | null
           event_id?: string | null
           id?: string
-          lottemart_class_id?: string | null
           spot_id?: string | null
           user_id: string
         }
         Update: {
           created_at?: string
           culture_club_class_id?: number | null
-          emart_class_id?: string | null
           event_id?: string | null
           id?: string
-          lottemart_class_id?: string | null
           spot_id?: string | null
           user_id?: string
         }
@@ -2125,25 +2122,11 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "user_bookmarks_emart_class_id_fkey"
-            columns: ["emart_class_id"]
-            isOneToOne: false
-            referencedRelation: "emart_culture_club_classes"
-            referencedColumns: ["class_id"]
-          },
-          {
             foreignKeyName: "user_bookmarks_event_id_fkey"
             columns: ["event_id"]
             isOneToOne: false
             referencedRelation: "events"
             referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "user_bookmarks_lottemart_class_id_fkey"
-            columns: ["lottemart_class_id"]
-            isOneToOne: false
-            referencedRelation: "lottemart_culture_club_classes"
-            referencedColumns: ["class_id"]
           },
           {
             foreignKeyName: "user_bookmarks_spot_id_fkey"
