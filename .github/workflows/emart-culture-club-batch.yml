@@ -14,9 +14,23 @@ name: Emart Culture Club Batch
 #
 # 크론 시간: 기존 daily(17:47 UTC)/monthly(18:52 UTC)/홈플러스(중단됨)와 겹치지
 # 않게 KST 새벽 4시(UTC 19:00)로 분산.
+#
+# [schedule 트리거 비활성화](2026-10-06 사용자 지시: "github action 수동 실행으로
+# 확인결과 여전히 에러남" — 하기사항을 확인하고 이마트쪽은 어떻게 수집하면 좋을지
+# 다시 제안): 지점 64개를 15개씩 5묶음으로 나눈 수정(2026-10-05, 커밋 a9484e8)도
+# WAFForbiddenException(403)을 해결하지 못했다(사용자가 직접 workflow_dispatch로
+# 재현해 에러 로그를 그대로 붙여넣어 확인) — 같은 IP/키로 classId 단건 조회(상세
+# 배치)는 항상 성공하는데, classStatus 필터가 들어간 이 쿼리만 막히는 걸 보면
+# WAF가 요청 크기보다 "이 필터 조합/반복 호출 패턴" 자체를 걸러내는 것으로 보인다
+# (추가 유료 프록시 없이는 GitHub Actions 쪽에서 더 시도할 free 옵션이 없다).
+# 사용자 결정: "로컬 PC에서 새벽배치 및 주기적 실행 + PC 부팅시 1회 실행"으로
+# 임시 전환(scripts/ingest/emart-culture-club.mjs를 그대로 재사용, Windows
+# 작업 스케줄러 "LocalOpenSpaces-EmartBatch"/"LocalOpenSpaces-EmartBatch-OnBoot"
+# 로 실행). schedule 트리거만 꺼둔다 — workflow_dispatch는 남겨서 나중에
+# 프록시 등으로 전환 시 그대로 재활성화할 수 있게 한다.
 on:
-  schedule:
-    - cron: '0 19 * * *'
+  # schedule:
+  #   - cron: '0 19 * * *'
   workflow_dispatch:
 
 jobs:

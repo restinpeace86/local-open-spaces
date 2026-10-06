@@ -23,12 +23,18 @@ describe('randomStartupDelayMs', () => {
 
 describe('applyRandomStartupDelay', () => {
   const originalEventName = process.env.GITHUB_EVENT_NAME;
+  const originalIsScheduledRun = process.env.IS_SCHEDULED_RUN;
 
   afterEach(() => {
     if (originalEventName === undefined) {
       delete process.env.GITHUB_EVENT_NAME;
     } else {
       process.env.GITHUB_EVENT_NAME = originalEventName;
+    }
+    if (originalIsScheduledRun === undefined) {
+      delete process.env.IS_SCHEDULED_RUN;
+    } else {
+      process.env.IS_SCHEDULED_RUN = originalIsScheduledRun;
     }
   });
 
@@ -57,6 +63,7 @@ describe('applyRandomStartupDelay', () => {
 
   it('GITHUB_EVENT_NAME이 schedule이 아니면(수동 트리거/로컬 실행) 지연을 생략한다', async () => {
     delete process.env.GITHUB_EVENT_NAME;
+    delete process.env.IS_SCHEDULED_RUN;
     const log = vi.fn();
     const delayMs = await applyRandomStartupDelay(1000, { log });
 
@@ -66,9 +73,25 @@ describe('applyRandomStartupDelay', () => {
 
   it('GITHUB_EVENT_NAME이 workflow_dispatch면 지연을 생략한다', async () => {
     process.env.GITHUB_EVENT_NAME = 'workflow_dispatch';
+    delete process.env.IS_SCHEDULED_RUN;
     const log = vi.fn();
     const delayMs = await applyRandomStartupDelay(1000, { log });
 
     expect(delayMs).toBe(0);
+  });
+
+  it('IS_SCHEDULED_RUN이 true면(윈도우 작업 스케줄러) GITHUB_EVENT_NAME 없이도 지연을 건다', async () => {
+    delete process.env.GITHUB_EVENT_NAME;
+    process.env.IS_SCHEDULED_RUN = 'true';
+    vi.useFakeTimers();
+    const log = vi.fn();
+    const promise = applyRandomStartupDelay(1000, { log });
+    await vi.runAllTimersAsync();
+    const delayMs = await promise;
+
+    expect(delayMs).toBeGreaterThanOrEqual(0);
+    expect(delayMs).toBeLessThanOrEqual(1000);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining('랜덤 시작 지연'));
+    vi.useRealTimers();
   });
 });

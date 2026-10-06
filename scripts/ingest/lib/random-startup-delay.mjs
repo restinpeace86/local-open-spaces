@@ -17,8 +17,16 @@ export function randomStartupDelayMs(maxMs) {
 // 이 값이 'schedule'이 아니므로(로컬은 아예 설정 자체가 없음), "진짜 예약
 // 실행일 때만" 지연을 건다. 봇처럼 안 보이려는 목적(기계적 트리거 시각을
 // 흔드는 것)은 스케줄 실행에만 의미가 있으므로 이 구분이 취지에도 맞는다.
+//
+// [로컬 PC 작업 스케줄러도 동일하게 취급](2026-10-06, todo.md 개선사항 1 —
+// 이마트 WAF 403 대응으로 메인 배치/찜 상태감시를 Windows 작업 스케줄러로
+// 옮김): GitHub Actions 밖에서는 GITHUB_EVENT_NAME 자체가 없어 위 조건만으로는
+// 항상 "수동 실행"으로 오인된다 — "기계적인 트리거 시각을 흔든다"는 취지는
+// 실행 환경과 무관하므로, 작업 스케줄러가 호출할 때는 명령어에
+// IS_SCHEDULED_RUN=true를 심어 "이것도 예약 실행이다"를 알린다(사람이 터미널에서
+// `node script.mjs`로 직접 돌릴 땐 이 값이 없으니 여전히 바로 실행됨).
 function isScheduledRun() {
-  return process.env.GITHUB_EVENT_NAME === 'schedule';
+  return process.env.GITHUB_EVENT_NAME === 'schedule' || process.env.IS_SCHEDULED_RUN === 'true';
 }
 
 // log는 호출부가 쓰는 콘솔 함수를 그대로 주입받는다(테스트에서 조용히 만들기

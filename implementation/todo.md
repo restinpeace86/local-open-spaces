@@ -48,7 +48,13 @@ Error: Process completed with exit code 1.
 윈도우 작업 스케줄러 활용 (자동화)
 PC를 켜두거나 작업하시는 시간에 스크립트가 백그라운드에서 알아서 돌도록 [윈도우 작업 스케줄러]에 등록해 둡니다. (예: PC 부팅 시 1회 실행)
 
-
+### 진행 상태: 완료(2026-10-06) — implementation/2026-10-06-emart-local-pc-bridge.md 참고
+- GitHub Actions 메인 배치 schedule 트리거 비활성화(workflow_dispatch는 유지).
+- `emart-culture-club-status-watch.mjs` 신규 구현(롯데마트와 동일 설계, 찜한
+  강좌만 class_id+classStatus 필터로 재확인).
+- Windows 작업 스케줄러: `LocalOpenSpaces-EmartStatusWatch`(5분마다) 생성 완료.
+  `LocalOpenSpaces-EmartBatch-OnBoot`(부팅 1회)는 관리자 권한이 필요해 **사용자
+  직접 실행 필요** — 구현 문서에 명령어 명시.
 
 ---
 
