@@ -32,6 +32,14 @@ import { loadEnv } from '../lib/load-env.mjs';
 import { fetchWithTimeout } from './lib/fetch-with-timeout.mjs';
 import { createAdminClient } from './lib/supabase-admin.mjs';
 import { applyRandomStartupDelay } from './lib/random-startup-delay.mjs';
+import { parseAgeRangeToMonths } from './lib/age-range-parser.mjs';
+import {
+  normalizeDaysToCodes,
+  parseRoundFromTitle,
+  parseTotalSessionsFromTitle,
+  yyyymmddToIso,
+} from './lib/schedule-normalizer.mjs';
+import { normalizeEmartStatus, parseInstructorFromTitle } from './lib/culture-club-common.mjs';
 
 const env = loadEnv();
 const SOURCE_KEY = 'EMART_CULTURE_CLUB';
@@ -222,6 +230,25 @@ export function parseRegisterStartAt(raw) {
 export function transform(item, filterStatus) {
   if (!item.classId || !item.classTitle) return null;
 
+  // [개선사항 2 — 연령 정규화](2026-10-06): 이마트는 연령 전용 필드가
+  // 없다(실측 확인) — class_title에 "(8~15개월)"/"(21~22년생)" 식으로
+  // 직접 박혀 있어, 제목 문자열에서 바로 파싱한다.
+  const { minAgeMonths, maxAgeMonths } = parseAgeRangeToMonths(item.classTitle);
+
+  // [개선사항 3 — 일정 정규화](2026-10-06): class_start_date/class_end_date는
+  // 이미 구조화된 YYYYMMDD 텍스트라 Date로 포맷만 바꾼다. round/total_sessions는
+  // 전용 컬럼이 없어 class_title에서 파싱한다(실측: "[3차-...] 4회", "[8주]").
+  const scheduleStartDate = yyyymmddToIso(item.classDateInfo?.classStartDate ?? null);
+  const scheduleEndDate = yyyymmddToIso(item.classDateInfo?.classEndDate ?? null);
+  const scheduleDaysCode = normalizeDaysToCodes(item.classDay ?? null);
+  const round = parseRoundFromTitle(item.classTitle);
+  const totalSessions = parseTotalSessionsFromTitle(item.classTitle);
+
+  // [개선사항 5 — 상태/강사명 정규화](2026-10-06): filter_status를 공통
+  // ENUM으로, class_title에서 강사명을 추출(전용 필드 없음).
+  const instructorName = parseInstructorFromTitle(item.classTitle);
+  const normalizedStatus = normalizeEmartStatus(filterStatus);
+
   return {
     class_id: item.classId,
     class_title: item.classTitle,
@@ -254,6 +281,15 @@ export function transform(item, filterStatus) {
     class_end_date: item.classDateInfo?.classEndDate ?? null,
     class_closed_date: item.classDateInfo?.classClosedDate ?? null,
     filter_status: filterStatus,
+    min_age_months: minAgeMonths,
+    max_age_months: maxAgeMonths,
+    schedule_start_date: scheduleStartDate,
+    schedule_end_date: scheduleEndDate,
+    schedule_days_code: scheduleDaysCode,
+    round,
+    total_sessions: totalSessions,
+    instructor_name: instructorName,
+    normalized_status: normalizedStatus,
   };
 }
 

@@ -28,6 +28,7 @@ import { loadEnv } from '../lib/load-env.mjs';
 import { fetchWithTimeout } from './lib/fetch-with-timeout.mjs';
 import { createAdminClient } from './lib/supabase-admin.mjs';
 import { applyRandomStartupDelay } from './lib/random-startup-delay.mjs';
+import { normalizeEmartStatus } from './lib/culture-club-common.mjs';
 
 const env = loadEnv();
 const GRAPHQL_URL = 'https://wrihg4edszhmvagptse4t4eggi.appsync-api.ap-northeast-2.amazonaws.com/graphql';
@@ -243,7 +244,7 @@ export async function run() {
         changedCount += 1;
         const { error: updateError } = await admin
           .from('emart_culture_club_classes')
-          .update({ filter_status: newStatus })
+          .update({ filter_status: newStatus, normalized_status: normalizeEmartStatus(newStatus) })
           .eq('class_id', row.class_id);
         if (updateError) console.error(`[EMART_STATUS_WATCH] ${row.class_id} 상태 갱신 실패: ${updateError.message}`);
 

@@ -43,6 +43,9 @@ import { loadEnv } from '../lib/load-env.mjs';
 import { fetchWithTimeout } from './lib/fetch-with-timeout.mjs';
 import { createAdminClient } from './lib/supabase-admin.mjs';
 import { applyRandomStartupDelay } from './lib/random-startup-delay.mjs';
+import { parseAgeRangeToMonths } from './lib/age-range-parser.mjs';
+import { normalizeDaysToCodes, yyyymmddToIso } from './lib/schedule-normalizer.mjs';
+import { normalizeLottemartStatus } from './lib/culture-club-common.mjs';
 
 loadEnv();
 
@@ -257,6 +260,19 @@ export function parseRow(tr, context) {
   const emElements = firstTd.querySelectorAll('.info-ico em');
   const { classMaterialFee, discountBadgeText, isClosingSoon, isNew } = parseBadges(emElements);
 
+  // [개선사항 2 — 연령 정규화](2026-10-06): age_range_text(화면에 그대로
+  // 노출되는 원문, 예: "(21~22년생)")를 개월 수로 환산해 함께 저장한다.
+  const { minAgeMonths, maxAgeMonths } = parseAgeRangeToMonths(ageRangeText);
+
+  // [개선사항 3 — 일정 정규화](2026-10-06): 롯데마트는 종료일/차수 개념이
+  // 없다(스펙 본문도 인정) — 항상 null. total_sessions는 기존 session_count를
+  // 그대로 복사(공통 스키마 이름 통일).
+  const scheduleStartDate = yyyymmddToIso(classStartDate ?? null);
+  const scheduleDaysCode = normalizeDaysToCodes(classDay ?? null);
+
+  // [개선사항 5 — 상태 정규화](2026-10-06): registration_status를 공통 ENUM으로.
+  const normalizedStatus = normalizeLottemartStatus(registrationStatus);
+
   return {
     class_id: classId,
     class_title: classTitle,
@@ -282,6 +298,14 @@ export function parseRow(tr, context) {
     semester_code: context.semesterCode,
     target_code: context.targetCode,
     target_name: context.targetName,
+    min_age_months: minAgeMonths,
+    max_age_months: maxAgeMonths,
+    schedule_start_date: scheduleStartDate,
+    schedule_end_date: null,
+    schedule_days_code: scheduleDaysCode,
+    round: null,
+    total_sessions: sessionCount ?? null,
+    normalized_status: normalizedStatus,
   };
 }
 
@@ -362,7 +386,10 @@ export async function markFallenOutRowsAsUnavailable(client, freshClassIds, stor
 
   for (let i = 0; i < staleIds.length; i += UPSERT_CHUNK_SIZE) {
     const chunk = staleIds.slice(i, i + UPSERT_CHUNK_SIZE);
-    const { error } = await client.from('lottemart_culture_club_classes').update({ registration_status: '접수불가' }).in('class_id', chunk);
+    const { error } = await client
+      .from('lottemart_culture_club_classes')
+      .update({ registration_status: '접수불가', normalized_status: normalizeLottemartStatus('접수불가') })
+      .in('class_id', chunk);
     if (error) throw new Error(`접수불가 갱신 실패: ${error.message}`);
   }
   return staleIds.length;

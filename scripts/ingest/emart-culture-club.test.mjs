@@ -66,6 +66,15 @@ describe('emart-culture-club transform', () => {
       class_end_date: '20261003',
       class_closed_date: null,
       filter_status: '접수중',
+      min_age_months: 36,
+      max_age_months: null,
+      schedule_start_date: '2026-10-03',
+      schedule_end_date: '2026-10-03',
+      schedule_days_code: ['SAT'],
+      round: null,
+      total_sessions: null,
+      instructor_name: null,
+      normalized_status: 'OPEN',
     });
   });
 

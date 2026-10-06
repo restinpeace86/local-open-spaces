@@ -85,6 +85,10 @@ PC를 켜두거나 작업하시는 시간에 스크립트가 백그라운드에�
 - TypeScript/JavaScript (또는 Python 중 선택) 기반으로 다양한 이마트/롯데마트 텍스트 패턴을 유연하게 처리할 수 있는 정규식(Regex) 기반의 파싱 함수 코드를 작성해줘.
 - 위 2단계 로직이 함수 내에서 순차적으로 깔끔하게 이어지도록 구조화해줘.
 
+### 진행 상태: 완료(2026-10-06) — implementation/2026-10-06-culture-club-data-normalization.md 참고
+- scripts/ingest/lib/age-range-parser.mjs 구현, 양쪽 ingest 스크립트에 연결,
+  min_age_months/max_age_months 컬럼 추가. 기존 데이터 백필은 백그라운드 실행 중.
+
 ---
 
 [개선사항 3] 이마트 컬처클럽과 롯데마트 문화센터의 강좌 원문 텍스트에서 일정 및 스케줄 관련 정보(시작일, 종료일, 요일, 시간, 총 회차, 차수)를 파싱하여, 데이터베이스 공통 스키마에 맞게 정형화하는 파싱 유틸리티 함수 및 정규식(Regex) 로직을 구현해줘. 
@@ -132,7 +136,11 @@ PC를 켜두거나 작업하시는 시간에 스크립트가 백그라운드에�
 - TypeScript/JavaScript (또는 Python)를 사용하여, 위 패턴들을 유연하게 잡아내는 정규식 기반의 파서 코드를 작성해줘.
 - 데이터 포맷이 일정하지 않거나 누락된 필드가 있을 경우 에러를 내지 않고 안전하게 `null` 또는 기본값으로 처리하는 방어 코드를 반드시 포함해줘.
 
-
+### 진행 상태: 완료(2026-10-06) — implementation/2026-10-06-culture-club-data-normalization.md 참고
+- 실측 확인 결과 startDate/endDate/days/startTime/endTime은 두 마트 다 이미
+  구조화된 컬럼으로 존재해 원문 재파싱 없이 Date/표준코드로 재포맷만 했다.
+  round/totalSessions은 이마트만 전용 컬럼이 없어 제목에서 파싱(scripts/ingest/
+  lib/schedule-normalizer.mjs). 롯데마트는 차수 개념이 없어 항상 null(스펙 인정).
 
 ---
 [개선사항 4] 회원가입 및 온보딩(Onboarding) 프로세스에서 기존에 아이의 '출생 연도(몇 년생)'만 수집하던 자녀 프로필 입력 단계를, **'몇 년 몇 월생(연도 및 월)'**까지 상세히 수집하도록 UI와 데이터 처리 로직을 수정해줘.
@@ -190,3 +198,11 @@ PC를 켜두거나 작업하시는 시간에 스크립트가 백그라운드에�
 ### [구현 요구사항]
 - 다양한 마트의 HTML 구조나 텍스트 포맷 변화에 유연하게 대응할 수 있도록, 정규식(Regex) 또는 DOM 셀렉터 기반의 파싱 로직을 안전하게 작성해줘.
 - 값이 누락되거나 파싱할 수 없는 경우 에러를 내지 않고 `null` 또는 기본값으로 처리하는 방어 코드(Error Handling)를 반드시 포함해줘.
+
+### 진행 상태: 부분 완료(2026-10-06) — implementation/2026-10-06-culture-club-data-normalization.md 참고
+- url: 두 마트 다 프론트엔드에 이미 URL 빌더가 있어(culture-club-tab-view.tsx,
+  culture-club-options.ts) 구현 불필요(중복 금지). fee/materialFee: 두 마트 다
+  이미 정수 컬럼이라 구현 불필요.
+- status: 공통 3단계 ENUM(OPEN/CLOSED/WAITING) 추가해 양쪽 매핑
+  (scripts/ingest/lib/culture-club-common.mjs). instructor: 롯데마트는 이미
+  있음, 이마트는 class_title에서 파싱(전용 필드 없음 — 추측 없이 없으면 null).

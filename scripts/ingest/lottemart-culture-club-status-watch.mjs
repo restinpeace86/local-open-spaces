@@ -30,6 +30,7 @@ import { loadEnv } from '../lib/load-env.mjs';
 import { fetchWithTimeout } from './lib/fetch-with-timeout.mjs';
 import { createAdminClient } from './lib/supabase-admin.mjs';
 import { applyRandomStartupDelay } from './lib/random-startup-delay.mjs';
+import { normalizeLottemartStatus } from './lib/culture-club-common.mjs';
 
 const DETAIL_URL = 'https://culture.lottemart.com/cu/gus/course/courseinfo/courseview.do';
 const REQUEST_PACING_MIN_MS = 1000;
@@ -208,7 +209,7 @@ export async function run() {
         changedCount += 1;
         const { error: updateError } = await admin
           .from('lottemart_culture_club_classes')
-          .update({ registration_status: newStatus })
+          .update({ registration_status: newStatus, normalized_status: normalizeLottemartStatus(newStatus) })
           .eq('class_id', row.class_id);
         if (updateError) console.error(`[LOTTEMART_STATUS_WATCH] ${row.class_id} 상태 갱신 실패: ${updateError.message}`);
 

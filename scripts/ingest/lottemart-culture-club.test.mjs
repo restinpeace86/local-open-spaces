@@ -175,6 +175,14 @@ describe('lottemart-culture-club parseRow', () => {
       semester_code: '202603',
       target_code: '4',
       target_name: '엄마와함께',
+      min_age_months: 13,
+      max_age_months: 28,
+      schedule_start_date: '2026-10-06',
+      schedule_end_date: null,
+      schedule_days_code: ['TUE'],
+      round: null,
+      total_sessions: 8,
+      normalized_status: 'OPEN',
     });
   });
 
@@ -288,7 +296,7 @@ describe('markFallenOutRowsAsUnavailable', () => {
 
     expect(count).toBe(2);
     expect(updateCalls).toHaveLength(1);
-    expect(updateCalls[0].payload).toEqual({ registration_status: '접수불가' });
+    expect(updateCalls[0].payload).toEqual({ registration_status: '접수불가', normalized_status: 'CLOSED' });
     expect(updateCalls[0].ids.sort()).toEqual(['b', 'c']);
   });
 
