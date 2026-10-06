@@ -171,6 +171,111 @@ export type Database = {
         }
         Relationships: []
       }
+      culture_club_classes: {
+        Row: {
+          brand: string
+          class_day: string[] | null
+          class_fee: number | null
+          class_material_fee: number | null
+          class_original_fee: number | null
+          class_title: string
+          classroom: string | null
+          collected_at: string
+          created_at: string
+          detail_fetched_at: string | null
+          end_time: string | null
+          id: number
+          instructor_name: string | null
+          is_excluded: boolean
+          main_category_name: string | null
+          max_age_months: number | null
+          min_age_months: number | null
+          normalized_status: string
+          raw_extra: Json
+          raw_status: string | null
+          register_start_at: string | null
+          round: number | null
+          schedule_days_code: string[] | null
+          schedule_end_date: string | null
+          schedule_start_date: string | null
+          source_class_id: string
+          start_time: string | null
+          store_code: string | null
+          store_name: string | null
+          sub_category_name: string | null
+          total_sessions: number | null
+          updated_at: string
+        }
+        Insert: {
+          brand: string
+          class_day?: string[] | null
+          class_fee?: number | null
+          class_material_fee?: number | null
+          class_original_fee?: number | null
+          class_title: string
+          classroom?: string | null
+          collected_at?: string
+          created_at?: string
+          detail_fetched_at?: string | null
+          end_time?: string | null
+          id?: never
+          instructor_name?: string | null
+          is_excluded?: boolean
+          main_category_name?: string | null
+          max_age_months?: number | null
+          min_age_months?: number | null
+          normalized_status: string
+          raw_extra?: Json
+          raw_status?: string | null
+          register_start_at?: string | null
+          round?: number | null
+          schedule_days_code?: string[] | null
+          schedule_end_date?: string | null
+          schedule_start_date?: string | null
+          source_class_id: string
+          start_time?: string | null
+          store_code?: string | null
+          store_name?: string | null
+          sub_category_name?: string | null
+          total_sessions?: number | null
+          updated_at?: string
+        }
+        Update: {
+          brand?: string
+          class_day?: string[] | null
+          class_fee?: number | null
+          class_material_fee?: number | null
+          class_original_fee?: number | null
+          class_title?: string
+          classroom?: string | null
+          collected_at?: string
+          created_at?: string
+          detail_fetched_at?: string | null
+          end_time?: string | null
+          id?: never
+          instructor_name?: string | null
+          is_excluded?: boolean
+          main_category_name?: string | null
+          max_age_months?: number | null
+          min_age_months?: number | null
+          normalized_status?: string
+          raw_extra?: Json
+          raw_status?: string | null
+          register_start_at?: string | null
+          round?: number | null
+          schedule_days_code?: string[] | null
+          schedule_end_date?: string | null
+          schedule_start_date?: string | null
+          source_class_id?: string
+          start_time?: string | null
+          store_code?: string | null
+          store_name?: string | null
+          sub_category_name?: string | null
+          total_sessions?: number | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       curated_items: {
         Row: {
           booking_url: string
