@@ -2487,6 +2487,14 @@ export type Database = {
           category_min: string
         }[]
       }
+      get_culture_club_store_coordinates: {
+        Args: never
+        Returns: {
+          external_id: string
+          lat: number
+          lng: number
+        }[]
+      }
       get_deal_spots: {
         Args: never
         Returns: {

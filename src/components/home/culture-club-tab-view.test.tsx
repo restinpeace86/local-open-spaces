@@ -3,7 +3,7 @@
 // 전용 화면 + 롯데마트 전용 화면 2개를 이 화면 하나로 합쳤다. 기본값은
 // "전체"(브랜드 무관 통합검색)이고, 브랜드 pill로 특정 브랜드로 좁힐 수 있다.
 import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CultureClubTabView } from './culture-club-tab-view';
 
 const mockUser = { current: null as { id: string } | null };
@@ -313,7 +313,7 @@ describe('CultureClubTabView — 클래스 상세 바텀시트', () => {
 
   it('찜 버튼을 눌러도 상세 시트가 열리지 않는다(이벤트 버블링 차단)', async () => {
     mockUser.current = { id: 'user-1' };
-    getMyProfileMock.mockResolvedValue({ grade: 'active' });
+    getMyProfileMock.mockResolvedValue({ grade: 'active', birth_years: [], birth_months: [] });
     stubFetch([makeEmartClass()]);
     render(<CultureClubTabView />);
     await screen.findByText(/두근두근/);
@@ -343,7 +343,7 @@ describe('CultureClubTabView — 접수 시작 안내(우수맘 전용)', () => 
 
   it('우수맘이고 register_start_at이 미래면 접수 시작 안내가 보인다', async () => {
     mockUser.current = { id: 'user-1' };
-    getMyProfileMock.mockResolvedValue({ grade: 'excellent' });
+    getMyProfileMock.mockResolvedValue({ grade: 'excellent', birth_years: [], birth_months: [] });
     stubFetch([makeEmartClass({ register_start_at: FAR_FUTURE })]);
     render(<CultureClubTabView />);
     await screen.findByText(/두근두근/);
@@ -355,7 +355,7 @@ describe('CultureClubTabView — 접수 시작 안내(우수맘 전용)', () => 
 
   it('열심맘(우수맘 미달)이면 안내가 보이지 않는다', async () => {
     mockUser.current = { id: 'user-1' };
-    getMyProfileMock.mockResolvedValue({ grade: 'active' });
+    getMyProfileMock.mockResolvedValue({ grade: 'active', birth_years: [], birth_months: [] });
     stubFetch([makeEmartClass({ register_start_at: FAR_FUTURE })]);
     render(<CultureClubTabView />);
     await screen.findByText(/두근두근/);
@@ -368,7 +368,7 @@ describe('CultureClubTabView — 접수 시작 안내(우수맘 전용)', () => 
 
   it('register_start_at이 없으면(롯데마트 등) 안내가 보이지 않는다', async () => {
     mockUser.current = { id: 'user-1' };
-    getMyProfileMock.mockResolvedValue({ grade: 'excellent' });
+    getMyProfileMock.mockResolvedValue({ grade: 'excellent', birth_years: [], birth_months: [] });
     stubFetch([makeLottemartClass({ register_start_at: null })]);
     render(<CultureClubTabView />);
     await screen.findByText('랄랄라 코알라');
@@ -377,5 +377,78 @@ describe('CultureClubTabView — 접수 시작 안내(우수맘 전용)', () => 
 
     expect(screen.queryByText('🔔 접수 시작 안내')).not.toBeInTheDocument();
     mockUser.current = null;
+  });
+});
+
+describe('CultureClubTabView — 기본 필터(아이 연령 + 위치)', () => {
+  afterEach(() => {
+    mockUser.current = null;
+  });
+
+  it('로그인 + 아이 연령 정보가 있으면 연령 기준 배너가 보이고 age_months가 자동으로 조회에 붙는다', async () => {
+    mockUser.current = { id: 'user-1' };
+    getMyProfileMock.mockResolvedValue({ grade: 'active', birth_years: [2024], birth_months: [10] });
+    const fetchMock = stubFetch([makeEmartClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/두근두근/);
+
+    expect(await screen.findByText('24개월')).toBeInTheDocument();
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([url]) => (url as string).includes('age_months=24'));
+      expect(call).toBeTruthy();
+    });
+  });
+
+  it('아이가 2명이면 첫째/둘째 스위처가 보이고, 전환하면 age_months가 바뀐다', async () => {
+    mockUser.current = { id: 'user-1' };
+    getMyProfileMock.mockResolvedValue({ grade: 'active', birth_years: [2024, 2021], birth_months: [10, 10] });
+    const fetchMock = stubFetch([makeEmartClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/두근두근/);
+
+    await screen.findByText('첫째 24개월');
+    expect(screen.getByText('둘째 5세')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('둘째 5세'));
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([url]) => (url as string).startsWith('/api/culture-club/search') && (url as string).includes('age_months=60'));
+      expect(call).toBeTruthy();
+    });
+  });
+
+  it('비로그인/아이 정보 없음이면 연령 배너를 생략한다(추측 없음)', async () => {
+    stubFetch([makeEmartClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/두근두근/);
+
+    expect(screen.queryByText('👶 기준', { exact: false })).not.toBeInTheDocument();
+  });
+
+  it('위치(lat/lng)는 항상 조회 파라미터에 포함된다(위치 미설정 시 서울시청 기본값)', async () => {
+    const fetchMock = stubFetch([makeEmartClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/두근두근/);
+
+    const call = fetchMock.mock.calls.find(([url]) => (url as string).startsWith('/api/culture-club/search'));
+    expect(call?.[0]).toContain('lat=37.5665');
+    expect(call?.[0]).toContain('lng=126.978');
+  });
+});
+
+describe('CultureClubTabView — 검색창(제출 시에만 검색)', () => {
+  it('입력 중에는 조회하지 않고, 조회 버튼을 눌러야 q 파라미터가 붙는다', async () => {
+    const fetchMock = stubFetch([makeEmartClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/두근두근/);
+    fetchMock.mockClear();
+
+    fireEvent.change(screen.getByPlaceholderText('강좌명 검색 (예: 트니트니)'), { target: { value: '트니트니' } });
+    expect(fetchMock.mock.calls.find(([url]) => (url as string).includes('q='))).toBeUndefined();
+
+    fireEvent.click(screen.getByText('조회'));
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([url]) => (url as string).includes('q=%ED%8A%B8%EB%8B%88%ED%8A%B8%EB%8B%88'));
+      expect(call).toBeTruthy();
+    });
   });
 });
