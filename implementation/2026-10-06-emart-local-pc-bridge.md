@@ -21,10 +21,15 @@ PC 새벽배치+주기 실행+부팅 시 1회 실행+찜 상태감시도 PC로)�
 
 ## 변경 사항
 
-### 1. GitHub Actions 메인 배치 스케줄 비활성화
-`.github/workflows/emart-culture-club-batch.yml`: `schedule` 트리거를
-주석 처리(계속 실패하는 걸 그대로 두면 알림만 쌓인다). `workflow_dispatch`는
-남겨서 나중에 프록시 등으로 전환 시 바로 재활성화할 수 있게 했다.
+### 1. GitHub Actions 메인 배치 완전 비활성화
+`.github/workflows/emart-culture-club-batch.yml`: 처음엔 `schedule` 트리거만
+주석 처리했다(계속 실패하는 걸 그대로 두면 알림만 쌓인다). 이후 사용자가
+"이마트 배치는 이제 github action으로 돌아가지 않게 해줘"라고 추가 지시해,
+`workflow_dispatch`(수동 실행)로도 전혀 돌릴 수 없도록 **파일 확장자를
+`.yml.disabled`로 변경**해 `.github/workflows/` 스캔 대상에서 완전히
+제외했다(이 환경엔 `gh workflow disable`을 쓸 GitHub API 토큰이 없어 파일
+이름 변경이 가장 확실한 방법). 나중에 되돌리려면 파일명을 `.yml`로 복원하고
+`schedule` 주석을 해제하면 된다.
 
 ### 2. 이마트 찜 상태감시 신규 구현
 `scripts/ingest/emart-culture-club-status-watch.mjs`(신규) —
