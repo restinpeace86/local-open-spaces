@@ -193,6 +193,7 @@ export type Database = {
           normalized_status: string
           raw_extra: Json
           raw_status: string | null
+          register_reminder_sent_at: string | null
           register_start_at: string | null
           reservation_open_reminder_sent_at: string | null
           round: number | null
@@ -228,6 +229,7 @@ export type Database = {
           normalized_status: string
           raw_extra?: Json
           raw_status?: string | null
+          register_reminder_sent_at?: string | null
           register_start_at?: string | null
           reservation_open_reminder_sent_at?: string | null
           round?: number | null
@@ -263,6 +265,7 @@ export type Database = {
           normalized_status?: string
           raw_extra?: Json
           raw_status?: string | null
+          register_reminder_sent_at?: string | null
           register_start_at?: string | null
           reservation_open_reminder_sent_at?: string | null
           round?: number | null

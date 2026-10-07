@@ -17,12 +17,12 @@
 // (롯데마트 쪽만 보면 GitHub Actions에서도 문제없이 동작했지만, 이마트가
 // 섞인 이상 더 제약이 큰 쪽(로컬 PC)에 맞춰야 한다).
 import { pathToFileURL } from 'url';
-import webpush from 'web-push';
 import { loadEnv } from '../lib/load-env.mjs';
 import { createAdminClient } from './lib/supabase-admin.mjs';
 import { applyRandomStartupDelay } from './lib/random-startup-delay.mjs';
 import { normalizeEmartStatus, normalizeLottemartStatus } from './lib/culture-club-common.mjs';
 import { fetchEmartCurrentStatus, fetchLottemartCurrentStatus } from './lib/culture-club-status-fetchers.mjs';
+import { configureWebPush, sendPushToBookmarkers } from './lib/culture-club-push.mjs';
 
 const env = loadEnv();
 const REQUEST_PACING_MIN_MS = 1000;
@@ -30,7 +30,6 @@ const REQUEST_PACING_MAX_MS = 1500;
 // [랜덤 시작 지연] 5분 주기라 다른 배치들처럼 몇 분씩 늘리면 "5분마다"라는
 // 약속이 무너진다 — 기존 두 스크립트와 동일하게 최대 30초로 작게만 흔든다.
 const MAX_STARTUP_DELAY_MS = 30 * 1000;
-const ELIGIBLE_GRADES = ['excellent', 'power'];
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -38,15 +37,6 @@ function sleep(ms) {
 
 function randomPacingDelay() {
   return REQUEST_PACING_MIN_MS + Math.random() * (REQUEST_PACING_MAX_MS - REQUEST_PACING_MIN_MS);
-}
-
-function configureWebPush() {
-  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
-  const privateKey = process.env.VAPID_PRIVATE_KEY;
-  if (!publicKey || !privateKey) {
-    throw new Error('NEXT_PUBLIC_VAPID_PUBLIC_KEY 또는 VAPID_PRIVATE_KEY가 설정되지 않았습니다.');
-  }
-  webpush.setVapidDetails('mailto:no-reply@example.com', publicKey, privateKey);
 }
 
 // [브랜드별 분기 — 사용자 지시] 새 브랜드(AK플라자 등)가 추가될 때 이 맵에
@@ -80,52 +70,6 @@ const BRAND_ADAPTERS = {
 
 export function isNewlyActionable(actionableRawStatuses, oldStatus, newStatus) {
   return !actionableRawStatuses.has(oldStatus) && actionableRawStatuses.has(newStatus);
-}
-
-async function sendPushToBookmarkers(admin, cultureClubClassId, classTitle, bodyText) {
-  const { data: bookmarks, error: bookmarksError } = await admin
-    .from('user_bookmarks')
-    .select('user_id')
-    .eq('culture_club_class_id', cultureClubClassId);
-  if (bookmarksError) throw new Error(`찜한 유저 조회 실패: ${bookmarksError.message}`);
-
-  const bookmarkedUserIds = [...new Set((bookmarks ?? []).map((r) => r.user_id))];
-  if (bookmarkedUserIds.length === 0) return { sentCount: 0, expiredCount: 0 };
-
-  const { data: eligibleProfiles, error: profilesError } = await admin
-    .from('profiles')
-    .select('id')
-    .in('id', bookmarkedUserIds)
-    .in('grade', ELIGIBLE_GRADES);
-  if (profilesError) throw new Error(`찜한 유저 등급 조회 실패: ${profilesError.message}`);
-
-  const userIds = (eligibleProfiles ?? []).map((p) => p.id);
-  if (userIds.length === 0) return { sentCount: 0, expiredCount: 0 };
-
-  const { data: subscriptions, error: subsError } = await admin
-    .from('push_subscriptions')
-    .select('id, endpoint, p256dh, auth_key')
-    .in('user_id', userIds);
-  if (subsError) throw new Error(`구독 정보 조회 실패: ${subsError.message}`);
-
-  const payload = JSON.stringify({ title: '🔔 찜한 강좌 접수 가능', body: `"${classTitle}" ${bodyText}`, url: '/' });
-
-  let sentCount = 0;
-  let expiredCount = 0;
-  for (const sub of subscriptions ?? []) {
-    try {
-      await webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth_key } }, payload);
-      sentCount += 1;
-    } catch (err) {
-      if (err.statusCode === 410 || err.statusCode === 404) {
-        await admin.from('push_subscriptions').delete().eq('id', sub.id);
-        expiredCount += 1;
-      } else {
-        console.error(`[CULTURE_CLUB_STATUS_WATCH] ${sub.id} 발송 실패(${err.statusCode ?? 'unknown'}): ${err.message}`);
-      }
-    }
-  }
-  return { sentCount, expiredCount };
 }
 
 async function postPipelineLog(client, { status, errorMessage = null, metaData = null }) {
@@ -200,7 +144,11 @@ export async function run() {
         if (updateError) console.error(`[CULTURE_CLUB_STATUS_WATCH] id=${row.id} 상태 갱신 실패: ${updateError.message}`);
 
         if (isNewlyActionable(adapter.actionableRawStatuses, row.raw_status, newRawStatus)) {
-          const result = await sendPushToBookmarkers(admin, row.id, row.class_title, adapter.pushBody(newRawStatus));
+          const result = await sendPushToBookmarkers(admin, row.id, {
+            title: '🔔 찜한 강좌 접수 가능',
+            body: `"${row.class_title}" ${adapter.pushBody(newRawStatus)}`,
+            logPrefix: 'CULTURE_CLUB_STATUS_WATCH',
+          });
           sentCount += result.sentCount;
           expiredCount += result.expiredCount;
           console.log(`  [${row.brand}/${row.source_class_id}] ${row.raw_status} → ${newRawStatus}, 푸시 ${result.sentCount}건 발송`);
