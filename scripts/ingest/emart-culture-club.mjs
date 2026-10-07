@@ -332,6 +332,38 @@ async function fetchExistingClassIds(client) {
   return ids;
 }
 
+// [통합 테이블 이중 쓰기 — 상세정보(이미지 등) 유실 버그 수정](2026-10-07
+// 사용자 지적: "사진 있는데.. 이마트껀 사진이 상세쪽에 있어") — emart-
+// culture-club-detail.mjs가 class_id당 한 번만 상세 API를 조회해 main_
+// image_key 등을 emart_culture_club_classes에 채워둔다(실측: 6,563건 중
+// 6,520건이 이미 채워져 있었음). 그런데 이 배치(목록 조회)는 애초에 목록
+// API 응답에 mainImage 필드 자체가 없어 transform()이 그 필드를 모른다.
+// toUnifiedEmartRow가 raw_extra를 매번 새로 만들면서 통합 테이블에 쓸 때
+// (기존 raw_extra와 병합하지 않고 덮어씀) main_image_key가 없는 채로
+// 써버려, 상세수집이 이미 채워둔 이미지 데이터가 통합 테이블(실제 화면이
+// 읽는 테이블)에서는 매번 사라지고 있었다. raw 테이블에 이미 저장된 상세
+// 필드를 읽어와 합쳐준 뒤에 통합 변환을 돌린다.
+async function fetchDetailEnrichmentByClassId(client) {
+  const map = new Map();
+  for (let from = 0; ; from += EXISTING_ID_PAGE_SIZE) {
+    const { data, error } = await client
+      .from('emart_culture_club_classes')
+      .select('class_id, main_image_bucket, main_image_region, main_image_key, class_detail_title, class_detail_content, detail_fetched_at')
+      .range(from, from + EXISTING_ID_PAGE_SIZE - 1);
+    if (error) throw new Error(`상세정보 조회 실패: ${error.message}`);
+    for (const row of data) map.set(row.class_id, row);
+    if (data.length < EXISTING_ID_PAGE_SIZE) break;
+  }
+  return map;
+}
+
+export function mergeDetailEnrichment(rows, enrichmentByClassId) {
+  return rows.map((row) => {
+    const enrichment = enrichmentByClassId.get(row.class_id);
+    return enrichment ? { ...row, ...enrichment } : row;
+  });
+}
+
 export function diagnoseRegisterWindowCapture(rows, existingClassIds, now = new Date()) {
   const newRows = rows.filter((r) => !existingClassIds.has(r.class_id));
   const withRegisterAt = newRows.filter((r) => r.register_start_at);
@@ -440,7 +472,8 @@ export async function run({ dryRun = false } = {}) {
   // 성공으로 처리한다(markFallenOutRowsAsUnavailable과 동일한 "부가 작업" 패턴
   // — 다음 실행에서 다시 맞춰짐).
   try {
-    const unifiedRows = rows.map(toUnifiedEmartRow);
+    const enrichmentByClassId = await fetchDetailEnrichmentByClassId(client);
+    const unifiedRows = mergeDetailEnrichment(rows, enrichmentByClassId).map(toUnifiedEmartRow);
     for (let i = 0; i < unifiedRows.length; i += UPSERT_CHUNK_SIZE) {
       const chunk = unifiedRows.slice(i, i + UPSERT_CHUNK_SIZE);
       const { error: unifiedError } = await client.from('culture_club_classes').upsert(chunk, { onConflict: 'brand,source_class_id' });

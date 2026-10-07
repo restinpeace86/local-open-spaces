@@ -100,6 +100,7 @@ type CultureClubClass = {
   min_age_months: number | null;
   max_age_months: number | null;
   schedule_start_date: string | null;
+  schedule_end_date: string | null;
   total_sessions: number | null;
   normalized_status: 'OPEN' | 'CLOSED' | 'WAITING';
   raw_status: string | null;
@@ -138,6 +139,99 @@ function formatDistanceLabel(meters: number | null | undefined): string | null {
   if (meters == null) return null;
   if (meters < 1000) return `${Math.round(meters)}m`;
   return `${(meters / 1000).toFixed(1)}km`;
+}
+
+const KOREAN_WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
+
+// 'YYYY-MM-DD' 문자열을 로컬 타임존 기준 Date로 안전하게 파싱한다 — new
+// Date(문자열)은 UTC로 해석해 타임존에 따라 하루 밀릴 수 있다.
+function parseDateOnly(raw: string | null | undefined): Date | null {
+  if (!raw) return null;
+  const [y, m, d] = raw.split('-').map(Number);
+  if (!y || !m || !d) return null;
+  return new Date(y, m - 1, d);
+}
+
+function isSameLocalDate(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+function formatMonthDay(date: Date): string {
+  return `${date.getMonth() + 1}.${date.getDate()}`;
+}
+
+type DateParts = { year: number; month: number; day: number; weekday: number };
+
+// [타임존 안전 처리 — KST 고정](2026-10-07 실측으로 발견) register_start_at은
+// "+09:00"까지 포함한 완전한 타임스탬프라 new Date(iso)로 파싱하면 그 자체는
+// 맞지만, 이어서 .getMonth()/.getDate()를 부르면 "실행 중인 서버/브라우저의
+// 로컬 타임존"을 기준으로 날짜를 읽어버려(KST가 아니면) 날짜가 하루 밀릴 수
+// 있다(실측 — 테스트 환경 타임존에서 하루 어긋나는 걸 직접 확인). 이 앱은
+// 한국 사용자 전용이라 실행 환경 타임존과 무관하게 항상 KST로 날짜를
+// 읽도록 UTC epoch에 9시간을 더해 UTC getter로 읽는다(DST 없는 KST라
+// 안전하게 고정 오프셋으로 계산 가능).
+function kstDatePartsFromIso(isoString: string): DateParts {
+  const kst = new Date(new Date(isoString).getTime() + 9 * 60 * 60 * 1000);
+  return { year: kst.getUTCFullYear(), month: kst.getUTCMonth() + 1, day: kst.getUTCDate(), weekday: kst.getUTCDay() };
+}
+
+// "YYYYMMDD"(8자)는 시각/타임존 정보가 전혀 없는 순수 날짜라 위 KST 보정이
+// 필요 없다 — 그대로 잘라서 읽는다.
+function datePartsFromYyyymmdd(raw: string | null | undefined): DateParts | null {
+  if (!raw || raw.length !== 8) return null;
+  const year = Number(raw.slice(0, 4));
+  const month = Number(raw.slice(4, 6));
+  const day = Number(raw.slice(6, 8));
+  return { year, month, day, weekday: new Date(year, month - 1, day).getDay() };
+}
+
+function formatDateParts(parts: DateParts): string {
+  return `${parts.month}.${parts.day}(${KOREAN_WEEKDAYS[parts.weekday]})`;
+}
+
+function isSameDateParts(a: DateParts, b: DateParts): boolean {
+  return a.year === b.year && a.month === b.month && a.day === b.day;
+}
+
+// [시간 표기 — 타이트하게](2026-10-07 사용자 지시: "11:00-12:20"처럼) 날짜
+// 범위는 "~"를 쓰고 시간은 "-"로 붙여 서로 구분되게 한다.
+function formatTimeRangeTight(start: string | null, end: string | null): string {
+  const fmt = (t: string | null) => (t && t.length === 4 ? `${t.slice(0, 2)}:${t.slice(2)}` : t ?? '-');
+  return `${fmt(start)}-${fmt(end)}`;
+}
+
+// [수업 일정 — "9.2~11.4 매주 수요일 11:00-12:20"](2026-10-07 사용자 지시)
+// 시작~종료일이 같으면("단발성" 강좌) 범위 표기 없이 날짜 하나만 보여준다.
+function formatClassScheduleLabel(item: CultureClubClass): string {
+  const start = parseDateOnly(item.schedule_start_date);
+  const end = parseDateOnly(item.schedule_end_date);
+  const days = item.class_day ?? [];
+
+  const parts: string[] = [];
+  if (start && end && !isSameLocalDate(start, end)) {
+    parts.push(`${formatMonthDay(start)}~${formatMonthDay(end)}`);
+  } else if (start) {
+    parts.push(formatMonthDay(start));
+  }
+  if (days.length > 0) parts.push(`매주 ${days.join(',')}요일`);
+  parts.push(formatTimeRangeTight(item.start_time, item.end_time));
+  return parts.join(' ');
+}
+
+// [접수 일정 — "7.24(금)" 또는 "7.22(수) ~ 11.24(화)"](2026-10-07 사용자
+// 지시: "접수 일자만 보여주고 시간은 보여주지마.. 시간은 내부적으로 쓸꺼야")
+// register_start_at엔 시각까지 있지만(접수 시작 알림 기능이 내부적으로 그
+// 시각을 그대로 쓴다 — CultureClubReservationHint 참고) 이 줄엔 날짜만
+// 보여준다. 데이터가 전혀 없으면(롯데마트 등) null을 돌려주고, 호출부가
+// "상세 페이지에서 확인" 문구로 대체한다(추측해서 날짜를 만들어내지 않음).
+function formatRegistrationDateLabel(item: CultureClubClass): string | null {
+  if (!item.register_start_at) return null;
+  const start = kstDatePartsFromIso(item.register_start_at);
+  const end = datePartsFromYyyymmdd(item.raw_extra.register_end_date as string | null | undefined);
+
+  const startLabel = formatDateParts(start);
+  if (!end || isSameDateParts(start, end)) return startLabel;
+  return `${startLabel} ~ ${formatDateParts(end)}`;
 }
 
 // [데이터 신선도 안내] 상태가 일 1회 배치 갱신임을 숨기지 않고 그대로 보여준다
@@ -220,11 +314,11 @@ function ClassCard({ item, onSelect }: { item: CultureClubClass; onSelect: (item
   const isClosingSoon = item.brand === 'lottemart' ? Boolean(item.raw_extra.is_closing_soon) : false;
   const isNew = item.brand === 'lottemart' ? Boolean(item.raw_extra.is_new) : false;
   const hasSpecialBadge = Boolean(discountBadge) || isClosingSoon || isNew;
-  // [접수일자 표시](2026-10-07 사용자 지적: "수업일자 요일 시간 말고 접수
-  // 일자는 왜 안보이지? 이마트는 접수일자 있지 않나") — register_start_at은
-  // 이마트만 값이 있다(실측 확인, 롯데마트는 전용 필드가 없어 늘 null) —
-  // 없으면 추측해서 만들어내지 않고 그냥 줄 자체를 생략한다.
-  const registerStartLabel = item.register_start_at ? formatRegisterStart(item.register_start_at) : null;
+  const scheduleLabel = formatClassScheduleLabel(item);
+  // [접수일자 — 날짜만](2026-10-07 사용자 지시: "접수 일자만 보여주고 시간은
+  // 보여주지마.. 시간은 내부적으로 쓸꺼야") 데이터가 없으면(롯데마트 등)
+  // "상세 페이지에서 확인"으로 안내한다(추측해서 날짜를 만들어내지 않음).
+  const registrationLabel = formatRegistrationDateLabel(item);
 
   return (
     <div
@@ -269,14 +363,24 @@ function ClassCard({ item, onSelect }: { item: CultureClubClass; onSelect: (item
             <span className="text-[11px] font-normal text-gray-400">(재료비 {item.class_material_fee!.toLocaleString('ko-KR')}원 포함)</span>
           )}
         </p>
-        <p className="truncate text-[11px] text-gray-400">
-          🗓 {(item.class_day ?? []).join(',')} {formatTimeRange(item.start_time, item.end_time)}
-        </p>
-        {registerStartLabel && <p className="truncate text-[11px] text-gray-400">📅 접수 {registerStartLabel}</p>}
-        <p className="truncate text-[11px] text-gray-400">
-          📍 {item.store_name ?? '-'}
-          {distanceLabel ? ` · ${distanceLabel}` : ''}
-        </p>
+        {/* [라벨형 정보 줄 — 수업/접수/위치](2026-10-07 사용자 지시: "수업
+            9.2~11.4 매주 수요일 11:00-12:20 / 접수 7.24(금) / 위치 롯데문화
+            센터 본점 · 0.4km") */}
+        <div className="flex gap-1.5 text-[11px] text-gray-500">
+          <span className="w-7 shrink-0 text-gray-400">수업</span>
+          <span className="truncate">{scheduleLabel}</span>
+        </div>
+        <div className="flex gap-1.5 text-[11px] text-gray-500">
+          <span className="w-7 shrink-0 text-gray-400">접수</span>
+          <span className="truncate">{registrationLabel ?? '일정은 상세 페이지에서 확인'}</span>
+        </div>
+        <div className="flex gap-1.5 text-[11px] text-gray-500">
+          <span className="w-7 shrink-0 text-gray-400">위치</span>
+          <span className="truncate">
+            {item.store_name ?? '-'}
+            {distanceLabel ? ` · ${distanceLabel}` : ''}
+          </span>
+        </div>
       </div>
     </div>
   );

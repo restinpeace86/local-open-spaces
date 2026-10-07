@@ -42,6 +42,7 @@ type ClassFixture = {
   min_age_months: number | null;
   max_age_months: number | null;
   schedule_start_date: string | null;
+  schedule_end_date: string | null;
   total_sessions: number | null;
   normalized_status: 'OPEN' | 'CLOSED' | 'WAITING';
   raw_status: string | null;
@@ -49,6 +50,7 @@ type ClassFixture = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   raw_extra: Record<string, any>;
   collected_at: string;
+  distance_meters?: number | null;
 };
 
 function makeEmartClass(overrides: Partial<ClassFixture> = {}): ClassFixture {
@@ -71,14 +73,16 @@ function makeEmartClass(overrides: Partial<ClassFixture> = {}): ClassFixture {
     min_age_months: 36,
     max_age_months: null,
     schedule_start_date: '2026-10-03',
+    schedule_end_date: '2026-12-19',
     total_sessions: null,
     normalized_status: 'OPEN',
     raw_status: '접수중',
-    register_start_at: '2026-07-23T10:00:00+09:00',
+    register_start_at: '2026-07-24T10:00:00+09:00',
     raw_extra: {
       main_image_key: 'classImages/6450c059-7f36-47e0-8c2e-670eeb1aed31',
       class_detail_title: '햇살아이 오감나무',
       class_detail_content: '중국 여행을 떠나 짜장면을 만들어요\n\n*준비물: 쪽쪽이, 물티슈',
+      register_end_date: '20260724',
     },
     collected_at: '2026-10-03T04:12:00+00:00',
     ...overrides,
@@ -105,6 +109,7 @@ function makeLottemartClass(overrides: Partial<ClassFixture> = {}): ClassFixture
     min_age_months: 5,
     max_age_months: 9,
     schedule_start_date: '2026-09-03',
+    schedule_end_date: null,
     total_sessions: 12,
     normalized_status: 'WAITING',
     raw_status: '대기자신청',
@@ -197,20 +202,53 @@ describe('CultureClubTabView — 기본값(전체, 브랜드 무관 통합검색
     expect(screen.queryByText(/^\d+회$/)).not.toBeInTheDocument();
   });
 
-  it('register_start_at이 있으면(이마트) 접수일자가 표시된다(2026-10-07 사용자 지적: "접수일자는 왜 안보이지")', async () => {
-    stubFetch([makeEmartClass({ register_start_at: '2026-07-23T10:00:00+09:00' })]);
+  it('수업/접수/위치 라벨 줄이 "M.D~M.D 매주 요일요일 HH:MM-HH:MM" / "M.D(요일)" / "지점 · 거리" 형식으로 표시된다(2026-10-07 사용자 지시)', async () => {
+    stubFetch([
+      makeEmartClass({
+        schedule_start_date: '2026-09-02',
+        schedule_end_date: '2026-11-04',
+        class_day: ['수'],
+        start_time: '1100',
+        end_time: '1220',
+        register_start_at: '2026-07-24T10:00:00+09:00',
+        raw_extra: { register_end_date: '20260724' },
+        distance_meters: 400,
+      }),
+    ]);
     render(<CultureClubTabView />);
 
-    expect(await screen.findByText(/📅 접수/)).toBeInTheDocument();
-    expect(screen.getByText(/2026\.07\.23/)).toBeInTheDocument();
+    expect(await screen.findByText('9.2~11.4 매주 수요일 11:00-12:20')).toBeInTheDocument();
+    expect(screen.getByText('7.24(금)')).toBeInTheDocument();
+    expect(screen.getByText(/춘천점 · 400m/)).toBeInTheDocument();
   });
 
-  it('register_start_at이 없으면(롯데마트) 접수일자 줄 자체를 생략한다(추측하지 않음)', async () => {
+  it('접수 시작~종료일이 다르면 "M.D(요일) ~ M.D(요일)" 범위로 표시된다', async () => {
+    stubFetch([
+      makeEmartClass({
+        register_start_at: '2026-07-22T10:00:00+09:00',
+        raw_extra: { register_end_date: '20261124' },
+      }),
+    ]);
+    render(<CultureClubTabView />);
+
+    expect(await screen.findByText('7.22(수) ~ 11.24(화)')).toBeInTheDocument();
+  });
+
+  it('register_start_at이 타임존 경계를 넘는 시각이어도 KST 기준 날짜로 표시된다(실측으로 발견한 타임존 버그 회귀 테스트)', async () => {
+    // 2026-01-01T01:00:00+09:00은 UTC로는 2025-12-31T16:00:00Z다 — KST 보정
+    // 없이 로컬(비-KST) 타임존 getter로 읽으면 "12.31"처럼 하루 밀려 보인다.
+    stubFetch([makeEmartClass({ register_start_at: '2026-01-01T01:00:00+09:00', raw_extra: {} })]);
+    render(<CultureClubTabView />);
+
+    expect(await screen.findByText('1.1(목)')).toBeInTheDocument();
+  });
+
+  it('register_start_at이 없으면(롯데마트) "일정은 상세 페이지에서 확인"으로 안내한다(추측하지 않음)', async () => {
     stubFetch([makeLottemartClass({ register_start_at: null })]);
     render(<CultureClubTabView />);
 
     await screen.findByText('랄랄라 코알라');
-    expect(screen.queryByText(/📅 접수/)).not.toBeInTheDocument();
+    expect(screen.getByText('일정은 상세 페이지에서 확인')).toBeInTheDocument();
   });
 
   it('상태 배지는 raw_status(브랜드별 원문 라벨)를 그대로 보여준다', async () => {
