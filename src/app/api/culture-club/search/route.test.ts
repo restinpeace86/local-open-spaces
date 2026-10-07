@@ -71,6 +71,22 @@ describe('GET /api/culture-club/search — Branch-First 거리순 정렬', () =>
     expect(body.items[0].distance_meters).toBeLessThan(1000);
   });
 
+  it('위치 기반 조회엔 지점의 실제 좌표(store_lat/store_lng)도 함께 내려준다(2026-10-07 — 위치 팝업용)', async () => {
+    const { fromMock, rpcMock } = mockAdminClient({
+      rowsByRange: () => [makeRow(1, 'emart', 'NEAR')],
+      coords: [{ external_id: 'EMART_STORE_NEAR', lng: 126.978, lat: 37.5665 }],
+      total: 1,
+    });
+    vi.doMock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ from: fromMock, rpc: rpcMock }) }));
+    const { GET } = await import('./route');
+
+    const res = await GET(new Request('http://localhost/api/culture-club/search?lat=37.5665&lng=126.978') as never);
+    const body = await res.json();
+
+    expect(body.items[0].store_lat).toBe(37.5665);
+    expect(body.items[0].store_lng).toBe(126.978);
+  });
+
   it('반경(radius_km)을 벗어난 지점은 애초에 조회 대상에서 제외되고, DB를 아예 조회하지 않는다', async () => {
     const { fromMock, rpcMock } = mockAdminClient({
       rowsByRange: () => [makeRow(1, 'emart', 'FAR')],

@@ -51,6 +51,8 @@ type ClassFixture = {
   raw_extra: Record<string, any>;
   collected_at: string;
   distance_meters?: number | null;
+  store_lat?: number | null;
+  store_lng?: number | null;
 };
 
 function makeEmartClass(overrides: Partial<ClassFixture> = {}): ClassFixture {
@@ -169,6 +171,32 @@ describe('CultureClubTabView — 기본값(전체, 브랜드 무관 통합검색
     const card = screen.getByText(/두근두근/).closest('.rounded-xl') as HTMLElement;
     expect(within(card).getByText(/춘천점/)).toBeInTheDocument();
     expect(within(card).queryByText('이마트')).not.toBeInTheDocument();
+  });
+
+  it('지점 좌표가 있으면 위치를 눌러 인앱 지도 팝업을 열 수 있다(2026-10-07 사용자 지시: "링크걸어놔서 누르면 위치 뜨도록해줘")', async () => {
+    stubFetch([makeEmartClass({ store_lat: 37.5665, store_lng: 126.978 })]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/두근두근/);
+
+    const location = screen.getByText('춘천점');
+    expect(location.tagName).toBe('BUTTON');
+    fireEvent.click(location);
+
+    expect(await screen.findByLabelText('지도 닫기')).toBeInTheDocument();
+    // 카드 클릭으로 오인되어 상세 시트까지 같이 열리면 안 된다(이벤트 버블링 차단).
+    expect(screen.queryByText('이마트 강좌 상세')).not.toBeInTheDocument();
+  });
+
+  it('지점 좌표가 없으면 위치가 평범한 텍스트로 보이고 클릭해도 아무 일도 없다', async () => {
+    stubFetch([makeEmartClass({ store_lat: null, store_lng: null })]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/두근두근/);
+
+    const location = screen.getByText('춘천점');
+    expect(location.tagName).not.toBe('BUTTON');
+    fireEvent.click(location);
+
+    expect(screen.queryByLabelText('지도 닫기')).not.toBeInTheDocument();
   });
 
   it('가격 옆에 재료비가 작게 표시된다', async () => {
@@ -394,10 +422,12 @@ describe('CultureClubTabView — 클래스 상세 바텀시트', () => {
 
     fireEvent.click(screen.getAllByText(/두근두근/)[0]);
 
-    expect(await screen.findByText('이마트 강좌 상세')).toBeInTheDocument();
-    expect(screen.getByText('접수가능지점 춘천점')).toBeInTheDocument();
-    expect(screen.getByText('접수 페이지로 가기 ↗')).toBeInTheDocument();
-    expect(screen.getByText('중국 여행을 떠나 짜장면을 만들어요', { exact: false })).toBeInTheDocument();
+    const heading = await screen.findByText('이마트 강좌 상세');
+    const sheet = heading.closest('.fixed') as HTMLElement;
+    expect(within(sheet).getByText(/접수가능지점/)).toBeInTheDocument();
+    expect(within(sheet).getByText('춘천점')).toBeInTheDocument();
+    expect(within(sheet).getByText('접수 페이지로 가기 ↗')).toBeInTheDocument();
+    expect(within(sheet).getByText('중국 여행을 떠나 짜장면을 만들어요', { exact: false })).toBeInTheDocument();
   });
 
   it('로그인하지 않았으면 상세 시트에 찜 버튼의 빈 테두리 박스도 남지 않는다(2026-10-07 사용자 지적: "찜 어디갔어")', async () => {

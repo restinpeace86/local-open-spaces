@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { EmptyState } from '@/components/map/empty-state';
 import { EventListSkeleton } from '@/components/cards/event-list-skeleton';
+import { MapPreviewModal } from '@/components/map/map-preview-modal';
 import { BookmarkButton } from '@/components/community/bookmark-button';
 import { BookmarkTarget } from '@/lib/community/bookmarks';
 import { useUser } from '@/hooks/use-user';
@@ -110,6 +111,9 @@ type CultureClubClass = {
   collected_at: string;
   // [위치 기반 정렬](2026-10-07) — lat/lng 파라미터가 있을 때만 API가 채워준다.
   distance_meters?: number | null;
+  // [위치 팝업용 좌표](2026-10-07) — lat/lng 파라미터가 있을 때만 채워진다.
+  store_lat?: number | null;
+  store_lng?: number | null;
 };
 
 const BRAND_LABELS: Record<CultureClubClass['brand'], string> = {
@@ -242,6 +246,37 @@ function formatUpdatedAt(raw: string) {
   return `${date.getMonth() + 1}.${date.getDate()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+// [위치 클릭 → 인앱 지도 팝업](2026-10-07 사용자 지시: "스타필드시티위례..
+// 링크걸어놔서 누르면 위치 뜨도록해줘.. 지도 인앱? 팝업으로?") 스팟/이벤트
+// 상세에서 이미 쓰고 있는 MapPreviewModal(인앱 지도 + 길찾기)을 그대로
+// 재사용한다(제5장 제4조 — 새로 만들지 않음). 지점 좌표(store_lat/lng)가
+// 없는 경우(위치 파라미터 없이 호출된 드문 경로)는 클릭 가능하게 만들 수
+// 없으니 평범한 텍스트로 둔다(추측으로 좌표를 지어내지 않음).
+function LocationLink({ item, label }: { item: CultureClubClass; label: string }) {
+  const [showMap, setShowMap] = useState(false);
+  const hasCoords = item.store_lat != null && item.store_lng != null;
+
+  if (!hasCoords) return <span className="truncate">{label}</span>;
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setShowMap(true);
+        }}
+        className="truncate text-left text-sky-600 hover:underline"
+      >
+        {label}
+      </button>
+      {showMap && (
+        <MapPreviewModal lat={item.store_lat!} lng={item.store_lng!} name={item.store_name ?? '문화센터'} onClose={() => setShowMap(false)} />
+      )}
+    </>
+  );
+}
+
 // [공통 상태 배지] 색상은 normalized_status(OPEN/WAITING/CLOSED) 3단계로
 // 통일하되, 라벨은 브랜드 고유 표기(raw_status, 예: "접수중"/"바로신청")를
 // 그대로 보여준다 — 색 체계는 통일하면서 브랜드별 구체적 표현은 잃지 않는다.
@@ -332,7 +367,7 @@ function ClassCard({ item, onSelect }: { item: CultureClubClass; onSelect: (item
       <ClassImage item={item} />
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex items-start justify-between gap-1">
-          <p className="line-clamp-2 flex-1 text-sm font-medium text-gray-900">{item.class_title}</p>
+          <p className="line-clamp-2 flex-1 text-sm font-medium text-slate-900">{item.class_title}</p>
           <span onClick={(e) => e.stopPropagation()} className="-mt-1 shrink-0">
             <BookmarkButton target={toBookmarkTarget(item)} />
           </span>
@@ -358,7 +393,7 @@ function ClassCard({ item, onSelect }: { item: CultureClubClass; onSelect: (item
         {/* [회차 표시 추가](2026-10-07 사용자 지적: "가격 관련 몇회 몇만원
             아니었어? 몇회가 안보여 상세 들어가야 보여") — total_sessions를
             가격 옆에 바로 보여준다. */}
-        <p className="flex items-baseline gap-1 text-base font-bold text-gray-900">
+        <p className="flex items-baseline gap-1 text-base font-bold text-slate-900">
           {item.total_sessions != null && <span className="text-xs font-semibold text-gray-500">{item.total_sessions}회</span>}
           {item.class_fee != null ? `${item.class_fee.toLocaleString('ko-KR')}원` : '무료'}
           {hasMaterialFee && (
@@ -368,20 +403,17 @@ function ClassCard({ item, onSelect }: { item: CultureClubClass; onSelect: (item
         {/* [라벨형 정보 줄 — 수업/접수/위치](2026-10-07 사용자 지시: "수업
             9.2~11.4 매주 수요일 11:00-12:20 / 접수 7.24(금) / 위치 롯데문화
             센터 본점 · 0.4km") */}
-        <div className="flex gap-1.5 text-[11px] text-gray-500">
-          <span className="w-7 shrink-0 text-gray-400">수업</span>
+        <div className="flex gap-1.5 text-[11px] text-slate-600">
+          <span className="w-7 shrink-0 text-sky-600 font-medium">수업</span>
           <span className="truncate">{scheduleLabel}</span>
         </div>
-        <div className="flex gap-1.5 text-[11px] text-gray-500">
-          <span className="w-7 shrink-0 text-gray-400">접수</span>
+        <div className="flex gap-1.5 text-[11px] text-slate-600">
+          <span className="w-7 shrink-0 text-sky-600 font-medium">접수</span>
           <span className="truncate">{registrationLabel ?? '일정은 상세 페이지에서 확인'}</span>
         </div>
-        <div className="flex gap-1.5 text-[11px] text-gray-500">
-          <span className="w-7 shrink-0 text-gray-400">위치</span>
-          <span className="truncate">
-            {item.store_name ?? '-'}
-            {distanceLabel ? ` · ${distanceLabel}` : ''}
-          </span>
+        <div className="flex gap-1.5 text-[11px] text-slate-600">
+          <span className="w-7 shrink-0 text-sky-600 font-medium">위치</span>
+          <LocationLink item={item} label={`${item.store_name ?? '-'}${distanceLabel ? ` · ${distanceLabel}` : ''}`} />
         </div>
       </div>
     </div>
@@ -450,7 +482,7 @@ function CultureClubDetailSheet({ item, onClose }: { item: CultureClubClass; onC
         onClick={(e) => e.stopPropagation()}
       >
         <div className="shrink-0 p-4 border-b border-gray-100 flex items-center justify-between">
-          <span className="text-base font-bold text-gray-900">{BRAND_LABELS[item.brand]} 강좌 상세</span>
+          <span className="text-base font-bold text-slate-900">{BRAND_LABELS[item.brand]} 강좌 상세</span>
           <button type="button" onClick={onClose} className="shrink-0 text-gray-400 hover:text-gray-600" aria-label="닫기">
             ✕
           </button>
@@ -474,13 +506,15 @@ function CultureClubDetailSheet({ item, onClose }: { item: CultureClubClass; onC
           </div>
 
           <div className="flex flex-col gap-1.5 md:w-1/2">
-            <span className="text-xs text-gray-400">
-              {item.sub_category_name ?? '-'}
-              {ageLabel ? ` · ${ageLabel}` : ''}
-            </span>
-            <h2 className="text-lg font-bold text-gray-900">{item.class_title}</h2>
-            {item.instructor_name && <p className="text-sm text-gray-500">강사 {item.instructor_name}</p>}
-            <p className="text-lg font-semibold text-gray-900">
+            <div className="flex flex-wrap items-center gap-1">
+              {item.sub_category_name && (
+                <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">{item.sub_category_name}</span>
+              )}
+              {ageLabel && <span className="shrink-0 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">{ageLabel}</span>}
+            </div>
+            <h2 className="text-lg font-bold text-slate-900">{item.class_title}</h2>
+            {item.instructor_name && <p className="text-sm text-slate-600">강사 {item.instructor_name}</p>}
+            <p className="text-lg font-semibold text-slate-900">
               {item.class_fee != null ? `${item.class_fee.toLocaleString('ko-KR')}원` : '무료'}
               {hasMaterialFee && (
                 <span className="ml-1 text-xs font-normal text-gray-400">
@@ -489,18 +523,17 @@ function CultureClubDetailSheet({ item, onClose }: { item: CultureClubClass; onC
               )}
             </p>
             <hr className="my-1 border-gray-100" />
-            <p className="text-sm text-gray-500">
+            <p className="text-sm text-slate-600">
               {formatScheduleDate(item.schedule_start_date)} ({(item.class_day ?? []).join(',')}) {formatTimeRange(item.start_time, item.end_time)}
               {item.total_sessions != null ? ` · 총 ${item.total_sessions}회` : ''}
             </p>
             {item.store_name && (
-              <p className="text-sm text-gray-500">
-                접수가능지점 {item.store_name}
-                {distanceLabel ? ` · ${distanceLabel}` : ''}
+              <p className="text-sm text-slate-600">
+                접수가능지점 <LocationLink item={item} label={`${item.store_name}${distanceLabel ? ` · ${distanceLabel}` : ''}`} />
               </p>
             )}
-            {capacity != null && <p className="text-sm text-gray-500">정원 {capacity}명</p>}
-            {likeCount != null && <p className="text-sm text-gray-500">좋아요 {likeCount}</p>}
+            {capacity != null && <p className="text-sm text-slate-600">정원 {capacity}명</p>}
+            {likeCount != null && <p className="text-sm text-slate-600">좋아요 {likeCount}</p>}
 
             {/* [찜 버튼 — 빈 박스 방지](2026-10-07 사용자 지적: "찜 어디갔어")
                 열심맘 미달/비로그인이면 BookmarkButton이 null을 반환하는데,
@@ -573,7 +606,7 @@ function ChildAgeBanner({
 
   return (
     <div className="flex items-center gap-1.5 overflow-x-auto px-3 pt-2">
-      <span className="shrink-0 text-xs text-gray-400">👶 기준</span>
+      <span className="shrink-0 text-xs text-sky-600 font-medium">👶 기준</span>
       {children.map((child, index) => {
         const label = CHILD_ORDINAL_LABELS[index] ?? `${index + 1}번째`;
         const ageLabel = formatAgeRangeMonths(child.ageMonths, child.ageMonths);
@@ -774,7 +807,7 @@ export function CultureClubTabView() {
               이 반경은 지점(Branch)을 먼저 좁히는 기준이라 브랜드와 무관하게
               항상 보인다. */}
           <div className="flex items-center gap-1.5 px-3 pt-1">
-            <span className="shrink-0 text-xs text-gray-400">반경</span>
+            <span className="shrink-0 text-xs text-sky-600 font-medium">반경</span>
             {RADIUS_KM_OPTIONS.map((km) => (
               <button
                 key={km}
@@ -782,7 +815,7 @@ export function CultureClubTabView() {
                 aria-pressed={radiusKm === km}
                 onClick={() => setRadiusKm(km)}
                 className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
-                  radiusKm === km ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                  radiusKm === km ? 'bg-sky-600 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
                 }`}
               >
                 {km}km
@@ -800,7 +833,7 @@ export function CultureClubTabView() {
               placeholder="강좌명 검색 (예: 트니트니)"
               className="flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
             />
-            <button type="submit" className="shrink-0 rounded-lg bg-gray-900 px-4 py-1.5 text-sm font-semibold text-white">
+            <button type="submit" className="shrink-0 rounded-lg bg-sky-600 px-4 py-1.5 text-sm font-semibold text-white">
               조회
             </button>
           </form>
@@ -816,7 +849,7 @@ export function CultureClubTabView() {
                   aria-pressed={isActive}
                   onClick={() => setBrandKey(brand.key)}
                   className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                    isActive ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                    isActive ? 'bg-sky-600 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
                   }`}
                 >
                   {brand.label}
@@ -851,7 +884,7 @@ export function CultureClubTabView() {
                     aria-pressed={isActive}
                     onClick={() => setSelectedStoreCodes((prev) => toggleInSet(prev, store.storeCode))}
                     className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
-                      isActive ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                      isActive ? 'bg-sky-600 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
                     }`}
                   >
                     {store.label}
@@ -873,7 +906,7 @@ export function CultureClubTabView() {
                   aria-pressed={isActive}
                   onClick={() => setSelectedDays((prev) => toggleInSet(prev, day))}
                   className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                    isActive ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                    isActive ? 'bg-sky-600 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
                   }`}
                 >
                   {day}
@@ -895,7 +928,7 @@ export function CultureClubTabView() {
                     aria-pressed={isActive}
                     onClick={() => setSelectedSubCategories((prev) => toggleInSet(prev, category))}
                     className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                      isActive ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                      isActive ? 'bg-sky-600 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
                     }`}
                   >
                     {category}
@@ -915,7 +948,7 @@ export function CultureClubTabView() {
                     aria-pressed={isActive}
                     onClick={() => setSelectedTargets((prev) => toggleInSet(prev, target.code))}
                     className={`shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-                      isActive ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                      isActive ? 'bg-sky-600 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
                     }`}
                   >
                     {target.label}

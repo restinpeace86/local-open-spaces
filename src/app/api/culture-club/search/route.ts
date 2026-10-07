@@ -43,7 +43,7 @@ function parseExternalId(externalId: string): { brand: string; storeCode: string
   return { brand: match[1].toLowerCase(), storeCode: match[2] };
 }
 
-type StoreCandidate = { brand: string; storeCode: string; distanceMeters: number };
+type StoreCandidate = { brand: string; storeCode: string; distanceMeters: number; lat: number; lng: number };
 
 // 브랜드별 store_code 네임스페이스가 서로 달라(이마트 '180'과 롯데마트 '455'가
 // 우연히 같은 숫자일 수 있음) brand+store_code를 묶어서 OR 그룹으로 만든다 —
@@ -108,7 +108,13 @@ export async function GET(request: NextRequest) {
     // [Branch-First] 위치가 있으면 지점(124개)부터 거리 계산 + 반경/브랜드/
     // 선택 지점으로 좁힌 뒤, 그 지점들에 속한 강좌만 조회한다.
     let storeScopeFilter: string | null = null;
-    let distanceByKey: Map<string, number> | null = null;
+    // [위치 팝업 — 지점 좌표도 함께 내려줌](2026-10-07 사용자 지시: "스타필드
+    // 시티위례.. 링크걸어놔서 누르면 위치 뜨도록") 카드/상세의 "위치" 줄을
+    // 누르면 인앱 지도 모달(MapPreviewModal, 기존 스팟/이벤트 상세와 동일한
+    // 컴포넌트 재사용 — 제5장 제4조)을 띄우려면 지점의 실제 lat/lng가
+    // 필요하다. 이미 Branch-First 과정에서 모든 후보 지점의 좌표를 들고
+    // 있으므로 거리와 함께 좌표도 그대로 맵에 담아 응답에 실어 보낸다.
+    let storeInfoByKey: Map<string, { distanceMeters: number; lat: number; lng: number }> | null = null;
 
     if (hasLocation) {
       const coords = await getCachedStoreCoordinates();
@@ -117,7 +123,7 @@ export async function GET(request: NextRequest) {
         .map((c: { external_id: string; lng: number; lat: number }) => {
           const parsed = parseExternalId(c.external_id);
           if (!parsed) return null;
-          return { ...parsed, distanceMeters: haversineDistanceMeters({ lat, lng }, c) };
+          return { ...parsed, distanceMeters: haversineDistanceMeters({ lat, lng }, c), lat: c.lat, lng: c.lng };
         })
         .filter((c: StoreCandidate | null): c is StoreCandidate => c !== null);
 
@@ -130,7 +136,9 @@ export async function GET(request: NextRequest) {
       }
 
       storeScopeFilter = buildStoreScopeFilter(candidates);
-      distanceByKey = new Map(candidates.map((c) => [`${c.brand}:${c.storeCode}`, c.distanceMeters]));
+      storeInfoByKey = new Map(
+        candidates.map((c) => [`${c.brand}:${c.storeCode}`, { distanceMeters: c.distanceMeters, lat: c.lat, lng: c.lng }])
+      );
     } else if (storeCodes.length > 0) {
       // 위치 없이 지점만 지정된 경우(드문 호출 패턴) — brand가 정확히 1개일 때만
       // store_code만으로 안전하게 좁힐 수 있다(네임스페이스 충돌 방지).
@@ -197,10 +205,15 @@ export async function GET(request: NextRequest) {
       data = data.concat(...morePages.map((p) => p.data ?? []));
     }
 
-    const withDistance = data.map((item) => ({
-      ...item,
-      distance_meters: distanceByKey!.get(`${item.brand}:${item.store_code}`) ?? null,
-    }));
+    const withDistance = data.map((item) => {
+      const info = storeInfoByKey!.get(`${item.brand}:${item.store_code}`);
+      return {
+        ...item,
+        distance_meters: info?.distanceMeters ?? null,
+        store_lat: info?.lat ?? null,
+        store_lng: info?.lng ?? null,
+      };
+    });
     withDistance.sort((a, b) => {
       if (a.distance_meters == null && b.distance_meters == null) return 0;
       if (a.distance_meters == null) return 1;
