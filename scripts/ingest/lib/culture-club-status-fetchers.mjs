@@ -80,6 +80,74 @@ export async function fetchEmartCurrentStatus({ apiKey, sourceClassId, pacingDel
   return EMART_FALLBACK_STATUS;
 }
 
+// [이마트 — 상태 전체 재확인 경량화](2026-10-08 실측 확인, 사용자 지시:
+// "이마트 쪽 배치는 최적화 구현해줘"): classId 필터가 단건이 아니라 배열을
+// 받는다는 걸 실측으로 확인했다(500개를 한 요청에 넣어도 정상 동작,
+// 120~150ms). isEmartClassInStatusBucket()은 class_id 1건용(찜 감시처럼
+// 대상이 적을 때)을 그대로 두고, 여러 건을 한 번에 역산하는 전용 함수를
+// 추가한다 — 찜 여부와 무관하게 전체 강좌의 상태값만 가볍게 갱신하려는
+// 용도(emart-culture-club-status-refresh.mjs)로 쓴다.
+const EMART_STATUS_BATCH_CHUNK_SIZE = 500;
+
+export function chunkArray(items, size) {
+  const chunks = [];
+  for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
+  return chunks;
+}
+
+async function fetchEmartStatusBucketMatches(apiKey, classIds, status) {
+  const res = await fetchWithTimeout(EMART_GRAPHQL_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, ...EMART_BROWSER_LIKE_HEADERS },
+    body: JSON.stringify({
+      query: EMART_QUERY,
+      variables: {
+        keyword: '',
+        filterData: [
+          { type: 'classId', data: classIds },
+          { type: 'classStatus', data: [status] },
+        ],
+        sortKey: 'deadline',
+        from: 0,
+        size: classIds.length,
+      },
+    }),
+  });
+
+  const text = await res.text();
+  if (!res.ok) throw new Error(`이마트 상태 배치 조회 실패 (HTTP ${res.status}): ${text.slice(0, 300)}`);
+
+  let json;
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error(`이마트 상태 배치 응답이 JSON이 아닙니다: ${text.slice(0, 300)}`);
+  }
+  if (json.errors) {
+    throw new Error(`이마트 상태 배치 GraphQL 에러: ${JSON.stringify(json.errors).slice(0, 300)}`);
+  }
+  return new Set((json.data?.getClassByFiltering?.data ?? []).map((d) => d.classId));
+}
+
+// 반환: Map<classId, rawStatus>. 3개 버킷 전부에서 빠진 class_id는
+// fetchEmartCurrentStatus와 동일한 기본값(EMART_FALLBACK_STATUS)으로 채운다.
+export async function fetchEmartStatusesBatch({ apiKey, classIds, pacingDelayMs, chunkSize = EMART_STATUS_BATCH_CHUNK_SIZE }) {
+  if (!apiKey) throw new Error('EMART_CULTURE_CLUB_API_KEY 환경변수가 설정되지 않았습니다.');
+  const result = new Map();
+  for (const chunk of chunkArray(classIds, chunkSize)) {
+    const rawStatusById = new Map();
+    for (const status of EMART_STATUS_CHECK_ORDER) {
+      const matched = await fetchEmartStatusBucketMatches(apiKey, chunk, status);
+      for (const classId of matched) rawStatusById.set(classId, status);
+      if (pacingDelayMs) await sleep(pacingDelayMs());
+    }
+    for (const classId of chunk) {
+      result.set(classId, rawStatusById.get(classId) ?? EMART_FALLBACK_STATUS);
+    }
+  }
+  return result;
+}
+
 // [롯데마트 — 실측 확인] 상세 페이지(courseview.do)는 목록 페이지와 달리
 // class="btn-status-red"를 쓰지만 onclick 함수명/"현장접수" 텍스트 판별 로직은
 // lottemart-culture-club.mjs의 parseRegistrationStatus와 동일하게 재사용
