@@ -179,6 +179,17 @@ describe('CultureClubTabView — 기본값(전체, 브랜드 무관 통합검색
     expect(screen.getByText(/재료비 9,000원 포함/)).toBeInTheDocument();
   });
 
+  it('카테고리/연령이 흐린 텍스트가 아니라 뱃지(배경색 있는 pill)로 보인다(2026-10-07 사용자 지적: "눈에 잘 안띄네.. 뱃지처럼")', async () => {
+    stubFetch([makeEmartClass({ sub_category_name: 'Kids & Children(event)', min_age_months: 48, max_age_months: 60 })]);
+    render(<CultureClubTabView />);
+
+    const categoryBadge = await screen.findByText('Kids & Children(event)');
+    expect(categoryBadge.className).toContain('rounded');
+    expect(categoryBadge.className).toContain('bg-gray-100');
+    const ageBadge = screen.getByText('4세~5세');
+    expect(ageBadge.className).toContain('bg-indigo-50');
+  });
+
   it('연령 범위가 개월 수 컬럼으로부터 표시된다', async () => {
     stubFetch([makeLottemartClass({ min_age_months: 5, max_age_months: 9 })]);
     render(<CultureClubTabView />);
@@ -264,6 +275,17 @@ describe('CultureClubTabView — 기본값(전체, 브랜드 무관 통합검색
 
     expect(await screen.findByText(/마지막 업데이트/)).toBeInTheDocument();
     expect(screen.getByText(/하루 1회 갱신돼요/)).toBeInTheDocument();
+  });
+
+  it('카드 목록이 반응형 그리드로 보인다(2026-10-07 사용자 지적: "PC에서 보면 한줄에 3개... 우리도 그렇게 안되나")', async () => {
+    stubFetch([makeEmartClass()]);
+    render(<CultureClubTabView />);
+
+    const card = await screen.findByText(/두근두근/);
+    const grid = card.closest('.rounded-xl')?.parentElement as HTMLElement;
+    expect(grid.className).toContain('grid-cols-1');
+    expect(grid.className).toContain('md:grid-cols-2');
+    expect(grid.className).toContain('lg:grid-cols-3');
   });
 
   it('요일 필터를 선택하면 초기화 버튼이 보이고, 누르면 선택이 풀린다', async () => {
@@ -374,8 +396,34 @@ describe('CultureClubTabView — 클래스 상세 바텀시트', () => {
 
     expect(await screen.findByText('이마트 강좌 상세')).toBeInTheDocument();
     expect(screen.getByText('접수가능지점 춘천점')).toBeInTheDocument();
-    expect(screen.getByText('접수중하러 가기 ↗')).toBeInTheDocument();
+    expect(screen.getByText('접수 페이지로 가기 ↗')).toBeInTheDocument();
     expect(screen.getByText('중국 여행을 떠나 짜장면을 만들어요', { exact: false })).toBeInTheDocument();
+  });
+
+  it('로그인하지 않았으면 상세 시트에 찜 버튼의 빈 테두리 박스도 남지 않는다(2026-10-07 사용자 지적: "찜 어디갔어")', async () => {
+    stubFetch([makeEmartClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/두근두근/);
+    fireEvent.click(screen.getAllByText(/두근두근/)[0]);
+
+    await screen.findByText('이마트 강좌 상세');
+    expect(screen.queryByLabelText('찜하기')).not.toBeInTheDocument();
+    expect(screen.queryByText('접수 페이지로 가기 ↗')?.parentElement?.querySelector('.border-gray-300')).toBeFalsy();
+  });
+
+  it('열심맘 이상으로 로그인했으면 상세 시트에 찜 버튼이 바로 보인다', async () => {
+    mockUser.current = { id: 'user-1' };
+    getMyProfileMock.mockResolvedValue({ grade: 'active', birth_years: [], birth_months: [] });
+    stubFetch([makeEmartClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/두근두근/);
+    fireEvent.click(screen.getAllByText(/두근두근/)[0]);
+
+    await screen.findByText('이마트 강좌 상세');
+    // 카드 자체의 찜 버튼도 뒤에 그대로 떠 있어 2개가 매칭된다 — 상세
+    // 시트가 열린 상태에서도 찜 버튼이 사라지지 않았는지만 확인한다.
+    expect((await screen.findAllByLabelText('찜하기')).length).toBeGreaterThanOrEqual(2);
+    mockUser.current = null;
   });
 
   it('이마트 신청하러 가기 버튼은 class_id가 포함된 상세 페이지로 새 탭 연결된다', async () => {
@@ -384,7 +432,7 @@ describe('CultureClubTabView — 클래스 상세 바텀시트', () => {
     await screen.findByText(/두근두근/);
     fireEvent.click(screen.getAllByText(/두근두근/)[0]);
 
-    const link = await screen.findByText('접수중하러 가기 ↗');
+    const link = await screen.findByText('접수 페이지로 가기 ↗');
     expect(link.closest('a')).toHaveAttribute('href', 'https://www.cultureclub.emart.com/class/403oo9Mze2026S3760');
     expect(link.closest('a')).toHaveAttribute('target', '_blank');
   });
@@ -396,7 +444,7 @@ describe('CultureClubTabView — 클래스 상세 바텀시트', () => {
     fireEvent.click(screen.getByText('랄랄라 코알라'));
 
     expect(await screen.findByText('롯데마트 강좌 상세')).toBeInTheDocument();
-    const link = screen.getByText('대기자신청하러 가기 ↗');
+    const link = screen.getByText('접수 페이지로 가기 ↗');
     expect(link.closest('a')).toHaveAttribute('href', expect.stringContaining('search_str_cd=455'));
     expect(link.closest('a')).toHaveAttribute('href', expect.stringContaining('cls_cd=lm-1'));
     expect(screen.getByText('오감 자극 놀이 소개', { exact: false })).toBeInTheDocument();

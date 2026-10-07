@@ -313,7 +313,6 @@ function ClassCard({ item, onSelect }: { item: CultureClubClass; onSelect: (item
   const discountBadge = item.brand === 'lottemart' ? (item.raw_extra.discount_badge_text as string | null) : null;
   const isClosingSoon = item.brand === 'lottemart' ? Boolean(item.raw_extra.is_closing_soon) : false;
   const isNew = item.brand === 'lottemart' ? Boolean(item.raw_extra.is_new) : false;
-  const hasSpecialBadge = Boolean(discountBadge) || isClosingSoon || isNew;
   const scheduleLabel = formatClassScheduleLabel(item);
   // [접수일자 — 날짜만](2026-10-07 사용자 지시: "접수 일자만 보여주고 시간은
   // 보여주지마.. 시간은 내부적으로 쓸꺼야") 데이터가 없으면(롯데마트 등)
@@ -341,18 +340,21 @@ function ClassCard({ item, onSelect }: { item: CultureClubClass; onSelect: (item
         {/* [브랜드 뱃지 제거](2026-10-07 사용자 지적: "롯데몰수지점 8.5km
             되어있는데 롯데마트 뱃지가 위에 안나와도 되지 않나?") — 아래
             위치 줄(📍 지점명 · 거리)이 이미 브랜드/위치를 전달해 중복이었다.
-            할인/마감임박/신설처럼 실제로 다른 정보를 주는 뱃지만 남긴다. */}
-        {hasSpecialBadge && (
-          <div className="flex flex-wrap items-center gap-1">
-            {discountBadge && <span className="shrink-0 rounded bg-rose-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">{discountBadge}</span>}
-            {isClosingSoon && <span className="shrink-0 rounded bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">마감임박</span>}
-            {isNew && <span className="shrink-0 rounded bg-blue-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">신설</span>}
-          </div>
-        )}
-        <p className="text-[11px] text-gray-400">
-          {item.sub_category_name ?? '-'}
-          {ageLabel ? ` · ${ageLabel}` : ''}
-        </p>
+            할인/마감임박/신설처럼 실제로 다른 정보를 주는 뱃지만 남긴다.
+            [카테고리/연령도 뱃지로](2026-10-07 사용자 지적: "Kids & Children
+            (event)라던가 4세~5세 연령... 제목 아래 있는것들 눈에 잘 안띄네..
+            뱃지처럼 만들어주던가") — 기존엔 흐린 회색 텍스트 한 줄이라
+            눈에 잘 안 띄었다. 할인/마감임박/신설과 같은 줄에 뱃지로 합쳐
+            한 번에 보여준다(여백도 줄어드는 효과). */}
+        <div className="flex flex-wrap items-center gap-1">
+          {item.sub_category_name && (
+            <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-600">{item.sub_category_name}</span>
+          )}
+          {ageLabel && <span className="shrink-0 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">{ageLabel}</span>}
+          {discountBadge && <span className="shrink-0 rounded bg-rose-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">{discountBadge}</span>}
+          {isClosingSoon && <span className="shrink-0 rounded bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">마감임박</span>}
+          {isNew && <span className="shrink-0 rounded bg-blue-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">신설</span>}
+        </div>
         {/* [회차 표시 추가](2026-10-07 사용자 지적: "가격 관련 몇회 몇만원
             아니었어? 몇회가 안보여 상세 들어가야 보여") — total_sessions를
             가격 옆에 바로 보여준다. */}
@@ -500,10 +502,16 @@ function CultureClubDetailSheet({ item, onClose }: { item: CultureClubClass; onC
             {capacity != null && <p className="text-sm text-gray-500">정원 {capacity}명</p>}
             {likeCount != null && <p className="text-sm text-gray-500">좋아요 {likeCount}</p>}
 
+            {/* [찜 버튼 — 빈 박스 방지](2026-10-07 사용자 지적: "찜 어디갔어")
+                열심맘 미달/비로그인이면 BookmarkButton이 null을 반환하는데,
+                테두리 박스를 항상 그려두면 그 자리에 빈 테두리만 남아 "찜이
+                사라진 것처럼" 보였다 — 버튼 자체에 맡기고 래퍼를 없앤다. */}
             <div className="mt-2 flex items-center gap-2">
-              <div className="flex items-center justify-center rounded-lg border border-gray-300 px-3 py-2">
-                <BookmarkButton target={toBookmarkTarget(item)} />
-              </div>
+              <BookmarkButton target={toBookmarkTarget(item)} />
+              {/* [버튼 문구 — 상태를 그대로 동사처럼 쓰지 않음](2026-10-07
+                  사용자 지적: "접수중하러 가기가 뭐야") "접수중"은 상태
+                  명사라 "~하러 가기"를 붙이면 말이 안 됐다. 상태는 이미
+                  뱃지로 따로 보이니 버튼은 고정 문구로 둔다. */}
               {externalUrl && !isClosed ? (
                 <a
                   href={externalUrl}
@@ -511,7 +519,7 @@ function CultureClubDetailSheet({ item, onClose }: { item: CultureClubClass; onC
                   rel="noopener noreferrer"
                   className="flex-1 rounded-lg bg-orange-500 px-4 py-2 text-center text-sm font-semibold text-white hover:bg-orange-600"
                 >
-                  {statusLabel(item)}하러 가기 ↗
+                  접수 페이지로 가기 ↗
                 </a>
               ) : (
                 <span className="flex-1 rounded-lg bg-gray-200 px-4 py-2 text-center text-sm font-semibold text-gray-500">
@@ -927,8 +935,11 @@ export function CultureClubTabView() {
               ⏱ 마지막 업데이트 {formatUpdatedAt(items[0].collected_at)} · 접수 상태는 하루 1회 갱신돼요(찜하면 더 자주 확인해 알려드려요)
             </p>
           )}
+          {/* [반응형 — PC에서 여러 칸](2026-10-07 사용자 지적: "문센같은 경우
+              PC에서 보면 한줄에 3개... 우리도 그렇게 안되나") — 모바일은
+              1열 그대로, 화면이 넓어지면 2열(md)→3열(lg)로 늘린다. */}
           {items.length > 0 && (
-            <div className="flex flex-col gap-2">
+            <div className="grid grid-cols-1 gap-2 md:grid-cols-2 lg:grid-cols-3">
               {items.map((item, index) =>
                 (index + 1) % AD_SLOT_INTERVAL === 0 ? (
                   <div key={item.id} className="contents">
