@@ -15,6 +15,7 @@ export const CULTURE_CLUB_BRAND_OPTIONS = [
   { key: 'all', label: '전체' },
   { key: 'emart', label: '이마트 컬처클럽' },
   { key: 'lottemart', label: '롯데마트 문화센터' },
+  { key: 'hyundai', label: '현대백화점 문화센터' },
 ] as const;
 
 export type CultureClubBrandKey = (typeof CULTURE_CLUB_BRAND_OPTIONS)[number]['key'];

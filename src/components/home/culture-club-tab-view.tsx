@@ -51,9 +51,25 @@ function buildEmartClassUrl(sourceClassId: string) {
   return `https://www.cultureclub.emart.com/class/${sourceClassId}`;
 }
 
+// [현대백화점 — 실측 확인](2026-10-08) 상세 페이지 링크는 stCd(지점)/
+// sqCd/crsSqNo(=source_class_id)/crsCd/proCustNo 5개 파라미터가 필요하다
+// — sqCd/crsCd/proCustNo는 공통 컬럼이 아니라 raw_extra에 있다.
+function buildHyundaiCourseViewUrl(params: { storeCode: string; classId: string; sqCd: string; crsCd: string; proCustNo: string }) {
+  const query = new URLSearchParams({
+    stCd: params.storeCode,
+    sqCd: params.sqCd,
+    crsSqNo: params.classId,
+    crsCd: params.crsCd,
+    proCustNo: params.proCustNo,
+    ctGubn: '',
+  });
+  return `https://www.ehyundai.com/newCulture/CT/CT010100_V.do?${query.toString()}`;
+}
+
 // 브랜드마다 "신청하러 가기" 외부 링크를 만드는 방식이 다르다(이마트는
-// class_id만, 롯데마트는 store_code+semester_code+target_code도 필요 —
-// 뒤 둘은 공통 컬럼이 아니라 raw_extra에 있다) — 여기서만 분기한다.
+// class_id만, 롯데마트는 store_code+semester_code+target_code도 필요,
+// 현대백화점은 store_code+sqCd+crsCd+proCustNo도 필요 — 뒤쪽 추가 파라미터
+// 들은 공통 컬럼이 아니라 raw_extra에 있다) — 여기서만 분기한다.
 function buildExternalApplyUrl(item: CultureClubClass): string | null {
   if (item.brand === 'emart') return buildEmartClassUrl(item.source_class_id);
   if (item.brand === 'lottemart' && item.store_code) {
@@ -68,22 +84,37 @@ function buildExternalApplyUrl(item: CultureClubClass): string | null {
       });
     }
   }
+  if (item.brand === 'hyundai' && item.store_code) {
+    const sqCd = item.raw_extra.sq_cd;
+    const crsCd = item.raw_extra.crs_cd;
+    const proCustNo = item.raw_extra.pro_cust_no;
+    if (typeof sqCd === 'string' && typeof crsCd === 'string' && typeof proCustNo === 'string') {
+      return buildHyundaiCourseViewUrl({ storeCode: item.store_code, classId: item.source_class_id, sqCd, crsCd, proCustNo });
+    }
+  }
   return null;
 }
 
 // 찜 기능은 아직 브랜드별 kind(emart_class/lottemart_class)를 쓴다 —
 // bookmarks.ts가 내부적으로 culture_club_classes.id로 변환해주므로 이 화면은
 // 기존 호출 방식을 그대로 재사용한다(2026-10-06 찜 FK 통합, Decision 028).
-function toBookmarkTarget(item: CultureClubClass): BookmarkTarget {
+// [현대백화점 — 찜 아직 미지원](2026-10-08, Decision 029) BookmarkTarget
+// 유니온에 'hyundai_class'가 아직 없다 — 브랜드가 늘어날 때마다 bookmarks.ts/
+// MyBookmark/getMyBookmarkedIds를 전부 같이 늘리는 구조적 비용은 Decision
+// 028이 이미 "조회는 통합, 쓰기는 당장 미룸"으로 의도적으로 남겨둔 부분이라,
+// 이번 범위(데이터 수집)를 넘어서는 결정을 임의로 추가하지 않는다(제5장
+// 제3조). null을 돌려주고 호출부가 찜 버튼 자체를 생략한다.
+function toBookmarkTarget(item: CultureClubClass): BookmarkTarget | null {
   if (item.brand === 'emart') return { kind: 'emart_class', emartClassId: item.source_class_id };
-  return { kind: 'lottemart_class', lottemartClassId: item.source_class_id };
+  if (item.brand === 'lottemart') return { kind: 'lottemart_class', lottemartClassId: item.source_class_id };
+  return null;
 }
 
 type StoreOption = { storeCode: string; label: string; distanceMeters?: number | null };
 
 type CultureClubClass = {
   id: number;
-  brand: 'emart' | 'lottemart';
+  brand: 'emart' | 'lottemart' | 'hyundai';
   source_class_id: string;
   class_title: string;
   store_code: string | null;
@@ -119,6 +150,7 @@ type CultureClubClass = {
 const BRAND_LABELS: Record<CultureClubClass['brand'], string> = {
   emart: '이마트',
   lottemart: '롯데마트',
+  hyundai: '현대백화점',
 };
 
 function formatTimeRange(start: string | null, end: string | null) {
@@ -363,6 +395,7 @@ function ClassCard({ item, onSelect }: { item: CultureClubClass; onSelect: (item
   // 보여주지마.. 시간은 내부적으로 쓸꺼야") 데이터가 없으면(롯데마트 등)
   // "상세 페이지에서 확인"으로 안내한다(추측해서 날짜를 만들어내지 않음).
   const registrationLabel = formatRegistrationDateLabel(item);
+  const bookmarkTarget = toBookmarkTarget(item);
 
   return (
     <div
@@ -378,9 +411,11 @@ function ClassCard({ item, onSelect }: { item: CultureClubClass; onSelect: (item
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex items-start justify-between gap-1">
           <p className="line-clamp-2 flex-1 text-sm font-medium text-slate-900">{item.class_title}</p>
-          <span onClick={(e) => e.stopPropagation()} className="-mt-1 shrink-0">
-            <BookmarkButton target={toBookmarkTarget(item)} />
-          </span>
+          {bookmarkTarget && (
+            <span onClick={(e) => e.stopPropagation()} className="-mt-1 shrink-0">
+              <BookmarkButton target={bookmarkTarget} />
+            </span>
+          )}
         </div>
         {/* [브랜드 뱃지 제거](2026-10-07 사용자 지적: "롯데몰수지점 8.5km
             되어있는데 롯데마트 뱃지가 위에 안나와도 되지 않나?") — 아래
@@ -470,6 +505,7 @@ function CultureClubDetailSheet({ item, onClose }: { item: CultureClubClass; onC
   const distanceLabel = formatDistanceLabel(item.distance_meters);
   const thumbnailUrl = getThumbnailUrl(item);
   const externalUrl = buildExternalApplyUrl(item);
+  const bookmarkTarget = toBookmarkTarget(item);
   // 접수마감/접수불가(롯데마트) 상태일 땐 외부 신청 버튼을 비활성 처리한다
   // (실측 확인 — 눌러도 "접수가 마감되었습니다" 안내만 뜨고 신청으로 안 이어짐).
   const isClosed = item.raw_status === '접수마감' || item.raw_status === '접수불가';
@@ -549,7 +585,7 @@ function CultureClubDetailSheet({ item, onClose }: { item: CultureClubClass; onC
                 테두리 박스를 항상 그려두면 그 자리에 빈 테두리만 남아 "찜이
                 사라진 것처럼" 보였다 — 버튼 자체에 맡기고 래퍼를 없앤다. */}
             <div className="mt-2 flex items-center gap-2">
-              <BookmarkButton target={toBookmarkTarget(item)} />
+              {bookmarkTarget && <BookmarkButton target={bookmarkTarget} />}
               {/* [버튼 문구 — 상태를 그대로 동사처럼 쓰지 않음](2026-10-07
                   사용자 지적: "접수중하러 가기가 뭐야") "접수중"은 상태
                   명사라 "~하러 가기"를 붙이면 말이 안 됐다. 상태는 이미
@@ -699,7 +735,12 @@ export function CultureClubTabView() {
     setSelectedStoreCodes(new Set());
     setSelectedSubCategories(new Set());
     setSelectedTargets(new Set());
-    if (brandKey === 'all') {
+    // [현대백화점 — 지점 뱃지 드릴다운 아직 미지원](2026-10-08, Decision 029)
+    // 전용 지점 목록 API가 아직 없다 — 데이터 수집(이번 범위)과 별개로,
+    // 추측으로 지점 목록을 지어내지 않고 빈 목록으로 둔다(브랜드 필터
+    // 자체는 정상 동작, 요일/카테고리 등 다른 필터와 함께 전체 통합검색에
+    // 그대로 걸린다).
+    if (brandKey === 'all' || brandKey === 'hyundai') {
       setStores([]);
       return;
     }

@@ -25,7 +25,7 @@ vi.mock('@/lib/community/bookmarks', async (importOriginal) => {
 
 type ClassFixture = {
   id: number;
-  brand: 'emart' | 'lottemart';
+  brand: 'emart' | 'lottemart' | 'hyundai';
   source_class_id: string;
   class_title: string;
   store_code: string | null;
@@ -118,6 +118,43 @@ function makeLottemartClass(overrides: Partial<ClassFixture> = {}): ClassFixture
     register_start_at: null,
     raw_extra: { semester_code: '202603', target_code: '4', discount_badge_text: '35% 할인', is_new: false, is_closing_soon: false, like_count: 1 },
     collected_at: '2026-10-03T04:12:00+00:00',
+    ...overrides,
+  };
+}
+
+function makeHyundaiClass(overrides: Partial<ClassFixture> = {}): ClassFixture {
+  return {
+    id: 3,
+    brand: 'hyundai',
+    source_class_id: '40950',
+    class_title: '10.17) 오감발달 우리쌀 키즈베이킹 : 꼬마버스 자동차 쿠키_3세 이상 / 보호자 1인 동반',
+    store_code: '220',
+    store_name: '무역센터점',
+    main_category_name: null,
+    sub_category_name: '엄마랑 아가랑',
+    class_day: ['토'],
+    start_time: '1530',
+    end_time: '1630',
+    class_original_fee: null,
+    class_fee: 30000,
+    class_material_fee: null,
+    instructor_name: '주연진',
+    min_age_months: 36,
+    max_age_months: null,
+    schedule_start_date: '2026-10-17',
+    schedule_end_date: '2026-10-17',
+    total_sessions: 1,
+    normalized_status: 'OPEN',
+    raw_status: '신청가능',
+    register_start_at: null,
+    raw_extra: {
+      category_keyword: '025',
+      sq_cd: '168',
+      crs_cd: '37932',
+      pro_cust_no: 'P02666039',
+      main_image_url: 'https://imgprism.ehyundai.com/x.jpg',
+    },
+    collected_at: '2026-10-07T04:12:00+00:00',
     ...overrides,
   };
 }
@@ -651,5 +688,45 @@ describe('CultureClubTabView — 검색창(제출 시에만 검색)', () => {
       const call = fetchMock.mock.calls.find(([url]) => (url as string).includes('q=%ED%8A%B8%EB%8B%88%ED%8A%B8%EB%8B%88'));
       expect(call).toBeTruthy();
     });
+  });
+});
+
+describe('CultureClubTabView — 현대백화점(2026-10-08, Decision 029)', () => {
+  it('현대백화점 강좌 카드가 지점/카테고리/썸네일과 함께 보인다(main_image_url을 그대로 사용)', async () => {
+    stubFetch([makeHyundaiClass()]);
+    const { container } = render(<CultureClubTabView />);
+    await screen.findByText(/오감발달/);
+
+    expect(screen.getByText(/무역센터점/)).toBeInTheDocument();
+    expect(screen.getByText('엄마랑 아가랑')).toBeInTheDocument();
+    expect(container.querySelector('img')).toHaveAttribute('src', 'https://imgprism.ehyundai.com/x.jpg');
+  });
+
+  it('찜 버튼은 아직 지원하지 않아 렌더링되지 않는다(2026-10-08, Decision 029 — BookmarkTarget 유니온 미확장)', async () => {
+    mockUser.current = { id: 'user-1' };
+    getMyProfileMock.mockResolvedValue({ grade: 'active', birth_years: [], birth_months: [] });
+    stubFetch([makeHyundaiClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/오감발달/);
+
+    expect(screen.queryByLabelText('찜하기')).not.toBeInTheDocument();
+    mockUser.current = null;
+  });
+
+  it('클릭하면 상세 시트가 열리고 현대백화점 상세 페이지로 가는 외부 링크가 올바른 파라미터로 만들어진다', async () => {
+    stubFetch([makeHyundaiClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/오감발달/);
+    fireEvent.click(screen.getAllByText(/오감발달/)[0]);
+
+    await screen.findByText('현대백화점 강좌 상세');
+    const link = screen.getByText('접수 페이지로 가기 ↗');
+    const href = link.closest('a')?.getAttribute('href') ?? '';
+    expect(href).toContain('https://www.ehyundai.com/newCulture/CT/CT010100_V.do');
+    expect(href).toContain('stCd=220');
+    expect(href).toContain('sqCd=168');
+    expect(href).toContain('crsSqNo=40950');
+    expect(href).toContain('crsCd=37932');
+    expect(href).toContain('proCustNo=P02666039');
   });
 });

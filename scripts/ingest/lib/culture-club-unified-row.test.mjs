@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toUnifiedEmartRow, toUnifiedLottemartRow } from './culture-club-unified-row.mjs';
+import { toUnifiedEmartRow, toUnifiedLottemartRow, toUnifiedHyundaiRow } from './culture-club-unified-row.mjs';
 
 describe('toUnifiedEmartRow', () => {
   it('이마트 행을 통합 테이블 행으로 변환한다', () => {
@@ -70,5 +70,46 @@ describe('toUnifiedLottemartRow', () => {
     const result = toUnifiedLottemartRow(row);
 
     expect(result.raw_extra.main_image_url).toBe('https://culture.lottemart.com/files/culture/LMC/Storage/attach/Lecture/2026/01/x_IMG.jpg');
+  });
+});
+
+describe('toUnifiedHyundaiRow', () => {
+  it('현대백화점 행을 통합 테이블 행으로 변환한다(별도 상세수집 단계 없이 목록 데이터 그대로)', () => {
+    const row = {
+      class_id: '40950',
+      class_title: '10.17) 오감발달 우리쌀 키즈베이킹 : 꼬마버스 자동차 쿠키_3세 이상 / 보호자 1인 동반',
+      store_code: '220',
+      store_name: '무역센터점',
+      sub_category_name: '엄마랑 아가랑',
+      min_age_months: 36,
+      max_age_months: null,
+      class_day: ['토'],
+      schedule_days_code: ['SAT'],
+      start_time: '1530',
+      end_time: '1630',
+      class_fee: 30000,
+      instructor_name: '주연진',
+      schedule_start_date: '2026-10-17',
+      schedule_end_date: '2026-10-17',
+      total_sessions: 1,
+      raw_status: '신청가능',
+      normalized_status: 'OPEN',
+      main_image_url: 'https://imgprism.ehyundai.com/x.jpg',
+      category_keyword: '025',
+      sq_cd: '168',
+      crs_cd: '37932',
+      pro_cust_no: 'P02666039',
+    };
+    const result = toUnifiedHyundaiRow(row);
+
+    expect(result.brand).toBe('hyundai');
+    expect(result.source_class_id).toBe('40950');
+    expect(result.class_title).toBe(row.class_title);
+    expect(result.raw_status).toBe('신청가능');
+    expect(result.register_start_at).toBeNull();
+    expect(result.raw_extra.main_image_url).toBe('https://imgprism.ehyundai.com/x.jpg');
+    expect(result.raw_extra.sq_cd).toBe('168');
+    expect(result.raw_extra.crs_cd).toBe('37932');
+    expect(result.raw_extra.pro_cust_no).toBe('P02666039');
   });
 });
