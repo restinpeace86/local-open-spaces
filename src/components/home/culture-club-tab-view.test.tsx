@@ -163,6 +163,27 @@ describe('CultureClubTabView — 기본값(전체, 브랜드 무관 통합검색
     expect(searchCall?.[0]).not.toContain('store_code=');
   });
 
+  it('롯데마트도 상세수집이 채운 main_image_url이 있으면 썸네일로 보인다(2026-10-07 사용자 지적: "이미지가 없지? ... 여기 가니깐 이미지 있는데?")', async () => {
+    stubFetch([
+      makeLottemartClass({ raw_extra: { main_image_url: 'https://culture.lottemart.com/files/culture/LMC/Storage/attach/Lecture/2026/01/x_IMG.jpg' } }),
+    ]);
+    const { container } = render(<CultureClubTabView />);
+    await screen.findByText('랄랄라 코알라');
+
+    expect(container.querySelector('img')).toHaveAttribute(
+      'src',
+      'https://culture.lottemart.com/files/culture/LMC/Storage/attach/Lecture/2026/01/x_IMG.jpg'
+    );
+  });
+
+  it('롯데마트에 main_image_url이 없으면 플레이스홀더를 보여준다(추측으로 이미지를 지어내지 않음)', async () => {
+    stubFetch([makeLottemartClass({ raw_extra: {} })]);
+    const { container } = render(<CultureClubTabView />);
+    await screen.findByText('랄랄라 코알라');
+
+    expect(container.querySelector('img')).not.toBeInTheDocument();
+  });
+
   it('카드에 지점명이 보인다(브랜드 뱃지는 위치 줄과 중복이라 제거됨, 2026-10-07 사용자 지적)', async () => {
     stubFetch([makeEmartClass(), makeLottemartClass()]);
     render(<CultureClubTabView />);

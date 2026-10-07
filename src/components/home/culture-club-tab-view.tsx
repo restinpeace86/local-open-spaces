@@ -290,6 +290,18 @@ function statusLabel(item: CultureClubClass) {
   return item.raw_status ?? item.normalized_status;
 }
 
+// [썸네일 — 롯데마트도 상세수집으로 채워짐](2026-10-07 사용자 지적: "이거
+// 관련해서 왜 이미지가 없지? ... 여기 가니깐 이미지 있는데?") — 이마트는
+// bucket/region/key를 CDN URL로 조합해야 하지만(buildCultureClubThumbnailUrl),
+// 롯데마트는 lottemart-culture-club-detail.mjs가 이미 완전한 절대 URL을
+// raw_extra.main_image_url에 채워주므로 그대로 쓴다.
+function getThumbnailUrl(item: CultureClubClass): string | null {
+  if (item.brand === 'emart') {
+    return buildCultureClubThumbnailUrl(item.raw_extra.main_image_key as string | null | undefined);
+  }
+  return (item.raw_extra.main_image_url as string | null | undefined) ?? null;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function CultureClubAdSlot() {
   return null;
@@ -310,17 +322,15 @@ function toggleInSet<T>(set: Set<T>, value: T): Set<T> {
 // 우리는 더 풍부하게"라는 지시에 따라 참고 화면엔 없는 연령 범위/브랜드
 // 뱃지/신설·할인 뱃지를 함께 보여준다.
 function ClassImage({ item }: { item: CultureClubClass }) {
-  // [이미지 — 이마트만 있음, 실측 확인] 롯데마트 목록 응답에는 썸네일 이미지이
-  // 전혀 없다 — 다른 브랜드는 전부 플레이스홀더로 폴백한다. 이마트도 실제로
-  // main_image_key가 있는 강좌는 전체의 8% 정도뿐이다(반복되는 정규 강좌엔
-  // 원본 API 자체가 사진을 안 준다 — 추측 금지, 실측 확인) — 나머지는 전부
-  // 플레이스홀더로 보이는 게 정상 동작이다.
+  // [이미지 — 두 브랜드 다 상세수집으로 채워짐, 실측 확인] 목록 API 응답에는
+  // 썸네일이 없지만(두 브랜드 다 공통), 상세 페이지(class-detail 배치)가
+  // class_id당 한 번씩 조회해 채워둔다 — getThumbnailUrl() 참고. 그래도
+  // 상세수집이 아직 못 돈 강좌는 플레이스홀더로 보이는 게 정상 동작이다.
   // [픽셀 비율 — 실측 확인](2026-10-07 사용자 지적: "픽셀 맞춘거 맞아?") 실제
-  // CDN 원본이 정사각형이 아니라 가로형(271×173, 616×416 등 약 3:2)이라
-  // 정사각형(96×96) 박스에 넣으면 과도하게 크롭됐다 — 가로로 조금 더 넓은
-  // 박스(112×96)로 바꿔 크롭을 줄인다.
-  const imageKey = item.brand === 'emart' ? (item.raw_extra.main_image_key as string | null | undefined) : null;
-  const thumbnailUrl = buildCultureClubThumbnailUrl(imageKey);
+  // 원본 이미지가 정사각형이 아니라 가로형(약 3:2)이라 정사각형(96×96)
+  // 박스에 넣으면 과도하게 크롭됐다 — 가로로 조금 더 넓은 박스(112×96)로
+  // 바꿔 크롭을 줄인다.
+  const thumbnailUrl = getThumbnailUrl(item);
   return (
     <div className="relative h-24 w-28 shrink-0 overflow-hidden rounded-lg bg-gray-100">
       <span
@@ -458,8 +468,7 @@ function CultureClubDetailSheet({ item, onClose }: { item: CultureClubClass; onC
   const hasMaterialFee = item.class_material_fee != null && item.class_material_fee > 0;
   const ageLabel = formatAgeRangeMonths(item.min_age_months, item.max_age_months);
   const distanceLabel = formatDistanceLabel(item.distance_meters);
-  const imageKey = item.brand === 'emart' ? (item.raw_extra.main_image_key as string | null | undefined) : null;
-  const thumbnailUrl = buildCultureClubThumbnailUrl(imageKey);
+  const thumbnailUrl = getThumbnailUrl(item);
   const externalUrl = buildExternalApplyUrl(item);
   // 접수마감/접수불가(롯데마트) 상태일 땐 외부 신청 버튼을 비활성 처리한다
   // (실측 확인 — 눌러도 "접수가 마감되었습니다" 안내만 뜨고 신청으로 안 이어짐).

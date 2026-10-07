@@ -81,6 +81,20 @@ export function parseDetailInfoTable(html) {
   return result;
 }
 
+// [썸네일 이미지](2026-10-07 사용자 지적: "접수페이지로 가기 해서... 여기
+// 가니깐 이미지 있는데?") — 실측 확인: 목록 응답(searchList.do)엔 <img>가
+// 전혀 없지만(2026-10-04 기존 조사), 상세 페이지엔 `<div class="lct-visual">
+// <img src="...">`로 이 강좌 자신의 썸네일이 있다(같은 페이지 하단에
+// "비슷한 강좌" 카드들도 각자 <img>를 갖고 있어 페이지 전체에서 첫 번째
+// <img>만 고르는 건 위험하다 — `.lct-visual` 컨테이너로 범위를 좁혀야
+// 정확히 이 강좌의 이미지만 집힌다, alt 텍스트가 현재 강좌 제목과 일치함을
+// 실측 확인).
+export function parseMainImageUrl(html) {
+  const root = parse(html);
+  const src = root.querySelector('.lct-visual img')?.getAttribute('src');
+  return src || null;
+}
+
 async function fetchDetailHtml(storeCode, classId, semesterCode, targetCode) {
   const params = new URLSearchParams({
     search_str_cd: storeCode,
@@ -148,6 +162,7 @@ export async function run({ dryRun = false } = {}) {
     try {
       const html = await fetchDetailHtml(row.store_code, row.class_id, row.semester_code, row.target_code);
       const { classCode, classroom, classIntro, classTip } = parseDetailInfoTable(html);
+      const mainImageUrl = parseMainImageUrl(html);
 
       const { error: updateError } = await client
         .from('lottemart_culture_club_classes')
@@ -156,6 +171,7 @@ export async function run({ dryRun = false } = {}) {
           classroom,
           class_intro: classIntro,
           class_tip: classTip,
+          main_image_url: mainImageUrl,
           detail_fetched_at: new Date().toISOString(),
         })
         .eq('id', row.id);

@@ -45,7 +45,7 @@ import { createAdminClient } from './lib/supabase-admin.mjs';
 import { applyRandomStartupDelay } from './lib/random-startup-delay.mjs';
 import { parseAgeRangeToMonths } from './lib/age-range-parser.mjs';
 import { normalizeDaysToCodes, yyyymmddToIso } from './lib/schedule-normalizer.mjs';
-import { normalizeLottemartStatus, stampCollectedAt } from './lib/culture-club-common.mjs';
+import { normalizeLottemartStatus, stampCollectedAt, mergeDetailEnrichment } from './lib/culture-club-common.mjs';
 import { toUnifiedLottemartRow } from './lib/culture-club-unified-row.mjs';
 
 loadEnv();
@@ -403,6 +403,23 @@ export async function markFallenOutRowsAsUnavailable(client, freshClassIds, stor
   return staleIds.length;
 }
 
+// [통합 테이블 이중 쓰기 — 상세정보(이미지/소개 등) 유실 버그 수정]
+// 2026-10-07 — mergeDetailEnrichment() 주석 참고(emart-culture-club.mjs와
+// 동일한 버그를 여기도 그대로 가지고 있었다).
+async function fetchDetailEnrichmentByClassId(client) {
+  const map = new Map();
+  for (let from = 0; ; from += EXISTING_ID_PAGE_SIZE) {
+    const { data, error } = await client
+      .from('lottemart_culture_club_classes')
+      .select('class_id, class_code, classroom, class_intro, class_tip, main_image_url, detail_fetched_at')
+      .range(from, from + EXISTING_ID_PAGE_SIZE - 1);
+    if (error) throw new Error(`상세정보 조회 실패: ${error.message}`);
+    for (const row of data) map.set(row.class_id, row);
+    if (data.length < EXISTING_ID_PAGE_SIZE) break;
+  }
+  return map;
+}
+
 async function postPipelineLog(client, { status, errorMessage = null, metaData = null }) {
   try {
     const { error } = await client.from('pipeline_logs').insert({
@@ -473,7 +490,8 @@ export async function run({ dryRun = false, storesLimit = null } = {}) {
   // [통합 테이블 이중 쓰기](2026-10-06, project/decision-log.md Decision 028):
   // emart-culture-club.mjs와 동일한 패턴 — 실패해도 메인 배치는 성공으로 처리.
   try {
-    const unifiedRows = rows.map(toUnifiedLottemartRow);
+    const enrichmentByClassId = await fetchDetailEnrichmentByClassId(client);
+    const unifiedRows = mergeDetailEnrichment(rows, enrichmentByClassId).map(toUnifiedLottemartRow);
     for (let i = 0; i < unifiedRows.length; i += UPSERT_CHUNK_SIZE) {
       const chunk = unifiedRows.slice(i, i + UPSERT_CHUNK_SIZE);
       const { error: unifiedError } = await client.from('culture_club_classes').upsert(chunk, { onConflict: 'brand,source_class_id' });

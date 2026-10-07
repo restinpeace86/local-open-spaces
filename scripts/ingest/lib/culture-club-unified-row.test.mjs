@@ -58,4 +58,17 @@ describe('toUnifiedLottemartRow', () => {
     expect(result.raw_extra.target_code).toBe('4');
     expect(result.raw_extra.semester_code).toBe('202603');
   });
+
+  it('main_image_url(상세수집으로 채워진 썸네일)을 raw_extra에 담는다(2026-10-07 — 사진 있는데 왜 안보이는지 사용자 지적)', () => {
+    const row = {
+      class_id: 'L1',
+      class_title: '테스트 강좌',
+      registration_status: '바로신청',
+      normalized_status: 'OPEN',
+      main_image_url: 'https://culture.lottemart.com/files/culture/LMC/Storage/attach/Lecture/2026/01/x_IMG.jpg',
+    };
+    const result = toUnifiedLottemartRow(row);
+
+    expect(result.raw_extra.main_image_url).toBe('https://culture.lottemart.com/files/culture/LMC/Storage/attach/Lecture/2026/01/x_IMG.jpg');
+  });
 });

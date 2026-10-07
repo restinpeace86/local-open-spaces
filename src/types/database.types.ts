@@ -874,6 +874,7 @@ export type Database = {
           is_new: boolean
           like_count: number | null
           main_category_name: string | null
+          main_image_url: string | null
           max_age_months: number | null
           min_age_months: number | null
           normalized_status: string | null
@@ -918,6 +919,7 @@ export type Database = {
           is_new?: boolean
           like_count?: number | null
           main_category_name?: string | null
+          main_image_url?: string | null
           max_age_months?: number | null
           min_age_months?: number | null
           normalized_status?: string | null
@@ -962,6 +964,7 @@ export type Database = {
           is_new?: boolean
           like_count?: number | null
           main_category_name?: string | null
+          main_image_url?: string | null
           max_age_months?: number | null
           min_age_months?: number | null
           normalized_status?: string | null

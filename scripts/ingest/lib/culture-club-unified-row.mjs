@@ -131,6 +131,7 @@ function buildUnifiedLottemartRow(row) {
       class_code: row.class_code,
       class_intro: row.class_intro,
       class_tip: row.class_tip,
+      main_image_url: row.main_image_url,
     },
     detail_fetched_at: row.detail_fetched_at,
     collected_at: row.collected_at,

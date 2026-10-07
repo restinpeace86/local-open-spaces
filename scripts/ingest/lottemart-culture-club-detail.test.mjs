@@ -2,7 +2,7 @@
 // 단위 테스트. 실측 표본 그대로(2026-10-04 courseview.do 직접 호출, 응답에서
 // #lctInfo 표 영역만 그대로 복사).
 import { describe, expect, it } from 'vitest';
-import { parseDetailInfoTable } from './lottemart-culture-club-detail.mjs';
+import { parseDetailInfoTable, parseMainImageUrl } from './lottemart-culture-club-detail.mjs';
 
 function wrapHtml(tableInner) {
   return `<html><body><div id="lctInfo" class="conts-box mt30">
@@ -61,5 +61,40 @@ describe('parseDetailInfoTable', () => {
   it('#lctInfo 테이블이 없으면 전부 null을 반환한다', () => {
     const result = parseDetailInfoTable('<html><body>다른 페이지</body></html>');
     expect(result).toEqual({ classCode: null, classroom: null, classIntro: null, classTip: null });
+  });
+});
+
+// [썸네일 이미지](2026-10-07 사용자 지적: "접수페이지로 가기 해서... 여기
+// 가니깐 이미지 있는데?") — 실측 표본(courseview.do, cls_cd=20260332236450)
+// 그대로. 페이지 하단에 "비슷한 강좌" 카드들도 각자 <img>를 갖고 있어(실측
+// 확인), .lct-visual 바깥의 디코이 이미지를 함께 넣어 범위가 정확히
+// 좁혀지는지 검증한다.
+function wrapDetailPageHtml({ mainImageSrc, decoyImageSrc }) {
+  return `<html><body>
+    <div class="lct_head-area mt20">
+      <div class="lct-visual left">
+        <img src="${mainImageSrc}" onerror="this.src='/resources/images/culture/ClassDefault/LectureView/36.jpg'" alt="현재 강좌 이미지"/>
+      </div>
+    </div>
+    <div class="recommend-list">
+      <img src="${decoyImageSrc}" alt="비슷한 강좌 이미지"/>
+    </div>
+  </body></html>`;
+}
+
+describe('parseMainImageUrl', () => {
+  it('.lct-visual 안의 이미지만 이 강좌 자신의 썸네일로 추출한다(비슷한 강좌 카드의 이미지는 제외)', () => {
+    const html = wrapDetailPageHtml({
+      mainImageSrc: 'https://culture.lottemart.com/files/culture/LMC/Storage/attach/Lecture/2026/01/2026013223637017547461_IMG.jpg',
+      decoyImageSrc: 'https://culture.lottemart.com/files/culture/LMC/Storage/attach/Lecture/2018/10/2018043223601013114822_IMG.jpg',
+    });
+
+    expect(parseMainImageUrl(html)).toBe(
+      'https://culture.lottemart.com/files/culture/LMC/Storage/attach/Lecture/2026/01/2026013223637017547461_IMG.jpg'
+    );
+  });
+
+  it('.lct-visual 자체가 없으면 null을 반환한다', () => {
+    expect(parseMainImageUrl('<html><body>다른 페이지</body></html>')).toBeNull();
   });
 });

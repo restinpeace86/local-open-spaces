@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeEmartStatus, normalizeLottemartStatus, parseInstructorFromTitle, stampCollectedAt } from './culture-club-common.mjs';
+import { normalizeEmartStatus, normalizeLottemartStatus, parseInstructorFromTitle, stampCollectedAt, mergeDetailEnrichment } from './culture-club-common.mjs';
 
 describe('normalizeEmartStatus', () => {
   it('접수중은 OPEN이다', () => {
@@ -66,5 +66,24 @@ describe('stampCollectedAt', () => {
     const rows = [{ class_id: 'a', collected_at: '2026-10-03T00:00:00.000Z' }];
     const result = stampCollectedAt(rows, '2026-10-07T00:00:00.000Z');
     expect(result[0].collected_at).toBe('2026-10-07T00:00:00.000Z');
+  });
+});
+
+describe('mergeDetailEnrichment', () => {
+  it('class_id가 일치하는 상세정보(이미지 등)를 행에 합친다(2026-10-07 — 통합 테이블에서 이미지/소개가 사라지던 버그 수정, 이마트/롯데마트 공통)', () => {
+    const rows = [{ class_id: 'a', class_title: '제목' }];
+    const enrichmentByClassId = new Map([['a', { class_id: 'a', main_image_key: 'classImages/x', detail_fetched_at: '2026-10-03T00:00:00Z' }]]);
+
+    const result = mergeDetailEnrichment(rows, enrichmentByClassId);
+
+    expect(result[0].main_image_key).toBe('classImages/x');
+    expect(result[0].class_title).toBe('제목');
+  });
+
+  it('상세정보가 아직 없는(detail_fetched_at이 null인) 강좌는 원본 행을 그대로 둔다', () => {
+    const rows = [{ class_id: 'b', class_title: '제목2' }];
+    const result = mergeDetailEnrichment(rows, new Map());
+
+    expect(result[0]).toEqual({ class_id: 'b', class_title: '제목2' });
   });
 });

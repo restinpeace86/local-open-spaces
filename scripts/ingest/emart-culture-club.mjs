@@ -39,7 +39,7 @@ import {
   parseTotalSessionsFromTitle,
   yyyymmddToIso,
 } from './lib/schedule-normalizer.mjs';
-import { normalizeEmartStatus, parseInstructorFromTitle, stampCollectedAt } from './lib/culture-club-common.mjs';
+import { normalizeEmartStatus, parseInstructorFromTitle, stampCollectedAt, mergeDetailEnrichment } from './lib/culture-club-common.mjs';
 import { toUnifiedEmartRow } from './lib/culture-club-unified-row.mjs';
 import { sendDiscordNotification } from '../notify-discord.mjs';
 
@@ -342,7 +342,10 @@ async function fetchExistingClassIds(client) {
 // (기존 raw_extra와 병합하지 않고 덮어씀) main_image_key가 없는 채로
 // 써버려, 상세수집이 이미 채워둔 이미지 데이터가 통합 테이블(실제 화면이
 // 읽는 테이블)에서는 매번 사라지고 있었다. raw 테이블에 이미 저장된 상세
-// 필드를 읽어와 합쳐준 뒤에 통합 변환을 돌린다.
+// 필드를 읽어와 합쳐준 뒤에 통합 변환을 돌린다(실제 합치는 mergeDetail
+// Enrichment()는 두 브랜드가 동일 버그/동일 고침이라 culture-club-common.mjs
+// 공유 함수로 뺐다 — 2026-10-07, 롯데마트도 같은 버그를 갖고 있었음을 뒤늦게
+// 발견하고 고치면서).
 async function fetchDetailEnrichmentByClassId(client) {
   const map = new Map();
   for (let from = 0; ; from += EXISTING_ID_PAGE_SIZE) {
@@ -355,13 +358,6 @@ async function fetchDetailEnrichmentByClassId(client) {
     if (data.length < EXISTING_ID_PAGE_SIZE) break;
   }
   return map;
-}
-
-export function mergeDetailEnrichment(rows, enrichmentByClassId) {
-  return rows.map((row) => {
-    const enrichment = enrichmentByClassId.get(row.class_id);
-    return enrichment ? { ...row, ...enrichment } : row;
-  });
 }
 
 export function diagnoseRegisterWindowCapture(rows, existingClassIds, now = new Date()) {

@@ -56,3 +56,19 @@ export function parseInstructorFromTitle(title) {
 export function stampCollectedAt(rows, collectedAt) {
   return rows.map((row) => ({ ...row, collected_at: collectedAt }));
 }
+
+// [통합 테이블 이중 쓰기 — 상세정보(이미지 등) 유실 버그 수정](2026-10-07
+// 사용자 지적: "사진 있는데.. 상세쪽에 있는 사진을 가져와서 썸네일로
+// 맞추면 안돼?") — 이마트/롯데마트 둘 다 class_id당 한 번만 상세 페이지를
+// 조회해 이미지/소개 등 "정적 콘텐츠"를 원본 테이블에만 채워둔다. 그런데
+// 매일 도는 목록 배치는 그 필드를 모르는 채로 raw_extra를 통째로 새로
+// 만들어 통합 테이블에 써버려(기존 값과 병합하지 않음), 상세수집이 채운
+// 값이 매번 지워지고 있었다. run()이 원본 테이블에서 상세정보를 다시
+// 읽어와(fetchDetailEnrichmentByClassId, 브랜드별 테이블/컬럼이 달라 각자
+// 구현) 이 함수로 합친 뒤 통합 변환을 돌리면 지워지지 않는다.
+export function mergeDetailEnrichment(rows, enrichmentByClassId) {
+  return rows.map((row) => {
+    const enrichment = enrichmentByClassId.get(row.class_id);
+    return enrichment ? { ...row, ...enrichment } : row;
+  });
+}
