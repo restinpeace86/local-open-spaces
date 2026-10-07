@@ -45,7 +45,7 @@ import { createAdminClient } from './lib/supabase-admin.mjs';
 import { applyRandomStartupDelay } from './lib/random-startup-delay.mjs';
 import { parseAgeRangeToMonths } from './lib/age-range-parser.mjs';
 import { normalizeDaysToCodes, yyyymmddToIso } from './lib/schedule-normalizer.mjs';
-import { normalizeLottemartStatus } from './lib/culture-club-common.mjs';
+import { normalizeLottemartStatus, stampCollectedAt } from './lib/culture-club-common.mjs';
 import { toUnifiedLottemartRow } from './lib/culture-club-unified-row.mjs';
 
 loadEnv();
@@ -440,7 +440,10 @@ export async function run({ dryRun = false, storesLimit = null } = {}) {
 
   // 동일 classId가 여러 대상(target) 조회에 걸쳐 중복 수신될 가능성에 대비
   // (예: "엄마와 함께" 강좌가 유아 카테고리에도 걸릴 경우 등).
-  const rows = [...new Map(allRows.map((row) => [row.class_id, row])).values()];
+  // collected_at을 매 실행마다 갱신하는 이유는 stampCollectedAt() 주석 참고
+  // (emart-culture-club.mjs와 동일한 버그를 여기도 그대로 가지고 있었다).
+  const collectedAt = new Date().toISOString();
+  const rows = stampCollectedAt([...new Map(allRows.map((row) => [row.class_id, row])).values()], collectedAt);
   console.log(`✅ 전체 수신 ${allRows.length}건, 중복 제거 후 ${rows.length}건`);
 
   if (dryRun) {

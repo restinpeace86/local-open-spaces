@@ -41,3 +41,18 @@ export function parseInstructorFromTitle(title) {
   const match = title.match(INSTRUCTOR_REGEX);
   return match ? match[1] : null;
 }
+
+// [collected_at 매 실행마다 갱신](2026-10-07 사용자 지적: "왜 수집일자가
+// 10/3이지? 10/6이 아니고?") — 이마트/롯데마트 ingest 스크립트의 transform()/
+// parseRow()는 collected_at을 돌려주지 않는다(의도적으로 테스트 가능한 순수
+// 함수로 유지) — 그래서 upsert payload에 이 컬럼이 아예 없었다. ON CONFLICT
+// DO UPDATE는 payload에 없는 컬럼은 건드리지 않으므로, 이미 존재하는 강좌는
+// 가격/상태 등은 매일 최신으로 갱신되는데도 collected_at(화면의 "마지막
+// 업데이트")만 최초 수집 시각에 영원히 고정돼 있었다(실측 확인 — 이마트
+// 전체 6,546건 중 10/4 이후 값을 가진 건 26건뿐). 매 실행마다 이 시점 값을
+// 모든 행에 실어 보내 매번 갱신되게 한다(toUnifiedEmartRow/toUnifiedLottemart
+// Row가 row.collected_at을 그대로 복사하므로 통합 테이블에도 같은 값이
+// 전파된다). 두 브랜드가 동일한 버그/동일한 고침을 가지므로 공유 함수로 둔다.
+export function stampCollectedAt(rows, collectedAt) {
+  return rows.map((row) => ({ ...row, collected_at: collectedAt }));
+}

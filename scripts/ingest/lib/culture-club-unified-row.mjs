@@ -6,15 +6,20 @@
 // club.mjs)의 "이중 쓰기"가 이 함수를 공유해 매핑 로직이 둘로 갈라지지
 // 않게 한다.
 //
-// [실측으로 발견한 버그] collected_at/created_at/updated_at/detail_fetched_at은
-// 원본 ingest 스크립트의 upsert payload에 원래 없는 키다(DB 기본값/보존 동작에
-// 맡기려는 의도 — "created_at은 upsert payload에 포함하지 않아 각 행의 '최초
-// 수집 시각'을 보존한다" 주석 참고). 이 함수가 `collected_at: row.collected_at`
-// 처럼 값이 undefined여도 키 자체를 만들어 반환하면, Supabase 대량 upsert가
-// (단일 행 insert와 달리) 그 키를 명시적 null로 보내 NOT NULL 제약을 위반한다
-// (실제 라이브 실행 중 발견: "null value in column \"collected_at\" ..." 에러).
-// 그래서 반환 직전에 undefined 값을 가진 키를 전부 제거해, 정말로 "키가 없던"
-// 원본과 동일하게 만든다.
+// [실측으로 발견한 버그] created_at/updated_at/detail_fetched_at은 원본 ingest
+// 스크립트의 upsert payload에 원래 없는 키다(DB 기본값/보존 동작에 맡기려는
+// 의도 — "created_at은 upsert payload에 포함하지 않아 각 행의 '최초 수집
+// 시각'을 보존한다" 주석 참고). collected_at은 한때 같은 취급을 받았으나,
+// 그 결과 이미 존재하는 강좌는 가격/상태가 매일 갱신돼도 화면의 "마지막
+// 업데이트" 표시만 최초 수집 시각에 영원히 고정되는 버그가 있었다(2026-10-07
+// 사용자 지적으로 발견) — 지금은 ingest 스크립트가 매 실행 시각을 명시적으로
+// 넘겨준다(emart-culture-club.mjs/lottemart-culture-club.mjs 참고). 이 함수가
+// `collected_at: row.collected_at`처럼 값이 undefined여도 키 자체를 만들어
+// 반환하면(1회성 백필 스크립트처럼 collected_at을 안 넘기는 호출자가 있을 때),
+// Supabase 대량 upsert가(단일 행 insert와 달리) 그 키를 명시적 null로 보내
+// NOT NULL 제약을 위반한다(실제 라이브 실행 중 발견: "null value in column
+// \"collected_at\" ..." 에러). 그래서 반환 직전에 undefined 값을 가진 키를
+// 전부 제거해, 정말로 "키가 없던" 원본과 동일하게 만든다.
 function omitUndefinedKeys(obj) {
   return Object.fromEntries(Object.entries(obj).filter(([, value]) => value !== undefined));
 }

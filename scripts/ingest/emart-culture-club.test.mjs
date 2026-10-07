@@ -176,3 +176,4 @@ describe('formatDurationSeconds', () => {
     expect(formatDurationSeconds(500)).toBe('0.5초');
   });
 });
+

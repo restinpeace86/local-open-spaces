@@ -39,7 +39,7 @@ import {
   parseTotalSessionsFromTitle,
   yyyymmddToIso,
 } from './lib/schedule-normalizer.mjs';
-import { normalizeEmartStatus, parseInstructorFromTitle } from './lib/culture-club-common.mjs';
+import { normalizeEmartStatus, parseInstructorFromTitle, stampCollectedAt } from './lib/culture-club-common.mjs';
 import { toUnifiedEmartRow } from './lib/culture-club-unified-row.mjs';
 import { sendDiscordNotification } from '../notify-discord.mjs';
 
@@ -385,7 +385,9 @@ export async function run({ dryRun = false } = {}) {
 
   // 동일 classId가 상태 전환 중 두 상태 조회 사이에 걸쳐 중복 수신될 가능성에 대비
   // (실측상 드물지만, 있으면 ON CONFLICT가 배치 전체를 거부하므로 안전하게 처리).
-  const rows = [...new Map(allRows.map((row) => [row.class_id, row])).values()];
+  // collected_at을 매 실행마다 갱신하는 이유는 stampCollectedAt() 주석 참고.
+  const collectedAt = new Date().toISOString();
+  const rows = stampCollectedAt([...new Map(allRows.map((row) => [row.class_id, row])).values()], collectedAt);
   console.log(`✅ 전체 수신 ${allRows.length}건, 중복 제거 후 ${rows.length}건`);
 
   const client = createAdminClient();

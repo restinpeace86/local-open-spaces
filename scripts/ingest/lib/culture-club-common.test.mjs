@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeEmartStatus, normalizeLottemartStatus, parseInstructorFromTitle } from './culture-club-common.mjs';
+import { normalizeEmartStatus, normalizeLottemartStatus, parseInstructorFromTitle, stampCollectedAt } from './culture-club-common.mjs';
 
 describe('normalizeEmartStatus', () => {
   it('접수중은 OPEN이다', () => {
@@ -49,5 +49,22 @@ describe('parseInstructorFromTitle', () => {
   it('제목이 없으면 null을 반환한다', () => {
     expect(parseInstructorFromTitle(null)).toBeNull();
     expect(parseInstructorFromTitle('')).toBeNull();
+  });
+});
+
+describe('stampCollectedAt', () => {
+  it('모든 행에 같은 collected_at 값을 덧붙인다(기존 필드는 유지)', () => {
+    const rows = [{ class_id: 'a' }, { class_id: 'b' }];
+    const result = stampCollectedAt(rows, '2026-10-07T00:00:00.000Z');
+    expect(result).toEqual([
+      { class_id: 'a', collected_at: '2026-10-07T00:00:00.000Z' },
+      { class_id: 'b', collected_at: '2026-10-07T00:00:00.000Z' },
+    ]);
+  });
+
+  it('이미 collected_at이 있던 행도 새 값으로 덮어쓴다(매 실행마다 최신으로 갱신)', () => {
+    const rows = [{ class_id: 'a', collected_at: '2026-10-03T00:00:00.000Z' }];
+    const result = stampCollectedAt(rows, '2026-10-07T00:00:00.000Z');
+    expect(result[0].collected_at).toBe('2026-10-07T00:00:00.000Z');
   });
 });
