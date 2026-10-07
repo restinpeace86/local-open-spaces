@@ -1,7 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
+import { useCultureClubAccess } from '@/hooks/use-culture-club-access';
+import { LoginPromptModal } from '@/components/community/login-prompt-modal';
+import { SaessakMomGuideModal } from '@/components/community/saessak-mom-guide-modal';
 import { useUserLocation } from '@/hooks/use-user-location';
 import { HomeHeader } from '@/components/home/home-header';
 import { HeroCarousel } from '@/components/home/hero-carousel';
@@ -249,6 +253,14 @@ export function HomeView({
   // 여는 바텀시트로 만들었다가, 이벤트픽 화면 자체를 2개 탭("이벤트"/"문화센터")으로
   // 나누는 구조로 바꿨다.
   const [activeMainTab, setActiveMainTab] = useState<'events' | 'culture-club'>('events');
+  // [문화센터 열람 권한](2026-10-08 사용자 지시): "문화센터 볼수 있는 권한에
+  // 대하여 로그인 유저? 새싹맘부터... 아이 연 월 생 관련 입력된 사람들만 볼수
+  // 있게해줘" — mom-pick-view.tsx의 useMomPickAccess + LoginPromptModal/
+  // SaessakMomGuideModal 패턴을 그대로 재사용한다(제5장 제4조). "아이 연월생
+  // 입력"은 canViewCultureClub(grades.ts) 주석 참고 — ProfileCompletionGuard가
+  // 이미 전역으로 강제해 sprout 등급 도달 시점에 구조적으로 이미 충족된다.
+  const { state: cultureClubAccessState } = useCultureClubAccess();
+  const router = useRouter();
   const [heroEvents, setHeroEvents] = useState<NearbyItem[]>(initialHeroEvents);
   // [홈 화면 성능 최적화](2026-08-29 사용자 지시): 이 두 섹션은 더 이상 Server Component가
   // 미리 계산해 넘겨주지 않는다(라운드로빈 믹스 연산 포함 3개 쿼리를 SSR에서 한 번에 처리하던
@@ -419,7 +431,21 @@ export function HomeView({
       </div>
 
       {activeMainTab === 'culture-club' ? (
-        <CultureClubTabView />
+        cultureClubAccessState === 'guest' ? (
+          <LoginPromptModal
+            onClose={() => setActiveMainTab('events')}
+            title="🏫 문화센터는 로그인 후 이용할 수 있어요"
+            description="로그인하고 아이 정보를 등록하면 연령에 맞는 문화센터 강좌를 찾아볼 수 있어요."
+          />
+        ) : cultureClubAccessState === 'not_sprout_yet' ? (
+          <SaessakMomGuideModal
+            onWriteClick={() => router.push('/mom-pick')}
+            onClose={() => setActiveMainTab('events')}
+            description="첫 스팟 후기나 체크리스트를 하나 남기고 새싹맘이 되면 문화센터를 볼 수 있어요."
+          />
+        ) : cultureClubAccessState === 'loading' ? null : (
+          <CultureClubTabView />
+        )
       ) : (
       <div className="flex-1 overflow-y-auto py-4 flex flex-col gap-5">
         {/* [프론트엔드 UI/UX 개선](2026-08-26, docs/spec.md 개정판 "GNB 헤더 & 검색"): 검색어가

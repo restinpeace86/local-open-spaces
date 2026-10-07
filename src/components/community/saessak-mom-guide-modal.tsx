@@ -8,7 +8,19 @@
 // 이 안내 모달을 닫고 하단 탭까지 덮는 전체 화면 글쓰기(SurveyReviewComposer)로
 // 전환한다(별도 /write 라우트를 새로 만들지 않고, 같은 화면 안의 fixed 오버레이로
 // 구현 — 제5장 제4조 기존 구조 우선).
-export function SaessakMomGuideModal({ onWriteClick, onClose }: { onWriteClick: () => void; onClose: () => void }) {
+// [문화센터 열람 권한](2026-10-08 사용자 지시): 다른 기능(문화센터 등)에서도
+// "아직 새싹맘이 아니에요" 안내를 재사용할 수 있도록 description을 선택적
+// override로 받는다 — 생략 시 기존 맘스픽 문구 그대로(기존 호출부 동작 변화
+// 없음).
+export function SaessakMomGuideModal({
+  onWriteClick,
+  onClose,
+  description = '동네 핫플이나 정보를 하나 공유하고 맘스픽의 모든 기능을 이용해보세요.',
+}: {
+  onWriteClick: () => void;
+  onClose: () => void;
+  description?: string;
+}) {
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 md:items-center" onClick={onClose}>
       <div
@@ -16,9 +28,7 @@ export function SaessakMomGuideModal({ onWriteClick, onClose }: { onWriteClick: 
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="text-base font-bold text-gray-900">🌱 아직 새싹맘 등급이 아니에요!</h2>
-        <p className="mt-2 text-sm text-gray-500">
-          동네 핫플이나 정보를 하나 공유하고 맘스픽의 모든 기능을 이용해보세요.
-        </p>
+        <p className="mt-2 text-sm text-gray-500">{description}</p>
         <div className="mt-4 flex flex-col gap-2">
           <button
             type="button"

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HomeView } from './home-view';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
@@ -10,14 +10,35 @@ vi.mock('next/navigation', () => ({
 // [Decision 019](2026-09-02): HomeView가 마운트하는 AiChatFab/AiChatSheet(이벤트픽 화면
 // 챗봇)이 useUser() 훅을 쓴다 — 비로그인으로 고정해 이 파일의 기존 홈 피드 테스트에는
 // 영향이 없게 한다.
+// [문화센터 열람 권한](2026-10-08 사용자 지시) 테스트를 위해 vi.fn()으로 바꿔 개별
+// 테스트에서 로그인 상태를 override할 수 있게 한다 — 기본값(비로그인)은 그대로라
+// override하지 않는 기존 테스트에는 영향이 없다.
+const getUserMock = vi.fn(() => Promise.resolve({ data: { user: null as { id: string } | null } }));
+const fromMock = vi.fn();
 vi.mock('@/lib/supabase/client', () => ({
   createClient: () => ({
     auth: {
-      getUser: () => Promise.resolve({ data: { user: null } }),
+      getUser: getUserMock,
       onAuthStateChange: () => ({ data: { subscription: { unsubscribe: vi.fn() } } }),
     },
+    from: fromMock,
   }),
 }));
+
+function mockLoggedInCultureClubEligibleUser() {
+  getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
+  fromMock.mockReturnValue({
+    select: () => ({
+      eq: () => ({
+        single: () =>
+          Promise.resolve({
+            data: { id: 'user-1', birth_years: [2024], birth_months: [1], grade: 'sprout', nickname: '테스트', ai_chat_free_uses_used: 0, created_at: 't', updated_at: 't' },
+            error: null,
+          }),
+      }),
+    }),
+  });
+}
 
 // Task 9-3-1(2026-08-22): jsdom에는 IntersectionObserver가 없어, HeroCarousel(뷰포트 이탈 시
 // Autoplay 정지 로직)이 렌더링될 때 크래시하지 않도록 가짜 구현을 전역에 등록해둔다.
@@ -139,6 +160,11 @@ describe('HomeView', () => {
       await Promise.resolve();
     });
     vi.unstubAllGlobals();
+    // [문화센터 열람 권한] 테스트에서 override한 로그인 상태가 다음 테스트로
+    // 새어나가지 않도록 기본값(비로그인)으로 되돌린다.
+    getUserMock.mockReset();
+    getUserMock.mockResolvedValue({ data: { user: null } });
+    fromMock.mockReset();
   });
 
   it('Hero Carousel/대분류 그리드를 홈 탭에서 즉시 렌더링한다', () => {
@@ -816,7 +842,13 @@ describe('HomeView', () => {
     // [통합검색으로 전환](2026-10-06, Decision 028): 문화센터 탭의 기본값이
     // "이마트"에서 "전체"(브랜드 무관 통합검색)로 바뀌어, 더 이상 진입 즉시
     // 지점 선택이 보이지 않는다(브랜드를 하나 골라야만 지점이 의미 있어짐).
-    it('"🏫 문화센터" 탭을 누르면 통합검색 브랜드 필터가 보이고 기존 이벤트 콘텐츠는 사라진다', async () => {
+    //
+    // [문화센터 열람 권한](2026-10-08 사용자 지시): "문화센터 볼수 있는 권한에
+    // 대하여... 새싹맘부터..." — 이제 sprout(새싹맘) 이상이어야 실제 콘텐츠가
+    // 보인다. 이 테스트는 "눈맞으면 정상 동작"을 확인하는 거라 자격을 갖춘
+    // 유저로 override한다 — 게스트/미달성 분기는 아래 별도 describe에서 검증.
+    it('새싹맘 이상 유저가 "🏫 문화센터" 탭을 누르면 통합검색 브랜드 필터가 보이고 기존 이벤트 콘텐츠는 사라진다', async () => {
+      mockLoggedInCultureClubEligibleUser();
       const { container } = render(<HomeView initialHeroEvents={[]} />);
 
       fireEvent.click(screen.getByText('🏫 문화센터'));
@@ -828,6 +860,7 @@ describe('HomeView', () => {
     });
 
     it('문화센터 탭에서 "이벤트" 탭을 다시 누르면 기존 화면으로 돌아온다', async () => {
+      mockLoggedInCultureClubEligibleUser();
       const { container } = render(<HomeView initialHeroEvents={[]} />);
 
       fireEvent.click(screen.getByText('🏫 문화센터'));
@@ -835,6 +868,56 @@ describe('HomeView', () => {
 
       fireEvent.click(screen.getByText('이벤트'));
       expect(screen.queryByText('이마트 컬처클럽')).not.toBeInTheDocument();
+      expect(container.querySelector('section[aria-label="카테고리별 행사"]')).not.toBeNull();
+    });
+  });
+
+  // [문화센터 열람 권한](2026-10-08 사용자 지시): "로그인 유저? 새싹맘부터...
+  // 그래서 아이 연 월 생 관련 입력된 사람들만 볼수 있게해줘" — 비로그인/새싹맘
+  // 미달성이면 콘텐츠 대신 로그인/등업 안내가 보여야 한다.
+  describe('문화센터 열람 권한 게이트', () => {
+    it('비로그인 상태로 "🏫 문화센터" 탭을 누르면 로그인 안내가 뜨고 실제 콘텐츠는 안 보인다', async () => {
+      render(<HomeView initialHeroEvents={[]} />);
+
+      fireEvent.click(screen.getByText('🏫 문화센터'));
+
+      expect(await screen.findByText('🏫 문화센터는 로그인 후 이용할 수 있어요')).toBeInTheDocument();
+      expect(screen.queryByText('이마트 컬처클럽')).not.toBeInTheDocument();
+    });
+
+    it('로그인했지만 새싹맘 미달성(signed_up)이면 등업 안내가 뜨고 실제 콘텐츠는 안 보인다', async () => {
+      getUserMock.mockResolvedValue({ data: { user: { id: 'user-1' } } });
+      fromMock.mockReturnValue({
+        select: () => ({
+          eq: () => ({
+            single: () =>
+              Promise.resolve({
+                data: { id: 'user-1', birth_years: [], birth_months: [], grade: 'signed_up', nickname: null, ai_chat_free_uses_used: 0, created_at: 't', updated_at: 't' },
+                error: null,
+              }),
+          }),
+        }),
+      });
+      render(<HomeView initialHeroEvents={[]} />);
+
+      fireEvent.click(screen.getByText('🏫 문화센터'));
+
+      expect(await screen.findByText('🌱 아직 새싹맘 등급이 아니에요!')).toBeInTheDocument();
+      expect(screen.queryByText('이마트 컬처클럽')).not.toBeInTheDocument();
+    });
+
+    it('로그인 안내를 닫으면 "이벤트" 탭으로 돌아간다', async () => {
+      const { container } = render(<HomeView initialHeroEvents={[]} />);
+
+      fireEvent.click(screen.getByText('🏫 문화센터'));
+      const title = await screen.findByText('🏫 문화센터는 로그인 후 이용할 수 있어요');
+      // 화면에 다른 "닫기" 버튼(위치 온보딩 모달 등)도 있을 수 있어, 로그인
+      // 안내 모달 영역 안으로 범위를 좁혀 찾는다.
+      const modal = title.closest('.fixed') as HTMLElement;
+
+      fireEvent.click(within(modal).getByLabelText('닫기'));
+
+      expect(screen.queryByText('🏫 문화센터는 로그인 후 이용할 수 있어요')).not.toBeInTheDocument();
       expect(container.querySelector('section[aria-label="카테고리별 행사"]')).not.toBeNull();
     });
   });

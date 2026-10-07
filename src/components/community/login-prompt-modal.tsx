@@ -12,7 +12,19 @@ import { GoogleLoginButton } from '@/components/auth/google-login-button';
 // 전환"처럼 보이도록 배경을 불투명(bg-white)으로, 영역을 전체 화면(fixed
 // inset-0)으로 바꿨다 — RootLayout이 하단 탭을 항상 렌더하지만 이 오버레이가
 // 그 영역까지 전부 덮는다.
-export function LoginPromptModal({ onClose }: { onClose: () => void }) {
+// [문화센터 열람 권한](2026-10-08 사용자 지시): 다른 기능(문화센터 등)에서도
+// 동일한 전체화면 로그인 유도를 재사용할 수 있도록 title/description을 선택적
+// override로 받는다 — 생략 시 기존 맘스픽 문구 그대로(제5장 제4조 기존 구조
+// 우선, 기존 호출부 동작 변화 없음).
+export function LoginPromptModal({
+  onClose,
+  title = '👑 맘스픽은 로그인 후 이용할 수 있어요',
+  description = '로그인하면 다른 엄마들의 생생한 후기와 체크리스트를 보고, 직접 글도 남길 수 있어요.',
+}: {
+  onClose: () => void;
+  title?: string;
+  description?: string;
+}) {
   return (
     <div className="fixed inset-0 z-[100] flex flex-col bg-white">
       <div className="flex items-center justify-end px-5 py-4">
@@ -21,10 +33,8 @@ export function LoginPromptModal({ onClose }: { onClose: () => void }) {
         </button>
       </div>
       <div className="flex flex-1 flex-col items-center justify-center gap-2 p-5 text-center">
-        <h2 className="text-lg font-bold text-gray-900">👑 맘스픽은 로그인 후 이용할 수 있어요</h2>
-        <p className="mt-1 text-sm text-gray-500">
-          로그인하면 다른 엄마들의 생생한 후기와 체크리스트를 보고, 직접 글도 남길 수 있어요.
-        </p>
+        <h2 className="text-lg font-bold text-gray-900">{title}</h2>
+        <p className="mt-1 text-sm text-gray-500">{description}</p>
         <div className="mt-4 flex w-full max-w-xs flex-col gap-3">
           <KakaoLoginButton />
           <GoogleLoginButton />

@@ -6,6 +6,7 @@ import {
   canReceivePushNotifications,
   canSeeLikeReactions,
   canUseUnlimitedChatbot,
+  canViewCultureClub,
   hasFeedPriorityBadge,
   hasReachedGrade,
   hasSpotlightBadge,
@@ -105,5 +106,14 @@ describe('hasReachedGrade / 등급 게이트', () => {
 
   it('power(파워맘)만 스포트라이트 뱃지 가능', () => {
     expect(hasSpotlightBadge('power')).toBe(true);
+  });
+
+  // [문화센터 열람 권한](2026-10-08 사용자 지시): 비로그인/signed_up은 못 보고,
+  // sprout(새싹맘) 이상부터 볼 수 있다.
+  it('문화센터 열람은 sprout(새싹맘) 이상부터 가능하다', () => {
+    expect(canViewCultureClub(null)).toBe(false);
+    expect(canViewCultureClub('signed_up')).toBe(false);
+    expect(canViewCultureClub('sprout')).toBe(true);
+    expect(canViewCultureClub('active')).toBe(true);
   });
 });

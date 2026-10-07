@@ -39,6 +39,16 @@ export const canReceivePushNotifications = (grade: MomPickGrade | null | undefin
 export const hasFeedPriorityBadge = (grade: MomPickGrade | null | undefined) => hasReachedGrade(grade, 'excellent');
 export const hasSpotlightBadge = (grade: MomPickGrade | null | undefined) => hasReachedGrade(grade, 'power');
 
+// [문화센터 열람 권한](2026-10-08 사용자 지시): "문화센터 볼수 있는 권한에 대하여
+// 로그인 유저? 새싹맘부터... 그래서 아이 연 월 생 관련 입력된 사람들만 볼수
+// 있게해줘" — 새싹맘(sprout) 이상만 열람 가능. "아이 연월생 입력된 사람만"은
+// 별도 체크를 새로 만들 필요가 없다 — ProfileCompletionGuard(src/components/
+// auth/profile-completion-guard.tsx)가 이미 로그인한 모든 사용자에게 전역으로
+// birth_years 입력을 강제하고 있어(입력 전엔 어떤 화면도 못 봄), sprout 등급에
+// 도달한 사용자는 구조적으로 이미 자녀 생년월을 입력한 상태다(sprout 승급도
+// 글 작성이 전제인데, 글쓰기 화면 역시 이 가드를 통과해야만 도달 가능하다).
+export const canViewCultureClub = (grade: MomPickGrade | null | undefined) => hasReachedGrade(grade, 'sprout');
+
 // AI 챗봇 무료 체험 한도(비로그인 및 signed_up 공통) — Decision 019: "비로그인 시 1회 한정".
 export const FREE_CHATBOT_USES_BEFORE_SPROUT = 1;
 
