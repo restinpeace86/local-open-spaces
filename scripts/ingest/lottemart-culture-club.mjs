@@ -399,6 +399,20 @@ export async function markFallenOutRowsAsUnavailable(client, freshClassIds, stor
       .update({ registration_status: '접수불가', normalized_status: normalizeLottemartStatus('접수불가') })
       .in('class_id', chunk);
     if (error) throw new Error(`접수불가 갱신 실패: ${error.message}`);
+
+    // [통합 테이블도 함께 갱신 — 실측으로 발견한 버그](2026-10-08): 이 함수가
+    // raw 테이블(lottemart_culture_club_classes)만 '접수불가'로 고쳐왔고
+    // 통합 테이블(culture_club_classes, 실제 화면이 읽는 테이블)은 건드리지
+    // 않고 있었다 — 1번 버킷에서 빠진 강좌가 화면에는 계속 "바로신청"으로
+    // 남아있는 상태였다(실측: 2026-10-04에 멈춘 updated_at, 그 사이 실제로는
+        // 이미 마감됨). raw 테이블과 동일한 class_id 집합을 동일한 값으로
+    // 맞춰준다.
+    const { error: unifiedError } = await client
+      .from('culture_club_classes')
+      .update({ raw_status: '접수불가', normalized_status: normalizeLottemartStatus('접수불가') })
+      .eq('brand', 'lottemart')
+      .in('source_class_id', chunk);
+    if (unifiedError) throw new Error(`통합 테이블 접수불가 갱신 실패: ${unifiedError.message}`);
   }
   return staleIds.length;
 }

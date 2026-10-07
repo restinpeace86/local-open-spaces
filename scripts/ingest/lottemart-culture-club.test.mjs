@@ -267,6 +267,19 @@ describe('markFallenOutRowsAsUnavailable', () => {
             }),
           };
         }
+        if (table === 'culture_club_classes') {
+          // 통합 테이블 갱신(2026-10-08 추가분) — update(payload).eq(brand).in(source_class_id, ids).
+          return {
+            update: (payload) => ({
+              eq: () => ({
+                in: (_column, ids) => {
+                  updateCalls.push({ table, payload, ids });
+                  return Promise.resolve({ error: updateError });
+                },
+              }),
+            }),
+          };
+        }
         // lottemart_culture_club_classes — select(페이지네이션 조회) 또는 update.
         return {
           select: () => ({
@@ -283,7 +296,7 @@ describe('markFallenOutRowsAsUnavailable', () => {
           }),
           update: (payload) => ({
             in: (_column, ids) => {
-              updateCalls.push({ payload, ids });
+              updateCalls.push({ table, payload, ids });
               return Promise.resolve({ error: updateError });
             },
           }),
@@ -293,15 +306,19 @@ describe('markFallenOutRowsAsUnavailable', () => {
     return { client, updateCalls };
   }
 
-  it('1번 버킷에서 빠진(신선하지 않은) 접수가능 행만 접수불가로 갱신한다', async () => {
+  it('1번 버킷에서 빠진(신선하지 않은) 접수가능 행만 접수불가로 갱신한다(원본+통합 테이블 둘 다)', async () => {
     const { client, updateCalls } = makeClient({ bookableIds: ['a', 'b', 'c'] });
 
     const count = await markFallenOutRowsAsUnavailable(client, ['a'], ['455']);
 
     expect(count).toBe(2);
-    expect(updateCalls).toHaveLength(1);
+    expect(updateCalls).toHaveLength(2);
+    expect(updateCalls[0].table).toBe('lottemart_culture_club_classes');
     expect(updateCalls[0].payload).toEqual({ registration_status: '접수불가', normalized_status: 'CLOSED' });
     expect(updateCalls[0].ids.sort()).toEqual(['b', 'c']);
+    expect(updateCalls[1].table).toBe('culture_club_classes');
+    expect(updateCalls[1].payload).toEqual({ raw_status: '접수불가', normalized_status: 'CLOSED' });
+    expect(updateCalls[1].ids.sort()).toEqual(['b', 'c']);
   });
 
   it('찜한 class_id는 빠졌어도 갱신하지 않는다(찜-상태감시가 더 정확히 추적 중)', async () => {
@@ -311,6 +328,7 @@ describe('markFallenOutRowsAsUnavailable', () => {
 
     expect(count).toBe(1);
     expect(updateCalls[0].ids).toEqual(['a']);
+    expect(updateCalls[1].ids).toEqual(['a']);
   });
 
   it('신선한 목록에 전부 남아있으면 갱신하지 않는다', async () => {
