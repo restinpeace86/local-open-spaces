@@ -39,6 +39,12 @@ import {
 const PAGE_SIZE = 20;
 const AD_SLOT_INTERVAL = 10;
 const CHILD_ORDINAL_LABELS = ['첫째', '둘째', '셋째', '넷째', '다섯째'];
+// [Branch-First 반경 선택](2026-10-07 todo.md 개선사항1-1): "사용자가 앱 내에서
+// 반경(예: 5km, 10km, 20km 등)을 직접 변경할 수 있는 거리 선택 필터... 기본값
+// 10km" — map-explorer.tsx의 바텀시트 반경 선택(5/10/20km, 기본 10km)과 동일한
+// 값 구성을 그대로 따른다(제5장 제4조 기존 구조 우선).
+const RADIUS_KM_OPTIONS = [5, 10, 20] as const;
+const DEFAULT_RADIUS_KM = 10;
 
 function buildEmartClassUrl(sourceClassId: string) {
   return `https://www.cultureclub.emart.com/class/${sourceClassId}`;
@@ -72,7 +78,7 @@ function toBookmarkTarget(item: CultureClubClass): BookmarkTarget {
   return { kind: 'lottemart_class', lottemartClassId: item.source_class_id };
 }
 
-type StoreOption = { storeCode: string; label: string };
+type StoreOption = { storeCode: string; label: string; distanceMeters?: number | null };
 
 type CultureClubClass = {
   id: number;
@@ -463,8 +469,9 @@ export function CultureClubTabView() {
   const [activeChildIndex, setActiveChildIndex] = useState(0);
 
   const [brandKey, setBrandKey] = useState<CultureClubBrandKey>('all');
+  const [radiusKm, setRadiusKm] = useState<number>(DEFAULT_RADIUS_KM);
   const [stores, setStores] = useState<StoreOption[]>([]);
-  const [storeCode, setStoreCode] = useState<string | null>(null);
+  const [selectedStoreCodes, setSelectedStoreCodes] = useState<Set<string>>(new Set());
   const [selectedDays, setSelectedDays] = useState<Set<CultureClubDay>>(new Set());
   const [selectedSubCategories, setSelectedSubCategories] = useState<Set<CultureClubSubCategory>>(new Set());
   const [selectedTargets, setSelectedTargets] = useState<Set<string>>(new Set());
@@ -505,10 +512,14 @@ export function CultureClubTabView() {
   }, [profile]);
   const activeAgeMonths = children[activeChildIndex]?.ageMonths ?? null;
 
-  // [지점 — 브랜드별 전용 목록] 지점 코드 네임스페이스가 브랜드마다 달라 "전체"
-  // 선택 시에는 지점 필터 자체를 숨긴다(특정 브랜드를 짐작해서 보여주지 않음).
+  // [지점 — 브랜드별 전용 목록, 반경 내로 좁힘](2026-10-07 todo.md 개선사항1-3):
+  // "전체 지점이 나오는 게 아니라 사용자가 설정한 거리 반경 내로 필터링된
+  // 지점들만 뱃지 형태로 나열" — 지점 코드 네임스페이스가 브랜드마다 달라
+  // "전체" 선택 시에는 지점 필터 자체를 숨긴다. 브랜드/반경이 바뀌면 선택된
+  // 지점은 초기화한다("아무 지점도 선택하지 않았을 때는 전체 지점 선택과
+  // 동일" — 자동으로 첫 지점을 골라두지 않는다).
   useEffect(() => {
-    setStoreCode(null);
+    setSelectedStoreCodes(new Set());
     setSelectedSubCategories(new Set());
     setSelectedTargets(new Set());
     if (brandKey === 'all') {
@@ -516,21 +527,19 @@ export function CultureClubTabView() {
       return;
     }
     const endpoint = brandKey === 'emart' ? '/api/culture-club/stores' : '/api/culture-club/lottemart-stores';
-    fetch(endpoint)
+    const params = new URLSearchParams({ lat: String(center.lat), lng: String(center.lng), radius_km: String(radiusKm) });
+    fetch(`${endpoint}?${params.toString()}`)
       .then((res) => res.json())
-      .then((data: { stores?: StoreOption[] }) => {
-        const list = data.stores ?? [];
-        setStores(list);
-        setStoreCode(list[0]?.storeCode ?? null);
-      })
+      .then((data: { stores?: StoreOption[] }) => setStores(data.stores ?? []))
       .catch(() => setStores([]));
-  }, [brandKey]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [brandKey, radiusKm, center.lat, center.lng]);
 
   const buildUrl = useCallback(
     (targetPage: number) => {
       const params = new URLSearchParams();
       if (brandKey !== 'all') params.set('brand', brandKey);
-      if (brandKey !== 'all' && storeCode) params.set('store_code', storeCode);
+      if (brandKey !== 'all' && selectedStoreCodes.size > 0) params.set('store_codes', [...selectedStoreCodes].join(','));
       if (selectedDays.size > 0) params.set('days', [...selectedDays].join(','));
       if (brandKey === 'emart' && selectedSubCategories.size > 0) params.set('sub_category_name', [...selectedSubCategories].join(','));
       if (brandKey === 'lottemart' && selectedTargets.size > 0) params.set('target_code', [...selectedTargets].join(','));
@@ -538,19 +547,15 @@ export function CultureClubTabView() {
       if (activeAgeMonths != null) params.set('age_months', String(activeAgeMonths));
       params.set('lat', String(center.lat));
       params.set('lng', String(center.lng));
+      params.set('radius_km', String(radiusKm));
       params.set('page', String(targetPage));
       params.set('page_size', String(PAGE_SIZE));
       return `/api/culture-club/search?${params.toString()}`;
     },
-    [brandKey, storeCode, selectedDays, selectedSubCategories, selectedTargets, appliedQuery, activeAgeMonths, center.lat, center.lng]
+    [brandKey, selectedStoreCodes, selectedDays, selectedSubCategories, selectedTargets, appliedQuery, activeAgeMonths, center.lat, center.lng, radiusKm]
   );
 
-  // 브랜드가 특정 마트인데 아직 지점 목록을 못 받아온 상태(storeCode가 아직
-  // null)에서는 조회하지 않는다 — "전체"는 지점이 필요 없으니 바로 조회한다.
-  const isWaitingForStore = brandKey !== 'all' && !storeCode;
-
   useEffect(() => {
-    if (isWaitingForStore) return;
     let cancelled = false;
     setIsLoading(true);
     setErrorMessage(null);
@@ -576,7 +581,7 @@ export function CultureClubTabView() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [brandKey, storeCode, selectedDays, selectedSubCategories, selectedTargets, appliedQuery, activeAgeMonths, center.lat, center.lng, isWaitingForStore]);
+  }, [brandKey, selectedStoreCodes, selectedDays, selectedSubCategories, selectedTargets, appliedQuery, activeAgeMonths, center.lat, center.lng, radiusKm]);
 
   const loadMore = useCallback(() => {
     const nextPage = page + 1;
@@ -595,7 +600,8 @@ export function CultureClubTabView() {
 
   const isEmpty = !isLoading && !errorMessage && items.length === 0;
   const hasMorePages = items.length < total;
-  const hasActiveFilters = selectedDays.size > 0 || selectedSubCategories.size > 0 || selectedTargets.size > 0 || appliedQuery !== '';
+  const hasActiveFilters =
+    selectedDays.size > 0 || selectedSubCategories.size > 0 || selectedTargets.size > 0 || selectedStoreCodes.size > 0 || appliedQuery !== '';
 
   function handleScroll(e: React.UIEvent<HTMLDivElement>) {
     if (!hasMorePages || isLoading) return;
@@ -610,6 +616,7 @@ export function CultureClubTabView() {
     setSelectedDays(new Set());
     setSelectedSubCategories(new Set());
     setSelectedTargets(new Set());
+    setSelectedStoreCodes(new Set());
     setSearchDraft('');
     setAppliedQuery('');
   }
@@ -626,6 +633,27 @@ export function CultureClubTabView() {
           {/* [1차 조건 — 아이 연령] 사용자가 고르는 게 아니라 늘 깔려 있는 기본값이라
               브랜드/요일 pill보다 위, 검색창보다도 위에 둔다. */}
           <ChildAgeBanner children={children} activeIndex={activeChildIndex} onSwitch={setActiveChildIndex} />
+
+          {/* [Branch-First 반경 선택] "거리 선택 필터 컴포넌트의 위치는 검색창
+              위쪽에 위치하도록" — 검색창보다 위, 아이 연령 배너 바로 아래에 둔다.
+              이 반경은 지점(Branch)을 먼저 좁히는 기준이라 브랜드와 무관하게
+              항상 보인다. */}
+          <div className="flex items-center gap-1.5 px-3 pt-1">
+            <span className="shrink-0 text-xs text-gray-400">반경</span>
+            {RADIUS_KM_OPTIONS.map((km) => (
+              <button
+                key={km}
+                type="button"
+                aria-pressed={radiusKm === km}
+                onClick={() => setRadiusKm(km)}
+                className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                  radiusKm === km ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                }`}
+              >
+                {km}km
+              </button>
+            ))}
+          </div>
 
           {/* [검색창] "트니트니 입력하고 조회버튼 누르면 검색" — 입력할 때마다 바로
               검색하지 않고 제출(조회) 시에만 적용한다. */}
@@ -670,24 +698,32 @@ export function CultureClubTabView() {
             </div>
           )}
 
-          {/* 지점 선택 — "전체"일 땐 지점 네임스페이스가 브랜드마다 달라 숨긴다. */}
+          {/* [계층형 지점 선택 — 2단계, 다중선택](2026-10-07 todo.md 개선사항1-3):
+              "전체 지점이 나오는 게 아니라 반경 내로 필터링된 지점들만 뱃지
+              형태로... 다중 선택이 가능하도록... 아무 지점도 선택하지 않았을
+              때는 전체 지점 선택과 동일" — "전체"일 땐 지점 네임스페이스가
+              브랜드마다 달라 숨긴다. */}
           {brandKey !== 'all' && (
-            <div className="flex items-center gap-2 px-3">
-              <label htmlFor="culture-club-store" className="text-sm text-gray-500 shrink-0">
-                지점
-              </label>
-              <select
-                id="culture-club-store"
-                value={storeCode ?? ''}
-                onChange={(e) => setStoreCode(e.target.value)}
-                className="flex-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
-              >
-                {stores.map((store) => (
-                  <option key={store.storeCode} value={store.storeCode}>
+            <div className="flex flex-wrap gap-1.5 px-3">
+              {stores.length === 0 && <span className="text-xs text-gray-400">반경 {radiusKm}km 내 지점이 없어요</span>}
+              {stores.map((store) => {
+                const isActive = selectedStoreCodes.has(store.storeCode);
+                const distanceLabel = formatDistanceLabel(store.distanceMeters);
+                return (
+                  <button
+                    key={store.storeCode}
+                    type="button"
+                    aria-pressed={isActive}
+                    onClick={() => setSelectedStoreCodes((prev) => toggleInSet(prev, store.storeCode))}
+                    className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${
+                      isActive ? 'bg-gray-900 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
+                    }`}
+                  >
                     {store.label}
-                  </option>
-                ))}
-              </select>
+                    {distanceLabel ? ` · ${distanceLabel}` : ''}
+                  </button>
+                );
+              })}
             </div>
           )}
 

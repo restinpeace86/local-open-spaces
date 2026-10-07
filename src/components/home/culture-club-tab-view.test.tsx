@@ -221,30 +221,46 @@ describe('CultureClubTabView — 기본값(전체, 브랜드 무관 통합검색
 });
 
 describe('CultureClubTabView — 브랜드 필터', () => {
-  it('이마트를 선택하면 지점 선택과 이마트 카테고리 칩이 나타나고, brand/store_code가 요청에 포함된다', async () => {
+  it('이마트를 선택하면 지점 뱃지와 이마트 카테고리 칩이 나타나고, brand가 요청에 포함된다(지점은 선택 전까지 전체)', async () => {
     const fetchMock = stubFetch([makeEmartClass()]);
     render(<CultureClubTabView />);
     await screen.findByText(/두근두근/);
 
     fireEvent.click(screen.getByText('이마트 컬처클럽'));
 
-    await screen.findByLabelText('지점');
+    await screen.findByText('이마트 춘천점');
     expect(screen.getByText('Club Originals')).toBeInTheDocument();
     await waitFor(() => {
       const call = fetchMock.mock.calls.find(([url]) => (url as string).includes('/api/culture-club/search?') && (url as string).includes('brand=emart'));
       expect(call).toBeTruthy();
-      expect(call?.[0]).toContain('store_code=180');
+      expect(call?.[0]).not.toContain('store_codes=');
     });
   });
 
-  it('롯데마트를 선택하면 지점 선택과 수강대상 칩이 나타난다', async () => {
+  it('지점 뱃지를 누르면 선택되고, 요청에 store_codes가 포함된다', async () => {
+    const fetchMock = stubFetch([makeEmartClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/두근두근/);
+
+    fireEvent.click(screen.getByText('이마트 컬처클럽'));
+    const storeBadge = await screen.findByText('이마트 춘천점');
+    fireEvent.click(storeBadge);
+
+    expect(storeBadge).toHaveAttribute('aria-pressed', 'true');
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([url]) => (url as string).includes('/api/culture-club/search?') && (url as string).includes('store_codes=180'));
+      expect(call).toBeTruthy();
+    });
+  });
+
+  it('롯데마트를 선택하면 지점 뱃지와 수강대상 칩이 나타난다', async () => {
     stubFetch([makeEmartClass(), makeLottemartClass()]);
     render(<CultureClubTabView />);
     await screen.findByText(/두근두근/);
 
     fireEvent.click(screen.getByText('롯데마트 문화센터'));
 
-    await screen.findByLabelText('지점');
+    await screen.findByText('고양점');
     expect(screen.getByText('엄마와함께')).toBeInTheDocument();
     expect(screen.queryByText('Club Originals')).not.toBeInTheDocument();
   });
@@ -255,10 +271,27 @@ describe('CultureClubTabView — 브랜드 필터', () => {
     await screen.findByText(/두근두근/);
 
     fireEvent.click(screen.getByText('이마트 컬처클럽'));
-    await screen.findByLabelText('지점');
+    await screen.findByText('이마트 춘천점');
 
     fireEvent.click(screen.getByText('전체'));
-    await waitFor(() => expect(screen.queryByLabelText('지점')).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByText('이마트 춘천점')).not.toBeInTheDocument());
+  });
+
+  it('반경 pill을 바꾸면 요청에 radius_km가 반영된다(기본값 10km)', async () => {
+    const fetchMock = stubFetch([makeEmartClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/두근두근/);
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([url]) => (url as string).includes('/api/culture-club/search?'));
+      expect(call?.[0]).toContain('radius_km=10');
+    });
+
+    fireEvent.click(screen.getByText('20km'));
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([url]) => (url as string).includes('/api/culture-club/search?') && (url as string).includes('radius_km=20'));
+      expect(call).toBeTruthy();
+    });
   });
 });
 

@@ -1,5 +1,6 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getStoreDistancesByCode } from '@/lib/home/culture-club-nearby-stores';
 
 // [문화센터 탭 — 지점 선택](2026-10-03 사용자 지시): "지점 선택(Branch Selector -
 // 단일선택) ... 유저가 쉽게 클릭한번으로 선택" — 지점 목록은 emart_culture_club_classes
@@ -22,8 +23,22 @@ function extractShortRegion(address: string | null): string | null {
   return tokens.slice(0, 2).join(' ') || null;
 }
 
-export async function GET() {
+// [계층형 지점 선택 — 반경 내 지점만](2026-10-07 todo.md 개선사항1-3): lat/lng가
+// 있으면 거리를 계산해 "distanceMeters"를 함께 돌려주고, radius_km가 있으면
+// 그 반경을 벗어난 지점은 목록에서 제외한다(뱃지 다중선택 UI가 반경 내 지점만
+// 보여주기 위함). 위치가 없으면 기존처럼 전체 지점을 그대로 돌려준다.
+export async function GET(request: NextRequest) {
   try {
+    const { searchParams } = new URL(request.url);
+    const latRaw = searchParams.get('lat');
+    const lngRaw = searchParams.get('lng');
+    const lat = latRaw != null && latRaw !== '' ? Number(latRaw) : NaN;
+    const lng = lngRaw != null && lngRaw !== '' ? Number(lngRaw) : NaN;
+    const hasLocation = Number.isFinite(lat) && Number.isFinite(lng);
+    const radiusKmRaw = searchParams.get('radius_km');
+    const radiusKm = radiusKmRaw != null && radiusKmRaw !== '' ? Number(radiusKmRaw) : null;
+    const hasRadius = radiusKm != null && Number.isFinite(radiusKm) && radiusKm > 0;
+
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from('open_spaces')
@@ -44,7 +59,16 @@ export async function GET() {
         };
       });
 
-    return NextResponse.json({ stores });
+    if (!hasLocation) {
+      return NextResponse.json({ stores });
+    }
+
+    const distances = await getStoreDistancesByCode(EXTERNAL_ID_PREFIX, { lat, lng });
+    let withDistance = stores.map((store) => ({ ...store, distanceMeters: distances.get(store.storeCode) ?? null }));
+    if (hasRadius) withDistance = withDistance.filter((store) => store.distanceMeters != null && store.distanceMeters <= radiusKm! * 1000);
+    withDistance.sort((a, b) => (a.distanceMeters ?? Infinity) - (b.distanceMeters ?? Infinity));
+
+    return NextResponse.json({ stores: withDistance });
   } catch (err) {
     const message = err instanceof Error ? err.message : '이마트 컬처클럽 지점 목록 조회 실패';
     return NextResponse.json({ error: message }, { status: 500 });

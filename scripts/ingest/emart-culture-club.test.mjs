@@ -1,7 +1,7 @@
 // [이마트 컬처클럽 강좌 리스트 수집](2026-10-03 사용자 지시) — transform() 단위 테스트.
 // 실측 표본 그대로(2026-10-03 getClassByFiltering 직접 호출, 응답 그대로 복사).
 import { describe, expect, it } from 'vitest';
-import { transform, parseRegisterStartAt, diagnoseRegisterWindowCapture } from './emart-culture-club.mjs';
+import { transform, parseRegisterStartAt, diagnoseRegisterWindowCapture, formatDurationSeconds } from './emart-culture-club.mjs';
 
 const SAMPLE_ITEM = {
   classId: '4065WabI62026S3964',
@@ -167,5 +167,12 @@ describe('diagnoseRegisterWindowCapture', () => {
     expect(result.newCount).toBe(1);
     expect(result.missedWindowCount).toBe(0);
     expect(result.caughtInTimeCount).toBe(0);
+  });
+});
+
+describe('formatDurationSeconds', () => {
+  it('밀리초를 소수점 1자리 초 단위 문자열로 바꾼다', () => {
+    expect(formatDurationSeconds(12345)).toBe('12.3초');
+    expect(formatDurationSeconds(500)).toBe('0.5초');
   });
 });

@@ -40,7 +40,7 @@ describe('GET /api/culture-club/stores', () => {
     vi.doMock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ from: () => builder }) }));
 
     const { GET } = await import('./route');
-    const res = await GET();
+    const res = await GET(new Request('http://localhost/api/culture-club/stores') as never);
     const data = await res.json();
 
     expect(res.status).toBe(200);
@@ -58,7 +58,7 @@ describe('GET /api/culture-club/stores', () => {
     vi.doMock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ from: () => builder }) }));
 
     const { GET } = await import('./route');
-    const res = await GET();
+    const res = await GET(new Request('http://localhost/api/culture-club/stores') as never);
     const data = await res.json();
 
     expect(data.stores).toEqual([{ storeCode: '935', label: '스타필드마켓 경산점 (경북 경산시)' }]);
@@ -72,7 +72,7 @@ describe('GET /api/culture-club/stores', () => {
     vi.doMock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ from: () => builder }) }));
 
     const { GET } = await import('./route');
-    const res = await GET();
+    const res = await GET(new Request('http://localhost/api/culture-club/stores') as never);
     const data = await res.json();
 
     expect(data.stores).toEqual([{ storeCode: '935', label: '스타필드마켓 경산점' }]);
@@ -83,7 +83,7 @@ describe('GET /api/culture-club/stores', () => {
     vi.doMock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ from: () => builder }) }));
 
     const { GET } = await import('./route');
-    const res = await GET();
+    const res = await GET(new Request('http://localhost/api/culture-club/stores') as never);
     const data = await res.json();
 
     expect(data.stores).toEqual([]);
@@ -94,8 +94,68 @@ describe('GET /api/culture-club/stores', () => {
     vi.doMock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ from: () => builder }) }));
 
     const { GET } = await import('./route');
-    const res = await GET();
+    const res = await GET(new Request('http://localhost/api/culture-club/stores') as never);
 
     expect(res.status).toBe(500);
+  });
+});
+
+describe('GET /api/culture-club/stores — 계층형 지점 선택(반경 내 지점만)', () => {
+  afterEach(() => {
+    vi.doUnmock('@/lib/supabase/admin');
+    vi.resetModules();
+  });
+
+  it('lat/lng가 있으면 distanceMeters를 포함해 거리순으로 정렬한다', async () => {
+    const builder = makeSelectBuilder({
+      data: [
+        { external_id: 'EMART_STORE_FAR', display_name: '먼 지점', name: '먼 지점', address: null },
+        { external_id: 'EMART_STORE_NEAR', display_name: '가까운 지점', name: '가까운 지점', address: null },
+      ],
+      error: null,
+    });
+    const rpcMock = vi.fn(() =>
+      Promise.resolve({
+        data: [
+          { external_id: 'EMART_STORE_FAR', lng: 129.0, lat: 35.0 },
+          { external_id: 'EMART_STORE_NEAR', lng: 126.978, lat: 37.5665 },
+        ],
+        error: null,
+      })
+    );
+    vi.doMock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ from: () => builder, rpc: rpcMock }) }));
+
+    const { GET } = await import('./route');
+    const res = await GET(new Request('http://localhost/api/culture-club/stores?lat=37.5665&lng=126.978') as never);
+    const data = await res.json();
+
+    expect(data.stores.map((s: { storeCode: string }) => s.storeCode)).toEqual(['NEAR', 'FAR']);
+    expect(data.stores[0].distanceMeters).toBeLessThan(data.stores[1].distanceMeters);
+  });
+
+  it('radius_km을 벗어난 지점은 목록에서 제외된다', async () => {
+    const builder = makeSelectBuilder({
+      data: [
+        { external_id: 'EMART_STORE_FAR', display_name: '먼 지점', name: '먼 지점', address: null },
+        { external_id: 'EMART_STORE_NEAR', display_name: '가까운 지점', name: '가까운 지점', address: null },
+      ],
+      error: null,
+    });
+    const rpcMock = vi.fn(() =>
+      Promise.resolve({
+        data: [
+          { external_id: 'EMART_STORE_FAR', lng: 129.0, lat: 35.0 },
+          { external_id: 'EMART_STORE_NEAR', lng: 126.978, lat: 37.5665 },
+        ],
+        error: null,
+      })
+    );
+    vi.doMock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ from: () => builder, rpc: rpcMock }) }));
+
+    const { GET } = await import('./route');
+    const res = await GET(new Request('http://localhost/api/culture-club/stores?lat=37.5665&lng=126.978&radius_km=10') as never);
+    const data = await res.json();
+
+    expect(data.stores.map((s: { storeCode: string }) => s.storeCode)).toEqual(['NEAR']);
   });
 });

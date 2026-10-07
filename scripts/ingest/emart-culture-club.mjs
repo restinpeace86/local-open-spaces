@@ -41,6 +41,7 @@ import {
 } from './lib/schedule-normalizer.mjs';
 import { normalizeEmartStatus, parseInstructorFromTitle } from './lib/culture-club-common.mjs';
 import { toUnifiedEmartRow } from './lib/culture-club-unified-row.mjs';
+import { sendDiscordNotification } from '../notify-discord.mjs';
 
 const env = loadEnv();
 const SOURCE_KEY = 'EMART_CULTURE_CLUB';
@@ -124,6 +125,22 @@ const QUERY = `query getClassByFiltering($keyword: String, $filterData: [FilterD
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// [배치 결과 디스코드 알림](2026-10-07 todo.md 개선사항2-4): "배치가 성공적으로
+// 끝났을 때나 에러가 터졌을 때, 수집된 총 개수와 소요 시간을 담아 디스코드
+// 웹훅으로 결과 리포트". 알림 전송 자체가 실패해도 배치 결과(성공/실패)에는
+// 영향을 주지 않는다(postPipelineLog와 동일한 "부가 작업" 패턴).
+export function formatDurationSeconds(ms) {
+  return `${(ms / 1000).toFixed(1)}초`;
+}
+
+async function notifyBatchResult(args) {
+  try {
+    await sendDiscordNotification(args);
+  } catch (err) {
+    console.error(`⚠️ Discord 알림 전송 실패(배치 자체에는 영향 없음): ${err.message}`);
+  }
 }
 
 function randomPacingDelay() {
@@ -354,6 +371,7 @@ async function postPipelineLog(client, { status, errorMessage = null, metaData =
 
 export async function run({ dryRun = false } = {}) {
   console.log(`▶ 이마트 컬처클럽 강좌 리스트 수집 시작 (dry-run: ${dryRun})`);
+  const startedAt = Date.now();
 
   const allRows = [];
   for (const status of TARGET_STATUSES) {
@@ -403,6 +421,12 @@ export async function run({ dryRun = false } = {}) {
     }
   } catch (err) {
     await postPipelineLog(client, { status: 'FAILED', errorMessage: err.message.slice(0, 500) });
+    await notifyBatchResult({
+      title: '❌ [local-open-spaces] 이마트 컬처클럽 배치 실패',
+      description: err.message.slice(0, 500),
+      status: formatDurationSeconds(Date.now() - startedAt),
+      color: 0xed4245,
+    });
     throw err;
   }
 
@@ -432,6 +456,14 @@ export async function run({ dryRun = false } = {}) {
       byStatus: TARGET_STATUSES.reduce((acc, s) => ({ ...acc, [s]: rows.filter((r) => r.filter_status === s).length }), {}),
       registerWindowDiagnostic,
     },
+  });
+
+  const byStatusSummary = TARGET_STATUSES.map((s) => `${s} ${rows.filter((r) => r.filter_status === s).length}건`).join(', ');
+  await notifyBatchResult({
+    title: '✅ [local-open-spaces] 이마트 컬처클럽 배치 완료',
+    description: `총 ${upsertedCount}건 수집/upsert (${byStatusSummary})`,
+    status: formatDurationSeconds(Date.now() - startedAt),
+    color: 0x5865f2,
   });
 
   return { sourceKey: SOURCE_KEY, count: upsertedCount, upserted: true, registerWindowDiagnostic };

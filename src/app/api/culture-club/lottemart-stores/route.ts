@@ -1,5 +1,8 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { LOTTEMART_STORES } from '@/lib/home/culture-club-options';
+import { getStoreDistancesByCode } from '@/lib/home/culture-club-nearby-stores';
+
+const EXTERNAL_ID_PREFIX = 'LOTTEMART_STORE_';
 
 // [롯데마트 문화센터 — 지점 선택](2026-10-04 사용자 지시): 화면 구조 참조 요청
 // (reference/lottemart culture.png) — 이마트는 open_spaces에 이미 지오코딩된
@@ -17,7 +20,34 @@ import { LOTTEMART_STORES } from '@/lib/home/culture-club-options';
 // 매번 재수집하지 않고 하드코딩해서 씀 — 지점이 느는 건 드문 수동 이벤트)라
 // 매 요청마다 테이블을 훑을 이유가 없었다. 공유 상수(LOTTEMART_STORES)를
 // 그대로 반환하도록 바꿔 DB 쿼리 자체를 없앴다.
-export async function GET() {
-  const stores = [...LOTTEMART_STORES].sort((a, b) => a.label.localeCompare(b.label, 'ko'));
-  return NextResponse.json({ stores });
+// [계층형 지점 선택 — 반경 내 지점만](2026-10-07 todo.md 개선사항1-3): 이마트
+// 지점 API와 동일하게 lat/lng가 있으면 거리를 계산해 반경 내 지점만 돌려준다.
+export async function GET(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const latRaw = searchParams.get('lat');
+    const lngRaw = searchParams.get('lng');
+    const lat = latRaw != null && latRaw !== '' ? Number(latRaw) : NaN;
+    const lng = lngRaw != null && lngRaw !== '' ? Number(lngRaw) : NaN;
+    const hasLocation = Number.isFinite(lat) && Number.isFinite(lng);
+    const radiusKmRaw = searchParams.get('radius_km');
+    const radiusKm = radiusKmRaw != null && radiusKmRaw !== '' ? Number(radiusKmRaw) : null;
+    const hasRadius = radiusKm != null && Number.isFinite(radiusKm) && radiusKm > 0;
+
+    const stores = [...LOTTEMART_STORES].sort((a, b) => a.label.localeCompare(b.label, 'ko'));
+
+    if (!hasLocation) {
+      return NextResponse.json({ stores });
+    }
+
+    const distances = await getStoreDistancesByCode(EXTERNAL_ID_PREFIX, { lat, lng });
+    let withDistance = stores.map((store) => ({ ...store, distanceMeters: distances.get(store.storeCode) ?? null }));
+    if (hasRadius) withDistance = withDistance.filter((store) => store.distanceMeters != null && store.distanceMeters <= radiusKm! * 1000);
+    withDistance.sort((a, b) => (a.distanceMeters ?? Infinity) - (b.distanceMeters ?? Infinity));
+
+    return NextResponse.json({ stores: withDistance });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : '롯데마트 문화센터 지점 목록 조회 실패';
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
 }

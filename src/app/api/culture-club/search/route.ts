@@ -9,42 +9,51 @@ import { buildAgeOverlapFilter } from '@/lib/home/culture-club-age-filter';
 // culture_club_classes 하나로 대체한다. brand를 생략하면 전체(모든 브랜드)를
 // 반환한다.
 //
-// [지점 필터는 단일 브랜드 선택 시에만 의미 있음] 지점 코드가 브랜드마다
-// 독립적으로 부여돼(이마트 '964'와 롯데마트 '455' 등 서로 다른 네임스페이스)
-// store_code만으로는 브랜드를 특정할 수 없다 — 이 라우트는 brand가 정확히
-// 1개로 지정됐을 때만 store_code 필터를 받는다(그 외에는 무시, 추측으로
-// 브랜드를 짐작하지 않음).
-//
-// [카테고리/대상 필터는 브랜드별로 다른 축] 이마트는 sub_category_name(5개
-// 고정값), 롯데마트는 target_code(수강대상, raw_extra에 보관)로 서로 다른
-// 분류 체계를 쓴다 — 억지로 하나의 공통 카테고리로 합치지 않고, 각자 원래
-// 쓰던 파라미터 이름을 그대로 받는다(둘 다 와도 됨, 각자 해당 브랜드 행에만
-// 적용됨).
-//
 // [기본 필터 2종 — 2026-10-07 사용자 지시](project/decision-log.md Decision
 // 028 연장): "1차적인 검색조건" — 아이 연령(age_months)과 현재 위치(lat/lng)
-// 기반 거리순 정렬. 둘 다 생략 가능(선택적 쿼리 파라미터)하지만, 프론트엔드가
-// 로그인/위치 정보가 있으면 항상 자동으로 실어 보낸다.
+// 기반 거리순 정렬.
 //
-// [거리순 정렬 — 구현 방식] culture_club_classes는 좌표를 직접 갖지 않는다
-// (store_code로 open_spaces를 가리킴). 문화센터 지점은 124개뿐이라
-// get_culture_club_store_coordinates() RPC로 전부 가져와 메모리에서 join한다.
-// "가까운 순"이 전체 필터링 결과를 기준으로 정확해야 하므로(사용자 지시:
-// "본인 위치 기준으로 가까운 것부터 보여줄꺼야"가 1차 조건), schedule_
-// start_date로 먼저 솎아낸 뒤 그 안에서만 거리 정렬하면 틀린 "가장 가까운"
-// 이 나올 수 있다(실측으로 발견 — 연령 필터만 걸었을 때 3,722건이 걸렸는데
-// 1,000건으로 자르고 날짜순으로 추렸더니 실제로 가장 가까운 지점이 아닌
-// 다른 지점이 1~3등으로 나왔다). 그래서 필터링된 전체를 가져와(안전상한
-// DISTANCE_SORT_FETCH_SAFETY_CEILING까지만 — 이 앱 규모(총 2만여 건)에서
-// 실제로 걸릴 일은 없고, 쿼리 폭주 방지용 방어선일 뿐이다) 거리순으로 정확히
-// 정렬한 뒤 페이지를 자른다.
+// [Branch-First 성능 최적화 + 반경 필터](2026-10-07 todo.md 개선사항1-1):
+// "수만 건에 달하는 강좌 데이터 전체를 대상으로 거리 계산을 하거나 필터를
+// 걸면 성능이 심각하게 떨어진다" — 이전 구현은 (나이/브랜드/요일 등) 필터링된
+// 전체 강좌를 안전상한(5,000건)까지 끌어와 메모리에서 거리를 계산해 정렬했다.
+// 이제는 반대 순서로 간다: 지점(Branch)은 124개뿐이라 먼저 지점 좌표만 전부
+// 가져와 거리를 계산하고, 반경(radius_km) 내 지점만 골라낸 뒤, 그 지점들에
+// 소속된 강좌만 조회한다(브랜드+store_code 조합을 OR로 묶어 culture_club_
+// classes 쿼리 자체를 좁힌다). 반경이 좁을수록 조회 대상 강좌 수 자체가
+// 줄어들어 훨씬 빠르다.
+//
+// [지점 필터 — 다중 선택으로 전환](2026-10-07 todo.md 개선사항1-3): "계층형
+// 지점 선택 UI/UX" — 기존엔 브랜드 하나를 고르면 그 브랜드 지점 중 하나만
+// 고를 수 있었다(store_code 단일값). 이제는 반경 내 지점들을 뱃지로 다중
+// 선택할 수 있어야 하므로 store_codes(콤마구분, 복수)로 바꾼다. 아무 지점도
+// 선택하지 않으면(빈 값) "반경 내 전체 지점"과 동일하게 취급한다.
 const DEFAULT_PAGE_SIZE = 20;
 const VALID_BRANDS = new Set(['emart', 'lottemart']);
 const DISTANCE_SORT_FETCH_SAFETY_CEILING = 5000;
+const PAGE_FETCH_SIZE = 1000;
 
-function buildExternalId(brand: string, storeCode: string | null): string | null {
-  if (!storeCode) return null;
-  return `${brand.toUpperCase()}_STORE_${storeCode}`;
+// get_culture_club_store_coordinates()가 돌려주는 external_id는
+// "{BRAND}_STORE_{storeCode}" 형태다(scripts/ingest/emart-culture-club-
+// stores.mjs / lottemart-culture-club-stores.mjs의 buildOpenSpaceRow 참고).
+function parseExternalId(externalId: string): { brand: string; storeCode: string } | null {
+  const match = /^([A-Z]+)_STORE_(.+)$/.exec(externalId);
+  if (!match) return null;
+  return { brand: match[1].toLowerCase(), storeCode: match[2] };
+}
+
+type StoreCandidate = { brand: string; storeCode: string; distanceMeters: number };
+
+// 브랜드별 store_code 네임스페이스가 서로 달라(이마트 '180'과 롯데마트 '455'가
+// 우연히 같은 숫자일 수 있음) brand+store_code를 묶어서 OR 그룹으로 만든다 —
+// store_code만으로 .in()을 걸면 다른 브랜드의 동일 코드까지 잘못 걸릴 수 있다.
+function buildStoreScopeFilter(candidates: StoreCandidate[]): string {
+  const codesByBrand = new Map<string, string[]>();
+  for (const c of candidates) {
+    if (!codesByBrand.has(c.brand)) codesByBrand.set(c.brand, []);
+    codesByBrand.get(c.brand)!.push(c.storeCode);
+  }
+  return [...codesByBrand.entries()].map(([brand, codes]) => `and(brand.eq.${brand},store_code.in.(${codes.join(',')}))`).join(',');
 }
 
 export async function GET(request: NextRequest) {
@@ -54,7 +63,7 @@ export async function GET(request: NextRequest) {
       .split(',')
       .filter(Boolean)
       .filter((b) => VALID_BRANDS.has(b));
-    const storeCode = searchParams.get('store_code');
+    const storeCodes = (searchParams.get('store_codes') ?? '').split(',').filter(Boolean);
     const days = (searchParams.get('days') ?? '').split(',').filter(Boolean);
     const subCategories = (searchParams.get('sub_category_name') ?? '').split(',').filter(Boolean);
     const targetCodes = (searchParams.get('target_code') ?? '').split(',').filter(Boolean);
@@ -62,9 +71,19 @@ export async function GET(request: NextRequest) {
     const ageMonthsRaw = searchParams.get('age_months');
     const ageMonths = ageMonthsRaw != null && ageMonthsRaw !== '' ? Number(ageMonthsRaw) : null;
     const hasAgeFilter = ageMonths != null && Number.isFinite(ageMonths);
-    const lat = Number(searchParams.get('lat'));
-    const lng = Number(searchParams.get('lng'));
+    // [버그 수정] searchParams.get()이 파라미터 부재 시 null을 돌려주는데,
+    // Number(null)은 NaN이 아니라 0이라 Number.isFinite(0)이 true가 되어
+    // lat/lng를 아예 안 보낸 요청도 "위치 있음"으로 잘못 판별되는 숨은
+    // 버그가 있었다(실측 확인 — age_months 전용 테스트에서 발견). 파라미터가
+    // 없으면 명시적으로 NaN으로 취급한다.
+    const latRaw = searchParams.get('lat');
+    const lngRaw = searchParams.get('lng');
+    const lat = latRaw != null && latRaw !== '' ? Number(latRaw) : NaN;
+    const lng = lngRaw != null && lngRaw !== '' ? Number(lngRaw) : NaN;
     const hasLocation = Number.isFinite(lat) && Number.isFinite(lng);
+    const radiusKmRaw = searchParams.get('radius_km');
+    const radiusKm = radiusKmRaw != null && radiusKmRaw !== '' ? Number(radiusKmRaw) : null;
+    const hasRadius = radiusKm != null && Number.isFinite(radiusKm) && radiusKm > 0;
     const page = Math.max(1, Number(searchParams.get('page') ?? '1') || 1);
     const pageSize = Number(searchParams.get('page_size')) || DEFAULT_PAGE_SIZE;
     const from = (page - 1) * pageSize;
@@ -72,49 +91,77 @@ export async function GET(request: NextRequest) {
 
     const supabase = createAdminClient();
 
-    function applyCommonFilters<T>(builder: T): T {
+    function applyCommonFilters<T>(builder: T, storeScopeFilter: string | null): T {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       let q2 = builder as any;
       if (brands.length > 0) q2 = q2.in('brand', brands);
-      if (brands.length === 1 && storeCode) q2 = q2.eq('store_code', storeCode);
       if (days.length > 0) q2 = q2.overlaps('class_day', days);
       if (subCategories.length > 0) q2 = q2.in('sub_category_name', subCategories);
       if (targetCodes.length > 0) q2 = q2.or(targetCodes.map((code) => `raw_extra->>target_code.eq.${code}`).join(','));
       if (q) q2 = q2.ilike('class_title', `%${q}%`);
       if (hasAgeFilter) q2 = q2.or(buildAgeOverlapFilter(ageMonths as number));
+      if (storeScopeFilter) q2 = q2.or(storeScopeFilter);
       return q2 as T;
     }
 
-    // 총 건수는 거리 정렬 상한과 무관하게 항상 정직한 값을 별도로 조회한다.
-    const countQuery = applyCommonFilters(supabase.from('culture_club_classes').select('*', { count: 'exact', head: true }).eq('is_excluded', false));
+    // [Branch-First] 위치가 있으면 지점(124개)부터 거리 계산 + 반경/브랜드/
+    // 선택 지점으로 좁힌 뒤, 그 지점들에 속한 강좌만 조회한다.
+    let storeScopeFilter: string | null = null;
+    let distanceByKey: Map<string, number> | null = null;
+
+    if (hasLocation) {
+      const { data: coords, error: coordsError } = await supabase.rpc('get_culture_club_store_coordinates');
+      if (coordsError) throw new Error(coordsError.message);
+
+      let candidates: StoreCandidate[] = (coords ?? [])
+        .map((c: { external_id: string; lng: number; lat: number }) => {
+          const parsed = parseExternalId(c.external_id);
+          if (!parsed) return null;
+          return { ...parsed, distanceMeters: haversineDistanceMeters({ lat, lng }, c) };
+        })
+        .filter((c: StoreCandidate | null): c is StoreCandidate => c !== null);
+
+      if (hasRadius) candidates = candidates.filter((c) => c.distanceMeters <= radiusKm! * 1000);
+      if (brands.length > 0) candidates = candidates.filter((c) => brands.includes(c.brand));
+      if (storeCodes.length > 0) candidates = candidates.filter((c) => storeCodes.includes(c.storeCode));
+
+      if (candidates.length === 0) {
+        return NextResponse.json({ items: [], total: 0, page, pageSize });
+      }
+
+      storeScopeFilter = buildStoreScopeFilter(candidates);
+      distanceByKey = new Map(candidates.map((c) => [`${c.brand}:${c.storeCode}`, c.distanceMeters]));
+    } else if (storeCodes.length > 0) {
+      // 위치 없이 지점만 지정된 경우(드문 호출 패턴) — brand가 정확히 1개일 때만
+      // store_code만으로 안전하게 좁힐 수 있다(네임스페이스 충돌 방지).
+      if (brands.length === 1) storeScopeFilter = storeCodes.map((code) => `store_code.eq.${code}`).join(',');
+    }
+
+    const countQuery = applyCommonFilters(
+      supabase.from('culture_club_classes').select('*', { count: 'exact', head: true }).eq('is_excluded', false),
+      storeScopeFilter
+    );
     const { count, error: countError } = await countQuery;
     if (countError) throw new Error(countError.message);
 
     if (hasLocation) {
-      // [PostgREST 1,000건 truncation 방지] 이 프로젝트에서 이미 여러 번 겪은
-      // 문제(emart-culture-club-detail.mjs 등 참고) — .limit()을 아무리 크게
-      // 줘도 PostgREST가 한 요청당 조용히 1,000건으로 자른다. 안전상한까지
-      // .range()로 1,000건씩 반복 조회해 합친다(실측으로 발견 — 최초 구현은
-      // .limit(5000)만 걸어뒀다가 실제로는 여전히 1,000건만 받아와 "가장
-      // 가까운 지점"이 틀리게 나왔다).
-      // 최종 순서는 어차피 아래에서 거리로 다시 정렬하므로, DB 단계에서는
-      // 정렬을 걸지 않는다(불필요한 정렬 비용 제거) — 페이지들을 병렬로
-      // 조회해 왕복 시간도 줄인다(순차 조회 시 페이지당 최대 수 초씩 걸려
-      // 체감 지연이 컸다, 실측 확인).
-      const PAGE_FETCH_SIZE = 1000;
+      // [1,000건 truncation 방지] PostgREST가 .limit()을 아무리 크게 줘도
+      // 응답을 1,000건으로 자르는 기존 이슈(emart-culture-club-detail.mjs 등
+      // 참고) — count만큼만 필요한 수의 .range() 호출로 나눠 병렬 조회한다
+      // (Branch-First로 좁혀진 덕에 대부분 1회 호출로 끝난다). 최종 순서는
+      // 거리로 다시 정렬하므로 DB 단계 정렬은 걷지 않는다.
+      const fetchCeiling = Math.min(count ?? 0, DISTANCE_SORT_FETCH_SAFETY_CEILING);
       const offsets: number[] = [];
-      for (let offset = 0; offset < DISTANCE_SORT_FETCH_SAFETY_CEILING; offset += PAGE_FETCH_SIZE) offsets.push(offset);
+      for (let offset = 0; offset < fetchCeiling; offset += PAGE_FETCH_SIZE) offsets.push(offset);
 
       const pages = await Promise.all(
-        offsets.map((offset) =>
-          applyCommonFilters(
-            supabase
-              .from('culture_club_classes')
-              .select('*')
-              .eq('is_excluded', false)
-              .range(offset, offset + PAGE_FETCH_SIZE - 1)
-          )
-        )
+        offsets.map((offset) => {
+          const filtered = applyCommonFilters(
+            supabase.from('culture_club_classes').select('*').eq('is_excluded', false),
+            storeScopeFilter
+          );
+          return filtered.range(offset, offset + PAGE_FETCH_SIZE - 1);
+        })
       );
       for (const { error: pageError } of pages) {
         if (pageError) throw new Error(pageError.message);
@@ -122,16 +169,10 @@ export async function GET(request: NextRequest) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const data: any[] = pages.flatMap((p) => p.data ?? []);
 
-      const { data: coords, error: coordsError } = await supabase.rpc('get_culture_club_store_coordinates');
-      if (coordsError) throw new Error(coordsError.message);
-      const coordMap = new Map((coords ?? []).map((c: { external_id: string; lng: number; lat: number }) => [c.external_id, c]));
-
-      const withDistance = (data ?? []).map((item) => {
-        const externalId = buildExternalId(item.brand, item.store_code);
-        const coord = externalId ? coordMap.get(externalId) : undefined;
-        const distanceMeters = coord ? haversineDistanceMeters({ lat, lng }, coord) : null;
-        return { ...item, distance_meters: distanceMeters };
-      });
+      const withDistance = data.map((item) => ({
+        ...item,
+        distance_meters: distanceByKey!.get(`${item.brand}:${item.store_code}`) ?? null,
+      }));
       withDistance.sort((a, b) => {
         if (a.distance_meters == null && b.distance_meters == null) return 0;
         if (a.distance_meters == null) return 1;
@@ -143,10 +184,11 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ items: pageItems, total: count ?? 0, page, pageSize });
     }
 
-    const query = applyCommonFilters(
-      supabase.from('culture_club_classes').select('*').eq('is_excluded', false).order('schedule_start_date', { ascending: true }).range(from, to)
+    const filteredQuery = applyCommonFilters(
+      supabase.from('culture_club_classes').select('*').eq('is_excluded', false).order('schedule_start_date', { ascending: true }),
+      storeScopeFilter
     );
-    const { data, error } = await query;
+    const { data, error } = await filteredQuery.range(from, to);
     if (error) throw new Error(error.message);
 
     return NextResponse.json({ items: data ?? [], total: count ?? 0, page, pageSize });
