@@ -182,11 +182,18 @@ function toggleInSet<T>(set: Set<T>, value: T): Set<T> {
 // 뱃지/신설·할인 뱃지를 함께 보여준다.
 function ClassImage({ item }: { item: CultureClubClass }) {
   // [이미지 — 이마트만 있음, 실측 확인] 롯데마트 목록 응답에는 썸네일 이미지이
-  // 전혀 없다 — 다른 브랜드는 전부 플레이스홀더로 폴백한다.
+  // 전혀 없다 — 다른 브랜드는 전부 플레이스홀더로 폴백한다. 이마트도 실제로
+  // main_image_key가 있는 강좌는 전체의 8% 정도뿐이다(반복되는 정규 강좌엔
+  // 원본 API 자체가 사진을 안 준다 — 추측 금지, 실측 확인) — 나머지는 전부
+  // 플레이스홀더로 보이는 게 정상 동작이다.
+  // [픽셀 비율 — 실측 확인](2026-10-07 사용자 지적: "픽셀 맞춘거 맞아?") 실제
+  // CDN 원본이 정사각형이 아니라 가로형(271×173, 616×416 등 약 3:2)이라
+  // 정사각형(96×96) 박스에 넣으면 과도하게 크롭됐다 — 가로로 조금 더 넓은
+  // 박스(112×96)로 바꿔 크롭을 줄인다.
   const imageKey = item.brand === 'emart' ? (item.raw_extra.main_image_key as string | null | undefined) : null;
   const thumbnailUrl = buildCultureClubThumbnailUrl(imageKey);
   return (
-    <div className="relative h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-gray-100">
+    <div className="relative h-24 w-28 shrink-0 overflow-hidden rounded-lg bg-gray-100">
       <span
         className={`absolute left-1 top-1 z-10 rounded px-1 py-0.5 text-[9px] font-semibold leading-none ${statusBadgeClassName(item.normalized_status)}`}
       >
@@ -212,6 +219,12 @@ function ClassCard({ item, onSelect }: { item: CultureClubClass; onSelect: (item
   const discountBadge = item.brand === 'lottemart' ? (item.raw_extra.discount_badge_text as string | null) : null;
   const isClosingSoon = item.brand === 'lottemart' ? Boolean(item.raw_extra.is_closing_soon) : false;
   const isNew = item.brand === 'lottemart' ? Boolean(item.raw_extra.is_new) : false;
+  const hasSpecialBadge = Boolean(discountBadge) || isClosingSoon || isNew;
+  // [접수일자 표시](2026-10-07 사용자 지적: "수업일자 요일 시간 말고 접수
+  // 일자는 왜 안보이지? 이마트는 접수일자 있지 않나") — register_start_at은
+  // 이마트만 값이 있다(실측 확인, 롯데마트는 전용 필드가 없어 늘 null) —
+  // 없으면 추측해서 만들어내지 않고 그냥 줄 자체를 생략한다.
+  const registerStartLabel = item.register_start_at ? formatRegisterStart(item.register_start_at) : null;
 
   return (
     <div
@@ -224,32 +237,42 @@ function ClassCard({ item, onSelect }: { item: CultureClubClass; onSelect: (item
       className="flex cursor-pointer gap-3 rounded-xl border border-gray-200 bg-white p-2.5 text-left"
     >
       <ClassImage item={item} />
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <div className="flex items-center justify-between gap-1">
-          <div className="flex min-w-0 flex-wrap items-center gap-1">
-            <span className="shrink-0 rounded bg-gray-100 px-1.5 py-0.5 text-[10px] font-medium text-gray-500">{BRAND_LABELS[item.brand]}</span>
+      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+        <div className="flex items-start justify-between gap-1">
+          <p className="line-clamp-2 flex-1 text-sm font-medium text-gray-900">{item.class_title}</p>
+          <span onClick={(e) => e.stopPropagation()} className="-mt-1 shrink-0">
+            <BookmarkButton target={toBookmarkTarget(item)} />
+          </span>
+        </div>
+        {/* [브랜드 뱃지 제거](2026-10-07 사용자 지적: "롯데몰수지점 8.5km
+            되어있는데 롯데마트 뱃지가 위에 안나와도 되지 않나?") — 아래
+            위치 줄(📍 지점명 · 거리)이 이미 브랜드/위치를 전달해 중복이었다.
+            할인/마감임박/신설처럼 실제로 다른 정보를 주는 뱃지만 남긴다. */}
+        {hasSpecialBadge && (
+          <div className="flex flex-wrap items-center gap-1">
             {discountBadge && <span className="shrink-0 rounded bg-rose-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">{discountBadge}</span>}
             {isClosingSoon && <span className="shrink-0 rounded bg-orange-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">마감임박</span>}
             {isNew && <span className="shrink-0 rounded bg-blue-500 px-1.5 py-0.5 text-[10px] font-semibold text-white">신설</span>}
           </div>
-          <span onClick={(e) => e.stopPropagation()} className="shrink-0">
-            <BookmarkButton target={toBookmarkTarget(item)} />
-          </span>
-        </div>
-        <p className="line-clamp-2 text-sm font-medium text-gray-900">{item.class_title}</p>
+        )}
         <p className="text-[11px] text-gray-400">
           {item.sub_category_name ?? '-'}
           {ageLabel ? ` · ${ageLabel}` : ''}
         </p>
-        <p className="text-base font-bold text-gray-900">
+        {/* [회차 표시 추가](2026-10-07 사용자 지적: "가격 관련 몇회 몇만원
+            아니었어? 몇회가 안보여 상세 들어가야 보여") — total_sessions를
+            가격 옆에 바로 보여준다. */}
+        <p className="flex items-baseline gap-1 text-base font-bold text-gray-900">
+          {item.total_sessions != null && <span className="text-xs font-semibold text-gray-500">{item.total_sessions}회</span>}
           {item.class_fee != null ? `${item.class_fee.toLocaleString('ko-KR')}원` : '무료'}
           {hasMaterialFee && (
-            <span className="ml-1 text-[11px] font-normal text-gray-400">(재료비 {item.class_material_fee!.toLocaleString('ko-KR')}원 포함)</span>
+            <span className="text-[11px] font-normal text-gray-400">(재료비 {item.class_material_fee!.toLocaleString('ko-KR')}원 포함)</span>
           )}
         </p>
         <p className="truncate text-[11px] text-gray-400">
           🗓 {(item.class_day ?? []).join(',')} {formatTimeRange(item.start_time, item.end_time)}
         </p>
+        {registerStartLabel && <p className="truncate text-[11px] text-gray-400">📅 접수 {registerStartLabel}</p>}
         <p className="truncate text-[11px] text-gray-400">
           📍 {item.store_name ?? '-'}
           {distanceLabel ? ` · ${distanceLabel}` : ''}

@@ -156,15 +156,14 @@ describe('CultureClubTabView — 기본값(전체, 브랜드 무관 통합검색
     expect(searchCall?.[0]).not.toContain('store_code=');
   });
 
-  it('카드에 브랜드 표시가 보이고, 지점명도 함께 보인다(여러 브랜드/지점이 섞여 나오므로)', async () => {
+  it('카드에 지점명이 보인다(브랜드 뱃지는 위치 줄과 중복이라 제거됨, 2026-10-07 사용자 지적)', async () => {
     stubFetch([makeEmartClass(), makeLottemartClass()]);
     render(<CultureClubTabView />);
 
     await screen.findByText(/두근두근/);
-    expect(screen.getByText('이마트')).toBeInTheDocument();
-    expect(screen.getByText('롯데마트')).toBeInTheDocument();
     const card = screen.getByText(/두근두근/).closest('.rounded-xl') as HTMLElement;
     expect(within(card).getByText(/춘천점/)).toBeInTheDocument();
+    expect(within(card).queryByText('이마트')).not.toBeInTheDocument();
   });
 
   it('가격 옆에 재료비가 작게 표시된다', async () => {
@@ -180,6 +179,38 @@ describe('CultureClubTabView — 기본값(전체, 브랜드 무관 통합검색
     render(<CultureClubTabView />);
 
     expect(await screen.findByText(/5개월~9개월/)).toBeInTheDocument();
+  });
+
+  it('total_sessions이 있으면 가격 옆에 "N회"로 표시된다(2026-10-07 사용자 지적: "몇회가 안보여")', async () => {
+    stubFetch([makeLottemartClass({ total_sessions: 12, class_fee: 91000 })]);
+    render(<CultureClubTabView />);
+
+    expect(await screen.findByText('12회')).toBeInTheDocument();
+    expect(screen.getByText(/91,000원/)).toBeInTheDocument();
+  });
+
+  it('total_sessions이 없으면 "회" 표시를 생략한다', async () => {
+    stubFetch([makeEmartClass({ total_sessions: null })]);
+    render(<CultureClubTabView />);
+
+    await screen.findByText(/두근두근/);
+    expect(screen.queryByText(/^\d+회$/)).not.toBeInTheDocument();
+  });
+
+  it('register_start_at이 있으면(이마트) 접수일자가 표시된다(2026-10-07 사용자 지적: "접수일자는 왜 안보이지")', async () => {
+    stubFetch([makeEmartClass({ register_start_at: '2026-07-23T10:00:00+09:00' })]);
+    render(<CultureClubTabView />);
+
+    expect(await screen.findByText(/📅 접수/)).toBeInTheDocument();
+    expect(screen.getByText(/2026\.07\.23/)).toBeInTheDocument();
+  });
+
+  it('register_start_at이 없으면(롯데마트) 접수일자 줄 자체를 생략한다(추측하지 않음)', async () => {
+    stubFetch([makeLottemartClass({ register_start_at: null })]);
+    render(<CultureClubTabView />);
+
+    await screen.findByText('랄랄라 코알라');
+    expect(screen.queryByText(/📅 접수/)).not.toBeInTheDocument();
   });
 
   it('상태 배지는 raw_status(브랜드별 원문 라벨)를 그대로 보여준다', async () => {

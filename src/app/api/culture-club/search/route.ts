@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { haversineDistanceMeters } from '@/lib/geo/haversine';
 import { buildAgeOverlapFilter } from '@/lib/home/culture-club-age-filter';
+import { getCachedStoreCoordinates } from '@/lib/home/culture-club-store-coordinates-cache';
 
 // [문화센터 통합검색](2026-10-06 사용자 지시, project/decision-log.md Decision
 // 028): "전체 통합검색 및 롯데마트나 이마트 필터검색도 가능하게" — 기존
@@ -110,10 +111,9 @@ export async function GET(request: NextRequest) {
     let distanceByKey: Map<string, number> | null = null;
 
     if (hasLocation) {
-      const { data: coords, error: coordsError } = await supabase.rpc('get_culture_club_store_coordinates');
-      if (coordsError) throw new Error(coordsError.message);
+      const coords = await getCachedStoreCoordinates();
 
-      let candidates: StoreCandidate[] = (coords ?? [])
+      let candidates: StoreCandidate[] = coords
         .map((c: { external_id: string; lng: number; lat: number }) => {
           const parsed = parseExternalId(c.external_id);
           if (!parsed) return null;
@@ -137,61 +137,79 @@ export async function GET(request: NextRequest) {
       if (brands.length === 1) storeScopeFilter = storeCodes.map((code) => `store_code.eq.${code}`).join(',');
     }
 
+    // [성능 최적화 — 왕복 횟수 줄이기](2026-10-07 사용자 지적: "성능 너무
+    // 느린데?") — 실측으로 원인을 찾았다: Supabase 원격 호출은 행 수와
+    // 무관하게 왕복마다 ~400~600ms 고정 지연이 있다. 이전엔 count 쿼리를
+    // 먼저 기다렸다가(1 왕복) 그 결과로 range 쿼리들을 보내(+1 왕복) 순차
+    // 3단계(지점 좌표 RPC → count → range)였다. count는 "첫 1,000건을
+    // 가져왔다"는 사실과 독립적인 정보이므로, count와 첫 페이지(최대
+    // 1,000건) 조회를 동시에 보낸다. 첫 페이지가 꽉 차지 않았으면(=더 없음)
+    // 그 자체가 정확한 총건수라 count 결과를 쓸 필요도 없다(실제로는 그래도
+    // 정직한 count 값을 그대로 쓴다 — 거의 항상 서로 일치하고, 더 저렴한
+    // 쪽을 고르느라 복잡도를 늘리지 않는다).
     const countQuery = applyCommonFilters(
       supabase.from('culture_club_classes').select('*', { count: 'exact', head: true }).eq('is_excluded', false),
       storeScopeFilter
     );
-    const { count, error: countError } = await countQuery;
-    if (countError) throw new Error(countError.message);
-
-    if (hasLocation) {
-      // [1,000건 truncation 방지] PostgREST가 .limit()을 아무리 크게 줘도
-      // 응답을 1,000건으로 자르는 기존 이슈(emart-culture-club-detail.mjs 등
-      // 참고) — count만큼만 필요한 수의 .range() 호출로 나눠 병렬 조회한다
-      // (Branch-First로 좁혀진 덕에 대부분 1회 호출로 끝난다). 최종 순서는
-      // 거리로 다시 정렬하므로 DB 단계 정렬은 걷지 않는다.
-      const fetchCeiling = Math.min(count ?? 0, DISTANCE_SORT_FETCH_SAFETY_CEILING);
-      const offsets: number[] = [];
-      for (let offset = 0; offset < fetchCeiling; offset += PAGE_FETCH_SIZE) offsets.push(offset);
-
-      const pages = await Promise.all(
-        offsets.map((offset) => {
-          const filtered = applyCommonFilters(
-            supabase.from('culture_club_classes').select('*').eq('is_excluded', false),
-            storeScopeFilter
-          );
-          return filtered.range(offset, offset + PAGE_FETCH_SIZE - 1);
-        })
-      );
-      for (const { error: pageError } of pages) {
-        if (pageError) throw new Error(pageError.message);
-      }
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const data: any[] = pages.flatMap((p) => p.data ?? []);
-
-      const withDistance = data.map((item) => ({
-        ...item,
-        distance_meters: distanceByKey!.get(`${item.brand}:${item.store_code}`) ?? null,
-      }));
-      withDistance.sort((a, b) => {
-        if (a.distance_meters == null && b.distance_meters == null) return 0;
-        if (a.distance_meters == null) return 1;
-        if (b.distance_meters == null) return -1;
-        return a.distance_meters - b.distance_meters;
-      });
-
-      const pageItems = withDistance.slice(from, to + 1);
-      return NextResponse.json({ items: pageItems, total: count ?? 0, page, pageSize });
-    }
-
-    const filteredQuery = applyCommonFilters(
-      supabase.from('culture_club_classes').select('*').eq('is_excluded', false).order('schedule_start_date', { ascending: true }),
+    const firstPageQuery = applyCommonFilters(
+      supabase.from('culture_club_classes').select('*').eq('is_excluded', false),
       storeScopeFilter
     );
-    const { data, error } = await filteredQuery.range(from, to);
-    if (error) throw new Error(error.message);
+    const firstPageRange = hasLocation ? ([0, PAGE_FETCH_SIZE - 1] as const) : ([from, to] as const);
+    if (!hasLocation) {
+      // 위치 없는 폴백 경로는 거리 재정렬이 없어 DB 정렬 그대로 원하는
+      // 페이지만 바로 가져오면 된다(Branch-First 안전상한 로직 불필요).
+      firstPageQuery.order('schedule_start_date', { ascending: true });
+    }
 
-    return NextResponse.json({ items: data ?? [], total: count ?? 0, page, pageSize });
+    const [{ count, error: countError }, firstPageResult] = await Promise.all([
+      countQuery,
+      firstPageQuery.range(...firstPageRange),
+    ]);
+    if (countError) throw new Error(countError.message);
+    if (firstPageResult.error) throw new Error(firstPageResult.error.message);
+
+    const total = count ?? 0;
+
+    if (!hasLocation) {
+      return NextResponse.json({ items: firstPageResult.data ?? [], total, page, pageSize });
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let data: any[] = firstPageResult.data ?? [];
+    const fetchCeiling = Math.min(total, DISTANCE_SORT_FETCH_SAFETY_CEILING);
+    if (fetchCeiling > PAGE_FETCH_SIZE) {
+      // 첫 페이지가 꽉 찼고 더 가져올 게 남아 있을 때만 추가 왕복을 보낸다
+      // (Branch-First로 좁혀진 흔한 경우는 대부분 여기 들어오지 않는다).
+      const remainingOffsets: number[] = [];
+      for (let offset = PAGE_FETCH_SIZE; offset < fetchCeiling; offset += PAGE_FETCH_SIZE) remainingOffsets.push(offset);
+      const morePages = await Promise.all(
+        remainingOffsets.map((offset) =>
+          applyCommonFilters(supabase.from('culture_club_classes').select('*').eq('is_excluded', false), storeScopeFilter).range(
+            offset,
+            offset + PAGE_FETCH_SIZE - 1
+          )
+        )
+      );
+      for (const { error: pageError } of morePages) {
+        if (pageError) throw new Error(pageError.message);
+      }
+      data = data.concat(...morePages.map((p) => p.data ?? []));
+    }
+
+    const withDistance = data.map((item) => ({
+      ...item,
+      distance_meters: distanceByKey!.get(`${item.brand}:${item.store_code}`) ?? null,
+    }));
+    withDistance.sort((a, b) => {
+      if (a.distance_meters == null && b.distance_meters == null) return 0;
+      if (a.distance_meters == null) return 1;
+      if (b.distance_meters == null) return -1;
+      return a.distance_meters - b.distance_meters;
+    });
+
+    const pageItems = withDistance.slice(from, to + 1);
+    return NextResponse.json({ items: pageItems, total, page, pageSize });
   } catch (err) {
     const message = err instanceof Error ? err.message : '문화센터 통합검색 조회 실패';
     return NextResponse.json({ error: message }, { status: 500 });
