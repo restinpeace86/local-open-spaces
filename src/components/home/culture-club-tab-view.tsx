@@ -15,6 +15,7 @@ import { formatAgeRangeMonths } from '@/lib/home/culture-club-age-format';
 import {
   buildCultureClubThumbnailUrl,
   buildLottemartCourseViewUrl,
+  buildShinsegaeDetailUrl,
   CULTURE_CLUB_BRAND_OPTIONS,
   CULTURE_CLUB_DAY_OPTIONS,
   CULTURE_CLUB_SUB_CATEGORY_OPTIONS,
@@ -94,6 +95,13 @@ function buildExternalApplyUrl(item: CultureClubClass): string | null {
     const proCustNo = item.raw_extra.pro_cust_no;
     if (typeof sqCd === 'string' && typeof crsCd === 'string' && typeof proCustNo === 'string') {
       return buildHyundaiCourseViewUrl({ storeCode: item.store_code, classId: item.source_class_id, sqCd, crsCd, proCustNo });
+    }
+  }
+  if (item.brand === 'shinsegae' && item.store_code) {
+    const yearCode = item.raw_extra.year_code;
+    const semesterCode = item.raw_extra.semester_code;
+    if (typeof yearCode === 'string' && typeof semesterCode === 'string') {
+      return buildShinsegaeDetailUrl({ yearCode, semesterCode, storeCode: item.store_code, classId: item.source_class_id });
     }
   }
   return null;

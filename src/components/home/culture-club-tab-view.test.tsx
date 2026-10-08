@@ -178,6 +178,7 @@ function makeShinsegaeClass(overrides: Partial<ClassFixture> = {}): ClassFixture
       target_code: 'C1',
       target_name: '패밀리',
       semester_code: 'S3',
+      year_code: '2026',
       register_start_date: '2026-07-22',
       register_end_date: '2026-11-27',
     },
@@ -850,8 +851,24 @@ describe('CultureClubTabView — 신세계 아카데미(2026-10-08, todo.md 개�
     mockUser.current = null;
   });
 
-  it('클릭하면 상세 시트가 열리지만, 딥링크 형식이 아직 확인되지 않아 신청 버튼 대신 상태 라벨이 보인다', async () => {
+  it('클릭하면 상세 시트가 열리고 신세계 아카데미 상세 페이지로 가는 외부 링크가 올바른 파라미터로 만들어진다(2026-10-08 사용자 제공 URL로 확정)', async () => {
     stubFetch([makeShinsegaeClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/어린이 뮤지컬/);
+    fireEvent.click(screen.getAllByText(/어린이 뮤지컬/)[0]);
+
+    await screen.findByText('신세계 아카데미 강좌 상세');
+    const link = screen.getByText('접수 페이지로 가기 ↗');
+    const href = link.closest('a')?.getAttribute('href') ?? '';
+    expect(href).toContain('https://sacademy.shinsegae.com/sdotcom/web/HP0010P0/HP0010P1.do');
+    expect(href).toContain('yearCode=2026');
+    expect(href).toContain('smstCode=S3');
+    expect(href).toContain('storeCode=03');
+    expect(href).toContain('lectCode=T2694782');
+  });
+
+  it('year_code/semester_code가 없으면(아직 확인 못한 경우를 대비) 신청 버튼 대신 상태 라벨이 보인다', async () => {
+    stubFetch([makeShinsegaeClass({ raw_extra: { target_code: 'C1', target_name: '패밀리' } })]);
     render(<CultureClubTabView />);
     await screen.findByText(/어린이 뮤지컬/);
     fireEvent.click(screen.getAllByText(/어린이 뮤지컬/)[0]);

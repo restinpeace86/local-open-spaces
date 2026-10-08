@@ -128,6 +128,11 @@ export function parseLecture(row, targetCode) {
     target_code: targetCode,
     target_name: SHINSEGAE_TARGET_LABELS[targetCode] ?? null,
     semester_code: row.smstCode ?? null,
+    // [외부 신청 딥링크 — 사용자 제공 URL로 확정](2026-10-08): "HP0010P0/
+    // HP0010P1.do?yearCode=2026&smstCode=S3&storeCode=03&lectCode=
+    // T2694782" 실측으로 정상 동작 확인(실제 강좌 상세 페이지 반환) —
+    // yearCode가 그 중 하나라 raw_extra에 보존해둔다.
+    year_code: row.yearCode ?? null,
     register_start_date: registerStartDate,
     register_end_date: registerEndDate,
   };

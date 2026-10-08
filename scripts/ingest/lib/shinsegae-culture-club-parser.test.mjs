@@ -127,6 +127,7 @@ describe('parseLecture — 실측 샘플(storeCode=03 + targetCode=C1)', () => {
       target_code: 'C1',
       target_name: '패밀리',
       semester_code: 'S3',
+      year_code: '2026',
       register_start_date: '2026-07-22',
       register_end_date: '2026-11-27',
     });

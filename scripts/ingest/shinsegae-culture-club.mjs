@@ -19,18 +19,25 @@
 // 일치), 응답의 lectStat 필드로 각 행의 실제 상태를 그대로 알 수 있다 —
 // 지점×대상 조합마다 상태별로 또 나눠 조회할 필요가 없다(한 번만 조회).
 //
-// [targetCode 라벨 — C1만 확정](사용자 제공 캡처, reference/sinsegae.png)
-// B1/B2는 라벨 미확정, 코드값만 보존한다(추측 금지, 제3장 제5조).
+// [targetCode 라벨 — 전부 확정](getCommCode.do, headCode=0025 — 사용자
+// 제보로 발견. shinsegae-culture-club-parser.mjs 주석 참고) B1=위드맘(대디)/
+// B2=키즈/C1=패밀리.
 //
-// [학기(schSmstCode) — 확정된 값만 사용] 사용자가 캡처한 당시의 기본값
-// 'S3'(가을학기)만 쓴다. 다른 학기 코드(겨울 등)는 드롭다운이 JS로 동적
-// 생성돼 정적 분석으로 확정할 수 없었다 — 추측으로 더 추가하지 않는다.
+// [학기(schSmstCode) — 확정된 값만 사용] 같은 getCommCode.do(headCode=
+// 0009)로 S1~S4 전체 목록은 확인했지만, 실측상 S3(가을)만 현재 활성
+// 학기라 그대로 둔다(학기 전환 시점엔 재확인 필요).
+//
+// [상세정보(이미지/소개) — 별도 1회성 스크립트](shinsegae-culture-club-
+// detail.mjs 참고) 목록엔 이미지/소개가 없어 상세 페이지에서 따로 채운다.
+// 이 메인 배치가 매일 돌 때 raw_extra를 새로 만들면서 그 값을 지워버리는
+// "이중 쓰기" 버그(2026-10-07 이마트/롯데마트에서 겪음)를 처음부터 피하려고,
+// fetchDetailEnrichmentByClassId()로 기존에 채워진 값을 읽어와 병합한다.
 import { pathToFileURL } from 'url';
 import { loadEnv } from '../lib/load-env.mjs';
 import { fetchWithTimeout } from './lib/fetch-with-timeout.mjs';
 import { createAdminClient } from './lib/supabase-admin.mjs';
 import { applyRandomStartupDelay } from './lib/random-startup-delay.mjs';
-import { stampCollectedAt } from './lib/culture-club-common.mjs';
+import { stampCollectedAt, mergeDetailEnrichment } from './lib/culture-club-common.mjs';
 import { toUnifiedShinsegaeRow } from './lib/culture-club-unified-row.mjs';
 import {
   SHINSEGAE_STORES,
@@ -46,6 +53,7 @@ const SOURCE_KEY = 'SHINSEGAE_CULTURE_CLUB';
 const LIST_URL = 'https://sacademy.shinsegae.com/sdotcom/web/HP0010P0/getLectList.do';
 const SCHOOL_SEMESTER_CODE = 'S3';
 const UPSERT_CHUNK_SIZE = 500;
+const EXISTING_ID_PAGE_SIZE = 1000;
 const REQUEST_PACING_MIN_MS = 1000;
 const REQUEST_PACING_MAX_MS = 1500;
 // [랜덤 시작 지연] 하루 1회 배치 — 다른 브랜드 배치들과 동일한 관례.
@@ -152,6 +160,43 @@ async function notifyBatchResult(args) {
   }
 }
 
+// [상세정보(이미지/소개) 유실 방지 — 이중 쓰기 버그 처음부터 피함](위
+// 파일 상단 주석 참고) 별도 원본 테이블이 없어 shinsegae-culture-club-
+// detail.mjs가 통합 테이블에 직접 채워둔 raw_extra.main_image_url/
+// class_intro를, 이 메인 배치가 raw_extra를 새로 만들면서 지우지 않도록
+// 미리 읽어와 mergeDetailEnrichment()로 합친다.
+async function fetchDetailEnrichmentByClassId(client) {
+  const map = new Map();
+  for (let from = 0; ; from += EXISTING_ID_PAGE_SIZE) {
+    const { data, error } = await client
+      .from('culture_club_classes')
+      .select('source_class_id, raw_extra, detail_fetched_at')
+      .eq('brand', 'shinsegae')
+      .range(from, from + EXISTING_ID_PAGE_SIZE - 1);
+    if (error) throw new Error(`상세정보 조회 실패: ${error.message}`);
+    for (const row of data) {
+      map.set(row.source_class_id, {
+        class_id: row.source_class_id,
+        main_image_url: row.raw_extra?.main_image_url ?? null,
+        class_intro: row.raw_extra?.class_intro ?? null,
+        detail_fetched_at: row.detail_fetched_at,
+      });
+    }
+    if (data.length < EXISTING_ID_PAGE_SIZE) break;
+  }
+  return map;
+}
+
+// [RC(접수마감) 제외 — 사용자 지시](todo.md 원본 캡처 주석: "RC는 접수마감을
+// 의미하여 제외") 새로 닫힌 강좌를 통합 테이블에 새로 쌓지 않는다 —
+// openRows만 upsert 대상이고, closedClassIds는 "이미 저장돼 있던 강좌가
+// 오늘 RC로 바뀐 경우"를 찾아 상태만 갱신하는 데 쓴다(신규 insert 아님).
+export function splitOpenAndClosedRows(rows) {
+  const openRows = rows.filter((r) => r.raw_status !== 'RC');
+  const closedClassIds = rows.filter((r) => r.raw_status === 'RC').map((r) => r.class_id);
+  return { openRows, closedClassIds };
+}
+
 export async function run({ dryRun = false } = {}) {
   console.log(`▶ 신세계 아카데미 문화센터 강좌 리스트 수집 시작 (dry-run: ${dryRun})`);
   const startedAt = Date.now();
@@ -172,23 +217,48 @@ export async function run({ dryRun = false } = {}) {
   const rows = stampCollectedAt([...new Map(allRows.map((row) => [row.class_id, row])).values()], collectedAt);
   console.log(`✅ 전체 수신 ${allRows.length}건, 중복 제거 후 ${rows.length}건`);
 
+  // 이미 OPEN/WAITING으로 저장돼 있던 강좌가 오늘 RC로 바뀐 경우를 그냥
+  // 두면 화면에 낡은 상태가 계속 남는다(2026-10-08 롯데마트에서 실측으로
+  // 발견/수정한 것과 동일한 버그, implementation/2026-10-08-lottemart-
+  // fallen-out-unified-sync-bug.md 참고) — splitOpenAndClosedRows()가 그런
+  // 기존 행만 접수마감으로 갱신 대상으로 분리하고, RC만 있는 신규 강좌는
+  // 애초에 insert하지 않는다.
+  const { openRows, closedClassIds } = splitOpenAndClosedRows(rows);
+  console.log(`  RC(접수마감) 제외: ${closedClassIds.length}건 — 저장 대상 ${openRows.length}건`);
+
   if (dryRun) {
-    console.log(JSON.stringify(rows.slice(0, 3), null, 2));
-    return { sourceKey: SOURCE_KEY, count: rows.length, upserted: false };
+    console.log(JSON.stringify(openRows.slice(0, 3), null, 2));
+    return { sourceKey: SOURCE_KEY, count: openRows.length, upserted: false };
   }
 
   const client = createAdminClient();
 
   // [원본 스테이징 테이블 없이 바로 통합 테이블에 쓴다](toUnifiedShinsegaeRow
-  // 주석 참고) — 현대백화점과 동일하게 별도 상세수집 단계가 없는 구조다.
+  // 주석 참고) — 다만 별도 상세수집 스크립트(shinsegae-culture-club-
+  // detail.mjs)가 같은 통합 테이블에 이미지/소개를 채워두므로, 그 값을
+  // 지우지 않도록 먼저 읽어와 병합한다(위 fetchDetailEnrichmentByClassId
+  // 주석 참고).
   let upsertedCount = 0;
+  let closedCount = 0;
   try {
-    const unifiedRows = rows.map(toUnifiedShinsegaeRow);
+    const enrichmentByClassId = await fetchDetailEnrichmentByClassId(client);
+    const unifiedRows = mergeDetailEnrichment(openRows, enrichmentByClassId).map(toUnifiedShinsegaeRow);
     for (let i = 0; i < unifiedRows.length; i += UPSERT_CHUNK_SIZE) {
       const chunk = unifiedRows.slice(i, i + UPSERT_CHUNK_SIZE);
       const { error } = await client.from('culture_club_classes').upsert(chunk, { onConflict: 'brand,source_class_id' });
       if (error) throw new Error(`culture_club_classes upsert 실패: ${error.message}`);
       upsertedCount += chunk.length;
+    }
+
+    for (let i = 0; i < closedClassIds.length; i += UPSERT_CHUNK_SIZE) {
+      const chunk = closedClassIds.slice(i, i + UPSERT_CHUNK_SIZE);
+      const { error } = await client
+        .from('culture_club_classes')
+        .update({ raw_status: 'RC', normalized_status: 'CLOSED' })
+        .eq('brand', 'shinsegae')
+        .in('source_class_id', chunk);
+      if (error) throw new Error(`culture_club_classes 접수마감 갱신 실패: ${error.message}`);
+      closedCount += chunk.length;
     }
   } catch (err) {
     await postPipelineLog(client, { status: 'FAILED', errorMessage: err.message.slice(0, 500) });
@@ -201,16 +271,16 @@ export async function run({ dryRun = false } = {}) {
     throw err;
   }
 
-  console.log(`✅ Supabase(culture_club_classes) upsert 완료: ${upsertedCount}건`);
+  console.log(`✅ Supabase(culture_club_classes) upsert 완료: ${upsertedCount}건, 접수마감 갱신 시도: ${closedCount}건`);
 
   const byTarget = SHINSEGAE_TARGET_CODES.reduce(
-    (acc, code) => ({ ...acc, [code]: rows.filter((r) => r.target_code === code).length }),
+    (acc, code) => ({ ...acc, [code]: openRows.filter((r) => r.target_code === code).length }),
     {}
   );
-  await postPipelineLog(client, { status: 'OK', metaData: { count: upsertedCount, byTarget } });
+  await postPipelineLog(client, { status: 'OK', metaData: { count: upsertedCount, closedCount, byTarget } });
   await notifyBatchResult({
     title: '✅ [local-open-spaces] 신세계 아카데미 컬처클럽 배치 완료',
-    description: `총 ${upsertedCount}건 수집/upsert (B1: ${byTarget.B1}건, B2: ${byTarget.B2}건, C1: ${byTarget.C1}건)`,
+    description: `총 ${upsertedCount}건 수집/upsert, 접수마감 갱신 시도 ${closedCount}건 (B1: ${byTarget.B1}건, B2: ${byTarget.B2}건, C1: ${byTarget.C1}건)`,
     status: `${((Date.now() - startedAt) / 1000).toFixed(1)}초`,
     color: 0x5865f2,
   });

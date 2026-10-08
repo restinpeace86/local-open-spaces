@@ -237,8 +237,20 @@ function buildUnifiedShinsegaeRow(row) {
       target_code: row.target_code,
       target_name: row.target_name,
       semester_code: row.semester_code,
+      // [외부 신청 딥링크 파라미터](2026-10-08 사용자 제공 URL로 확정)
+      // HP0010P1.do?yearCode=...&smstCode=...&storeCode=...&lectCode=...
+      // — smstCode/storeCode/lectCode는 이미 다른 컬럼에 있어 year_code만
+      // 추가로 보존하면 된다.
+      year_code: row.year_code,
       register_start_date: row.register_start_date,
       register_end_date: row.register_end_date,
+      // [상세정보 — shinsegae-culture-club-detail.mjs가 채움](2026-10-08
+      // 사용자 지시: "상세내용도 긁어오는거지? 이미지도?") 목록 응답엔
+      // 없고 상세 페이지에만 있다 — 이 메인 배치 자신은 채우지 않고,
+      // 위 fetchDetailEnrichmentByClassId가 기존 값을 읽어와 병합해줄
+      // 때만 값이 들어온다(없으면 undefined → omitUndefinedKeys가 제거).
+      main_image_url: row.main_image_url,
+      class_intro: row.class_intro,
     },
     detail_fetched_at: row.detail_fetched_at,
     collected_at: row.collected_at,

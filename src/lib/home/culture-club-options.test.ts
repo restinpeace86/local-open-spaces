@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCultureClubThumbnailUrl } from './culture-club-options';
+import { buildCultureClubThumbnailUrl, buildShinsegaeDetailUrl } from './culture-club-options';
 
 // [이미지 — 썸네일 CDN 확인됨](2026-10-03 사용자 제공 URL로 실측 확인): 두 가지 실제
 // main_image_key 형태("category/4/403/{uuid}", "classImages/{uuid}") 모두에서
@@ -21,5 +21,17 @@ describe('buildCultureClubThumbnailUrl', () => {
   it('키가 없으면(null/undefined) null을 반환한다(추측으로 이미지를 만들어내지 않음)', () => {
     expect(buildCultureClubThumbnailUrl(null)).toBeNull();
     expect(buildCultureClubThumbnailUrl(undefined)).toBeNull();
+  });
+});
+
+// [신세계 아카데미 상세/신청 페이지 — 사용자 제공 URL로 확정](2026-10-08):
+// "https://sacademy.shinsegae.com/.../HP0010P1.do?yearCode=2026&smstCode=
+// S3&storeCode=03&lectCode=T2694782" 실측으로 실제 강좌 상세 페이지가
+// 정상 반환됨을 확인했다.
+describe('buildShinsegaeDetailUrl', () => {
+  it('yearCode/smstCode/storeCode/lectCode로 실제 확인된 URL 형태를 만든다', () => {
+    expect(
+      buildShinsegaeDetailUrl({ yearCode: '2026', semesterCode: 'S3', storeCode: '03', classId: 'T2694782' })
+    ).toBe('https://sacademy.shinsegae.com/sdotcom/web/HP0010P0/HP0010P1.do?yearCode=2026&smstCode=S3&storeCode=03&lectCode=T2694782');
   });
 });

@@ -137,6 +137,7 @@ describe('toUnifiedShinsegaeRow', () => {
       target_code: 'C1',
       target_name: '패밀리',
       semester_code: 'S3',
+      year_code: '2026',
       register_start_date: '2026-07-22',
       register_end_date: '2026-11-27',
     };
@@ -149,6 +150,9 @@ describe('toUnifiedShinsegaeRow', () => {
     // 동일하게 sub_category_name 자리에 노출한다.
     expect(result.sub_category_name).toBe('패밀리');
     expect(result.raw_extra.target_name).toBe('패밀리');
+    // [외부 신청 딥링크 파라미터 — year_code 보존](2026-10-08 사용자 제공
+    // URL로 확정, HP0010P1.do?yearCode=...)
+    expect(result.raw_extra.year_code).toBe('2026');
     expect(result.raw_status).toBe('RT');
     expect(result.normalized_status).toBe('OPEN');
     expect(result.register_start_at).toBeNull();
@@ -156,5 +160,27 @@ describe('toUnifiedShinsegaeRow', () => {
     expect(result.raw_extra.semester_code).toBe('S3');
     expect(result.raw_extra.register_start_date).toBe('2026-07-22');
     expect(result.raw_extra.register_end_date).toBe('2026-11-27');
+  });
+
+  // [상세정보(이미지/소개) 패스스루 — shinsegae-culture-club-detail.mjs가
+  // 채워줌](2026-10-08 사용자 지시: "상세내용도 긁어오는거지? 이미지도?")
+  // 메인 배치 자신은 모르는 필드라 row에 값이 들어왔을 때만 raw_extra로
+  // 그대로 전달되면 된다(채워져 있지 않으면 undefined → 결과 객체에서
+  // 생략되어야 함, omitUndefinedKeys와 동일한 관례).
+  it('main_image_url/class_intro이 row에 있으면 raw_extra로 그대로 전달된다', () => {
+    const result = toUnifiedShinsegaeRow({
+      class_id: 'T2694782',
+      class_title: '테스트',
+      main_image_url: 'https://sacademy.shinsegae.com/sdotcom/uploads/images/bl/291.png',
+      class_intro: '강좌 소개 텍스트',
+    });
+    expect(result.raw_extra.main_image_url).toBe('https://sacademy.shinsegae.com/sdotcom/uploads/images/bl/291.png');
+    expect(result.raw_extra.class_intro).toBe('강좌 소개 텍스트');
+  });
+
+  it('main_image_url/class_intro이 아직 없으면(상세수집 전) undefined로 비어있다', () => {
+    const result = toUnifiedShinsegaeRow({ class_id: 'T1', class_title: '테스트' });
+    expect(result.raw_extra.main_image_url).toBeUndefined();
+    expect(result.raw_extra.class_intro).toBeUndefined();
   });
 });

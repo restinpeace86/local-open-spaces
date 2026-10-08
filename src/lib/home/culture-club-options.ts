@@ -105,3 +105,18 @@ export function buildLottemartCourseViewUrl(params: { storeCode: string; classId
   });
   return `https://culture.lottemart.com/cu/gus/course/courseinfo/courseview.do?${query.toString()}`;
 }
+
+// [신세계 아카데미 상세/신청 페이지 — 사용자 제공 URL로 확정](2026-10-08)
+// "https://sacademy.shinsegae.com/.../HP0010P1.do?yearCode=2026&smstCode=
+// S3&storeCode=03&lectCode=T2694782" 실측 확인(실제 강좌 상세 페이지 정상
+// 반환) — 로그인 여부와 무관하게 공개 페이지라 다른 브랜드처럼 그대로
+// 외부 링크로 써도 된다.
+export function buildShinsegaeDetailUrl(params: { yearCode: string; semesterCode: string; storeCode: string; classId: string }) {
+  const query = new URLSearchParams({
+    yearCode: params.yearCode,
+    smstCode: params.semesterCode,
+    storeCode: params.storeCode,
+    lectCode: params.classId,
+  });
+  return `https://sacademy.shinsegae.com/sdotcom/web/HP0010P0/HP0010P1.do?${query.toString()}`;
+}
