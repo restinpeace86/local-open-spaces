@@ -1,23 +1,14 @@
 // Task 9-4-1(2026-08-22): 나드리픽 브랜드 스플래시 & 로딩 컴포넌트.
 // 화면 전체를 채우는 배치(고정 오버레이 등)는 사용하는 쪽(app/loading.tsx, bottom-tabs.tsx)이
-// 책임진다 — 이 컴포넌트 자체는 중앙 정렬된 타이틀/서브 문구/로딩 이미지 콘텐츠만 담당한다.
-// [로딩 이미지 교체](2026-09-03 사용자 지시): 회전 스피너(animate-spin) 대신 사용자가
-// 직접 제공한 움직이는 GIF(reference/loading/loading_image.gif → public/loading/로
-// 복사)를 쓴다. next/image는 GIF를 재인코딩해 애니메이션이 깨질 수 있어(최적화 파이프라인
-// 특성) 순수 <img> 태그로 원본 그대로 재생한다 — 이 프로젝트에도 이미 여러 곳에서
-// 동일한 이유로 <img>를 그대로 쓰는 관례가 있다.
-// [로딩 이미지 크기/배경 보정](2026-09-03 사용자 지시): "너무 작다"/"배경이 흰색이
-// 아니라 주변과 색이 다르다"는 피드백 반영 — ① w-24 정사각 박스(96px, 16:9 원본을
-// object-contain하면 실제로는 훨씬 작게 보임) 대신 w-40으로 키우고 h-auto로 원본
-// 비율(16:9)을 그대로 살려 여백 낭비 없이 커 보이게 한다. ② GIF 배경(원본 실측
-// (252,252,255), 거의 흰색이지만 완전한 #fff는 아니었음)을 투명 처리해 재인코딩했다 —
-// GIF는 반투명이 아니라 완전 투명/불투명만 지원해 안티앨리어싱 경계가 아주 미세하게
-// 남을 수 있지만, 어차피 실제 배경도 흰색이라 육안으로는 차이가 없다.
+// 책임진다 — 이 컴포넌트 자체는 중앙 정렬된 타이틀/서브 문구/스피너 콘텐츠만 담당한다.
+// [기본 스피너로 복귀](2026-10-09 사용자 지시): "로딩할때 애니메이션인가 그거
+// 넣었잖아. 그거 그냥 기본로딩 버튼으로 좀 바꿔줘" — 2026-09-03에 커스텀 GIF
+// (public/loading/loading_image.gif)로 바꿨던 것을 되돌려, 원래(Task 9-4-1
+// 최초 구현)의 단순 회전 스피너(animate-spin)로 복귀한다.
 export function BrandSplash() {
   return (
     <div className="flex flex-col items-center justify-center gap-3 py-10" role="status" aria-live="polite">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/loading/loading_image.gif" alt="" aria-hidden className="w-40 h-auto" />
+      <div className="h-10 w-10 rounded-full border-4 border-gray-200 border-t-blue-600 animate-spin" aria-hidden />
       <div className="flex flex-col items-center gap-1">
         <p className="text-lg font-extrabold text-gray-900">나드리픽</p>
         <p className="text-sm text-gray-500">오늘 어디 가지?</p>
