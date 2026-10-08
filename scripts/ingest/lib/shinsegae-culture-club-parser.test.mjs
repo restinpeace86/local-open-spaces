@@ -7,7 +7,16 @@ import {
   parseLectureListResponse,
   parsePeriod,
   parseTimeRange,
+  SHINSEGAE_TARGET_LABELS,
 } from './shinsegae-culture-club-parser.mjs';
+
+// [수강대상 라벨 — getCommCode.do(headCode=0025)로 확정](2026-10-08
+// 사용자 제보로 발견한 공용 코드 조회 엔드포인트 실측).
+describe('SHINSEGAE_TARGET_LABELS', () => {
+  it('B1=위드맘(대디)/B2=키즈/C1=패밀리로 확정된 라벨을 갖는다', () => {
+    expect(SHINSEGAE_TARGET_LABELS).toEqual({ B1: '위드맘(대디)', B2: '키즈', C1: '패밀리' });
+  });
+});
 
 describe('parsePeriod', () => {
   it('시작~종료가 같은 단발성 기간을 파싱한다', () => {
@@ -116,6 +125,7 @@ describe('parseLecture — 실측 샘플(storeCode=03 + targetCode=C1)', () => {
       raw_status: 'RT',
       normalized_status: 'OPEN',
       target_code: 'C1',
+      target_name: '패밀리',
       semester_code: 'S3',
       register_start_date: '2026-07-22',
       register_end_date: '2026-11-27',

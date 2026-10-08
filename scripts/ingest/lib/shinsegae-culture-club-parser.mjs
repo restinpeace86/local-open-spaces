@@ -15,15 +15,17 @@
 // (targetCode와 달리 응답에 상태를 되비춰주는 필드가 있음), 지점당 상태별
 // 3번 나눠 조회할 필요 없이 1번만 조회하고 사후에 걸러내면 된다.
 //
-// [targetCode 라벨 — C1만 확정](2026-10-08 사용자 제공 캡처,
-// reference/sinsegae.png): storeCode=03(타임스퀘어 & ON) + targetCode=C1
-// 조합이 실제 "패밀리" 드롭다운 선택 상태에서 캡처된 것임을 화면 스크린샷
-// 으로 직접 확인(수강대상 드롭다운에 "패밀리" 선택, 결과 테이블에 동일한
-// 강좌 1건 노출 — 실측 재현으로 완전히 일치 확인). B1/B2는 "위드맘(대디)"/
-// "키즈" 중 하나씩일 것으로 추정되지만, HTML/JS 정적 분석으로는 수강대상
-// 드롭다운 옵션이 지점 선택 시 동적으로(AJAX) 채워지는 구조라 코드-라벨
-// 매핑을 확정하지 못했다 — 추측으로 라벨을 지어내지 않고(제3장 제5조)
-// 코드값 자체만 raw_extra에 보존한다.
+// [targetCode 라벨 — 전부 확정](2026-10-08 사용자 제보: "상세쪽에
+// 수강대상이 있고 목록 리스트쪽엔 없네" — 목록 응답에 라벨이 없는 건
+// 맞지만, 사용자가 찾아준 공용 코드 조회 엔드포인트(POST sacademy.
+// shinsegae.com/sdotcom/cmmn/code/getCommCode.do, userdefHeaderCode=
+// "0025")로 라벨 전체를 확정했다: B1=위드맘(대디), B2=키즈, C1=패밀리
+// (headName "수강대상" 그룹 전체 — A3=임산부/A4=시니어/A5=남성/A9=기타/
+// D1=커플/Z1=성인도 같은 그룹에 있지만 전부 "성인" 대상이라 이번 수집
+// 범위(자녀 동반) 밖이다). 이 엔드포인트는 학기 코드(headCode "0009":
+// S1=봄/S2=여름/S3=가을/S4=겨울)도 함께 확인해줬다 — 실측으로 S1/S2/S4는
+// 전부 0건, S3만 현재 활성 학기임을 재확인(SCHOOL_SEMESTER_CODE 그대로
+// 유지).
 //
 // [접수상태 라벨 — 전부 확정](실측: HP0010P0.do 원문 HTML의 라디오 버튼
 // title 속성) PR=접수전, RT=접수중, RC=접수마감, ST=대기등록.
@@ -45,9 +47,13 @@ export const SHINSEGAE_STORES = [
   ['D1', '대전신세계'],
 ];
 
-// [수강대상 — 사용자 지시](todo.md 개선사항2): "위드맘(대디), 패밀리, 키즈"
-// 3종. 실측으로 코드값만 확정(C1=패밀리), B1/B2는 라벨 미확정인 채 코드만.
+// [수강대상 — getCommCode.do(headCode=0025)로 라벨까지 전부 확정]
 export const SHINSEGAE_TARGET_CODES = ['B1', 'B2', 'C1'];
+export const SHINSEGAE_TARGET_LABELS = {
+  B1: '위드맘(대디)',
+  B2: '키즈',
+  C1: '패밀리',
+};
 
 const OPEN_RAW_STATUSES = new Set(['RT']);
 const WAITING_RAW_STATUSES = new Set(['ST']);
@@ -120,6 +126,7 @@ export function parseLecture(row, targetCode) {
     raw_status: row.lectStat ?? null,
     normalized_status: normalizeShinsegaeStatus(row.lectStat),
     target_code: targetCode,
+    target_name: SHINSEGAE_TARGET_LABELS[targetCode] ?? null,
     semester_code: row.smstCode ?? null,
     register_start_date: registerStartDate,
     register_end_date: registerEndDate,

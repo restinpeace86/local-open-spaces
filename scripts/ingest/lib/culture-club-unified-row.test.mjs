@@ -135,6 +135,7 @@ describe('toUnifiedShinsegaeRow', () => {
       raw_status: 'RT',
       normalized_status: 'OPEN',
       target_code: 'C1',
+      target_name: '패밀리',
       semester_code: 'S3',
       register_start_date: '2026-07-22',
       register_end_date: '2026-11-27',
@@ -144,6 +145,10 @@ describe('toUnifiedShinsegaeRow', () => {
     expect(result.brand).toBe('shinsegae');
     expect(result.source_class_id).toBe('T2694782');
     expect(result.class_title).toBe(row.class_title);
+    // [수강대상 라벨 — getCommCode.do로 확정](2026-10-08) 다른 브랜드와
+    // 동일하게 sub_category_name 자리에 노출한다.
+    expect(result.sub_category_name).toBe('패밀리');
+    expect(result.raw_extra.target_name).toBe('패밀리');
     expect(result.raw_status).toBe('RT');
     expect(result.normalized_status).toBe('OPEN');
     expect(result.register_start_at).toBeNull();

@@ -159,7 +159,7 @@ function makeShinsegaeClass(overrides: Partial<ClassFixture> = {}): ClassFixture
     class_title: '[11/28]어린이 뮤지컬, 방귀공주와 다니엘(22년생이상, 성인)',
     store_code: '03',
     store_name: '타임스퀘어 & ON',
-    sub_category_name: null,
+    sub_category_name: '패밀리',
     class_day: ['토'],
     start_time: '1100',
     end_time: '1140',
@@ -176,6 +176,7 @@ function makeShinsegaeClass(overrides: Partial<ClassFixture> = {}): ClassFixture
     register_start_at: null,
     raw_extra: {
       target_code: 'C1',
+      target_name: '패밀리',
       semester_code: 'S3',
       register_start_date: '2026-07-22',
       register_end_date: '2026-11-27',
@@ -826,12 +827,15 @@ describe('CultureClubTabView — 현대백화점(2026-10-08, Decision 029)', () 
 });
 
 describe('CultureClubTabView — 신세계 아카데미(2026-10-08, todo.md 개선사항2)', () => {
-  it('신세계 아카데미 강좌 카드가 지점명과 함께 보인다(썸네일 없음 — 목록 응답에 이미지 필드 자체가 없음)', async () => {
+  it('신세계 아카데미 강좌 카드가 지점명/수강대상 뱃지와 함께 보인다(썸네일 없음 — 목록 응답에 이미지 필드 자체가 없음)', async () => {
     stubFetch([makeShinsegaeClass()]);
     const { container } = render(<CultureClubTabView />);
     await screen.findByText(/어린이 뮤지컬/);
 
     expect(screen.getByText(/타임스퀘어 & ON/)).toBeInTheDocument();
+    // [수강대상 라벨 — getCommCode.do로 확정](2026-10-08) 다른 브랜드의
+    // sub_category_name과 동일한 자리에 뱃지로 그대로 노출된다.
+    expect(screen.getByText('패밀리')).toBeInTheDocument();
     expect(container.querySelector('img')).not.toBeInTheDocument();
   });
 

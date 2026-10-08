@@ -206,7 +206,10 @@ function buildUnifiedShinsegaeRow(row) {
     store_code: row.store_code,
     store_name: row.store_name,
     main_category_name: null, // 목록에 상위 분류 필드가 없다(추측 금지)
-    sub_category_name: null, // targetCode(raw_extra)와 별개 — 확정된 한글 라벨이 없어 지어내지 않음
+    // [수강대상 라벨 — getCommCode.do(headCode=0025)로 확정](2026-10-08
+    // 사용자 제보로 발견) B1=위드맘(대디)/B2=키즈/C1=패밀리 — 다른 브랜드의
+    // sub_category_name과 동일한 자리에 그대로 노출해 화면에서 바로 보이게 한다.
+    sub_category_name: row.target_name ?? null,
     classroom: null,
     class_day: row.class_day,
     start_time: row.start_time,
@@ -232,6 +235,7 @@ function buildUnifiedShinsegaeRow(row) {
     is_excluded: row.is_excluded ?? false,
     raw_extra: {
       target_code: row.target_code,
+      target_name: row.target_name,
       semester_code: row.semester_code,
       register_start_date: row.register_start_date,
       register_end_date: row.register_end_date,
