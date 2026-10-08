@@ -45,6 +45,8 @@ type ClassRow = {
 const BRAND_OPTIONS: { key: Brand; label: string }[] = [
   { key: 'emart', label: '이마트' },
   { key: 'lottemart', label: '롯데마트' },
+  { key: 'shinsegae', label: '신세계 아카데미' },
+  { key: 'hyundai', label: '현대백화점' },
 ];
 
 const STATUS_OPTIONS: { key: ClassRow['normalized_status']; label: string }[] = [
@@ -184,7 +186,21 @@ export function CultureClubPanel() {
           (data.stores ?? []).map((s) => ({ storeCode: `lottemart:${s.storeCode}`, label: `[롯데마트] ${s.label}` }))
         )
         .catch(() => []),
-    ]).then(([emartStores, lottemartStores]) => setStores([...emartStores, ...lottemartStores]));
+      fetch('/api/culture-club/shinsegae-stores')
+        .then((res) => res.json())
+        .then((data: { stores?: { storeCode: string; label: string }[] }) =>
+          (data.stores ?? []).map((s) => ({ storeCode: `shinsegae:${s.storeCode}`, label: `[신세계] ${s.label}` }))
+        )
+        .catch(() => []),
+      fetch('/api/culture-club/hyundai-stores')
+        .then((res) => res.json())
+        .then((data: { stores?: { storeCode: string; label: string }[] }) =>
+          (data.stores ?? []).map((s) => ({ storeCode: `hyundai:${s.storeCode}`, label: `[현대백화점] ${s.label}` }))
+        )
+        .catch(() => []),
+    ]).then(([emartStores, lottemartStores, shinsegaeStores, hyundaiStores]) =>
+      setStores([...emartStores, ...lottemartStores, ...shinsegaeStores, ...hyundaiStores])
+    );
   }, []);
 
   function toggleBrand(brand: Brand) {

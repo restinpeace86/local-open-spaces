@@ -92,6 +92,24 @@ describe('CultureClubPanel', () => {
     });
   });
 
+  // [관리자 화면 브랜드 필터 누락 수정](2026-10-08 사용자 지적): "관리자
+  // 화면도 이마트랑 롯데마트밖에없네 조건이? 신세계랑 현백 필터링조건이
+  // 없는데?" — 신세계/현대백화점도 브랜드 pill로 선택 가능하고, 조회
+  // 요청에 brand 파라미터로 반영되는지 검증한다.
+  it('신세계/현대백화점 브랜드 pill도 선택 가능하고 조회 요청에 반영된다', async () => {
+    const fetchMock = stubFetch([makeRow()]);
+    render(<CultureClubPanel />);
+
+    fireEvent.click(screen.getByText('신세계 아카데미'));
+    fireEvent.click(screen.getByText('현대백화점'));
+    fireEvent.click(screen.getByText('조회하기'));
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([url]) => (url as string).startsWith('/api/admin/culture-club?'));
+      expect(call?.[0]).toContain('brand=shinsegae%2Chyundai');
+    });
+  });
+
   it('노출 제외 체크박스를 누르면 id로 PATCH 요청을 보낸다', async () => {
     const fetchMock = stubFetch([makeRow({ id: 42 })]);
     render(<CultureClubPanel />);
