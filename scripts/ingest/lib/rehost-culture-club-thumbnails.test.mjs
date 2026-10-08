@@ -68,18 +68,23 @@ describe('rehostCultureClubThumbnails', () => {
     const result = await rehostCultureClubThumbnails(client, { limit: 10 });
 
     expect(fetchWithTimeout).toHaveBeenCalledWith('https://sacademy.shinsegae.com/img.png', {}, expect.any(Number));
-    expect(uploadMock).toHaveBeenCalledWith('42.png', expect.any(Buffer), expect.objectContaining({ upsert: true }));
+    expect(uploadMock).toHaveBeenCalledWith('42.webp', expect.any(Buffer), expect.objectContaining({ upsert: true }));
     expect(updateEqMock).toHaveBeenCalledWith('id', 42);
     expect(updateMock).toHaveBeenCalledWith({
       raw_extra: {
         target_code: 'C1',
-        main_image_url: `https://project.supabase.co/storage/v1/object/public/${CULTURE_CLUB_THUMBNAIL_BUCKET}/42.png`,
+        main_image_url: `https://project.supabase.co/storage/v1/object/public/${CULTURE_CLUB_THUMBNAIL_BUCKET}/42.webp`,
       },
     });
     expect(result).toEqual({ processed: 1, succeeded: 1, failed: 0, skipped: 0 });
   });
 
-  it('원본이 비표준 image/jpg를 내려줘도 표준 image/jpeg로 정규화해 업로드한다', async () => {
+  // [원래 발견한 버그] culture.seoul.go.kr 등 일부 원본 서버가 비표준
+  // `image/jpg`를 Content-Type으로 내려주는데, resizeThumbnail이 이제
+  // 포맷을 무조건 WebP로 재인코딩하므로(2026-10-08 용량 최적화) 이
+  // 입력값 자체가 최종 업로드 contentType에 영향을 주지 않는다 — 정규화
+  // 버그가 구조적으로 재발할 수 없음을 함께 확인한다.
+  it('원본이 비표준 image/jpg를 내려줘도 실패 없이 WebP로 재인코딩해 업로드한다', async () => {
     const jpegBuffer = await sharp({ create: { width: 10, height: 10, channels: 3, background: { r: 1, g: 2, b: 3 } } })
       .jpeg()
       .toBuffer();
@@ -94,7 +99,7 @@ describe('rehostCultureClubThumbnails', () => {
 
     const result = await rehostCultureClubThumbnails(client, { limit: 10 });
 
-    expect(uploadMock).toHaveBeenCalledWith('1.jpg', expect.any(Buffer), expect.objectContaining({ contentType: 'image/jpeg' }));
+    expect(uploadMock).toHaveBeenCalledWith('1.webp', expect.any(Buffer), expect.objectContaining({ contentType: 'image/webp' }));
     expect(result.succeeded).toBe(1);
   });
 
