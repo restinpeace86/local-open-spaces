@@ -41,3 +41,60 @@
 위 내용을 바탕으로 현재 코드에서 어떤 부분을 고쳐야 하는지 진단하고 구체적인 코드를 작성해주세요.
 
 ---
+
+[개선사항 2] 신세계 문화센터의 url 이야 이것도 다른 문화센터처럼 주기적으로 데이터 가져오기 위한 연동 작업 점검해줘.
+- storeCode는 지점 Code임. 이걸 전체 지점으로 해서 데이터 가져올 수 있는지.. storeCode에 지점코드 안넣었을경우.. 혹은 배열로 ON,01,03,14, ... 이렇게 해서 가져올수 있는지 여부
+- rcptStat는 상태코드임RC는 접수마감을 의미하여 제외하고 PR RT ST인데 이3개 한번에 요청할 수 있는지도 확인할 것
+- targetCode는 연령대상임 . 위드맘(대디), 패밀리, 키즈인데 이것도 마찬가지로 한번에 가져올수 있는지 확인할 것
+Request URL   https://sacademy.shinsegae.com/sdotcom/web/HP0010P0/getLectList.do
+Request method   POST
+Status code   200 OK
+Remote address   202.3.19.35:443
+Referrer policy   strict-origin-when-cross-origin
+
+accept   application/json, text/javascript, */*; q=0.01
+accept-encoding   gzip, deflate, br, zstd
+accept-language   ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7,ja;q=0.6
+connection   keep-alive
+content-length   317
+content-type   application/x-www-form-urlencoded; charset=UTF-8
+cookie   cookLectGrType=; cookLectGrCode=; cookRcptStat=; cookDayCode=; cookLectTimeCode=; cookTchName=; cookLectName=; cookSrchCndCd=01; cookCurPage=1; cook_dtl=N; cookOrdKey=; cookSrchWrd=; cookTargetCode=B1; JSESSIONID=VFUfcmHg2sFWyCpGeNbGECRSG1tQS1U63b8uznb4skpUbS1pTvPoq6f3mQlOp6WX.c2Ftc19kb21haW4vc2RvdGNvbTJfMg==; _ga=GA1.1.1488620935.1791446880; _ga_K1NBN99SFR=GS2.1.s1791446880$o1$g0$t1791446880$j60$l0$h0; _ga_FN49J2HYEX=GS2.1.s1791446880$o1$g1$t1791446988$j60$l0$h0; store_code=ON
+host   sacademy.shinsegae.com
+origin   https://sacademy.shinsegae.com
+referer   https://sacademy.shinsegae.com/sdotcom/web/HP0010P0/HP0010P0.do
+sec-ch-ua   "Google Chrome";v="155", "Chromium";v="155", "Not(A:Brand";v="24"
+sec-ch-ua-mobile   ?0
+sec-ch-ua-platform   "Windows"
+sec-fetch-dest   empty
+sec-fetch-mode   cors
+sec-fetch-site   same-origin
+user-agent    Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36
+x-requested-with   XMLHttpRequest
+
+ordKey
+curPage		1
+vipUseFlag
+prmStoreCode
+prmYearCode
+prmSmstCode
+prmLectCode
+yearCode
+smstCode
+sttlmBtnYn		Y
+adminFlag
+autoSeachYn		Y
+search			Y
+storeCode		  ON   01   03  14  15 16 18 19 37 40 70 90 D1
+onOffCode
+onlineStoreCode
+lectGrType
+lectGrCode
+schSmstCode		S3
+rcptStat		   PR  RT  ST  (RC는 접수마감 제외)
+dayCode
+lectTimeCode
+targetCode		B1 B2 C1
+tchName
+lectName
+srchCndCd		01
+srchWrd
