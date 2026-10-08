@@ -30,7 +30,11 @@ import { getCachedStoreCoordinates } from '@/lib/home/culture-club-store-coordin
 // 선택할 수 있어야 하므로 store_codes(콤마구분, 복수)로 바꾼다. 아무 지점도
 // 선택하지 않으면(빈 값) "반경 내 전체 지점"과 동일하게 취급한다.
 const DEFAULT_PAGE_SIZE = 20;
-const VALID_BRANDS = new Set(['emart', 'lottemart']);
+// [실측으로 발견한 버그](2026-10-08 사용자 지적: "신세계 문화센터꺼는
+// 아직 안보이는데?") 현대백화점(2026-10-08)/신세계 아카데미(2026-10-08)
+// 가 추가된 뒤에도 이 목록이 갱신되지 않아, brand 파라미터로 그 두
+// 브랜드를 넘기면 조용히 걸러져(빈 배열) "필터 없음" 취급되고 있었다.
+const VALID_BRANDS = new Set(['emart', 'lottemart', 'hyundai', 'shinsegae']);
 const DISTANCE_SORT_FETCH_SAFETY_CEILING = 5000;
 const PAGE_FETCH_SIZE = 1000;
 
