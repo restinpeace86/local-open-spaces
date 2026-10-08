@@ -34,6 +34,18 @@ const VALID_BRANDS = new Set(['emart', 'lottemart']);
 const DISTANCE_SORT_FETCH_SAFETY_CEILING = 5000;
 const PAGE_FETCH_SIZE = 1000;
 
+// [무거운 페이로드 — SELECT * 트림](2026-10-08 todo.md 개선사항1 사용자
+// 지시): "리스트를 뿌릴 때 불필요하게 거대한 JSONB 메타데이터나 안 쓰는
+// 컬럼까지 SELECT *로 통째로 끌어오고 있는지 확인해주세요." culture-club-
+// tab-view.tsx(이 라우트의 유일한 소비자)가 실제로 쓰는 컬럼만 확인
+// (grep으로 실측) — main_category_name/classroom/class_original_fee/
+// created_at/updated_at/detail_fetched_at/round/is_excluded(WHERE에만
+// 쓰고 응답엔 불필요)는 화면에서 전혀 읽지 않는다. raw_extra(이미지/소개
+// 등 브랜드별 부가정보)는 화면이 실제로 쓰므로 그대로 둔다 — JSONB라고
+// 무조건 빼면 안 되고, 쓰임을 확인한 것만 뺀다(추측 금지, 제3장 제5조).
+const SEARCH_RESULT_COLUMNS =
+  'id, brand, source_class_id, class_title, store_code, store_name, sub_category_name, class_day, start_time, end_time, class_fee, class_material_fee, instructor_name, min_age_months, max_age_months, schedule_start_date, schedule_end_date, total_sessions, normalized_status, raw_status, register_start_at, raw_extra, collected_at';
+
 // get_culture_club_store_coordinates()가 돌려주는 external_id는
 // "{BRAND}_STORE_{storeCode}" 형태다(scripts/ingest/emart-culture-club-
 // stores.mjs / lottemart-culture-club-stores.mjs의 buildOpenSpaceRow 참고).
@@ -160,7 +172,7 @@ export async function GET(request: NextRequest) {
       storeScopeFilter
     );
     const firstPageQuery = applyCommonFilters(
-      supabase.from('culture_club_classes').select('*').eq('is_excluded', false),
+      supabase.from('culture_club_classes').select(SEARCH_RESULT_COLUMNS).eq('is_excluded', false),
       storeScopeFilter
     );
     const firstPageRange = hasLocation ? ([0, PAGE_FETCH_SIZE - 1] as const) : ([from, to] as const);
@@ -193,7 +205,7 @@ export async function GET(request: NextRequest) {
       for (let offset = PAGE_FETCH_SIZE; offset < fetchCeiling; offset += PAGE_FETCH_SIZE) remainingOffsets.push(offset);
       const morePages = await Promise.all(
         remainingOffsets.map((offset) =>
-          applyCommonFilters(supabase.from('culture_club_classes').select('*').eq('is_excluded', false), storeScopeFilter).range(
+          applyCommonFilters(supabase.from('culture_club_classes').select(SEARCH_RESULT_COLUMNS).eq('is_excluded', false), storeScopeFilter).range(
             offset,
             offset + PAGE_FETCH_SIZE - 1
           )

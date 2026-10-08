@@ -46,6 +46,10 @@ const CHILD_ORDINAL_LABELS = ['첫째', '둘째', '셋째', '넷째', '다섯째
 // 값 구성을 그대로 따른다(제5장 제4조 기존 구조 우선).
 const RADIUS_KM_OPTIONS = [5, 10, 20] as const;
 const DEFAULT_RADIUS_KM = 10;
+// [코어 데이터 캐싱 — 기본 풀 크기](2026-10-08 todo.md 개선사항1) route.ts의
+// DISTANCE_SORT_FETCH_SAFETY_CEILING(거리순 정렬 시 안전 상한)과 동일한
+// 값으로 요청해, 그 반경·연령 조건의 전체 풀을 한 번에 받아 캐싱한다.
+const BASE_POOL_SIZE = 5000;
 
 function buildEmartClassUrl(sourceClassId: string) {
   return `https://www.cultureclub.emart.com/class/${sourceClassId}`;
@@ -119,13 +123,10 @@ type CultureClubClass = {
   class_title: string;
   store_code: string | null;
   store_name: string | null;
-  main_category_name: string | null;
   sub_category_name: string | null;
-  classroom: string | null;
   class_day: string[] | null;
   start_time: string | null;
   end_time: string | null;
-  class_original_fee: number | null;
   class_fee: number | null;
   class_material_fee: number | null;
   instructor_name: string | null;
@@ -690,9 +691,15 @@ export function CultureClubTabView() {
   const [selectedTargets, setSelectedTargets] = useState<Set<string>>(new Set());
   const [searchDraft, setSearchDraft] = useState('');
   const [appliedQuery, setAppliedQuery] = useState('');
-  const [items, setItems] = useState<CultureClubClass[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+  // [코어 데이터 캐싱 & 로컬 필터링](2026-10-08 todo.md 개선사항1 사용자 지시):
+  // "오직 '사용자의 위치 반경'이 변경되거나... '아이의 나이'가 바뀔 때만
+  // Supabase로 가서 새로운 기본 데이터 풀을 조회... 이후 요일을 바꾸거나,
+  // 지점을 켜고 끄거나, 키워드를 검색하는 등의 2차 필터링은 서버를 타지
+  // 않고 이미 캐싱된 데이터에서 즉시 로컬 필터링." — basePool은 위치/반경/
+  // 아이 나이로만 다시 조회되는 "기본 데이터 풀"이고, brand/지점/요일/
+  // 카테고리/대상/검색어는 이 풀을 메모리에서 거르는 2차 필터로 바뀐다.
+  const [basePool, setBasePool] = useState<CultureClubClass[]>([]);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedItem, setSelectedItem] = useState<CultureClubClass | null>(null);
@@ -753,40 +760,35 @@ export function CultureClubTabView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [brandKey, radiusKm, center.lat, center.lng]);
 
-  const buildUrl = useCallback(
-    (targetPage: number) => {
-      const params = new URLSearchParams();
-      if (brandKey !== 'all') params.set('brand', brandKey);
-      if (brandKey !== 'all' && selectedStoreCodes.size > 0) params.set('store_codes', [...selectedStoreCodes].join(','));
-      if (selectedDays.size > 0) params.set('days', [...selectedDays].join(','));
-      if (brandKey === 'emart' && selectedSubCategories.size > 0) params.set('sub_category_name', [...selectedSubCategories].join(','));
-      if (brandKey === 'lottemart' && selectedTargets.size > 0) params.set('target_code', [...selectedTargets].join(','));
-      if (appliedQuery) params.set('q', appliedQuery);
-      if (activeAgeMonths != null) params.set('age_months', String(activeAgeMonths));
-      params.set('lat', String(center.lat));
-      params.set('lng', String(center.lng));
-      params.set('radius_km', String(radiusKm));
-      params.set('page', String(targetPage));
-      params.set('page_size', String(PAGE_SIZE));
-      return `/api/culture-club/search?${params.toString()}`;
-    },
-    [brandKey, selectedStoreCodes, selectedDays, selectedSubCategories, selectedTargets, appliedQuery, activeAgeMonths, center.lat, center.lng, radiusKm]
-  );
+  // [기본 데이터 풀 조회 — 위치/반경/아이 나이로만](2026-10-08 todo.md
+  // 개선사항1) 서버가 거리 기준으로 모아주는 안전 상한(BASE_POOL_SIZE =
+  // route.ts의 DISTANCE_SORT_FETCH_SAFETY_CEILING과 동일한 5,000)을 그대로
+  // 요청해 "이 반경·연령 조건에 맞는 사실상 전부"를 한 번에 받아 캐싱한다.
+  // brand/지점/요일/카테고리/대상/검색어는 여기 포함하지 않는다 — 전부
+  // 아래 filteredItems에서 메모리로 거른다.
+  const buildBasePoolUrl = useCallback(() => {
+    const params = new URLSearchParams();
+    if (activeAgeMonths != null) params.set('age_months', String(activeAgeMonths));
+    params.set('lat', String(center.lat));
+    params.set('lng', String(center.lng));
+    params.set('radius_km', String(radiusKm));
+    params.set('page', '1');
+    params.set('page_size', String(BASE_POOL_SIZE));
+    return `/api/culture-club/search?${params.toString()}`;
+  }, [activeAgeMonths, center.lat, center.lng, radiusKm]);
 
   useEffect(() => {
     let cancelled = false;
     setIsLoading(true);
     setErrorMessage(null);
-    setPage(1);
 
-    fetch(buildUrl(1))
+    fetch(buildBasePoolUrl())
       .then((res) => res.json())
-      .then((data: { items?: CultureClubClass[]; total?: number; error?: string }) => {
+      .then((data: { items?: CultureClubClass[]; error?: string }) => {
         if (cancelled) return;
         if (data.error) throw new Error(data.error);
-        const nextItems = data.items ?? [];
-        setItems(nextItems);
-        setTotal(data.total ?? nextItems.length);
+        setBasePool(data.items ?? []);
+        setVisibleCount(PAGE_SIZE);
       })
       .catch((err: Error) => {
         if (!cancelled) setErrorMessage(err.message);
@@ -798,25 +800,39 @@ export function CultureClubTabView() {
     return () => {
       cancelled = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [brandKey, selectedStoreCodes, selectedDays, selectedSubCategories, selectedTargets, appliedQuery, activeAgeMonths, center.lat, center.lng, radiusKm]);
+  }, [buildBasePoolUrl]);
+
+  // [2차 필터 — 로컬 메모리](2026-10-08 todo.md 개선사항1) brand/지점/요일/
+  // 카테고리/대상/검색어는 서버를 다시 타지 않고 이미 캐싱된 basePool에서
+  // 즉시 거른다. route.ts의 applyCommonFilters와 동일한 조건을 JS로 재현한다.
+  const filteredItems = useMemo(() => {
+    const q = appliedQuery.trim().toLowerCase();
+    return basePool.filter((item) => {
+      if (brandKey !== 'all' && item.brand !== brandKey) return false;
+      if (brandKey !== 'all' && selectedStoreCodes.size > 0 && !selectedStoreCodes.has(item.store_code ?? '')) return false;
+      if (selectedDays.size > 0 && !(item.class_day ?? []).some((d) => selectedDays.has(d as CultureClubDay))) return false;
+      if (brandKey === 'emart' && selectedSubCategories.size > 0 && !selectedSubCategories.has(item.sub_category_name as CultureClubSubCategory))
+        return false;
+      if (brandKey === 'lottemart' && selectedTargets.size > 0 && !selectedTargets.has(item.raw_extra.target_code as string)) return false;
+      if (q && !item.class_title.toLowerCase().includes(q)) return false;
+      return true;
+    });
+  }, [basePool, brandKey, selectedStoreCodes, selectedDays, selectedSubCategories, selectedTargets, appliedQuery]);
+
+  // 2차 필터가 바뀌면 "몇 개까지 보여줄지"를 처음(PAGE_SIZE)부터 다시
+  // 센다 — 서버 재조회가 아니라 순수 로컬 상태 초기화라 체감 지연이 없다.
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [brandKey, selectedStoreCodes, selectedDays, selectedSubCategories, selectedTargets, appliedQuery]);
+
+  const items = useMemo(() => filteredItems.slice(0, visibleCount), [filteredItems, visibleCount]);
+  const total = filteredItems.length;
 
   const loadMore = useCallback(() => {
-    const nextPage = page + 1;
-    setIsLoading(true);
-    fetch(buildUrl(nextPage))
-      .then((res) => res.json())
-      .then((data: { items?: CultureClubClass[]; total?: number; error?: string }) => {
-        if (data.error) throw new Error(data.error);
-        setItems((prev) => [...prev, ...(data.items ?? [])]);
-        setTotal((prevTotal) => data.total ?? prevTotal);
-        setPage(nextPage);
-      })
-      .catch((err: Error) => setErrorMessage(err.message))
-      .finally(() => setIsLoading(false));
-  }, [buildUrl, page]);
+    setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, filteredItems.length));
+  }, [filteredItems.length]);
 
-  const isEmpty = !isLoading && !errorMessage && items.length === 0;
+  const isEmpty = !isLoading && !errorMessage && filteredItems.length === 0;
   const hasMorePages = items.length < total;
   const hasActiveFilters =
     selectedDays.size > 0 || selectedSubCategories.size > 0 || selectedTargets.size > 0 || selectedStoreCodes.size > 0 || appliedQuery !== '';

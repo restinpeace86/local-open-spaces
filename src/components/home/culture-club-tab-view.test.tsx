@@ -30,12 +30,10 @@ type ClassFixture = {
   class_title: string;
   store_code: string | null;
   store_name: string | null;
-  main_category_name: string | null;
   sub_category_name: string | null;
   class_day: string[];
   start_time: string;
   end_time: string;
-  class_original_fee: number | null;
   class_fee: number | null;
   class_material_fee: number | null;
   instructor_name: string | null;
@@ -63,12 +61,10 @@ function makeEmartClass(overrides: Partial<ClassFixture> = {}): ClassFixture {
     class_title: '10/3(토) 11:00 두근두근 무지개 레이저쇼',
     store_code: '180',
     store_name: '춘천점',
-    main_category_name: 'Little Club',
     sub_category_name: 'Kids & Children',
     class_day: ['토'],
     start_time: '1100',
     end_time: '1140',
-    class_original_fee: null,
     class_fee: 12000,
     class_material_fee: 9000,
     instructor_name: null,
@@ -99,12 +95,10 @@ function makeLottemartClass(overrides: Partial<ClassFixture> = {}): ClassFixture
     class_title: '랄랄라 코알라',
     store_code: '455',
     store_name: '고양점',
-    main_category_name: '영아강좌',
     sub_category_name: '오감자극',
     class_day: ['목'],
     start_time: '1120',
     end_time: '1200',
-    class_original_fee: 140000,
     class_fee: 91000,
     class_material_fee: null,
     instructor_name: '문화센터',
@@ -130,12 +124,10 @@ function makeHyundaiClass(overrides: Partial<ClassFixture> = {}): ClassFixture {
     class_title: '10.17) 오감발달 우리쌀 키즈베이킹 : 꼬마버스 자동차 쿠키_3세 이상 / 보호자 1인 동반',
     store_code: '220',
     store_name: '무역센터점',
-    main_category_name: null,
     sub_category_name: '엄마랑 아가랑',
     class_day: ['토'],
     start_time: '1530',
     end_time: '1630',
-    class_original_fee: null,
     class_fee: 30000,
     class_material_fee: null,
     instructor_name: '주연진',
@@ -398,36 +390,48 @@ describe('CultureClubTabView — 기본값(전체, 브랜드 무관 통합검색
 });
 
 describe('CultureClubTabView — 브랜드 필터', () => {
-  it('이마트를 선택하면 지점 뱃지와 이마트 카테고리 칩이 나타나고, brand가 요청에 포함된다(지점은 선택 전까지 전체)', async () => {
-    const fetchMock = stubFetch([makeEmartClass()]);
+  // [코어 데이터 캐싱 & 로컬 필터링](2026-10-08 todo.md 개선사항1 사용자
+  // 지시): "위치나 아이 나이가 바뀔 때만 서버 API를 호출하고, 요일 선택이나
+  // 지점 토글 같은 세부 필터는 메모리에 캐싱된 데이터 내에서 즉각 필터링" —
+  // 브랜드 선택은 이제 서버를 다시 타지 않고 이미 받아온 기본 풀을 그 자리에서
+  // 거른다. "요청에 brand가 포함된다"는 더 이상 맞는 기대가 아니라 — 반대로
+  // "재조회가 전혀 없다"가 새로운 기대다.
+  it('이마트를 선택하면 지점 뱃지와 이마트 카테고리 칩이 나타나고, 롯데마트 강좌는 화면에서 사라진다(서버 재조회 없음)', async () => {
+    const fetchMock = stubFetch([makeEmartClass(), makeLottemartClass()]);
     render(<CultureClubTabView />);
     await screen.findByText(/두근두근/);
+    const searchCallsBefore = fetchMock.mock.calls.filter(([url]) => (url as string).startsWith('/api/culture-club/search')).length;
 
     fireEvent.click(screen.getByText('이마트 컬처클럽'));
 
     await screen.findByText('이마트 춘천점');
     expect(screen.getByText('Club Originals')).toBeInTheDocument();
-    await waitFor(() => {
-      const call = fetchMock.mock.calls.find(([url]) => (url as string).includes('/api/culture-club/search?') && (url as string).includes('brand=emart'));
-      expect(call).toBeTruthy();
-      expect(call?.[0]).not.toContain('store_codes=');
-    });
+    expect(screen.queryByText('랄랄라 코알라')).not.toBeInTheDocument();
+    const searchCallsAfter = fetchMock.mock.calls.filter(([url]) => (url as string).startsWith('/api/culture-club/search')).length;
+    expect(searchCallsAfter).toBe(searchCallsBefore);
   });
 
-  it('지점 뱃지를 누르면 선택되고, 요청에 store_codes가 포함된다', async () => {
-    const fetchMock = stubFetch([makeEmartClass()]);
+  it('지점 뱃지를 누르면 선택되고, 그 지점 강좌만 남는다(서버 재조회 없음)', async () => {
+    const otherStoreClass = makeEmartClass({ store_code: '974', store_name: '다른지점', class_title: '다른 지점 강좌' });
+    const fetchMock = stubFetch([makeEmartClass(), otherStoreClass], {
+      emartStores: [
+        { storeCode: '180', label: '이마트 춘천점' },
+        { storeCode: '974', label: '이마트 다른지점' },
+      ],
+    });
     render(<CultureClubTabView />);
     await screen.findByText(/두근두근/);
 
     fireEvent.click(screen.getByText('이마트 컬처클럽'));
     const storeBadge = await screen.findByText('이마트 춘천점');
+    const searchCallsBefore = fetchMock.mock.calls.filter(([url]) => (url as string).startsWith('/api/culture-club/search')).length;
     fireEvent.click(storeBadge);
 
     expect(storeBadge).toHaveAttribute('aria-pressed', 'true');
-    await waitFor(() => {
-      const call = fetchMock.mock.calls.find(([url]) => (url as string).includes('/api/culture-club/search?') && (url as string).includes('store_codes=180'));
-      expect(call).toBeTruthy();
-    });
+    expect(screen.queryByText('다른 지점 강좌')).not.toBeInTheDocument();
+    expect(screen.getByText(/두근두근/)).toBeInTheDocument();
+    const searchCallsAfter = fetchMock.mock.calls.filter(([url]) => (url as string).startsWith('/api/culture-club/search')).length;
+    expect(searchCallsAfter).toBe(searchCallsBefore);
   });
 
   it('롯데마트를 선택하면 지점 뱃지와 수강대상 칩이 나타난다', async () => {
@@ -673,21 +677,77 @@ describe('CultureClubTabView — 기본 필터(아이 연령 + 위치)', () => {
   });
 });
 
-describe('CultureClubTabView — 검색창(제출 시에만 검색)', () => {
-  it('입력 중에는 조회하지 않고, 조회 버튼을 눌러야 q 파라미터가 붙는다', async () => {
+// [코어 데이터 캐싱 & 로컬 필터링](2026-10-08 todo.md 개선사항1 사용자
+// 지시): "오직 위치 반경이 바뀌거나 아이 나이가 바뀔 때만 서버로 가서 기본
+// 데이터 풀을 새로 조회 ... 요일 선택이나 지점 토글 같은 세부 필터는 메모리에
+// 캐싱된 데이터에서 즉각 필터링" — 이 전략 자체를 직접 검증한다(위의
+// 브랜드/지점/검색어 테스트들은 "결과가 맞는지"를 보고, 이 블록은 "정확히
+// 어떤 조건에서만 재조회가 일어나는지"를 본다).
+describe('CultureClubTabView — 코어 데이터 캐싱 & 로컬 필터링', () => {
+  function countSearchCalls(fetchMock: ReturnType<typeof stubFetch>) {
+    return fetchMock.mock.calls.filter(([url]) => (url as string).startsWith('/api/culture-club/search')).length;
+  }
+
+  it('요일/카테고리/대상 2차 필터를 바꿔도 검색 API는 다시 호출되지 않는다', async () => {
+    const fetchMock = stubFetch([makeEmartClass(), makeLottemartClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/두근두근/);
+    const before = countSearchCalls(fetchMock);
+
+    fireEvent.click(screen.getByText('토')); // 요일
+    fireEvent.click(screen.getByText('이마트 컬처클럽')); // 브랜드
+    await screen.findByText('Club Originals');
+    fireEvent.click(screen.getByText('Club Originals')); // 이마트 카테고리
+
+    expect(countSearchCalls(fetchMock)).toBe(before);
+  });
+
+  it('반경을 바꾸면 기본 데이터 풀을 서버에서 다시 조회한다', async () => {
     const fetchMock = stubFetch([makeEmartClass()]);
     render(<CultureClubTabView />);
     await screen.findByText(/두근두근/);
+    const before = countSearchCalls(fetchMock);
+
+    fireEvent.click(screen.getByText('20km'));
+
+    await waitFor(() => expect(countSearchCalls(fetchMock)).toBe(before + 1));
+  });
+
+  it('찜/상세 열람과 무관하게, 2차 필터를 아무리 바꿔도 처음 받은 기본 풀 1건 조회만 유지된다', async () => {
+    const fetchMock = stubFetch([makeEmartClass(), makeLottemartClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/두근두근/);
+
+    fireEvent.click(screen.getByText('화'));
+    fireEvent.click(screen.getByText('화')); // 토글 두 번(켰다 끄기)
+    fireEvent.click(screen.getByText('롯데마트 문화센터'));
+    fireEvent.click(screen.getByText('전체'));
+
+    expect(countSearchCalls(fetchMock)).toBe(1);
+  });
+});
+
+describe('CultureClubTabView — 검색창(제출 시에만 검색)', () => {
+  // [코어 데이터 캐싱 & 로컬 필터링](2026-10-08 todo.md 개선사항1) 검색어도
+  // 이제 2차 필터라 서버를 다시 타지 않고, 이미 받아온 기본 풀에서 제목을
+  // 로컬로 거른다.
+  it('입력 중에는 필터링하지 않고, 조회 버튼을 눌러야 제목으로 필터링되며 서버는 다시 타지 않는다', async () => {
+    const fetchMock = stubFetch([makeEmartClass(), makeEmartClass({ id: 99, class_title: '트니트니 수업', source_class_id: 'tt-1' })]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/두근두근/);
+    await screen.findByText('트니트니 수업');
     fetchMock.mockClear();
 
     fireEvent.change(screen.getByPlaceholderText('강좌명 검색 (예: 트니트니)'), { target: { value: '트니트니' } });
-    expect(fetchMock.mock.calls.find(([url]) => (url as string).includes('q='))).toBeUndefined();
+    expect(screen.getByText(/두근두근/)).toBeInTheDocument();
+    expect(screen.getByText('트니트니 수업')).toBeInTheDocument();
 
     fireEvent.click(screen.getByText('조회'));
     await waitFor(() => {
-      const call = fetchMock.mock.calls.find(([url]) => (url as string).includes('q=%ED%8A%B8%EB%8B%88%ED%8A%B8%EB%8B%88'));
-      expect(call).toBeTruthy();
+      expect(screen.queryByText(/두근두근/)).not.toBeInTheDocument();
+      expect(screen.getByText('트니트니 수업')).toBeInTheDocument();
     });
+    expect(fetchMock.mock.calls.filter(([url]) => (url as string).startsWith('/api/culture-club/search'))).toHaveLength(0);
   });
 });
 
