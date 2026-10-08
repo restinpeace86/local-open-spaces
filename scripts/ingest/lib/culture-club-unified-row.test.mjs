@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { toUnifiedEmartRow, toUnifiedLottemartRow, toUnifiedHyundaiRow, toUnifiedShinsegaeRow } from './culture-club-unified-row.mjs';
+import {
+  toUnifiedEmartRow,
+  toUnifiedLottemartRow,
+  toUnifiedHyundaiRow,
+  toUnifiedShinsegaeRow,
+  toUnifiedAkplazaRow,
+} from './culture-club-unified-row.mjs';
 
 describe('toUnifiedEmartRow', () => {
   it('이마트 행을 통합 테이블 행으로 변환한다', () => {
@@ -181,6 +187,68 @@ describe('toUnifiedShinsegaeRow', () => {
   it('main_image_url/class_intro이 아직 없으면(상세수집 전) undefined로 비어있다', () => {
     const result = toUnifiedShinsegaeRow({ class_id: 'T1', class_title: '테스트' });
     expect(result.raw_extra.main_image_url).toBeUndefined();
+    expect(result.raw_extra.class_intro).toBeUndefined();
+  });
+});
+
+describe('toUnifiedAkplazaRow', () => {
+  it('AK플라자 행을 통합 테이블 행으로 변환한다(이미지는 목록 단계에서 이미 채워져 있음)', () => {
+    const row = {
+      class_id: '835467',
+      class_title: '(중도) [10/17개강] 주산식 암산 점프셈 수학교실 (7세-초등, 중급)',
+      store_code: '02',
+      store_name: '수원점',
+      main_category_name: '유아, 어린이',
+      sub_category_name: '키즈 플레이&에듀',
+      class_day: ['토'],
+      start_time: '0950',
+      end_time: '1030',
+      class_fee: 70000,
+      class_material_fee: null,
+      instructor_name: '박영미',
+      min_age_months: 84,
+      max_age_months: 84,
+      schedule_start_date: '2026-10-17',
+      schedule_end_date: '2026-11-28',
+      total_sessions: 7,
+      raw_status: '접수가능',
+      normalized_status: 'OPEN',
+      main_cd: '3',
+      sect_cd: '02',
+      subject_fg_name: '단기',
+      reco_cnt: 0,
+      main_image_url: 'http://img-culture.akplaza.com/upload/wlect/20261006916315851.jpg',
+    };
+    const result = toUnifiedAkplazaRow(row);
+
+    expect(result.brand).toBe('ak_plaza');
+    expect(result.source_class_id).toBe('835467');
+    // [분류 2단계 — 이마트와 동일한 구조](실측 확인) main_category_name=
+    // 수강대상, sub_category_name=강좌분야.
+    expect(result.main_category_name).toBe('유아, 어린이');
+    expect(result.sub_category_name).toBe('키즈 플레이&에듀');
+    expect(result.classroom).toBeNull(); // 목록의 CLASSROOM은 항상 placeholder라 저장하지 않음
+    expect(result.raw_status).toBe('접수가능');
+    expect(result.normalized_status).toBe('OPEN');
+    expect(result.register_start_at).toBeNull();
+    expect(result.raw_extra.main_cd).toBe('3');
+    expect(result.raw_extra.sect_cd).toBe('02');
+    // [이미지 — 목록 단계에서 이미 완성](실측 확인: 상세 페이지의 이미지
+    // 블록은 사이트 자체가 꺼둔 상태라 상세수집이 아니라 목록 배치가 직접
+    // 채운다) 별도 상세수집(detail.mjs)이 필요한 건 class_intro뿐이다.
+    expect(result.raw_extra.main_image_url).toBe('http://img-culture.akplaza.com/upload/wlect/20261006916315851.jpg');
+  });
+
+  // [소개 텍스트 패스스루 — akplaza-culture-club-detail.mjs가 채워줌]
+  // 메인 배치 자신은 모르는 필드라 row에 값이 들어왔을 때만 raw_extra로
+  // 그대로 전달되면 된다.
+  it('class_intro이 row에 있으면 raw_extra로 그대로 전달된다', () => {
+    const result = toUnifiedAkplazaRow({ class_id: '835467', class_title: '테스트', class_intro: '강좌 소개 텍스트' });
+    expect(result.raw_extra.class_intro).toBe('강좌 소개 텍스트');
+  });
+
+  it('class_intro이 아직 없으면(상세수집 전) undefined로 비어있다', () => {
+    const result = toUnifiedAkplazaRow({ class_id: '835467', class_title: '테스트' });
     expect(result.raw_extra.class_intro).toBeUndefined();
   });
 });

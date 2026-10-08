@@ -25,7 +25,7 @@ vi.mock('@/lib/community/bookmarks', async (importOriginal) => {
 
 type ClassFixture = {
   id: number;
-  brand: 'emart' | 'lottemart' | 'hyundai' | 'shinsegae';
+  brand: 'emart' | 'lottemart' | 'hyundai' | 'shinsegae' | 'ak_plaza';
   source_class_id: string;
   class_title: string;
   store_code: string | null;
@@ -183,6 +183,39 @@ function makeShinsegaeClass(overrides: Partial<ClassFixture> = {}): ClassFixture
       register_end_date: '2026-11-27',
     },
     collected_at: '2026-10-08T04:12:00+00:00',
+    ...overrides,
+  };
+}
+
+function makeAkplazaClass(overrides: Partial<ClassFixture> = {}): ClassFixture {
+  return {
+    id: 5,
+    brand: 'ak_plaza',
+    source_class_id: '835566',
+    class_title: '(중도)AK 패밀리 오케스트라(키즈)',
+    store_code: '04',
+    store_name: '원주점',
+    sub_category_name: '뮤직 라이프',
+    class_day: ['토'],
+    start_time: '1700',
+    end_time: '1830',
+    class_fee: 84000,
+    class_material_fee: null,
+    instructor_name: '최지승',
+    min_age_months: null,
+    max_age_months: null,
+    schedule_start_date: '2026-10-10',
+    schedule_end_date: '2026-11-21',
+    total_sessions: 7,
+    normalized_status: 'OPEN',
+    raw_status: '접수가능',
+    register_start_at: null,
+    raw_extra: {
+      main_cd: '3',
+      sect_cd: '03',
+      main_image_url: 'http://img-culture.akplaza.com/upload/wlect/20261006916315851.jpg',
+    },
+    collected_at: '2026-10-09T04:12:00+00:00',
     ...overrides,
   };
 }
@@ -874,6 +907,53 @@ describe('CultureClubTabView — 신세계 아카데미(2026-10-08, todo.md 개�
     fireEvent.click(screen.getAllByText(/어린이 뮤지컬/)[0]);
 
     await screen.findByText('신세계 아카데미 강좌 상세');
+    expect(screen.queryByText('접수 페이지로 가기 ↗')).not.toBeInTheDocument();
+  });
+});
+
+describe('CultureClubTabView — AK플라자 문화아카데미(2026-10-09)', () => {
+  it('AK플라자 강좌 카드가 지점명/강좌분야 뱃지와 함께 보인다', async () => {
+    stubFetch([makeAkplazaClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/패밀리 오케스트라/);
+
+    expect(screen.getByText(/원주점/)).toBeInTheDocument();
+    expect(screen.getByText('뮤직 라이프')).toBeInTheDocument();
+  });
+
+  it('찜 버튼은 아직 지원하지 않아 렌더링되지 않는다(제5장 제3조 — 범위를 넘는 결정을 임의로 추가하지 않음)', async () => {
+    mockUser.current = { id: 'user-1' };
+    getMyProfileMock.mockResolvedValue({ grade: 'active', birth_years: [], birth_months: [] });
+    stubFetch([makeAkplazaClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/패밀리 오케스트라/);
+
+    expect(screen.queryByLabelText('찜하기')).not.toBeInTheDocument();
+    mockUser.current = null;
+  });
+
+  it('클릭하면 상세 시트가 열리고 AK플라자 상세 페이지로 가는 외부 링크가 올바른 파라미터로 만들어진다(2026-10-09 실측 확인된 URL)', async () => {
+    stubFetch([makeAkplazaClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/패밀리 오케스트라/);
+    fireEvent.click(screen.getAllByText(/패밀리 오케스트라/)[0]);
+
+    await screen.findByText('AK플라자 문화아카데미 강좌 상세');
+    const link = screen.getByText('접수 페이지로 가기 ↗');
+    const href = link.closest('a')?.getAttribute('href') ?? '';
+    expect(href).toContain('https://culture.akplaza.com/course/detail');
+    expect(href).toContain('store=04');
+    expect(href).toContain('main_cd=3');
+    expect(href).toContain('sSubject_cd=835566');
+  });
+
+  it('main_cd가 없으면(아직 확인 못한 경우를 대비) 신청 버튼 대신 상태 라벨이 보인다', async () => {
+    stubFetch([makeAkplazaClass({ raw_extra: {} })]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/패밀리 오케스트라/);
+    fireEvent.click(screen.getAllByText(/패밀리 오케스트라/)[0]);
+
+    await screen.findByText('AK플라자 문화아카데미 강좌 상세');
     expect(screen.queryByText('접수 페이지로 가기 ↗')).not.toBeInTheDocument();
   });
 });

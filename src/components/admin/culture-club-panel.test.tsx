@@ -110,6 +110,23 @@ describe('CultureClubPanel', () => {
     });
   });
 
+  // [AK플라자 브랜드 필터 추가](2026-10-09 사용자 요청: "상세페이지까지
+  // 조사하고나서 제안하는 수집방식으로 해" — 데이터 수집과 함께 관리자
+  // 화면 브랜드 필터도 같이 추가한다, 신세계/현대백화점 추가 때와 동일한
+  // 누락을 처음부터 피함).
+  it('AK플라자 브랜드 pill도 선택 가능하고 조회 요청에 반영된다', async () => {
+    const fetchMock = stubFetch([makeRow()]);
+    render(<CultureClubPanel />);
+
+    fireEvent.click(screen.getByText('AK플라자'));
+    fireEvent.click(screen.getByText('조회하기'));
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([url]) => (url as string).startsWith('/api/admin/culture-club?'));
+      expect(call?.[0]).toContain('brand=ak_plaza');
+    });
+  });
+
   it('노출 제외 체크박스를 누르면 id로 PATCH 요청을 보낸다', async () => {
     const fetchMock = stubFetch([makeRow({ id: 42 })]);
     render(<CultureClubPanel />);

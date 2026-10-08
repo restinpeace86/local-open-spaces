@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildCultureClubThumbnailUrl, buildShinsegaeDetailUrl } from './culture-club-options';
+import { buildAkplazaDetailUrl, buildCultureClubThumbnailUrl, buildShinsegaeDetailUrl } from './culture-club-options';
 
 // [이미지 — 썸네일 CDN 확인됨](2026-10-03 사용자 제공 URL로 실측 확인): 두 가지 실제
 // main_image_key 형태("category/4/403/{uuid}", "classImages/{uuid}") 모두에서
@@ -33,5 +33,16 @@ describe('buildShinsegaeDetailUrl', () => {
     expect(
       buildShinsegaeDetailUrl({ yearCode: '2026', semesterCode: 'S3', storeCode: '03', classId: 'T2694782' })
     ).toBe('https://sacademy.shinsegae.com/sdotcom/web/HP0010P0/HP0010P1.do?yearCode=2026&smstCode=S3&storeCode=03&lectCode=T2694782');
+  });
+});
+
+// [AK플라자 상세/신청 페이지 — 실측 확인](2026-10-09): "/course/detail?
+// store=04&main_cd=3&sSubject_cd=835566" 세션 쿠키 없이도 정상 반환됨을
+// 확인했다.
+describe('buildAkplazaDetailUrl', () => {
+  it('store/main_cd/sSubject_cd로 실제 확인된 URL 형태를 만든다', () => {
+    expect(buildAkplazaDetailUrl({ storeCode: '04', mainCd: '3', classId: '835566' })).toBe(
+      'https://culture.akplaza.com/course/detail?store=04&main_cd=3&sSubject_cd=835566'
+    );
   });
 });

@@ -17,6 +17,7 @@ export const CULTURE_CLUB_BRAND_OPTIONS = [
   { key: 'lottemart', label: '롯데마트 문화센터' },
   { key: 'hyundai', label: '현대백화점 문화센터' },
   { key: 'shinsegae', label: '신세계 아카데미' },
+  { key: 'ak_plaza', label: 'AK플라자 문화아카데미' },
 ] as const;
 
 export type CultureClubBrandKey = (typeof CULTURE_CLUB_BRAND_OPTIONS)[number]['key'];
@@ -119,4 +120,13 @@ export function buildShinsegaeDetailUrl(params: { yearCode: string; semesterCode
     lectCode: params.classId,
   });
   return `https://sacademy.shinsegae.com/sdotcom/web/HP0010P0/HP0010P1.do?${query.toString()}`;
+}
+
+// [AK플라자 상세/신청 페이지 — 실측 확인](2026-10-09) "/course/detail?
+// store=04&main_cd=3&sSubject_cd=835566" 세션 쿠키 없이도 200 + 정상
+// 콘텐츠를 돌려줌을 확인(로그인 여부와 무관하게 공개 페이지) — 다른
+// 브랜드처럼 그대로 외부 링크로 써도 된다.
+export function buildAkplazaDetailUrl(params: { storeCode: string; mainCd: string; classId: string }) {
+  const query = new URLSearchParams({ store: params.storeCode, main_cd: params.mainCd, sSubject_cd: params.classId });
+  return `https://culture.akplaza.com/course/detail?${query.toString()}`;
 }

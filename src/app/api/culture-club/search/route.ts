@@ -34,7 +34,7 @@ const DEFAULT_PAGE_SIZE = 20;
 // 아직 안보이는데?") 현대백화점(2026-10-08)/신세계 아카데미(2026-10-08)
 // 가 추가된 뒤에도 이 목록이 갱신되지 않아, brand 파라미터로 그 두
 // 브랜드를 넘기면 조용히 걸러져(빈 배열) "필터 없음" 취급되고 있었다.
-const VALID_BRANDS = new Set(['emart', 'lottemart', 'hyundai', 'shinsegae']);
+const VALID_BRANDS = new Set(['emart', 'lottemart', 'hyundai', 'shinsegae', 'ak_plaza']);
 const DISTANCE_SORT_FETCH_SAFETY_CEILING = 5000;
 const PAGE_FETCH_SIZE = 1000;
 
@@ -53,10 +53,21 @@ const SEARCH_RESULT_COLUMNS =
 // get_culture_club_store_coordinates()가 돌려주는 external_id는
 // "{BRAND}_STORE_{storeCode}" 형태다(scripts/ingest/emart-culture-club-
 // stores.mjs / lottemart-culture-club-stores.mjs의 buildOpenSpaceRow 참고).
+// [실측으로 발견한 버그 — AK플라자](2026-10-09) external_id 접두사
+// "AKPLAZA_STORE_"를 그대로 소문자화하면 "akplaza"가 되는데, culture_club_
+// classes.brand 컬럼의 실제 값은 "ak_plaza"(언더스코어 포함, CHECK 제약과
+// 동일)라 store-scope 필터(brand.eq.akplaza)가 단 한 건도 매칭되지 않아
+// AK플라자 강좌가 조용히 0건으로 누락되고 있었다 — 다른 4개 브랜드는
+// external_id 접두사가 brand 값과 1:1로 일치해(emart/lottemart/hyundai/
+// shinsegae) 이 불일치가 드러나지 않았다. 정규식(다른 4개 브랜드가 쓰는
+// 검증된 패턴)은 그대로 두고, 이 한 가지 예외만 명시적으로 보정한다.
+const EXTERNAL_ID_BRAND_ALIASES: Record<string, string> = { akplaza: 'ak_plaza' };
+
 function parseExternalId(externalId: string): { brand: string; storeCode: string } | null {
   const match = /^([A-Z]+)_STORE_(.+)$/.exec(externalId);
   if (!match) return null;
-  return { brand: match[1].toLowerCase(), storeCode: match[2] };
+  const brand = match[1].toLowerCase();
+  return { brand: EXTERNAL_ID_BRAND_ALIASES[brand] ?? brand, storeCode: match[2] };
 }
 
 type StoreCandidate = { brand: string; storeCode: string; distanceMeters: number; lat: number; lng: number };

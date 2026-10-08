@@ -47,6 +47,7 @@ const BRAND_OPTIONS: { key: Brand; label: string }[] = [
   { key: 'lottemart', label: '롯데마트' },
   { key: 'shinsegae', label: '신세계 아카데미' },
   { key: 'hyundai', label: '현대백화점' },
+  { key: 'ak_plaza', label: 'AK플라자' },
 ];
 
 const STATUS_OPTIONS: { key: ClassRow['normalized_status']; label: string }[] = [
@@ -198,8 +199,14 @@ export function CultureClubPanel() {
           (data.stores ?? []).map((s) => ({ storeCode: `hyundai:${s.storeCode}`, label: `[현대백화점] ${s.label}` }))
         )
         .catch(() => []),
-    ]).then(([emartStores, lottemartStores, shinsegaeStores, hyundaiStores]) =>
-      setStores([...emartStores, ...lottemartStores, ...shinsegaeStores, ...hyundaiStores])
+      fetch('/api/culture-club/akplaza-stores')
+        .then((res) => res.json())
+        .then((data: { stores?: { storeCode: string; label: string }[] }) =>
+          (data.stores ?? []).map((s) => ({ storeCode: `ak_plaza:${s.storeCode}`, label: `[AK플라자] ${s.label}` }))
+        )
+        .catch(() => []),
+    ]).then(([emartStores, lottemartStores, shinsegaeStores, hyundaiStores, akplazaStores]) =>
+      setStores([...emartStores, ...lottemartStores, ...shinsegaeStores, ...hyundaiStores, ...akplazaStores])
     );
   }, []);
 

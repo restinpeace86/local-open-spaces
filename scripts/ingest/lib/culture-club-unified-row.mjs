@@ -140,6 +140,70 @@ function buildUnifiedLottemartRow(row) {
   };
 }
 
+// [AK플라자 — 통합 테이블 직접 쓰기](2026-10-09) 신세계와 동일한 구조
+// (별도 원본 스테이징 테이블 없음) — 다만 이미지는 목록 응답 자체에 이미
+// 있어(akplaza-culture-club-parser.mjs의 buildThumbnailUrl 참고) 별도
+// 상세수집 단계가 채울 필요가 없고, 강좌 소개 텍스트(lect_info)만
+// akplaza-culture-club-detail.mjs가 1회성으로 채운다 — 그래서 이중 쓰기
+// 방지(mergeDetailEnrichment)가 class_intro 하나에만 필요하다.
+export function toUnifiedAkplazaRow(row) {
+  return omitUndefinedKeys(buildUnifiedAkplazaRow(row));
+}
+
+function buildUnifiedAkplazaRow(row) {
+  return {
+    brand: 'ak_plaza',
+    source_class_id: row.class_id,
+    class_title: row.class_title,
+    store_code: row.store_code,
+    store_name: row.store_name,
+    // [분류 2단계 — AK플라자는 수강대상/강좌분야를 둘 다 구조화된 필드로
+    // 갖는다](실측 확인, akplaza-culture-club-parser.mjs parseLecture 주석
+    // 참고) main_category_name=수강대상 한글 라벨, sub_category_name=
+    // 강좌분야(SECT_NM) — 이마트와 동일한 2단계 분류 구조.
+    main_category_name: row.main_category_name,
+    sub_category_name: row.sub_category_name,
+    classroom: null, // 목록 응답의 CLASSROOM은 항상 " / 층-호" 템플릿 placeholder라 저장하지 않음(실측 확인)
+    class_day: row.class_day,
+    start_time: row.start_time,
+    end_time: row.end_time,
+    class_original_fee: null, // 목록에 할인 전 가격이 별도로 없음(실측 확인)
+    class_fee: row.class_fee,
+    class_material_fee: row.class_material_fee,
+    instructor_name: row.instructor_name,
+    min_age_months: row.min_age_months,
+    max_age_months: row.max_age_months,
+    schedule_start_date: row.schedule_start_date,
+    schedule_end_date: row.schedule_end_date,
+    schedule_days_code: row.schedule_days_code,
+    round: null,
+    total_sessions: row.total_sessions,
+    normalized_status: row.normalized_status,
+    raw_status: row.raw_status,
+    register_start_at: null, // 목록에 접수 시작 시각 개념이 노출되지 않는다(실측 확인, 추측 금지)
+    is_excluded: row.is_excluded ?? false,
+    raw_extra: {
+      main_cd: row.main_cd,
+      sect_cd: row.sect_cd,
+      subject_fg_name: row.subject_fg_name,
+      reco_cnt: row.reco_cnt,
+      // [이미지 — 목록 단계에서 바로 채움](akplaza-culture-club-parser.mjs
+      // buildThumbnailUrl 참고) 상세 페이지의 이미지 블록은 사이트 자체가
+      // 꺼둔 상태라(실측 확인) 상세수집 스크립트는 이 필드를 건드리지 않는다.
+      main_image_url: row.main_image_url,
+      // [소개 텍스트 — akplaza-culture-club-detail.mjs가 채움] 목록 응답엔
+      // 없고 상세 페이지의 #lect_info에만 있다. 이 메인 배치 자신은 채우지
+      // 않고, fetchDetailEnrichmentByClassId가 기존 값을 읽어와 병합해줄
+      // 때만 값이 들어온다(없으면 undefined → omitUndefinedKeys가 제거).
+      class_intro: row.class_intro,
+    },
+    detail_fetched_at: row.detail_fetched_at,
+    collected_at: row.collected_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
+
 // [현대백화점 — 통합 테이블 직접 쓰기](2026-10-08) 이마트/롯데마트와 달리
 // 별도 원본 스테이징 테이블이 없다 — 목록 페이지에 썸네일까지 이미 포함돼
 // 있어(실측 확인) 1회성 상세수집 단계 자체가 필요 없기 때문이다(그래서

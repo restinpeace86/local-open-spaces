@@ -21,12 +21,18 @@ function mockAdminClient({
   coords: { external_id: string; lng: number; lat: number }[];
   total: number;
 }) {
+  // [AK플라자 브랜드명 불일치 버그 회귀 테스트용](2026-10-09) or()가 실제
+  // PostgREST처럼 필터링하진 않지만(기존 테스트들이 그 가정에 의존), 호출
+  // 인자(store-scope 필터 문자열)는 캡처해 parseExternalId가 만든 brand
+  // 값이 culture_club_classes.brand의 실제 값과 일치하는지 검증할 수 있게
+  // 한다.
+  const orMock = vi.fn((_filter?: string) => chain);
   const chain = {
     select: () => chain,
     eq: () => chain,
     in: () => chain,
     overlaps: () => chain,
-    or: () => chain,
+    or: orMock,
     ilike: () => chain,
     order: () => chain,
     range: (from: number, to: number) => Promise.resolve({ data: rowsByRange(from, to), error: null }),
@@ -38,7 +44,7 @@ function mockAdminClient({
   };
   const fromMock = vi.fn(() => chain);
   const rpcMock = vi.fn(() => Promise.resolve({ data: coords, error: null }));
-  return { fromMock, rpcMock };
+  return { fromMock, rpcMock, orMock };
 }
 
 describe('GET /api/culture-club/search — Branch-First 거리순 정렬', () => {
@@ -69,6 +75,28 @@ describe('GET /api/culture-club/search — Branch-First 거리순 정렬', () =>
 
     expect(body.items[0].store_code).toBe('NEAR');
     expect(body.items[0].distance_meters).toBeLessThan(1000);
+  });
+
+  // [AK플라자 브랜드명 불일치 버그](2026-10-09 실측으로 발견) external_id
+  // 접두사 "AKPLAZA_STORE_"를 그대로 소문자화하면 "akplaza"가 되는데,
+  // culture_club_classes.brand의 실제 값은 "ak_plaza"(언더스코어 포함)라
+  // store-scope 필터가 전혀 매칭되지 않아 AK플라자 강좌가 조용히 0건으로
+  // 누락됐다(라이브 API 호출로 재현 확인). 다른 4개 브랜드는 external_id
+  // 접두사가 brand 값과 1:1로 일치해 이 불일치가 드러나지 않았었다.
+  it('AKPLAZA_STORE_ 접두사는 store-scope 필터에서 brand를 "ak_plaza"(언더스코어 포함)로 정규화한다', async () => {
+    const { fromMock, rpcMock, orMock } = mockAdminClient({
+      rowsByRange: () => [makeRow(1, 'ak_plaza', '02')],
+      coords: [{ external_id: 'AKPLAZA_STORE_02', lng: 127.0, lat: 37.2655 }],
+      total: 1,
+    });
+    vi.doMock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ from: fromMock, rpc: rpcMock }) }));
+    const { GET } = await import('./route');
+
+    await GET(new Request('http://localhost/api/culture-club/search?lat=37.2655&lng=127.0') as never);
+
+    const storeScopeFilter = orMock.mock.calls.find(([arg]) => (arg as string).includes('store_code.in'))?.[0] as string;
+    expect(storeScopeFilter).toContain('brand.eq.ak_plaza');
+    expect(storeScopeFilter).not.toContain('brand.eq.akplaza');
   });
 
   it('위치 기반 조회엔 지점의 실제 좌표(store_lat/store_lng)도 함께 내려준다(2026-10-07 — 위치 팝업용)', async () => {
