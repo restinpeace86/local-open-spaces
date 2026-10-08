@@ -7,6 +7,29 @@ import { addBookmark, BookmarkCapExceededError, BookmarkTarget, getMyBookmarkedI
 import { canBookmark } from '@/lib/community/grades';
 import { Toast } from '@/components/map/toast';
 
+// [찜 버튼 대비 강화](2026-10-08 사용자 지적: "찜이게 어떤게 누른거고
+// 안누른건지... 눈에 안띄어") — 기존엔 ❤️/🤍 이모지로만 구분했는데, 흰
+// 배경 카드 위에서 🤍(흰 하트)가 거의 안 보여 구분이 안 됐다. 이모지는
+// 플랫폼/폰트에 따라 렌더링 색이 고정돼 CSS로 제어할 수 없어, 직접 그린
+// SVG 하트로 바꿔 찜한 상태(루비색 채움)와 안 한 상태(연한 회색 윤곽선만)의
+// 대비를 명확히 둔다.
+function HeartIcon({ filled }: { filled: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="24"
+      height="24"
+      fill={filled ? '#e11d48' : 'none'}
+      stroke={filled ? '#e11d48' : '#9ca3af'}
+      strokeWidth="2"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M12 21s-6.72-4.35-9.33-8.2C1.1 10.8 1.5 7.6 4 6c1.8-1.15 4.1-.75 5.4.9L12 9.9l2.6-3c1.3-1.65 3.6-2.05 5.4-.9 2.5 1.6 2.9 4.8 1.33 6.8C18.72 16.65 12 21 12 21z" />
+    </svg>
+  );
+}
+
 // [이마트 문화센터 클래스 찜 추가](2026-10-03) — target 3종(spot/event/emart_class)에서
 // id/판별 로직이 늘어 삼항식이 2개씩 겹치면 가독성이 떨어져 작은 헬퍼로 뺐다.
 // [롯데마트 문화센터 클래스 찜 추가](2026-10-04) — 4종으로 확장.
@@ -85,9 +108,9 @@ export function BookmarkButton({ target }: { target: BookmarkTarget }) {
         onClick={handleToggle}
         disabled={isBusy}
         aria-label={isBookmarked ? '찜 해제' : '찜하기'}
-        className="shrink-0 text-xl disabled:opacity-50"
+        className="shrink-0 disabled:opacity-50"
       >
-        {isBookmarked ? '❤️' : '🤍'}
+        <HeartIcon filled={isBookmarked} />
       </button>
       {toastMessage && <Toast message={toastMessage} />}
     </>
