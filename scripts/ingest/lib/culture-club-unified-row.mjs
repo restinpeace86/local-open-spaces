@@ -190,3 +190,55 @@ function buildUnifiedHyundaiRow(row) {
     updated_at: row.updated_at,
   };
 }
+
+// [신세계 아카데미 — 목록 직결](2026-10-08, implementation/todo.md 개선사항2):
+// 현대백화점과 동일하게 목록 응답 자체에 필요한 필드가 다 있어 별도
+// 상세수집 단계가 없다 — 원본 스테이징 테이블 없이 통합 테이블에 바로 쓴다.
+export function toUnifiedShinsegaeRow(row) {
+  return omitUndefinedKeys(buildUnifiedShinsegaeRow(row));
+}
+
+function buildUnifiedShinsegaeRow(row) {
+  return {
+    brand: 'shinsegae',
+    source_class_id: row.class_id,
+    class_title: row.class_title,
+    store_code: row.store_code,
+    store_name: row.store_name,
+    main_category_name: null, // 목록에 상위 분류 필드가 없다(추측 금지)
+    sub_category_name: null, // targetCode(raw_extra)와 별개 — 확정된 한글 라벨이 없어 지어내지 않음
+    classroom: null,
+    class_day: row.class_day,
+    start_time: row.start_time,
+    end_time: row.end_time,
+    class_original_fee: null, // 목록에 할인 전 가격이 별도로 없음(실측 확인)
+    class_fee: row.class_fee,
+    class_material_fee: null,
+    instructor_name: row.instructor_name,
+    min_age_months: row.min_age_months,
+    max_age_months: row.max_age_months,
+    schedule_start_date: row.schedule_start_date,
+    schedule_end_date: row.schedule_end_date,
+    schedule_days_code: row.schedule_days_code,
+    round: null,
+    total_sessions: row.total_sessions,
+    normalized_status: row.normalized_status,
+    raw_status: row.raw_status,
+    // [접수 시작 시각 — 날짜만 있고 시각이 없음](실측 확인) 다른 브랜드의
+    // register_start_at(정밀 시각, 접수시작 10분 전 알림 대상)과 같은
+    // 정밀도가 없어 가짜 시각을 채우지 않는다 — raw_extra의 날짜 문자열로만
+    // 표시용으로 쓴다.
+    register_start_at: null,
+    is_excluded: row.is_excluded ?? false,
+    raw_extra: {
+      target_code: row.target_code,
+      semester_code: row.semester_code,
+      register_start_date: row.register_start_date,
+      register_end_date: row.register_end_date,
+    },
+    detail_fetched_at: row.detail_fetched_at,
+    collected_at: row.collected_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}

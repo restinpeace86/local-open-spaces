@@ -25,7 +25,7 @@ vi.mock('@/lib/community/bookmarks', async (importOriginal) => {
 
 type ClassFixture = {
   id: number;
-  brand: 'emart' | 'lottemart' | 'hyundai';
+  brand: 'emart' | 'lottemart' | 'hyundai' | 'shinsegae';
   source_class_id: string;
   class_title: string;
   store_code: string | null;
@@ -147,6 +147,40 @@ function makeHyundaiClass(overrides: Partial<ClassFixture> = {}): ClassFixture {
       main_image_url: 'https://imgprism.ehyundai.com/x.jpg',
     },
     collected_at: '2026-10-07T04:12:00+00:00',
+    ...overrides,
+  };
+}
+
+function makeShinsegaeClass(overrides: Partial<ClassFixture> = {}): ClassFixture {
+  return {
+    id: 4,
+    brand: 'shinsegae',
+    source_class_id: 'T2694782',
+    class_title: '[11/28]어린이 뮤지컬, 방귀공주와 다니엘(22년생이상, 성인)',
+    store_code: '03',
+    store_name: '타임스퀘어 & ON',
+    sub_category_name: null,
+    class_day: ['토'],
+    start_time: '1100',
+    end_time: '1140',
+    class_fee: 5000,
+    class_material_fee: null,
+    instructor_name: '극단 이레',
+    min_age_months: 48,
+    max_age_months: null,
+    schedule_start_date: '2026-11-28',
+    schedule_end_date: '2026-11-28',
+    total_sessions: 1,
+    normalized_status: 'OPEN',
+    raw_status: 'RT',
+    register_start_at: null,
+    raw_extra: {
+      target_code: 'C1',
+      semester_code: 'S3',
+      register_start_date: '2026-07-22',
+      register_end_date: '2026-11-27',
+    },
+    collected_at: '2026-10-08T04:12:00+00:00',
     ...overrides,
   };
 }
@@ -788,5 +822,37 @@ describe('CultureClubTabView — 현대백화점(2026-10-08, Decision 029)', () 
     expect(href).toContain('crsSqNo=40950');
     expect(href).toContain('crsCd=37932');
     expect(href).toContain('proCustNo=P02666039');
+  });
+});
+
+describe('CultureClubTabView — 신세계 아카데미(2026-10-08, todo.md 개선사항2)', () => {
+  it('신세계 아카데미 강좌 카드가 지점명과 함께 보인다(썸네일 없음 — 목록 응답에 이미지 필드 자체가 없음)', async () => {
+    stubFetch([makeShinsegaeClass()]);
+    const { container } = render(<CultureClubTabView />);
+    await screen.findByText(/어린이 뮤지컬/);
+
+    expect(screen.getByText(/타임스퀘어 & ON/)).toBeInTheDocument();
+    expect(container.querySelector('img')).not.toBeInTheDocument();
+  });
+
+  it('찜 버튼은 아직 지원하지 않아 렌더링되지 않는다(제5장 제3조 — 범위를 넘는 결정을 임의로 추가하지 않음)', async () => {
+    mockUser.current = { id: 'user-1' };
+    getMyProfileMock.mockResolvedValue({ grade: 'active', birth_years: [], birth_months: [] });
+    stubFetch([makeShinsegaeClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/어린이 뮤지컬/);
+
+    expect(screen.queryByLabelText('찜하기')).not.toBeInTheDocument();
+    mockUser.current = null;
+  });
+
+  it('클릭하면 상세 시트가 열리지만, 딥링크 형식이 아직 확인되지 않아 신청 버튼 대신 상태 라벨이 보인다', async () => {
+    stubFetch([makeShinsegaeClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/어린이 뮤지컬/);
+    fireEvent.click(screen.getAllByText(/어린이 뮤지컬/)[0]);
+
+    await screen.findByText('신세계 아카데미 강좌 상세');
+    expect(screen.queryByText('접수 페이지로 가기 ↗')).not.toBeInTheDocument();
   });
 });

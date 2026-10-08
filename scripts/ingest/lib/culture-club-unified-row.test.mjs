@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { toUnifiedEmartRow, toUnifiedLottemartRow, toUnifiedHyundaiRow } from './culture-club-unified-row.mjs';
+import { toUnifiedEmartRow, toUnifiedLottemartRow, toUnifiedHyundaiRow, toUnifiedShinsegaeRow } from './culture-club-unified-row.mjs';
 
 describe('toUnifiedEmartRow', () => {
   it('이마트 행을 통합 테이블 행으로 변환한다', () => {
@@ -111,5 +111,45 @@ describe('toUnifiedHyundaiRow', () => {
     expect(result.raw_extra.sq_cd).toBe('168');
     expect(result.raw_extra.crs_cd).toBe('37932');
     expect(result.raw_extra.pro_cust_no).toBe('P02666039');
+  });
+});
+
+describe('toUnifiedShinsegaeRow', () => {
+  it('신세계 아카데미 행을 통합 테이블 행으로 변환한다(별도 상세수집 단계 없이 목록 데이터 그대로)', () => {
+    const row = {
+      class_id: 'T2694782',
+      class_title: '[11/28]어린이 뮤지컬, 방귀공주와 다니엘(22년생이상, 성인)',
+      store_code: '03',
+      store_name: '타임스퀘어 & ON',
+      class_day: ['토'],
+      schedule_days_code: ['SAT'],
+      start_time: '1100',
+      end_time: '1140',
+      class_fee: 5000,
+      instructor_name: '극단 이레',
+      min_age_months: 48,
+      max_age_months: null,
+      schedule_start_date: '2026-11-28',
+      schedule_end_date: '2026-11-28',
+      total_sessions: 1,
+      raw_status: 'RT',
+      normalized_status: 'OPEN',
+      target_code: 'C1',
+      semester_code: 'S3',
+      register_start_date: '2026-07-22',
+      register_end_date: '2026-11-27',
+    };
+    const result = toUnifiedShinsegaeRow(row);
+
+    expect(result.brand).toBe('shinsegae');
+    expect(result.source_class_id).toBe('T2694782');
+    expect(result.class_title).toBe(row.class_title);
+    expect(result.raw_status).toBe('RT');
+    expect(result.normalized_status).toBe('OPEN');
+    expect(result.register_start_at).toBeNull();
+    expect(result.raw_extra.target_code).toBe('C1');
+    expect(result.raw_extra.semester_code).toBe('S3');
+    expect(result.raw_extra.register_start_date).toBe('2026-07-22');
+    expect(result.raw_extra.register_end_date).toBe('2026-11-27');
   });
 });

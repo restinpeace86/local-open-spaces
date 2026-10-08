@@ -118,7 +118,7 @@ type StoreOption = { storeCode: string; label: string; distanceMeters?: number |
 
 type CultureClubClass = {
   id: number;
-  brand: 'emart' | 'lottemart' | 'hyundai';
+  brand: 'emart' | 'lottemart' | 'hyundai' | 'shinsegae';
   source_class_id: string;
   class_title: string;
   store_code: string | null;
@@ -152,6 +152,7 @@ const BRAND_LABELS: Record<CultureClubClass['brand'], string> = {
   emart: '이마트',
   lottemart: '롯데마트',
   hyundai: '현대백화점',
+  shinsegae: '신세계 아카데미',
 };
 
 function formatTimeRange(start: string | null, end: string | null) {
@@ -742,12 +743,12 @@ export function CultureClubTabView() {
     setSelectedStoreCodes(new Set());
     setSelectedSubCategories(new Set());
     setSelectedTargets(new Set());
-    // [현대백화점 — 지점 뱃지 드릴다운 아직 미지원](2026-10-08, Decision 029)
-    // 전용 지점 목록 API가 아직 없다 — 데이터 수집(이번 범위)과 별개로,
-    // 추측으로 지점 목록을 지어내지 않고 빈 목록으로 둔다(브랜드 필터
-    // 자체는 정상 동작, 요일/카테고리 등 다른 필터와 함께 전체 통합검색에
-    // 그대로 걸린다).
-    if (brandKey === 'all' || brandKey === 'hyundai') {
+    // [현대백화점/신세계 — 지점 뱃지 드릴다운 아직 미지원](2026-10-08,
+    // Decision 029 / todo.md 개선사항2) 전용 지점 목록 API가 아직 없다 —
+    // 데이터 수집(이번 범위)과 별개로, 추측으로 지점 목록을 지어내지 않고
+    // 빈 목록으로 둔다(브랜드 필터 자체는 정상 동작, 요일 등 다른 필터와
+    // 함께 전체 통합검색에 그대로 걸린다).
+    if (brandKey === 'all' || brandKey === 'hyundai' || brandKey === 'shinsegae') {
       setStores([]);
       return;
     }
