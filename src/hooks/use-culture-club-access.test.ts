@@ -1,6 +1,7 @@
 import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useCultureClubAccess } from './use-culture-club-access';
+import { invalidateMyProfileCache } from '@/lib/auth/profile';
 
 // [문화센터 열람 권한](2026-10-08 사용자 지시) — use-mom-pick-access.test.ts와
 // 동일한 3분기 검증(guest/not_sprout_yet/allowed).
@@ -23,6 +24,11 @@ describe('useCultureClubAccess', () => {
   afterEach(() => {
     getUserMock.mockReset();
     fromMock.mockReset();
+    // [getMyProfile() TTL 캐시 도입](2026-10-09) 모듈 레벨 캐시가 테스트 간에
+    // 새어나가지 않게 매번 초기화한다. 이 파일은 vi.mock(정적, 파일 전체에
+    // 적용)만 쓰고 vi.doMock+resetModules는 안 써서 정적 import로도 안전하다
+    // (profile.test.ts와 달리 모듈 캐시 선점 충돌이 없음 — 실측 확인).
+    invalidateMyProfileCache();
   });
 
   it('비로그인이면 guest', async () => {

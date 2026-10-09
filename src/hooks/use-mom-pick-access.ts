@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useUser } from '@/hooks/use-user';
-import { getMyProfile, Profile } from '@/lib/auth/profile';
+import { getMyProfile, invalidateMyProfileCache, Profile } from '@/lib/auth/profile';
 import { canAccessCommunityFeed } from '@/lib/community/grades';
 
 // [새싹맘 등급 조건부 권한 제어 및 안내 팝업](2026-09-02 사용자 지시): "맘스픽" 진입 시
@@ -39,6 +39,13 @@ export function useMomPickAccess(refreshKey?: number): { state: MomPickAccessSta
     }
     let cancelled = false;
     setIsProfileLoading(true);
+    // [프로필 캐싱 도입 후에도 refreshKey 즉시 반영 보장](2026-10-09
+    // getMyProfile()에 TTL 캐시 추가) refreshKey를 바꾼다는 건 호출부가
+    // "방금 뭔가 바뀌었으니 꼭 새로 읽어라"라고 명시하는 신호다 — 이 훅이
+    // 그 신호를 받을 때마다 직접 캐시를 무효화해, 호출부가 무효화를 깜빡해도
+    // (예: mom-pick-view.tsx 외의 새 호출부) TTL 때문에 예전 값을 보여주는
+    // 사고(2026-09-13에 고친 버그와 동일 종류)가 재발하지 않게 한다.
+    invalidateMyProfileCache();
     getMyProfile()
       .then((p) => {
         if (!cancelled) setProfile(p);

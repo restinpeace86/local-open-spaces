@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HomeView } from './home-view';
 import { NearbyItem } from '@/lib/spaces/get-nearby';
+import { invalidateMyProfileCache } from '@/lib/auth/profile';
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: () => {} }),
@@ -165,6 +166,9 @@ describe('HomeView', () => {
     getUserMock.mockReset();
     getUserMock.mockResolvedValue({ data: { user: null } });
     fromMock.mockReset();
+    // [getMyProfile() TTL 캐시 도입](2026-10-09) 모듈 레벨 캐시가 테스트 간에
+    // 새어나가지 않도록 매번 초기화한다.
+    invalidateMyProfileCache();
   });
 
   it('Hero Carousel/대분류 그리드를 홈 탭에서 즉시 렌더링한다', () => {

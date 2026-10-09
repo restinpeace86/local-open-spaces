@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useMomPickAccess } from '@/hooks/use-mom-pick-access';
-import { getMyProfile } from '@/lib/auth/profile';
+import { getMyProfile, invalidateMyProfileCache } from '@/lib/auth/profile';
 import { LoginPromptModal } from './login-prompt-modal';
 import { SaessakMomGuideModal } from './saessak-mom-guide-modal';
 import { SurveyReviewComposer } from './survey-review-composer';
@@ -116,6 +116,11 @@ export function MomPickView() {
     // 재조회시킨다 — 안 그러면 글 등록 직후 grade가 sprout로 승급돼도 이 화면이
     // 계속 예전 state를 참조해 "첫 글 쓰러 가기" 안내가 다시 뜨는 문제가 있었다.
     setAccessRefreshKey((k) => k + 1);
+    // [프로필 캐싱 도입 후에도 이 즉시-반영 보장 유지](2026-10-09 사용자 지시로
+    // getMyProfile()에 TTL 캐시 추가) 글 작성으로 DB 트리거가 grade를 막
+    // 승급시킨 직후라 캐시가 알 길이 없는 "서버 쪽 변경"에 해당한다 — TTL이
+    // 지날 때까지 기다리지 않도록 명시적으로 무효화하고 재조회한다.
+    invalidateMyProfileCache();
     setProfile(await getMyProfile());
   }
 

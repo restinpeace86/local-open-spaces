@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CompleteProfileView } from './complete-profile-view';
+import { invalidateMyProfileCache } from '@/lib/auth/profile';
 
 const getUserMock = vi.fn();
 const onAuthStateChangeMock = vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } }));
@@ -43,6 +44,9 @@ describe('CompleteProfileView', () => {
     fromMock.mockReset();
     replaceMock.mockReset();
     mockSearchParams = new URLSearchParams();
+    // [getMyProfile() TTL 캐시 도입](2026-10-09) 모듈 레벨 캐시가 테스트 간에
+    // 새어나가지 않게 매번 초기화한다.
+    invalidateMyProfileCache();
   });
 
   it('로그인하지 않았으면 홈으로 되돌려보낸다', async () => {

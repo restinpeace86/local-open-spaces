@@ -25,18 +25,76 @@ export type Profile = {
   updated_at: string;
 };
 
+// [프로필 캐싱 — 중복 왕복 제거](2026-10-09 사용자 질문: "위치설정이라던가
+// 온보딩때의 애 나이같은거는 바로바로 세션으로 가지고 있는거야?") 실측
+// 확인: getMyProfile()이 15곳에서 호출되는데 캐시가 전혀 없어 매번
+// auth.getUser()+profiles select 2왕복(왕복 1회 ~70~180ms, 같은 세션에서
+// 이미 실측)을 새로 한다 — 특히 리스트 카드마다 하나씩 렌더되는
+// BookmarkButton처럼 "같은 화면에 여러 개" 뜨는 컴포넌트는 그 개수만큼
+// 중복 조회가 발생한다. culture-club-store-coordinates-cache.ts와 동일한
+// 패턴(짧은 TTL + 진행 중인 요청을 공유해 동시 호출을 중복시키지 않음)
+// 으로 중복을 없앤다(제5장 제4조 기존 구조 우선) — 호출부 15곳은 전혀
+// 안 바뀐다(이 파일 내부만 바뀜).
+//
+// [무효화가 필요한 지점] updateNickname/updateBirthYearsAndMonths(이
+// 파일)가 직접 바꾸는 경우는 즉시 invalidateMyProfileCache()로 무효화한다.
+// 로그인/로그아웃(다른 사용자로 전환)도 onAuthStateChange로 감지해
+// 무효화한다 — 안 그러면 로그아웃 후 다른 계정으로 로그인해도 이전
+// 사용자의 캐시된 프로필을 잠깐 돌려주는 사고가 날 수 있다. 반면 서버
+// 쪽에서 바뀌는 경우(DB 트리거로 등급 승급, /api/ai-chat/search의 무료
+// 횟수 소진 등)는 이 클라이언트 캐시가 알 방법이 없어 TTL(30초)이 지나야
+// 반영된다 — "글쓰기 직후 즉시 등급이 바뀌어야 하는" 케이스(2026-09-13에
+// 고친 버그, mom-pick-view.tsx의 refreshProfileAfterPost)는 TTL을
+// 기다리지 않도록 그 호출부가 invalidateMyProfileCache()를 직접 부른다.
+const CACHE_TTL_MS = 30 * 1000;
+let cachedResult: { profile: Profile | null; fetchedAt: number } | null = null;
+let pendingRequest: Promise<Profile | null> | null = null;
+let hasSubscribedToAuthChanges = false;
+
+export function invalidateMyProfileCache(): void {
+  cachedResult = null;
+  pendingRequest = null;
+}
+
+function ensureAuthInvalidationSubscribed(supabase: ReturnType<typeof createClient>): void {
+  if (hasSubscribedToAuthChanges) return;
+  hasSubscribedToAuthChanges = true;
+  supabase.auth.onAuthStateChange(() => {
+    invalidateMyProfileCache();
+  });
+}
+
 // 로그인하지 않은 상태면 null을 반환한다(에러가 아님 — 호출부가 "로그인 필요" 화면을
 // 보여줄 수 있는 정상적인 상태).
 export async function getMyProfile(): Promise<Profile | null> {
-  const supabase = createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return null;
+  if (cachedResult && Date.now() - cachedResult.fetchedAt < CACHE_TTL_MS) {
+    return cachedResult.profile;
+  }
+  if (pendingRequest) return pendingRequest;
 
-  const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).single();
-  if (error) throw new Error(`프로필 조회 실패: ${error.message}`);
-  return data as Profile;
+  const supabase = createClient();
+  ensureAuthInvalidationSubscribed(supabase);
+
+  pendingRequest = (async () => {
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) {
+      cachedResult = { profile: null, fetchedAt: Date.now() };
+      return null;
+    }
+
+    const { data, error } = await supabase.from('profiles').select('*').eq('id', user.id).single();
+    if (error) throw new Error(`프로필 조회 실패: ${error.message}`);
+    cachedResult = { profile: data as Profile, fetchedAt: Date.now() };
+    return cachedResult.profile;
+  })();
+
+  try {
+    return await pendingRequest;
+  } finally {
+    pendingRequest = null;
+  }
 }
 
 // birthYears/birthMonths: 같은 인덱스로 대응하는 자녀 출생년도/출생월 배열
@@ -56,6 +114,7 @@ export async function updateBirthYearsAndMonths(birthYears: number[], birthMonth
     .select()
     .single();
   if (error) throw new Error(`프로필 저장 실패: ${error.message}`);
+  invalidateMyProfileCache();
   return data as Profile;
 }
 
@@ -76,5 +135,6 @@ export async function updateNickname(nickname: string): Promise<Profile> {
     .select()
     .single();
   if (error) throw new Error(`닉네임 저장 실패: ${error.message}`);
+  invalidateMyProfileCache();
   return data as Profile;
 }

@@ -1,6 +1,7 @@
 import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useMomPickAccess } from './use-mom-pick-access';
+import { invalidateMyProfileCache } from '@/lib/auth/profile';
 
 // [새싹맘 등급 조건부 권한 제어 및 안내 팝업](2026-09-02 사용자 지시): "맘스픽" 진입 시
 // 3가지 분기(비로그인/새싹맘 미달성/새싹맘 이상)를 판별하는 useMomPickAccess 검증.
@@ -23,6 +24,9 @@ describe('useMomPickAccess', () => {
   afterEach(() => {
     getUserMock.mockReset();
     fromMock.mockReset();
+    // [getMyProfile() TTL 캐시 도입](2026-10-09) 모듈 레벨 캐시가 테스트 간에
+    // 새어나가지 않게 매번 초기화한다.
+    invalidateMyProfileCache();
   });
 
   it('Case 1: 비로그인이면 guest', async () => {
