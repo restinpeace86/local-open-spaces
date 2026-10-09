@@ -322,3 +322,73 @@ function buildUnifiedShinsegaeRow(row) {
     updated_at: row.updated_at,
   };
 }
+
+// [스타필드 문화센터(클래스콕) — 목록 직결](2026-10-09, 사용자 승인:
+// "그렇게 진행하자") 신세계/AK플라자와 동일한 구조(별도 원본 스테이징
+// 테이블 없음) — 이미지는 목록 응답 자체에 이미 있어(thumbnailImgPath)
+// 별도 상세수집 단계가 채울 필요가 없고, 강좌 소개 텍스트만 starfield-
+// culture-club-detail.mjs가 1회성으로 채운다.
+export function toUnifiedStarfieldRow(row) {
+  return omitUndefinedKeys(buildUnifiedStarfieldRow(row));
+}
+
+function buildUnifiedStarfieldRow(row) {
+  return {
+    brand: 'starfield',
+    source_class_id: row.class_id,
+    class_title: row.class_title,
+    store_code: row.store_code,
+    store_name: row.store_name,
+    main_category_name: null, // 목록에 상위 분류 필드가 없다(추측 금지)
+    // [수강대상 라벨 — 응답에 없어 호출 컨텍스트가 채움](실측 확인,
+    // starfield-culture-club-parser.mjs 주석 참고) 신세계와 동일하게
+    // sub_category_name 자리에 노출한다.
+    sub_category_name: row.target_name ?? null,
+    classroom: null, // 목록에 강의실 정보가 없다(실측 확인)
+    class_day: row.class_day,
+    start_time: row.start_time,
+    end_time: row.end_time,
+    // [학습비/재료비 분리 — 항상 null, 총액만 신뢰 가능](실측 확인,
+    // starfield-culture-club-parser.mjs 주석 참고) class_original_fee에는
+    // 할인 전 총액(다른 브랜드와 달리 실제로 존재)을 넣는다.
+    class_original_fee: row.class_original_fee,
+    class_fee: row.class_fee,
+    class_material_fee: null,
+    instructor_name: null, // pfmcoNm은 업체명이라 개인 강사명이 아니다(raw_extra에 보존)
+    min_age_months: row.min_age_months,
+    max_age_months: row.max_age_months,
+    schedule_start_date: row.schedule_start_date,
+    schedule_end_date: row.schedule_end_date,
+    schedule_days_code: row.schedule_days_code,
+    round: null,
+    total_sessions: row.total_sessions,
+    normalized_status: row.normalized_status,
+    raw_status: row.raw_status,
+    // [접수 시작 시각 — 날짜+시각까지 정밀하게 제공됨](실측 확인) 다른
+    // 브랜드와 달리 emart와 동일한 정밀도의 register_start_at을 그대로
+    // 쓸 수 있다.
+    register_start_at: row.register_start_at,
+    is_excluded: row.is_excluded ?? false,
+    raw_extra: {
+      target_code: row.target_code,
+      target_name: row.target_name,
+      pfmco_nm: row.pfmco_nm,
+      fdtr_yn: row.fdtr_yn,
+      lctr_type: row.lctr_type,
+      register_end_at: row.register_end_at,
+      // [이미지 — 목록 단계에서 바로 채움](실측 확인: thumbnailImgPath가
+      // 이미 완전한 URL) rehost-culture-club-thumbnails.mjs(브랜드 공용)
+      // 가 이 raw_extra.main_image_url을 그대로 재호스팅 대상으로 읽는다.
+      main_image_url: row.main_image_url,
+      // [소개 텍스트 — starfield-culture-club-detail.mjs가 채움] 목록
+      // 응답엔 없고 상세 페이지에만 있다. 이 메인 배치 자신은 채우지
+      // 않고, fetchDetailEnrichmentByClassId가 기존 값을 읽어와 병합해줄
+      // 때만 값이 들어온다(없으면 undefined → omitUndefinedKeys가 제거).
+      class_intro: row.class_intro,
+    },
+    detail_fetched_at: row.detail_fetched_at,
+    collected_at: row.collected_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}

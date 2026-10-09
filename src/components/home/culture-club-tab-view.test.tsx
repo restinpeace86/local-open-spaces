@@ -25,7 +25,7 @@ vi.mock('@/lib/community/bookmarks', async (importOriginal) => {
 
 type ClassFixture = {
   id: number;
-  brand: 'emart' | 'lottemart' | 'hyundai' | 'shinsegae' | 'ak_plaza';
+  brand: 'emart' | 'lottemart' | 'hyundai' | 'shinsegae' | 'ak_plaza' | 'starfield';
   source_class_id: string;
   class_title: string;
   store_code: string | null;
@@ -216,6 +216,39 @@ function makeAkplazaClass(overrides: Partial<ClassFixture> = {}): ClassFixture {
       main_image_url: 'http://img-culture.akplaza.com/upload/wlect/20261006916315851.jpg',
     },
     collected_at: '2026-10-09T04:12:00+00:00',
+    ...overrides,
+  };
+}
+
+function makeStarfieldClass(overrides: Partial<ClassFixture> = {}): ClassFixture {
+  return {
+    id: 6,
+    brand: 'starfield',
+    source_class_id: 'L260910153',
+    class_title: '[10월9일/원데이]트니트니 (25~35개월)',
+    store_code: '02',
+    store_name: '수원점',
+    sub_category_name: '영유아',
+    class_day: ['금'],
+    start_time: '1130',
+    end_time: '1210',
+    class_fee: 30000,
+    class_material_fee: null,
+    instructor_name: null,
+    min_age_months: 25,
+    max_age_months: 35,
+    schedule_start_date: '2026-10-09',
+    schedule_end_date: '2026-10-09',
+    total_sessions: 1,
+    normalized_status: 'OPEN',
+    raw_status: 'P',
+    register_start_at: '2026-09-10T00:00:00+09:00',
+    raw_extra: {
+      target_code: '3',
+      target_name: '영유아',
+      main_image_url: 'https://image.classkok.com/lect/20260910/1e5ce92f-9829-4616-942e-a59ba6b0e437.jpg',
+    },
+    collected_at: '2026-10-09T09:00:00+00:00',
     ...overrides,
   };
 }
@@ -954,6 +987,56 @@ describe('CultureClubTabView — AK플라자 문화아카데미(2026-10-09)', ()
     fireEvent.click(screen.getAllByText(/패밀리 오케스트라/)[0]);
 
     await screen.findByText('AK플라자 문화아카데미 강좌 상세');
+    expect(screen.queryByText('접수 페이지로 가기 ↗')).not.toBeInTheDocument();
+  });
+});
+
+describe('CultureClubTabView — 스타필드 문화센터(2026-10-09)', () => {
+  it('스타필드 강좌 카드가 지점명/수강대상 뱃지와 함께 보인다', async () => {
+    stubFetch([makeStarfieldClass()]);
+    const { container } = render(<CultureClubTabView />);
+    await screen.findByText(/트니트니/);
+
+    expect(screen.getByText(/수원점/)).toBeInTheDocument();
+    expect(screen.getByText('영유아')).toBeInTheDocument();
+    expect(container.querySelector('img')).toHaveAttribute(
+      'src',
+      'https://image.classkok.com/lect/20260910/1e5ce92f-9829-4616-942e-a59ba6b0e437.jpg'
+    );
+  });
+
+  it('찜 버튼은 아직 지원하지 않아 렌더링되지 않는다(제5장 제3조 — 범위를 넘는 결정을 임의로 추가하지 않음)', async () => {
+    mockUser.current = { id: 'user-1' };
+    getMyProfileMock.mockResolvedValue({ grade: 'active', birth_years: [], birth_months: [] });
+    stubFetch([makeStarfieldClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/트니트니/);
+
+    expect(screen.queryByLabelText('찜하기')).not.toBeInTheDocument();
+    mockUser.current = null;
+  });
+
+  it('클릭하면 상세 시트가 열리고 스타필드 상세 페이지로 가는 외부 링크가 올바른 파라미터로 만들어진다(2026-10-09 실측 확인된 URL)', async () => {
+    stubFetch([makeStarfieldClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/트니트니/);
+    fireEvent.click(screen.getAllByText(/트니트니/)[0]);
+
+    await screen.findByText('스타필드 문화센터 강좌 상세');
+    const link = screen.getByText('접수 페이지로 가기 ↗');
+    const href = link.closest('a')?.getAttribute('href') ?? '';
+    expect(href).toContain('https://www.classkok.com/mlt/initLctrDetl.do');
+    expect(href).toContain('lctrNo=L260910153');
+    expect(href).toContain('store=suwon');
+  });
+
+  it('store_code가 매핑에 없으면(아직 확인 못한 지점) 신청 버튼 대신 상태 라벨이 보인다', async () => {
+    stubFetch([makeStarfieldClass({ store_code: '99' })]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/트니트니/);
+    fireEvent.click(screen.getAllByText(/트니트니/)[0]);
+
+    await screen.findByText('스타필드 문화센터 강좌 상세');
     expect(screen.queryByText('접수 페이지로 가기 ↗')).not.toBeInTheDocument();
   });
 });

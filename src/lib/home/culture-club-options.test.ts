@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { buildAkplazaDetailUrl, buildCultureClubThumbnailUrl, buildShinsegaeDetailUrl } from './culture-club-options';
+import {
+  buildAkplazaDetailUrl,
+  buildCultureClubThumbnailUrl,
+  buildShinsegaeDetailUrl,
+  buildStarfieldDetailUrl,
+} from './culture-club-options';
 
 // [이미지 — 썸네일 CDN 확인됨](2026-10-03 사용자 제공 URL로 실측 확인): 두 가지 실제
 // main_image_key 형태("category/4/403/{uuid}", "classImages/{uuid}") 모두에서
@@ -43,6 +48,16 @@ describe('buildAkplazaDetailUrl', () => {
   it('store/main_cd/sSubject_cd로 실제 확인된 URL 형태를 만든다', () => {
     expect(buildAkplazaDetailUrl({ storeCode: '04', mainCd: '3', classId: '835566' })).toBe(
       'https://culture.akplaza.com/course/detail?store=04&main_cd=3&sSubject_cd=835566'
+    );
+  });
+});
+
+// [스타필드 상세/신청 페이지 — 실측 확인](2026-10-09): "/mlt/initLctrDetl.do
+// ?lctrNo=L260912228&store=suwon" 쿠키 없이도 정상 반환됨을 확인했다.
+describe('buildStarfieldDetailUrl', () => {
+  it('lctrNo/store(영문 지점명)로 실제 확인된 URL 형태를 만든다', () => {
+    expect(buildStarfieldDetailUrl({ storeEnNm: 'suwon', classId: 'L260912228' })).toBe(
+      'https://www.classkok.com/mlt/initLctrDetl.do?lctrNo=L260912228&store=suwon'
     );
   });
 });

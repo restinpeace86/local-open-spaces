@@ -18,6 +18,7 @@ export const CULTURE_CLUB_BRAND_OPTIONS = [
   { key: 'hyundai', label: '현대백화점 문화센터' },
   { key: 'shinsegae', label: '신세계 아카데미' },
   { key: 'ak_plaza', label: 'AK플라자 문화아카데미' },
+  { key: 'starfield', label: '스타필드 문화센터' },
 ] as const;
 
 export type CultureClubBrandKey = (typeof CULTURE_CLUB_BRAND_OPTIONS)[number]['key'];
@@ -129,4 +130,25 @@ export function buildShinsegaeDetailUrl(params: { yearCode: string; semesterCode
 export function buildAkplazaDetailUrl(params: { storeCode: string; mainCd: string; classId: string }) {
   const query = new URLSearchParams({ store: params.storeCode, main_cd: params.mainCd, sSubject_cd: params.classId });
   return `https://culture.akplaza.com/course/detail?${query.toString()}`;
+}
+
+// [스타필드 지점 — 숫자 코드 → 영문 지점명](2026-10-09 실측 확인)
+// culture_club_classes.store_code는 숫자 코드("01"/"02"/"03")지만, 상세
+// 페이지 딥링크는 영문 지점명을 쓴다(scripts/ingest/lib/starfield-
+// culture-club-parser.mjs STARFIELD_STORES와 동일한 매핑 — Node 배치
+// 스크립트와 브라우저 코드는 런타임이 달라 공유 모듈로 묶지 않고 각자
+// 둔다, 제5장 제4조 기존 구조 그대로 따름).
+export const STARFIELD_STORE_EN_NAME_BY_CODE: Record<string, string> = {
+  '01': 'goyang',
+  '02': 'suwon',
+  '03': 'unjeong',
+};
+
+// [스타필드 상세/신청 페이지 — 실측 확인](2026-10-09) "/mlt/initLctrDetl.do
+// ?lctrNo=L260912228&store=suwon" 쿠키 없이도 200 + 정상 콘텐츠를
+// 돌려줌을 확인(로그인 여부와 무관하게 공개 페이지, og:url 메타에서 이
+// 형태를 그대로 확인) — 다른 브랜드처럼 그대로 외부 링크로 써도 된다.
+export function buildStarfieldDetailUrl(params: { storeEnNm: string; classId: string }) {
+  const query = new URLSearchParams({ lctrNo: params.classId, store: params.storeEnNm });
+  return `https://www.classkok.com/mlt/initLctrDetl.do?${query.toString()}`;
 }

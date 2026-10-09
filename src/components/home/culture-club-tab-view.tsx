@@ -15,6 +15,8 @@ import { formatAgeRangeMonths } from '@/lib/home/culture-club-age-format';
 import {
   buildCultureClubThumbnailUrl,
   buildAkplazaDetailUrl,
+  buildStarfieldDetailUrl,
+  STARFIELD_STORE_EN_NAME_BY_CODE,
   buildLottemartCourseViewUrl,
   buildShinsegaeDetailUrl,
   CULTURE_CLUB_BRAND_OPTIONS,
@@ -111,6 +113,12 @@ function buildExternalApplyUrl(item: CultureClubClass): string | null {
       return buildAkplazaDetailUrl({ storeCode: item.store_code, mainCd, classId: item.source_class_id });
     }
   }
+  if (item.brand === 'starfield' && item.store_code) {
+    const storeEnNm = STARFIELD_STORE_EN_NAME_BY_CODE[item.store_code];
+    if (storeEnNm) {
+      return buildStarfieldDetailUrl({ storeEnNm, classId: item.source_class_id });
+    }
+  }
   return null;
 }
 
@@ -133,7 +141,7 @@ type StoreOption = { storeCode: string; label: string; distanceMeters?: number |
 
 type CultureClubClass = {
   id: number;
-  brand: 'emart' | 'lottemart' | 'hyundai' | 'shinsegae' | 'ak_plaza';
+  brand: 'emart' | 'lottemart' | 'hyundai' | 'shinsegae' | 'ak_plaza' | 'starfield';
   source_class_id: string;
   class_title: string;
   store_code: string | null;
@@ -169,6 +177,7 @@ const BRAND_LABELS: Record<CultureClubClass['brand'], string> = {
   hyundai: '현대백화점',
   shinsegae: '신세계 아카데미',
   ak_plaza: 'AK플라자 문화아카데미',
+  starfield: '스타필드 문화센터',
 };
 
 function formatTimeRange(start: string | null, end: string | null) {
@@ -759,14 +768,21 @@ export function CultureClubTabView() {
     setSelectedStoreCodes(new Set());
     setSelectedSubCategories(new Set());
     setSelectedTargets(new Set());
-    // [현대백화점/신세계/AK플라자 — 지점 뱃지 드릴다운 아직 미지원]
-    // (2026-10-08, Decision 029 / todo.md 개선사항2 — 2026-10-09 AK플라자
-    // 추가 때도 동일하게 적용) 이 화면(사용자 노출용 지점 뱃지 드릴다운)
-    // 전용 API가 아직 없다 — 관리자 패널용 지점 목록 API(/api/culture-club/
-    // akplaza-stores)는 오늘 추가했지만 그건 별개 용도라, 추측으로 이
-    // 화면에 지점 목록을 지어내지 않고 빈 목록으로 둔다(브랜드 필터 자체는
-    // 정상 동작, 요일 등 다른 필터와 함께 전체 통합검색에 그대로 걸린다).
-    if (brandKey === 'all' || brandKey === 'hyundai' || brandKey === 'shinsegae' || brandKey === 'ak_plaza') {
+    // [현대백화점/신세계/AK플라자/스타필드 — 지점 뱃지 드릴다운 아직
+    // 미지원](2026-10-08, Decision 029 / todo.md 개선사항2 — 2026-10-09
+    // AK플라자/스타필드 추가 때도 동일하게 적용) 이 화면(사용자 노출용
+    // 지점 뱃지 드릴다운) 전용 API가 아직 없다 — 관리자 패널용 지점 목록
+    // API(/api/culture-club/akplaza-stores, starfield-stores)는 오늘
+    // 추가했지만 그건 별개 용도라, 추측으로 이 화면에 지점 목록을
+    // 지어내지 않고 빈 목록으로 둔다(브랜드 필터 자체는 정상 동작, 요일
+    // 등 다른 필터와 함께 전체 통합검색에 그대로 걸린다).
+    if (
+      brandKey === 'all' ||
+      brandKey === 'hyundai' ||
+      brandKey === 'shinsegae' ||
+      brandKey === 'ak_plaza' ||
+      brandKey === 'starfield'
+    ) {
       setStores([]);
       return;
     }

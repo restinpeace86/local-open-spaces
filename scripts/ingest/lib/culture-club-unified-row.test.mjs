@@ -5,6 +5,7 @@ import {
   toUnifiedHyundaiRow,
   toUnifiedShinsegaeRow,
   toUnifiedAkplazaRow,
+  toUnifiedStarfieldRow,
 } from './culture-club-unified-row.mjs';
 
 describe('toUnifiedEmartRow', () => {
@@ -249,6 +250,62 @@ describe('toUnifiedAkplazaRow', () => {
 
   it('class_intro이 아직 없으면(상세수집 전) undefined로 비어있다', () => {
     const result = toUnifiedAkplazaRow({ class_id: '835467', class_title: '테스트' });
+    expect(result.raw_extra.class_intro).toBeUndefined();
+  });
+});
+
+describe('toUnifiedStarfieldRow', () => {
+  it('스타필드 행을 통합 테이블 행으로 변환한다(이미지는 목록 단계에서 이미 채워져 있음)', () => {
+    const row = {
+      class_id: 'L260910153',
+      class_title: '[10월9일/원데이]트니트니 (25~35개월)',
+      store_code: '01',
+      store_name: '고양점',
+      class_day: ['금'],
+      schedule_days_code: ['FRI'],
+      start_time: '1130',
+      end_time: '1210',
+      class_fee: 30000,
+      class_original_fee: 30000,
+      min_age_months: 25,
+      max_age_months: 35,
+      schedule_start_date: '2026-10-09',
+      schedule_end_date: '2026-10-09',
+      total_sessions: 1,
+      raw_status: 'P',
+      normalized_status: 'OPEN',
+      register_start_at: '2026-09-10T00:00:00+09:00',
+      target_code: '3',
+      target_name: '영유아',
+      pfmco_nm: '트니트니',
+      fdtr_yn: 'N',
+      lctr_type: '1회',
+      register_end_at: '2026-10-09T11:29:59+09:00',
+      main_image_url: 'https://image.classkok.com/lect/20260910/1e5ce92f-9829-4616-942e-a59ba6b0e437.jpg',
+    };
+    const result = toUnifiedStarfieldRow(row);
+
+    expect(result.brand).toBe('starfield');
+    expect(result.source_class_id).toBe('L260910153');
+    // [수강대상 라벨 — 신세계와 동일하게 sub_category_name 자리에 노출]
+    expect(result.sub_category_name).toBe('영유아');
+    expect(result.raw_extra.target_code).toBe('3');
+    expect(result.class_original_fee).toBe(30000);
+    expect(result.raw_status).toBe('P');
+    expect(result.normalized_status).toBe('OPEN');
+    // [접수 시작 시각 — 다른 브랜드와 달리 정밀하게 제공됨]
+    expect(result.register_start_at).toBe('2026-09-10T00:00:00+09:00');
+    expect(result.raw_extra.register_end_at).toBe('2026-10-09T11:29:59+09:00');
+    expect(result.raw_extra.main_image_url).toBe('https://image.classkok.com/lect/20260910/1e5ce92f-9829-4616-942e-a59ba6b0e437.jpg');
+  });
+
+  it('class_intro이 row에 있으면 raw_extra로 그대로 전달된다', () => {
+    const result = toUnifiedStarfieldRow({ class_id: 'L1', class_title: '테스트', class_intro: '강좌 소개 텍스트' });
+    expect(result.raw_extra.class_intro).toBe('강좌 소개 텍스트');
+  });
+
+  it('class_intro이 아직 없으면(상세수집 전) undefined로 비어있다', () => {
+    const result = toUnifiedStarfieldRow({ class_id: 'L1', class_title: '테스트' });
     expect(result.raw_extra.class_intro).toBeUndefined();
   });
 });
