@@ -7,6 +7,7 @@ import {
   toUnifiedAkplazaRow,
   toUnifiedStarfieldRow,
   toUnifiedLotteDepartmentRow,
+  toUnifiedElandRetailRow,
 } from './culture-club-unified-row.mjs';
 
 describe('toUnifiedEmartRow', () => {
@@ -364,6 +365,66 @@ describe('toUnifiedLotteDepartmentRow', () => {
     expect(result.class_fee).toBe(12000);
     expect(result.start_time).toBe('1440');
     expect(result.min_age_months).toBe(7);
+    expect(result.raw_extra.class_intro).toBe('실제 강좌 소개');
+  });
+});
+
+describe('toUnifiedElandRetailRow', () => {
+  it('이랜드리테일 행을 통합 테이블 행으로 변환한다(목록 단계에서 이미 핵심 필드가 채워져 있음)', () => {
+    const row = {
+      class_id: '8222_66_B_36',
+      class_title: '11회 (월)동화촉감놀이 당나귀똥(11-20개월) 13:50',
+      store_code: '8222',
+      store_name: '부천',
+      class_day: ['월'],
+      schedule_days_code: ['MON'],
+      start_time: '1350',
+      end_time: '1430',
+      class_fee: 77000,
+      total_sessions: 11,
+      min_age_months: 11,
+      max_age_months: 20,
+      raw_status: '현장문의',
+      normalized_status: 'CLOSED',
+      target_code: 'B',
+      target_name: '엄마랑아기랑',
+      store_id: '8222',
+      sem_num: '66',
+      lec_type_id: 'B',
+      seq: '36',
+    };
+    const result = toUnifiedElandRetailRow(row);
+
+    expect(result.brand).toBe('eland_retail');
+    expect(result.source_class_id).toBe('8222_66_B_36');
+    expect(result.sub_category_name).toBe('엄마랑아기랑');
+    expect(result.instructor_name).toBeNull(); // "전문강사" placeholder뿐이라 항상 null(지어내지 않음)
+    expect(result.min_age_months).toBe(11);
+    expect(result.normalized_status).toBe('CLOSED');
+    expect(result.raw_extra.lec_type_id).toBe('B');
+    // 상세수집 전에는 classroom/schedule_start_date 등이 비어있다(undefined).
+    expect(result.classroom).toBeUndefined();
+    expect(result.schedule_start_date).toBeUndefined();
+  });
+
+  it('상세수집이 이미 끝난 행(merge된 값)은 보강 컬럼이 그대로 전달된다(재실행 시 유실 방지)', () => {
+    const result = toUnifiedElandRetailRow({
+      class_id: '8222_66_B_36',
+      class_title: '테스트',
+      store_code: '8222',
+      store_name: '부천',
+      raw_status: '현장문의',
+      normalized_status: 'CLOSED',
+      classroom: '키즈룸',
+      schedule_start_date: '2026-12-07',
+      schedule_end_date: '2027-02-22',
+      class_material_fee: 40000,
+      class_intro: '실제 강좌 소개',
+    });
+
+    expect(result.classroom).toBe('키즈룸');
+    expect(result.schedule_start_date).toBe('2026-12-07');
+    expect(result.class_material_fee).toBe(40000);
     expect(result.raw_extra.class_intro).toBe('실제 강좌 소개');
   });
 });

@@ -25,7 +25,7 @@ vi.mock('@/lib/community/bookmarks', async (importOriginal) => {
 
 type ClassFixture = {
   id: number;
-  brand: 'emart' | 'lottemart' | 'hyundai' | 'shinsegae' | 'ak_plaza' | 'starfield' | 'lotte_department';
+  brand: 'emart' | 'lottemart' | 'hyundai' | 'shinsegae' | 'ak_plaza' | 'starfield' | 'lotte_department' | 'eland_retail';
   source_class_id: string;
   class_title: string;
   store_code: string | null;
@@ -279,6 +279,41 @@ function makeLotteDepartmentClass(overrides: Partial<ClassFixture> = {}): ClassF
     raw_extra: {
       main_image_url: 'https://culture.lotteshopping.com/files/CUL_ONL/2026/8/202608281236327580.jpg',
       class_intro: '실제 강좌 소개',
+    },
+    collected_at: '2026-10-09T09:00:00+00:00',
+    ...overrides,
+  };
+}
+
+function makeElandRetailClass(overrides: Partial<ClassFixture> = {}): ClassFixture {
+  return {
+    id: 8,
+    brand: 'eland_retail',
+    source_class_id: '8222_66_B_36',
+    class_title: '11회 (월)동화촉감놀이 당나귀똥(11-20개월) 13:50',
+    store_code: '8222',
+    store_name: '부천',
+    sub_category_name: '엄마랑아기랑',
+    class_day: ['월'],
+    start_time: '1350',
+    end_time: '1430',
+    class_fee: 77000,
+    class_material_fee: 40000,
+    instructor_name: null,
+    min_age_months: 11,
+    max_age_months: 20,
+    schedule_start_date: '2026-12-07',
+    schedule_end_date: '2027-02-22',
+    total_sessions: 11,
+    normalized_status: 'OPEN',
+    raw_status: '수강신청',
+    register_start_at: null,
+    raw_extra: {
+      store_id: '8222',
+      sem_num: '66',
+      lec_type_id: 'B',
+      seq: '36',
+      class_intro: '동화촉감놀이 당나귀똥 전문강사 이정민',
     },
     collected_at: '2026-10-09T09:00:00+00:00',
     ...overrides,
@@ -1111,5 +1146,43 @@ describe('CultureClubTabView — 롯데백화점 문화센터(2026-10-09)', () =
     expect(href).toContain('yy=2026');
     expect(href).toContain('lectSmsterCd=3');
     expect(href).toContain('lectCd=0488');
+  });
+});
+
+describe('CultureClubTabView — 이랜드리테일 문화센터(2026-10-09)', () => {
+  it('이랜드리테일 강좌 카드가 지점명/수강대상 뱃지와 함께 보인다', async () => {
+    stubFetch([makeElandRetailClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/당나귀똥/);
+
+    expect(screen.getByText(/부천/)).toBeInTheDocument();
+    expect(screen.getByText('엄마랑아기랑')).toBeInTheDocument();
+  });
+
+  it('찜 버튼은 아직 지원하지 않아 렌더링되지 않는다(제5장 제3조 — 범위를 넘는 결정을 임의로 추가하지 않음)', async () => {
+    mockUser.current = { id: 'user-1' };
+    getMyProfileMock.mockResolvedValue({ grade: 'active', birth_years: [], birth_months: [] });
+    stubFetch([makeElandRetailClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/당나귀똥/);
+
+    expect(screen.queryByLabelText('찜하기')).not.toBeInTheDocument();
+    mockUser.current = null;
+  });
+
+  it('클릭하면 상세 시트가 열리고 이랜드리테일 상세 페이지로 가는 외부 링크가 복합 class_id를 분해한 파라미터로 만들어진다(2026-10-09 실측 확인된 URL)', async () => {
+    stubFetch([makeElandRetailClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/당나귀똥/);
+    fireEvent.click(screen.getAllByText(/당나귀똥/)[0]);
+
+    await screen.findByText('이랜드리테일 문화센터 강좌 상세');
+    const link = screen.getByText('접수 페이지로 가기 ↗');
+    const href = link.closest('a')?.getAttribute('href') ?? '';
+    expect(href).toContain('https://www.elandretail.com/m/culture/culture04.do');
+    expect(href).toContain('storeid=8222');
+    expect(href).toContain('semnum=66');
+    expect(href).toContain('lectypeid=B');
+    expect(href).toContain('seq=36');
   });
 });

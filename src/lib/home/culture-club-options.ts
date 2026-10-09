@@ -20,6 +20,7 @@ export const CULTURE_CLUB_BRAND_OPTIONS = [
   { key: 'ak_plaza', label: 'AK플라자 문화아카데미' },
   { key: 'starfield', label: '스타필드 문화센터' },
   { key: 'lotte_department', label: '롯데백화점 문화센터' },
+  { key: 'eland_retail', label: '이랜드리테일 문화센터' },
 ] as const;
 
 export type CultureClubBrandKey = (typeof CULTURE_CLUB_BRAND_OPTIONS)[number]['key'];
@@ -164,4 +165,16 @@ export function buildLotteDepartmentDetailUrl(classId: string) {
   const [brchCd, yy, lectSmsterCd, lectCd] = classId.split('_');
   const query = new URLSearchParams({ brchCd, yy, lectSmsterCd, lectCd });
   return `https://culture.lotteshopping.com/application/search/view.do?${query.toString()}`;
+}
+
+// [이랜드리테일 상세/신청 페이지 — 실측 확인](2026-10-09) "/m/culture/
+// culture04.do?storeid=8222&semnum=66&lectypeid=B&seq=36" 로그인 없이도
+// 200 + 정상 콘텐츠를 돌려줌을 확인(실제 신청 제출은 로그인이 필요하지만
+// 상세 열람은 공개) — source_class_id가 이 4개 값을 "_"로 합친 복합
+// 키라(scripts/ingest/lib/eland-retail-culture-club-parser.mjs 참고)
+// 그대로 분해해서 재구성한다.
+export function buildElandRetailDetailUrl(classId: string) {
+  const [storeId, semNum, lecTypeId, seq] = classId.split('_');
+  const query = new URLSearchParams({ storeid: storeId, semnum: semNum, lectypeid: lecTypeId, seq });
+  return `https://www.elandretail.com/m/culture/culture04.do?${query.toString()}`;
 }

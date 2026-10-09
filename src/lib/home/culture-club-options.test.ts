@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildAkplazaDetailUrl,
   buildCultureClubThumbnailUrl,
+  buildElandRetailDetailUrl,
   buildLotteDepartmentDetailUrl,
   buildShinsegaeDetailUrl,
   buildStarfieldDetailUrl,
@@ -70,6 +71,17 @@ describe('buildLotteDepartmentDetailUrl', () => {
   it('복합 class_id("brchCd_yy_lectSmsterCd_lectCd")를 분해해 실제 확인된 URL 형태를 만든다', () => {
     expect(buildLotteDepartmentDetailUrl('0025_2026_3_0478')).toBe(
       'https://culture.lotteshopping.com/application/search/view.do?brchCd=0025&yy=2026&lectSmsterCd=3&lectCd=0478'
+    );
+  });
+});
+
+// [이랜드리테일 상세/신청 페이지 — 실측 확인](2026-10-09): "/m/culture/
+// culture04.do?storeid=8222&semnum=66&lectypeid=B&seq=36" 로그인 없이도
+// 정상 반환됨을 확인했다.
+describe('buildElandRetailDetailUrl', () => {
+  it('복합 class_id("storeId_semNum_lecTypeId_seq")를 분해해 실제 확인된 URL 형태를 만든다', () => {
+    expect(buildElandRetailDetailUrl('8222_66_B_36')).toBe(
+      'https://www.elandretail.com/m/culture/culture04.do?storeid=8222&semnum=66&lectypeid=B&seq=36'
     );
   });
 });

@@ -17,6 +17,7 @@ import {
   buildAkplazaDetailUrl,
   buildStarfieldDetailUrl,
   buildLotteDepartmentDetailUrl,
+  buildElandRetailDetailUrl,
   STARFIELD_STORE_EN_NAME_BY_CODE,
   buildLottemartCourseViewUrl,
   buildShinsegaeDetailUrl,
@@ -123,6 +124,9 @@ function buildExternalApplyUrl(item: CultureClubClass): string | null {
   if (item.brand === 'lotte_department') {
     return buildLotteDepartmentDetailUrl(item.source_class_id);
   }
+  if (item.brand === 'eland_retail') {
+    return buildElandRetailDetailUrl(item.source_class_id);
+  }
   return null;
 }
 
@@ -145,7 +149,7 @@ type StoreOption = { storeCode: string; label: string; distanceMeters?: number |
 
 type CultureClubClass = {
   id: number;
-  brand: 'emart' | 'lottemart' | 'hyundai' | 'shinsegae' | 'ak_plaza' | 'starfield' | 'lotte_department';
+  brand: 'emart' | 'lottemart' | 'hyundai' | 'shinsegae' | 'ak_plaza' | 'starfield' | 'lotte_department' | 'eland_retail';
   source_class_id: string;
   class_title: string;
   store_code: string | null;
@@ -183,6 +187,7 @@ const BRAND_LABELS: Record<CultureClubClass['brand'], string> = {
   ak_plaza: 'AK플라자 문화아카데미',
   starfield: '스타필드 문화센터',
   lotte_department: '롯데백화점 문화센터',
+  eland_retail: '이랜드리테일 문화센터',
 };
 
 function formatTimeRange(start: string | null, end: string | null) {
@@ -786,7 +791,8 @@ export function CultureClubTabView() {
       brandKey === 'shinsegae' ||
       brandKey === 'ak_plaza' ||
       brandKey === 'starfield' ||
-      brandKey === 'lotte_department'
+      brandKey === 'lotte_department' ||
+      brandKey === 'eland_retail'
     ) {
       setStores([]);
       return;

@@ -119,6 +119,26 @@ describe('GET /api/culture-club/search — Branch-First 거리순 정렬', () =>
     expect(storeScopeFilter).not.toContain('brand.eq.lottedept');
   });
 
+  // [이랜드리테일도 동일한 패턴 — 처음부터 알리아스로 대비](2026-10-09)
+  // "ELAND_STORE_" 접두사도 소문자화하면 "eland"가 되는데 brand 값은
+  // "eland_retail"다 — 처음부터 등록한 알리아스가 실제로 동작하는지
+  // 검증한다.
+  it('ELAND_STORE_ 접두사는 store-scope 필터에서 brand를 "eland_retail"로 정규화한다', async () => {
+    const { fromMock, rpcMock, orMock } = mockAdminClient({
+      rowsByRange: () => [makeRow(1, 'eland_retail', '8222')],
+      coords: [{ external_id: 'ELAND_STORE_8222', lng: 126.78, lat: 37.49 }],
+      total: 1,
+    });
+    vi.doMock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ from: fromMock, rpc: rpcMock }) }));
+    const { GET } = await import('./route');
+
+    await GET(new Request('http://localhost/api/culture-club/search?lat=37.49&lng=126.78') as never);
+
+    const storeScopeFilter = orMock.mock.calls.find(([arg]) => (arg as string).includes('store_code.in'))?.[0] as string;
+    expect(storeScopeFilter).toContain('brand.eq.eland_retail');
+    expect(storeScopeFilter).not.toContain('brand.eq.eland,');
+  });
+
   it('위치 기반 조회엔 지점의 실제 좌표(store_lat/store_lng)도 함께 내려준다(2026-10-07 — 위치 팝업용)', async () => {
     const { fromMock, rpcMock } = mockAdminClient({
       rowsByRange: () => [makeRow(1, 'emart', 'NEAR')],

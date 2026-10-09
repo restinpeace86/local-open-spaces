@@ -458,3 +458,68 @@ function buildUnifiedLotteDepartmentRow(row) {
     updated_at: row.updated_at,
   };
 }
+
+// [이랜드리테일 문화센터 — 목록 우선 + 상세 보강](2026-10-09) 목록
+// 응답이 상태/제목(연령 포함)/지점/요일/시간/수강료까지 이미 제공해
+// (AK플라자/스타필드와 동일한 구조) 롯데백화점처럼 "뼈대만" 넣을 필요가
+// 없다 — classroom/schedule_start_date/schedule_end_date/
+// class_material_fee만 eland-retail-culture-club-detail.mjs가 보강한다.
+// [강사명 — 항상 null](실측 확인: 목록/상세 둘 다 "전문강사" placeholder
+// 뿐이라 추측으로 지어내지 않음, 제3장 제5조).
+export function toUnifiedElandRetailRow(row) {
+  return omitUndefinedKeys(buildUnifiedElandRetailRow(row));
+}
+
+function buildUnifiedElandRetailRow(row) {
+  return {
+    brand: 'eland_retail',
+    source_class_id: row.class_id,
+    class_title: row.class_title,
+    store_code: row.store_code,
+    store_name: row.store_name,
+    main_category_name: null, // 목록에 상위 분류 필드가 없다(추측 금지)
+    // [수강대상 라벨 — select 옵션으로 확정](실측 확인) 다른 브랜드와
+    // 동일하게 sub_category_name 자리에 노출한다.
+    sub_category_name: row.target_name ?? null,
+    classroom: row.classroom,
+    class_day: row.class_day,
+    start_time: row.start_time,
+    end_time: row.end_time,
+    class_original_fee: null, // 할인 전/후 가격 구분이 보이지 않는다(실측 확인)
+    class_fee: row.class_fee,
+    class_material_fee: row.class_material_fee,
+    instructor_name: null, // "전문강사" placeholder뿐이라 항상 null(위 주석 참고)
+    min_age_months: row.min_age_months,
+    max_age_months: row.max_age_months,
+    schedule_start_date: row.schedule_start_date,
+    schedule_end_date: row.schedule_end_date,
+    schedule_days_code: row.schedule_days_code,
+    round: null,
+    total_sessions: row.total_sessions,
+    normalized_status: row.normalized_status,
+    raw_status: row.raw_status,
+    register_start_at: null, // 접수 시작 시각 개념이 노출되지 않는다(실측 확인, 추측 금지)
+    is_excluded: row.is_excluded ?? false,
+    raw_extra: {
+      store_id: row.store_id,
+      sem_num: row.sem_num,
+      lec_type_id: row.lec_type_id,
+      seq: row.seq,
+      target_code: row.target_code,
+      target_name: row.target_name,
+      capacity: row.capacity,
+      textbook_fee: row.textbook_fee,
+      first_class_supplies: row.first_class_supplies,
+      // [소개 텍스트 — eland-retail-culture-club-detail.mjs가 채움] 목록
+      // 응답엔 없고 상세 페이지의 "강좌개요"에만 있다. 이 메인 배치
+      // 자신은 채우지 않고, fetchDetailEnrichmentByClassId가 기존 값을
+      // 읽어와 병합해줄 때만 값이 들어온다(없으면 undefined → omit
+      // UndefinedKeys가 제거).
+      class_intro: row.class_intro,
+    },
+    detail_fetched_at: row.detail_fetched_at,
+    collected_at: row.collected_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}

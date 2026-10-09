@@ -159,6 +159,22 @@ describe('CultureClubPanel', () => {
     });
   });
 
+  // [이랜드리테일 브랜드 필터 추가](2026-10-09 사용자 승인: "K 중도수강도
+  // 포함해... J도 뭐 일단은 포함시켜" — 다른 신규 브랜드와 동일하게
+  // 데이터 수집과 함께 관리자 화면 브랜드 필터도 같이 추가한다).
+  it('이랜드리테일 브랜드 pill도 선택 가능하고 조회 요청에 반영된다', async () => {
+    const fetchMock = stubFetch([makeRow()]);
+    render(<CultureClubPanel />);
+
+    fireEvent.click(screen.getByText('이랜드리테일'));
+    fireEvent.click(screen.getByText('조회하기'));
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([url]) => (url as string).startsWith('/api/admin/culture-club?'));
+      expect(call?.[0]).toContain('brand=eland_retail');
+    });
+  });
+
   it('노출 제외 체크박스를 누르면 id로 PATCH 요청을 보낸다', async () => {
     const fetchMock = stubFetch([makeRow({ id: 42 })]);
     render(<CultureClubPanel />);
