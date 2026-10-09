@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildAkplazaDetailUrl,
   buildCultureClubThumbnailUrl,
+  buildLotteDepartmentDetailUrl,
   buildShinsegaeDetailUrl,
   buildStarfieldDetailUrl,
 } from './culture-club-options';
@@ -58,6 +59,17 @@ describe('buildStarfieldDetailUrl', () => {
   it('lctrNo/store(영문 지점명)로 실제 확인된 URL 형태를 만든다', () => {
     expect(buildStarfieldDetailUrl({ storeEnNm: 'suwon', classId: 'L260912228' })).toBe(
       'https://www.classkok.com/mlt/initLctrDetl.do?lctrNo=L260912228&store=suwon'
+    );
+  });
+});
+
+// [롯데백화점 상세/신청 페이지 — 실측 확인](2026-10-09): "/application/
+// search/view.do?brchCd=0025&yy=2026&lectSmsterCd=3&lectCd=0478" 쿠키
+// 없이도 정상 반환됨을 확인했다.
+describe('buildLotteDepartmentDetailUrl', () => {
+  it('복합 class_id("brchCd_yy_lectSmsterCd_lectCd")를 분해해 실제 확인된 URL 형태를 만든다', () => {
+    expect(buildLotteDepartmentDetailUrl('0025_2026_3_0478')).toBe(
+      'https://culture.lotteshopping.com/application/search/view.do?brchCd=0025&yy=2026&lectSmsterCd=3&lectCd=0478'
     );
   });
 });

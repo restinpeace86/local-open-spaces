@@ -99,6 +99,26 @@ describe('GET /api/culture-club/search — Branch-First 거리순 정렬', () =>
     expect(storeScopeFilter).not.toContain('brand.eq.akplaza');
   });
 
+  // [롯데백화점도 동일한 패턴 — 처음부터 알리아스로 대비](2026-10-09)
+  // "LOTTEDEPT_STORE_" 접두사도 소문자화하면 "lottedept"가 되는데 brand
+  // 값은 "lotte_department"다 — AK플라자 때 겪은 버그를 재현하지 않도록
+  // 처음부터 등록한 알리아스가 실제로 동작하는지 검증한다.
+  it('LOTTEDEPT_STORE_ 접두사는 store-scope 필터에서 brand를 "lotte_department"로 정규화한다', async () => {
+    const { fromMock, rpcMock, orMock } = mockAdminClient({
+      rowsByRange: () => [makeRow(1, 'lotte_department', '0025')],
+      coords: [{ external_id: 'LOTTEDEPT_STORE_0025', lng: 127.14, lat: 35.82 }],
+      total: 1,
+    });
+    vi.doMock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ from: fromMock, rpc: rpcMock }) }));
+    const { GET } = await import('./route');
+
+    await GET(new Request('http://localhost/api/culture-club/search?lat=35.82&lng=127.14') as never);
+
+    const storeScopeFilter = orMock.mock.calls.find(([arg]) => (arg as string).includes('store_code.in'))?.[0] as string;
+    expect(storeScopeFilter).toContain('brand.eq.lotte_department');
+    expect(storeScopeFilter).not.toContain('brand.eq.lottedept');
+  });
+
   it('위치 기반 조회엔 지점의 실제 좌표(store_lat/store_lng)도 함께 내려준다(2026-10-07 — 위치 팝업용)', async () => {
     const { fromMock, rpcMock } = mockAdminClient({
       rowsByRange: () => [makeRow(1, 'emart', 'NEAR')],

@@ -9,7 +9,7 @@ import { StoreMultiSelect, StoreOption } from '@/components/admin/store-multisel
 // panel.tsx 2개를 culture_club_classes 하나를 보는 단일 패널로 합쳤다.
 // 브랜드가 늘어나도(AK플라자 등) BRAND_OPTIONS에 원소만 추가하면 된다.
 
-type Brand = 'emart' | 'lottemart' | 'ak_plaza' | 'shinsegae' | 'hyundai' | 'starfield';
+type Brand = 'emart' | 'lottemart' | 'ak_plaza' | 'shinsegae' | 'hyundai' | 'starfield' | 'lotte_department';
 
 type ClassRow = {
   id: number;
@@ -49,6 +49,7 @@ const BRAND_OPTIONS: { key: Brand; label: string }[] = [
   { key: 'hyundai', label: '현대백화점' },
   { key: 'ak_plaza', label: 'AK플라자' },
   { key: 'starfield', label: '스타필드' },
+  { key: 'lotte_department', label: '롯데백화점' },
 ];
 
 const STATUS_OPTIONS: { key: ClassRow['normalized_status']; label: string }[] = [
@@ -212,8 +213,22 @@ export function CultureClubPanel() {
           (data.stores ?? []).map((s) => ({ storeCode: `starfield:${s.storeCode}`, label: `[스타필드] ${s.label}` }))
         )
         .catch(() => []),
-    ]).then(([emartStores, lottemartStores, shinsegaeStores, hyundaiStores, akplazaStores, starfieldStores]) =>
-      setStores([...emartStores, ...lottemartStores, ...shinsegaeStores, ...hyundaiStores, ...akplazaStores, ...starfieldStores])
+      fetch('/api/culture-club/lotte-department-stores')
+        .then((res) => res.json())
+        .then((data: { stores?: { storeCode: string; label: string }[] }) =>
+          (data.stores ?? []).map((s) => ({ storeCode: `lotte_department:${s.storeCode}`, label: `[롯데백화점] ${s.label}` }))
+        )
+        .catch(() => []),
+    ]).then(([emartStores, lottemartStores, shinsegaeStores, hyundaiStores, akplazaStores, starfieldStores, lotteDepartmentStores]) =>
+      setStores([
+        ...emartStores,
+        ...lottemartStores,
+        ...shinsegaeStores,
+        ...hyundaiStores,
+        ...akplazaStores,
+        ...starfieldStores,
+        ...lotteDepartmentStores,
+      ])
     );
   }, []);
 

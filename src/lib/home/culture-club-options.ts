@@ -19,6 +19,7 @@ export const CULTURE_CLUB_BRAND_OPTIONS = [
   { key: 'shinsegae', label: '신세계 아카데미' },
   { key: 'ak_plaza', label: 'AK플라자 문화아카데미' },
   { key: 'starfield', label: '스타필드 문화센터' },
+  { key: 'lotte_department', label: '롯데백화점 문화센터' },
 ] as const;
 
 export type CultureClubBrandKey = (typeof CULTURE_CLUB_BRAND_OPTIONS)[number]['key'];
@@ -151,4 +152,16 @@ export const STARFIELD_STORE_EN_NAME_BY_CODE: Record<string, string> = {
 export function buildStarfieldDetailUrl(params: { storeEnNm: string; classId: string }) {
   const query = new URLSearchParams({ lctrNo: params.classId, store: params.storeEnNm });
   return `https://www.classkok.com/mlt/initLctrDetl.do?${query.toString()}`;
+}
+
+// [롯데백화점 상세/신청 페이지 — 실측 확인](2026-10-09) "/application/
+// search/view.do?brchCd=0025&yy=2026&lectSmsterCd=3&lectCd=0478" 세션
+// 쿠키 없이도 200 + 정상 콘텐츠를 돌려줌을 확인(로그인 여부와 무관하게
+// 공개 페이지) — source_class_id가 이 4개 값을 "_"로 합친 복합 키라
+// (scripts/ingest/lib/lotte-department-culture-club-parser.mjs 참고)
+// 그대로 분해해서 재구성한다.
+export function buildLotteDepartmentDetailUrl(classId: string) {
+  const [brchCd, yy, lectSmsterCd, lectCd] = classId.split('_');
+  const query = new URLSearchParams({ brchCd, yy, lectSmsterCd, lectCd });
+  return `https://culture.lotteshopping.com/application/search/view.do?${query.toString()}`;
 }

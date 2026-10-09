@@ -6,6 +6,7 @@ import {
   toUnifiedShinsegaeRow,
   toUnifiedAkplazaRow,
   toUnifiedStarfieldRow,
+  toUnifiedLotteDepartmentRow,
 } from './culture-club-unified-row.mjs';
 
 describe('toUnifiedEmartRow', () => {
@@ -307,5 +308,62 @@ describe('toUnifiedStarfieldRow', () => {
   it('class_intro이 아직 없으면(상세수집 전) undefined로 비어있다', () => {
     const result = toUnifiedStarfieldRow({ class_id: 'L1', class_title: '테스트' });
     expect(result.raw_extra.class_intro).toBeUndefined();
+  });
+});
+
+describe('toUnifiedLotteDepartmentRow', () => {
+  it('목록 배치가 넘긴 "뼈대" 행(상세수집 전)은 구조화 컬럼이 전부 undefined로 비어있다(다른 브랜드와 다른 설계 — 상세수집이 이 컬럼들을 채움)', () => {
+    const result = toUnifiedLotteDepartmentRow({
+      class_id: '0025_2026_3_0478',
+      class_title: '[특강]아이좋아 아이꼬야(4~9개월)',
+      store_code: '0025',
+      store_name: '전주점',
+      brch_cd: '0025',
+      yy: '2026',
+      lect_smster_cd: '3',
+      lect_cd: '0478',
+      raw_status: '대기접수',
+      normalized_status: 'WAITING',
+      main_image_url: 'https://culture.lotteshopping.com/files/CUL_ONL/2026/8/202608261048455010.jpg',
+    });
+
+    expect(result.brand).toBe('lotte_department');
+    expect(result.source_class_id).toBe('0025_2026_3_0478');
+    expect(result.normalized_status).toBe('WAITING');
+    expect(result.instructor_name).toBeUndefined();
+    expect(result.start_time).toBeUndefined();
+    expect(result.raw_extra.brch_cd).toBe('0025');
+    expect(result.raw_extra.main_image_url).toBe('https://culture.lotteshopping.com/files/CUL_ONL/2026/8/202608261048455010.jpg');
+    expect(result.raw_extra.class_intro).toBeUndefined();
+  });
+
+  it('상세수집이 이미 끝난 행(merge된 값)은 구조화 컬럼이 그대로 전달된다(재실행 시 유실 방지)', () => {
+    const result = toUnifiedLotteDepartmentRow({
+      class_id: '0025_2026_3_0488',
+      class_title: '테스트',
+      store_code: '0025',
+      store_name: '전주점',
+      raw_status: '접수중',
+      normalized_status: 'OPEN',
+      instructor_name: '이영희',
+      classroom: '8층 맘엔키즈',
+      class_fee: 12000,
+      class_day: ['화'],
+      start_time: '1440',
+      end_time: '1520',
+      schedule_start_date: '2026-09-08',
+      schedule_end_date: '2026-09-08',
+      total_sessions: 1,
+      min_age_months: 7,
+      max_age_months: 12,
+      class_intro: '실제 강좌 소개',
+    });
+
+    expect(result.instructor_name).toBe('이영희');
+    expect(result.classroom).toBe('8층 맘엔키즈');
+    expect(result.class_fee).toBe(12000);
+    expect(result.start_time).toBe('1440');
+    expect(result.min_age_months).toBe(7);
+    expect(result.raw_extra.class_intro).toBe('실제 강좌 소개');
   });
 });

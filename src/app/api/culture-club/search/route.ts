@@ -34,7 +34,7 @@ const DEFAULT_PAGE_SIZE = 20;
 // 아직 안보이는데?") 현대백화점(2026-10-08)/신세계 아카데미(2026-10-08)
 // 가 추가된 뒤에도 이 목록이 갱신되지 않아, brand 파라미터로 그 두
 // 브랜드를 넘기면 조용히 걸러져(빈 배열) "필터 없음" 취급되고 있었다.
-const VALID_BRANDS = new Set(['emart', 'lottemart', 'hyundai', 'shinsegae', 'ak_plaza', 'starfield']);
+const VALID_BRANDS = new Set(['emart', 'lottemart', 'hyundai', 'shinsegae', 'ak_plaza', 'starfield', 'lotte_department']);
 const DISTANCE_SORT_FETCH_SAFETY_CEILING = 5000;
 const PAGE_FETCH_SIZE = 1000;
 
@@ -61,7 +61,11 @@ const SEARCH_RESULT_COLUMNS =
 // external_id 접두사가 brand 값과 1:1로 일치해(emart/lottemart/hyundai/
 // shinsegae) 이 불일치가 드러나지 않았다. 정규식(다른 4개 브랜드가 쓰는
 // 검증된 패턴)은 그대로 두고, 이 한 가지 예외만 명시적으로 보정한다.
-const EXTERNAL_ID_BRAND_ALIASES: Record<string, string> = { akplaza: 'ak_plaza' };
+// [롯데백화점도 동일한 예외 — 처음부터 알리아스로 대비](2026-10-09)
+// external_id 접두사를 "LOTTEDEPT_STORE_"(언더스코어 없이)로 지었으므로
+// 소문자화하면 "lottedept"가 되는데, brand 값은 "lotte_department"다 —
+// AK플라자 때 겪은 버그를 또 재현하지 않도록 처음부터 알리아스로 등록.
+const EXTERNAL_ID_BRAND_ALIASES: Record<string, string> = { akplaza: 'ak_plaza', lottedept: 'lotte_department' };
 
 function parseExternalId(externalId: string): { brand: string; storeCode: string } | null {
   const match = /^([A-Z]+)_STORE_(.+)$/.exec(externalId);

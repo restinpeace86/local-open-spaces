@@ -25,7 +25,7 @@ vi.mock('@/lib/community/bookmarks', async (importOriginal) => {
 
 type ClassFixture = {
   id: number;
-  brand: 'emart' | 'lottemart' | 'hyundai' | 'shinsegae' | 'ak_plaza' | 'starfield';
+  brand: 'emart' | 'lottemart' | 'hyundai' | 'shinsegae' | 'ak_plaza' | 'starfield' | 'lotte_department';
   source_class_id: string;
   class_title: string;
   store_code: string | null;
@@ -247,6 +247,38 @@ function makeStarfieldClass(overrides: Partial<ClassFixture> = {}): ClassFixture
       target_code: '3',
       target_name: '영유아',
       main_image_url: 'https://image.classkok.com/lect/20260910/1e5ce92f-9829-4616-942e-a59ba6b0e437.jpg',
+    },
+    collected_at: '2026-10-09T09:00:00+00:00',
+    ...overrides,
+  };
+}
+
+function makeLotteDepartmentClass(overrides: Partial<ClassFixture> = {}): ClassFixture {
+  return {
+    id: 7,
+    brand: 'lotte_department',
+    source_class_id: '0025_2026_3_0488',
+    class_title: '[특강-화]음악과 촉감의 만남 뮤직아르떼(7~12개월)',
+    store_code: '0025',
+    store_name: '전주점',
+    sub_category_name: null,
+    class_day: ['화'],
+    start_time: '1440',
+    end_time: '1520',
+    class_fee: 12000,
+    class_material_fee: null,
+    instructor_name: '이영희',
+    min_age_months: 7,
+    max_age_months: 12,
+    schedule_start_date: '2026-09-08',
+    schedule_end_date: '2026-09-08',
+    total_sessions: 1,
+    normalized_status: 'OPEN',
+    raw_status: '접수중',
+    register_start_at: null,
+    raw_extra: {
+      main_image_url: 'https://culture.lotteshopping.com/files/CUL_ONL/2026/8/202608281236327580.jpg',
+      class_intro: '실제 강좌 소개',
     },
     collected_at: '2026-10-09T09:00:00+00:00',
     ...overrides,
@@ -1038,5 +1070,46 @@ describe('CultureClubTabView — 스타필드 문화센터(2026-10-09)', () => {
 
     await screen.findByText('스타필드 문화센터 강좌 상세');
     expect(screen.queryByText('접수 페이지로 가기 ↗')).not.toBeInTheDocument();
+  });
+});
+
+describe('CultureClubTabView — 롯데백화점 문화센터(2026-10-09)', () => {
+  it('롯데백화점 강좌 카드가 지점명과 함께 보인다', async () => {
+    stubFetch([makeLotteDepartmentClass()]);
+    const { container } = render(<CultureClubTabView />);
+    await screen.findByText(/뮤직아르떼/);
+
+    expect(screen.getByText(/전주점/)).toBeInTheDocument();
+    expect(container.querySelector('img')).toHaveAttribute(
+      'src',
+      'https://culture.lotteshopping.com/files/CUL_ONL/2026/8/202608281236327580.jpg'
+    );
+  });
+
+  it('찜 버튼은 아직 지원하지 않아 렌더링되지 않는다(제5장 제3조 — 범위를 넘는 결정을 임의로 추가하지 않음)', async () => {
+    mockUser.current = { id: 'user-1' };
+    getMyProfileMock.mockResolvedValue({ grade: 'active', birth_years: [], birth_months: [] });
+    stubFetch([makeLotteDepartmentClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/뮤직아르떼/);
+
+    expect(screen.queryByLabelText('찜하기')).not.toBeInTheDocument();
+    mockUser.current = null;
+  });
+
+  it('클릭하면 상세 시트가 열리고 롯데백화점 상세 페이지로 가는 외부 링크가 복합 class_id를 분해한 파라미터로 만들어진다(2026-10-09 실측 확인된 URL)', async () => {
+    stubFetch([makeLotteDepartmentClass()]);
+    render(<CultureClubTabView />);
+    await screen.findByText(/뮤직아르떼/);
+    fireEvent.click(screen.getAllByText(/뮤직아르떼/)[0]);
+
+    await screen.findByText('롯데백화점 문화센터 강좌 상세');
+    const link = screen.getByText('접수 페이지로 가기 ↗');
+    const href = link.closest('a')?.getAttribute('href') ?? '';
+    expect(href).toContain('https://culture.lotteshopping.com/application/search/view.do');
+    expect(href).toContain('brchCd=0025');
+    expect(href).toContain('yy=2026');
+    expect(href).toContain('lectSmsterCd=3');
+    expect(href).toContain('lectCd=0488');
   });
 });

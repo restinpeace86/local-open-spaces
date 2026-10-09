@@ -392,3 +392,69 @@ function buildUnifiedStarfieldRow(row) {
     updated_at: row.updated_at,
   };
 }
+
+// [롯데백화점 문화센터 — 다른 브랜드와 다른 설계: 상세수집이 핵심 구조화
+// 컬럼을 채움](2026-10-09 사용자 지시: "상세꺼가 중요해") 목록 응답은
+// 지점/상태/제목/이미지만 믿을 수 있고(요일·시간은 "세부 일정 선택"처럼
+// 없는 경우가 있고, 강사명/강의실/정확한 연령은 아예 없음) — 상세
+// 페이지(<dt>/<dd>)가 훨씬 구조화된 진짜 데이터를 준다. 그래서 이 목록
+// 배치는 "뼈대" 행만 만들고, 나머지 구조화 컬럼(instructor_name/
+// classroom/class_fee/class_day/start_time/end_time/schedule_*_date/
+// total_sessions/min_max_age_months)은 lotte-department-culture-club-
+// detail.mjs가 UPDATE로 직접 채운다. 이 목록 배치가 재실행될 때(4~6시간
+// 주기) 이미 상세수집된 값을 지우지 않도록, row에 그 필드들이 있으면
+// (fetchDetailEnrichmentByClassId가 기존 DB 값을 읽어와 병합해줬을 때만)
+// 그대로 전달하고, 없으면(처음 수집 또는 상세수집 전) undefined로 비워
+// omitUndefinedKeys가 제거하게 한다 — 다른 브랜드의 class_intro 전용
+// merge와 동일한 메커니즘을 더 많은 컬럼으로 확장한 것일 뿐이다.
+export function toUnifiedLotteDepartmentRow(row) {
+  return omitUndefinedKeys(buildUnifiedLotteDepartmentRow(row));
+}
+
+function buildUnifiedLotteDepartmentRow(row) {
+  return {
+    brand: 'lotte_department',
+    source_class_id: row.class_id,
+    class_title: row.class_title,
+    store_code: row.store_code,
+    store_name: row.store_name,
+    main_category_name: null, // 목록에 상위 분류 필드가 없다(추측 금지)
+    classroom: row.classroom,
+    class_day: row.class_day,
+    start_time: row.start_time,
+    end_time: row.end_time,
+    class_original_fee: null, // 할인 전/후 구분이 보이지 않는다(실측 확인)
+    class_fee: row.class_fee,
+    class_material_fee: null, // 재료비는 소개 텍스트 안의 자유 서술일 뿐 구조화 필드가 아니다(추측 금지)
+    instructor_name: row.instructor_name,
+    min_age_months: row.min_age_months,
+    max_age_months: row.max_age_months,
+    schedule_start_date: row.schedule_start_date,
+    schedule_end_date: row.schedule_end_date,
+    schedule_days_code: row.schedule_days_code,
+    round: null,
+    total_sessions: row.total_sessions,
+    normalized_status: row.normalized_status,
+    raw_status: row.raw_status,
+    register_start_at: null, // 접수기간은 날짜만 있고 시각이 없다(실측 확인) — raw_extra에 날짜만 보존
+    is_excluded: row.is_excluded ?? false,
+    raw_extra: {
+      brch_cd: row.brch_cd,
+      yy: row.yy,
+      lect_smster_cd: row.lect_smster_cd,
+      lect_cd: row.lect_cd,
+      lect_gubun: row.lect_gubun,
+      target_gubun: row.target_gubun,
+      capacity: row.capacity,
+      register_start_date: row.register_start_date,
+      register_end_date: row.register_end_date,
+      contact_phone: row.contact_phone,
+      main_image_url: row.main_image_url,
+      class_intro: row.class_intro,
+    },
+    detail_fetched_at: row.detail_fetched_at,
+    collected_at: row.collected_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  };
+}
