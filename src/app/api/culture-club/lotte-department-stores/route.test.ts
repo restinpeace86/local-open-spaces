@@ -31,7 +31,7 @@ describe('GET /api/culture-club/lotte-department-stores', () => {
     const data = await res.json();
 
     expect(res.status).toBe(200);
-    expect(data.stores).toEqual([{ storeCode: '0025', label: '롯데백화점 전주점 (전북 전주시)' }]);
+    expect(data.stores).toEqual([{ storeCode: '0025', label: '롯데백화점 전주점' }]);
   });
 
   it('DB 조회가 실패하면 500을 반환한다', async () => {

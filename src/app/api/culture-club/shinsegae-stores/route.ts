@@ -11,11 +11,9 @@ import { getStoreDistancesByCode } from '@/lib/home/culture-club-nearby-stores';
 const EXTERNAL_ID_PREFIX = 'SHINSEGAE_STORE_';
 const CULTURE_CENTER_CATEGORY_MIN = '백화점문화센터';
 
-function extractShortRegion(address: string | null): string | null {
-  if (!address) return null;
-  const tokens = address.trim().split(/\s+/);
-  return tokens.slice(0, 2).join(' ') || null;
-}
+// [지점명 뒤 지역 표기 제거](2026-10-09 사용자 지적: "이마트 분당점 (경기
+// 성남시) 2.4km 이렇게 나와 ? 일단 이마트 분당점 2.4km만나오던가") 뱃지에
+// 실제 거리(km)가 함께 표시되면서 지역 표기가 중복 정보가 됐다 — 제거.
 
 export async function GET(request: NextRequest) {
   try {
@@ -32,7 +30,7 @@ export async function GET(request: NextRequest) {
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from('open_spaces')
-      .select('external_id, display_name, name, address')
+      .select('external_id, display_name, name')
       .eq('category_min', CULTURE_CENTER_CATEGORY_MIN)
       .order('display_name', { ascending: true });
 
@@ -40,14 +38,10 @@ export async function GET(request: NextRequest) {
 
     const stores = (data ?? [])
       .filter((row): row is typeof row & { external_id: string } => Boolean(row.external_id?.startsWith(EXTERNAL_ID_PREFIX)))
-      .map((row) => {
-        const name = row.display_name ?? row.name;
-        const region = extractShortRegion(row.address);
-        return {
-          storeCode: row.external_id.slice(EXTERNAL_ID_PREFIX.length),
-          label: region ? `${name} (${region})` : name,
-        };
-      });
+      .map((row) => ({
+        storeCode: row.external_id.slice(EXTERNAL_ID_PREFIX.length),
+        label: row.display_name ?? row.name,
+      }));
 
     if (!hasLocation) {
       return NextResponse.json({ stores });

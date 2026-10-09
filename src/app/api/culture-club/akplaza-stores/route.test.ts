@@ -31,7 +31,7 @@ describe('GET /api/culture-club/akplaza-stores', () => {
     const data = await res.json();
 
     expect(res.status).toBe(200);
-    expect(data.stores).toEqual([{ storeCode: '02', label: 'AK플라자 수원점 (경기 수원시)' }]);
+    expect(data.stores).toEqual([{ storeCode: '02', label: 'AK플라자 수원점' }]);
   });
 
   it('DB 조회가 실패하면 500을 반환한다', async () => {

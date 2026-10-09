@@ -397,7 +397,7 @@ describe('CultureClubTabView — 기본값(전체, 브랜드 무관 통합검색
     render(<CultureClubTabView />);
     await screen.findByText(/두근두근/);
 
-    const location = screen.getByText('춘천점');
+    const location = screen.getByText('이마트 춘천점');
     expect(location.tagName).toBe('BUTTON');
     fireEvent.click(location);
 
@@ -411,7 +411,7 @@ describe('CultureClubTabView — 기본값(전체, 브랜드 무관 통합검색
     render(<CultureClubTabView />);
     await screen.findByText(/두근두근/);
 
-    const location = screen.getByText('춘천점');
+    const location = screen.getByText('이마트 춘천점');
     expect(location.tagName).not.toBe('BUTTON');
     fireEvent.click(location);
 
@@ -571,7 +571,7 @@ describe('CultureClubTabView — 브랜드 필터', () => {
     await screen.findByText(/두근두근/);
     const searchCallsBefore = fetchMock.mock.calls.filter(([url]) => (url as string).startsWith('/api/culture-club/search')).length;
 
-    fireEvent.click(screen.getByText('이마트 컬처클럽'));
+    fireEvent.click(screen.getByText('이마트'));
 
     await screen.findByText('이마트 춘천점');
     expect(screen.getByText('Club Originals')).toBeInTheDocument();
@@ -591,10 +591,20 @@ describe('CultureClubTabView — 브랜드 필터', () => {
     render(<CultureClubTabView />);
     await screen.findByText(/두근두근/);
 
-    fireEvent.click(screen.getByText('이마트 컬처클럽'));
-    const storeBadge = await screen.findByText('이마트 춘천점');
+    fireEvent.click(screen.getByText('이마트'));
+    // [카드 위치 줄도 같은 텍스트("이마트 춘천점")를 쓰게 되어](2026-10-09
+    // 사용자 지적 — 브랜드 접두사 추가) 지점 뱃지와 카드의 위치 줄이 이제
+    // 같은 문구를 쓴다 — 뱃지만 aria-pressed 속성을 갖고 있어 그걸로
+    // 구분한다. 카드는 즉시(캐시) 렌더되지만 뱃지는 비동기 지점 목록 조회가
+    // 끝나야 나타나므로, 먼저 잡히는 카드 쪽만 찾고 끝나지 않도록 waitFor로
+    // 뱃지가 나타날 때까지 재시도한다.
+    let storeBadge: HTMLElement | undefined;
+    await waitFor(() => {
+      storeBadge = screen.getAllByText('이마트 춘천점').find((el) => el.hasAttribute('aria-pressed'));
+      expect(storeBadge).toBeTruthy();
+    });
     const searchCallsBefore = fetchMock.mock.calls.filter(([url]) => (url as string).startsWith('/api/culture-club/search')).length;
-    fireEvent.click(storeBadge);
+    fireEvent.click(storeBadge!);
 
     expect(storeBadge).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByText('다른 지점 강좌')).not.toBeInTheDocument();
@@ -608,7 +618,7 @@ describe('CultureClubTabView — 브랜드 필터', () => {
     render(<CultureClubTabView />);
     await screen.findByText(/두근두근/);
 
-    fireEvent.click(screen.getByText('롯데마트 문화센터'));
+    fireEvent.click(screen.getByText('롯데마트'));
 
     await screen.findByText('고양점');
     expect(screen.getByText('엄마와함께')).toBeInTheDocument();
@@ -620,11 +630,16 @@ describe('CultureClubTabView — 브랜드 필터', () => {
     render(<CultureClubTabView />);
     await screen.findByText(/두근두근/);
 
-    fireEvent.click(screen.getByText('이마트 컬처클럽'));
-    await screen.findByText('이마트 춘천점');
+    // [카드 위치 줄도 같은 텍스트를 쓰게 되어](2026-10-09 사용자 지적 — 브랜드
+    // 접두사 추가) 지점 뱃지와 카드의 위치 줄이 이제 같은 문구를 쓴다 —
+    // 뱃지만 aria-pressed 속성을 갖고 있어 그걸로 구분한다.
+    const findStoreBadge = () => screen.queryAllByText('이마트 춘천점').filter((el) => el.hasAttribute('aria-pressed'));
+
+    fireEvent.click(screen.getByText('이마트'));
+    await waitFor(() => expect(findStoreBadge().length).toBeGreaterThan(0));
 
     fireEvent.click(screen.getByText('전체'));
-    await waitFor(() => expect(screen.queryByText('이마트 춘천점')).not.toBeInTheDocument());
+    await waitFor(() => expect(findStoreBadge().length).toBe(0));
   });
 
   it('반경 pill을 바꾸면 요청에 radius_km가 반영된다(기본값 10km)', async () => {
@@ -656,7 +671,7 @@ describe('CultureClubTabView — 클래스 상세 바텀시트', () => {
     const heading = await screen.findByText('이마트 강좌 상세');
     const sheet = heading.closest('.fixed') as HTMLElement;
     expect(within(sheet).getByText(/접수가능지점/)).toBeInTheDocument();
-    expect(within(sheet).getByText('춘천점')).toBeInTheDocument();
+    expect(within(sheet).getByText('이마트 춘천점')).toBeInTheDocument();
     expect(within(sheet).getByText('접수 페이지로 가기 ↗')).toBeInTheDocument();
     expect(within(sheet).getByText('중국 여행을 떠나 짜장면을 만들어요', { exact: false })).toBeInTheDocument();
   });
@@ -864,7 +879,7 @@ describe('CultureClubTabView — 코어 데이터 캐싱 & 로컬 필터링', ()
     const before = countSearchCalls(fetchMock);
 
     fireEvent.click(screen.getByText('토')); // 요일
-    fireEvent.click(screen.getByText('이마트 컬처클럽')); // 브랜드
+    fireEvent.click(screen.getByText('이마트')); // 브랜드
     await screen.findByText('Club Originals');
     fireEvent.click(screen.getByText('Club Originals')); // 이마트 카테고리
 
@@ -889,7 +904,7 @@ describe('CultureClubTabView — 코어 데이터 캐싱 & 로컬 필터링', ()
 
     fireEvent.click(screen.getByText('화'));
     fireEvent.click(screen.getByText('화')); // 토글 두 번(켰다 끄기)
-    fireEvent.click(screen.getByText('롯데마트 문화센터'));
+    fireEvent.click(screen.getByText('롯데마트'));
     fireEvent.click(screen.getByText('전체'));
 
     expect(countSearchCalls(fetchMock)).toBe(1);
@@ -990,7 +1005,7 @@ describe('CultureClubTabView — 신세계 아카데미(2026-10-08, todo.md 개�
     await screen.findByText(/어린이 뮤지컬/);
     fireEvent.click(screen.getAllByText(/어린이 뮤지컬/)[0]);
 
-    await screen.findByText('신세계 아카데미 강좌 상세');
+    await screen.findByText('신세계 강좌 상세');
     const link = screen.getByText('접수 페이지로 가기 ↗');
     const href = link.closest('a')?.getAttribute('href') ?? '';
     expect(href).toContain('https://sacademy.shinsegae.com/sdotcom/web/HP0010P0/HP0010P1.do');
@@ -1006,7 +1021,7 @@ describe('CultureClubTabView — 신세계 아카데미(2026-10-08, todo.md 개�
     await screen.findByText(/어린이 뮤지컬/);
     fireEvent.click(screen.getAllByText(/어린이 뮤지컬/)[0]);
 
-    await screen.findByText('신세계 아카데미 강좌 상세');
+    await screen.findByText('신세계 강좌 상세');
     expect(screen.queryByText('접수 페이지로 가기 ↗')).not.toBeInTheDocument();
   });
 });
@@ -1038,7 +1053,7 @@ describe('CultureClubTabView — AK플라자 문화아카데미(2026-10-09)', ()
     await screen.findByText(/패밀리 오케스트라/);
     fireEvent.click(screen.getAllByText(/패밀리 오케스트라/)[0]);
 
-    await screen.findByText('AK플라자 문화아카데미 강좌 상세');
+    await screen.findByText('AK플라자 강좌 상세');
     const link = screen.getByText('접수 페이지로 가기 ↗');
     const href = link.closest('a')?.getAttribute('href') ?? '';
     expect(href).toContain('https://culture.akplaza.com/course/detail');
@@ -1053,7 +1068,7 @@ describe('CultureClubTabView — AK플라자 문화아카데미(2026-10-09)', ()
     await screen.findByText(/패밀리 오케스트라/);
     fireEvent.click(screen.getAllByText(/패밀리 오케스트라/)[0]);
 
-    await screen.findByText('AK플라자 문화아카데미 강좌 상세');
+    await screen.findByText('AK플라자 강좌 상세');
     expect(screen.queryByText('접수 페이지로 가기 ↗')).not.toBeInTheDocument();
   });
 });
@@ -1089,7 +1104,7 @@ describe('CultureClubTabView — 스타필드 문화센터(2026-10-09)', () => {
     await screen.findByText(/트니트니/);
     fireEvent.click(screen.getAllByText(/트니트니/)[0]);
 
-    await screen.findByText('스타필드 문화센터 강좌 상세');
+    await screen.findByText('스타필드 강좌 상세');
     const link = screen.getByText('접수 페이지로 가기 ↗');
     const href = link.closest('a')?.getAttribute('href') ?? '';
     expect(href).toContain('https://www.classkok.com/mlt/initLctrDetl.do');
@@ -1103,7 +1118,7 @@ describe('CultureClubTabView — 스타필드 문화센터(2026-10-09)', () => {
     await screen.findByText(/트니트니/);
     fireEvent.click(screen.getAllByText(/트니트니/)[0]);
 
-    await screen.findByText('스타필드 문화센터 강좌 상세');
+    await screen.findByText('스타필드 강좌 상세');
     expect(screen.queryByText('접수 페이지로 가기 ↗')).not.toBeInTheDocument();
   });
 });
@@ -1138,7 +1153,7 @@ describe('CultureClubTabView — 롯데백화점 문화센터(2026-10-09)', () =
     await screen.findByText(/뮤직아르떼/);
     fireEvent.click(screen.getAllByText(/뮤직아르떼/)[0]);
 
-    await screen.findByText('롯데백화점 문화센터 강좌 상세');
+    await screen.findByText('롯데백화점 강좌 상세');
     const link = screen.getByText('접수 페이지로 가기 ↗');
     const href = link.closest('a')?.getAttribute('href') ?? '';
     expect(href).toContain('https://culture.lotteshopping.com/application/search/view.do');
@@ -1176,7 +1191,7 @@ describe('CultureClubTabView — 이랜드리테일 문화센터(2026-10-09)', (
     await screen.findByText(/당나귀똥/);
     fireEvent.click(screen.getAllByText(/당나귀똥/)[0]);
 
-    await screen.findByText('이랜드리테일 문화센터 강좌 상세');
+    await screen.findByText('이랜드리테일 강좌 상세');
     const link = screen.getByText('접수 페이지로 가기 ↗');
     const href = link.closest('a')?.getAttribute('href') ?? '';
     expect(href).toContain('https://www.elandretail.com/m/culture/culture04.do');

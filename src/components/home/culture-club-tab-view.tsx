@@ -183,16 +183,32 @@ type CultureClubClass = {
   store_lng?: number | null;
 };
 
+// [브랜드 라벨 — "문화센터"류 접미사 제거](2026-10-09 사용자 지시, culture-
+// club-options.ts의 CULTURE_CLUB_BRAND_OPTIONS와 동일한 이유) 강좌 상세
+// 시트 제목("OOO 강좌 상세")과 위치 줄에 쓰는 브랜드명도 순수 브랜드명만
+// 쓴다 — 필터 pill과 다른 라벨을 쓰면 오히려 헷갈린다.
 const BRAND_LABELS: Record<CultureClubClass['brand'], string> = {
   emart: '이마트',
   lottemart: '롯데마트',
   hyundai: '현대백화점',
-  shinsegae: '신세계 아카데미',
-  ak_plaza: 'AK플라자 문화아카데미',
-  starfield: '스타필드 문화센터',
-  lotte_department: '롯데백화점 문화센터',
-  eland_retail: '이랜드리테일 문화센터',
+  shinsegae: '신세계',
+  ak_plaza: 'AK플라자',
+  starfield: '스타필드',
+  lotte_department: '롯데백화점',
+  eland_retail: '이랜드리테일',
 };
+
+// [위치 줄 — 지점명에 브랜드 접두사](2026-10-09 사용자 지적: "각 목록
+// 리스트에 원래는 이마트 분당점 이렇게 나왔는데 그냥 분당 2.4km 이렇게만
+// 나오네") culture_club_classes.store_name은 원본 사이트 표기 그대로라
+// 브랜드 없이 "분당"/"수원"처럼 짧게만 들어있는 브랜드가 많다(이마트/
+// AK플라자/스타필드/롯데백화점/이랜드리테일) — 카드에 브랜드 뱃지가 없는
+// 지금 구조에선 "분당"만 보면 어느 브랜드인지 알 수 없다. 목록 카드에선
+// 브랜드명을 붙여 "이마트 분당"처럼 보여준다.
+function formatStoreNameWithBrand(item: CultureClubClass): string | null {
+  if (!item.store_name) return null;
+  return `${BRAND_LABELS[item.brand]} ${item.store_name}`;
+}
 
 function formatTimeRange(start: string | null, end: string | null) {
   const fmt = (t: string | null) => (t && t.length === 4 ? `${t.slice(0, 2)}:${t.slice(2)}` : t ?? '-');
@@ -499,7 +515,7 @@ function ClassCard({ item, onSelect }: { item: CultureClubClass; onSelect: (item
         </div>
         <div className="flex gap-1.5 text-[11px] text-slate-600">
           <span className="w-7 shrink-0 text-sky-600 font-medium">위치</span>
-          <LocationLink item={item} label={`${item.store_name ?? '-'}${distanceLabel ? ` · ${distanceLabel}` : ''}`} />
+          <LocationLink item={item} label={`${formatStoreNameWithBrand(item) ?? '-'}${distanceLabel ? ` · ${distanceLabel}` : ''}`} />
         </div>
       </div>
     </div>
@@ -615,7 +631,7 @@ function CultureClubDetailSheet({ item, onClose }: { item: CultureClubClass; onC
             </p>
             {item.store_name && (
               <p className="text-sm text-slate-600">
-                접수가능지점 <LocationLink item={item} label={`${item.store_name}${distanceLabel ? ` · ${distanceLabel}` : ''}`} />
+                접수가능지점 <LocationLink item={item} label={`${formatStoreNameWithBrand(item)}${distanceLabel ? ` · ${distanceLabel}` : ''}`} />
               </p>
             )}
             {capacity != null && <p className="text-sm text-slate-600">정원 {capacity}명</p>}
@@ -954,8 +970,14 @@ export function CultureClubTabView() {
             </button>
           </form>
 
-          {/* 브랜드 필터 — 전체(기본)/이마트/롯데마트. */}
-          <div className="flex items-center gap-2 px-3 pt-1">
+          {/* [브랜드 필터 — 줄바꿈 허용](2026-10-09 사용자 지적: "글이 세로로
+              안나오게 하자... 2줄로 되도 되니깐") 8개 브랜드로 늘어나며 한
+              줄에 다 안 들어가는데, overflow-x-auto도 flex-wrap도 없이
+              기본 flex-shrink만 걸려있어 pill 하나하나가 눌리면서 글자가
+              세로로 줄바꿈되고 있었다 — 컨테이너에 flex-wrap, 각 버튼에
+              shrink-0+whitespace-nowrap을 줘서 pill 단위로 다음 줄로
+              넘어가게 한다(가로 스크롤 대신 2줄 허용). */}
+          <div className="flex flex-wrap items-center gap-2 px-3 pt-1">
             {CULTURE_CLUB_BRAND_OPTIONS.map((brand) => {
               const isActive = brandKey === brand.key;
               return (
@@ -964,7 +986,7 @@ export function CultureClubTabView() {
                   type="button"
                   aria-pressed={isActive}
                   onClick={() => setBrandKey(brand.key)}
-                  className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                  className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium transition-colors ${
                     isActive ? 'bg-sky-600 text-white' : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'
                   }`}
                 >

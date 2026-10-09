@@ -31,7 +31,7 @@ describe('GET /api/culture-club/starfield-stores', () => {
     const data = await res.json();
 
     expect(res.status).toBe(200);
-    expect(data.stores).toEqual([{ storeCode: '02', label: '스타필드 수원 (경기 수원시)' }]);
+    expect(data.stores).toEqual([{ storeCode: '02', label: '스타필드 수원' }]);
   });
 
   it('DB 조회가 실패하면 500을 반환한다', async () => {

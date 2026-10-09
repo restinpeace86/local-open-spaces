@@ -12,16 +12,11 @@ import { getStoreDistancesByCode } from '@/lib/home/culture-club-nearby-stores';
 const EXTERNAL_ID_PREFIX = 'EMART_STORE_';
 const CULTURE_CENTER_CATEGORY_MIN = '대형마트문화센터';
 
-// [지점명만으로는 위치를 알기 어려움](2026-10-03 사용자 지적): "스타필드 안성점이라고
-// 하면 얼추 다 아나? 어디인지?" — 지점명(예: "스타필드시티명지점")만으로는 어느
-// 지역인지 바로 알기 어려운 경우가 많아, address 앞 2토큰(시/도 + 시/군/구, 예:
-// "경기 안성시")을 괄호로 붙인다. home-view.tsx의 shortenSigunguForDisplay와 같은
-// 발상(짧은 지역명만 보여줌)이지만 주소 원문에서 추출한다는 점이 달라 별도로 둔다.
-function extractShortRegion(address: string | null): string | null {
-  if (!address) return null;
-  const tokens = address.trim().split(/\s+/);
-  return tokens.slice(0, 2).join(' ') || null;
-}
+// [지점명 뒤 지역 표기 제거](2026-10-09 사용자 지적: "이마트 분당점 (경기
+// 성남시) 2.4km 이렇게 나와 ? 일단 이마트 분당점 2.4km만나오던가") 2026-10-03
+// 당시엔 지점명만으론 위치를 알기 어렵다는 이유로 주소 앞 2토큰을 괄호로
+// 붙였었는데, 이후 뱃지에 실제 거리(km)가 함께 표시되게 되면서 지역 표기가
+// 중복 정보가 됐고 글자 수만 늘렸다 — 지역 표기를 제거하고 지점명만 쓴다.
 
 // [계층형 지점 선택 — 반경 내 지점만](2026-10-07 todo.md 개선사항1-3): lat/lng가
 // 있으면 거리를 계산해 "distanceMeters"를 함께 돌려주고, radius_km가 있으면
@@ -42,7 +37,7 @@ export async function GET(request: NextRequest) {
     const supabase = createAdminClient();
     const { data, error } = await supabase
       .from('open_spaces')
-      .select('external_id, display_name, name, address')
+      .select('external_id, display_name, name')
       .eq('category_min', CULTURE_CENTER_CATEGORY_MIN)
       .order('display_name', { ascending: true });
 
@@ -50,14 +45,10 @@ export async function GET(request: NextRequest) {
 
     const stores = (data ?? [])
       .filter((row): row is typeof row & { external_id: string } => Boolean(row.external_id?.startsWith(EXTERNAL_ID_PREFIX)))
-      .map((row) => {
-        const name = row.display_name ?? row.name;
-        const region = extractShortRegion(row.address);
-        return {
-          storeCode: row.external_id.slice(EXTERNAL_ID_PREFIX.length),
-          label: region ? `${name} (${region})` : name,
-        };
-      });
+      .map((row) => ({
+        storeCode: row.external_id.slice(EXTERNAL_ID_PREFIX.length),
+        label: row.display_name ?? row.name,
+      }));
 
     if (!hasLocation) {
       return NextResponse.json({ stores });

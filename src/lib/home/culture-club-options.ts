@@ -11,16 +11,22 @@
 // 아니라 brand를 필터 중 하나로 다루는 단일 화면으로 바꿨다) 'all'(전체,
 // 기본값)을 맨 앞에 추가한다. 브랜드가 5개(AK플라자/신세계/현대백화점 추가
 // 예정)가 돼도 이 배열에 원소만 늘리면 된다.
+// [브랜드 라벨 — "문화센터"류 접미사 제거](2026-10-09 사용자 지시: "이마트,
+// 롯데마트, 현대백화점, 신세계 AK플라자, 스타필드 롯데백화점 이랜드리테일로
+// 문화센터는 다 빼... 너무 길어져") 8개로 늘어나면서 각자 다른 접미사
+// (컬처클럽/문화센터/아카데미/문화아카데미)가 붙은 긴 라벨이 필터 pill
+// 줄을 세로로 깨지게 했다 — 이미 "문화센터" 탭 안이라 접미사가 중복 정보라
+// 순수 브랜드명만 쓴다.
 export const CULTURE_CLUB_BRAND_OPTIONS = [
   { key: 'all', label: '전체' },
-  { key: 'emart', label: '이마트 컬처클럽' },
-  { key: 'lottemart', label: '롯데마트 문화센터' },
-  { key: 'hyundai', label: '현대백화점 문화센터' },
-  { key: 'shinsegae', label: '신세계 아카데미' },
-  { key: 'ak_plaza', label: 'AK플라자 문화아카데미' },
-  { key: 'starfield', label: '스타필드 문화센터' },
-  { key: 'lotte_department', label: '롯데백화점 문화센터' },
-  { key: 'eland_retail', label: '이랜드리테일 문화센터' },
+  { key: 'emart', label: '이마트' },
+  { key: 'lottemart', label: '롯데마트' },
+  { key: 'hyundai', label: '현대백화점' },
+  { key: 'shinsegae', label: '신세계' },
+  { key: 'ak_plaza', label: 'AK플라자' },
+  { key: 'starfield', label: '스타필드' },
+  { key: 'lotte_department', label: '롯데백화점' },
+  { key: 'eland_retail', label: '이랜드리테일' },
 ] as const;
 
 export type CultureClubBrandKey = (typeof CULTURE_CLUB_BRAND_OPTIONS)[number]['key'];

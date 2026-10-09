@@ -33,7 +33,7 @@ describe('GET /api/culture-club/hyundai-stores', () => {
     const data = await res.json();
 
     expect(res.status).toBe(200);
-    expect(data.stores).toEqual([{ storeCode: '220', label: '현대백화점 무역센터점 (서울 강남구)' }]);
+    expect(data.stores).toEqual([{ storeCode: '220', label: '현대백화점 무역센터점' }]);
   });
 
   it('DB 조회가 실패하면 500을 반환한다', async () => {

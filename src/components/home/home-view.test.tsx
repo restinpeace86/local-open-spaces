@@ -854,8 +854,8 @@ describe('HomeView', () => {
       fireEvent.click(screen.getByText('🏫 문화센터'));
 
       expect(await screen.findByText('전체')).toBeInTheDocument();
-      expect(screen.getByText('이마트 컬처클럽')).toBeInTheDocument();
-      expect(screen.getByText('롯데마트 문화센터')).toBeInTheDocument();
+      expect(screen.getByText('이마트')).toBeInTheDocument();
+      expect(screen.getByText('롯데마트')).toBeInTheDocument();
       expect(container.querySelector('section[aria-label="카테고리별 행사"]')).toBeNull();
     });
 
@@ -864,10 +864,10 @@ describe('HomeView', () => {
       const { container } = render(<HomeView initialHeroEvents={[]} />);
 
       fireEvent.click(screen.getByText('🏫 문화센터'));
-      await screen.findByText('이마트 컬처클럽');
+      await screen.findByText('이마트');
 
       fireEvent.click(screen.getByText('이벤트'));
-      expect(screen.queryByText('이마트 컬처클럽')).not.toBeInTheDocument();
+      expect(screen.queryByText('이마트')).not.toBeInTheDocument();
       expect(container.querySelector('section[aria-label="카테고리별 행사"]')).not.toBeNull();
     });
   });
@@ -882,7 +882,7 @@ describe('HomeView', () => {
       fireEvent.click(screen.getByText('🏫 문화센터'));
 
       expect(await screen.findByText('🏫 문화센터는 로그인 후 이용할 수 있어요')).toBeInTheDocument();
-      expect(screen.queryByText('이마트 컬처클럽')).not.toBeInTheDocument();
+      expect(screen.queryByText('이마트')).not.toBeInTheDocument();
     });
 
     it('로그인했지만 새싹맘 미달성(signed_up)이면 등업 안내가 뜨고 실제 콘텐츠는 안 보인다', async () => {
@@ -903,7 +903,7 @@ describe('HomeView', () => {
       fireEvent.click(screen.getByText('🏫 문화센터'));
 
       expect(await screen.findByText('🌱 아직 새싹맘 등급이 아니에요!')).toBeInTheDocument();
-      expect(screen.queryByText('이마트 컬처클럽')).not.toBeInTheDocument();
+      expect(screen.queryByText('이마트')).not.toBeInTheDocument();
     });
 
     it('로그인 안내를 닫으면 "이벤트" 탭으로 돌아간다', async () => {

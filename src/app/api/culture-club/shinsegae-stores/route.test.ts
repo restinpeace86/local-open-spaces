@@ -33,7 +33,7 @@ describe('GET /api/culture-club/shinsegae-stores', () => {
     const data = await res.json();
 
     expect(res.status).toBe(200);
-    expect(data.stores).toEqual([{ storeCode: '03', label: '신세계 타임스퀘어 & ON (서울 영등포구)' }]);
+    expect(data.stores).toEqual([{ storeCode: '03', label: '신세계 타임스퀘어 & ON' }]);
   });
 
   it('DB 조회가 실패하면 500을 반환한다', async () => {
