@@ -49,8 +49,12 @@ const CHILD_ORDINAL_LABELS = ['첫째', '둘째', '셋째', '넷째', '다섯째
 // [Branch-First 반경 선택](2026-10-07 todo.md 개선사항1-1): "사용자가 앱 내에서
 // 반경(예: 5km, 10km, 20km 등)을 직접 변경할 수 있는 거리 선택 필터... 기본값
 // 10km" — map-explorer.tsx의 바텀시트 반경 선택(5/10/20km, 기본 10km)과 동일한
-// 값 구성을 그대로 따른다(제5장 제4조 기존 구조 우선).
-const RADIUS_KM_OPTIONS = [5, 10, 20] as const;
+// 값 구성을 그대로 따랐었다(제5장 제4조 기존 구조 우선).
+// [20km 옵션 제거](2026-10-09 사용자 지시: "20km는 너무 먼거같고 필요없어보여")
+// 문화센터는 지점을 오가는 생활권 거리가 중요해 20km는 과하다고 판단 —
+// 이 화면(문화센터)에만 적용, map-explorer.tsx의 반경 선택은 별개 범위라
+// 건드리지 않는다.
+const RADIUS_KM_OPTIONS = [5, 10] as const;
 const DEFAULT_RADIUS_KM = 10;
 // [코어 데이터 캐싱 — 기본 풀 크기](2026-10-08 todo.md 개선사항1) route.ts의
 // DISTANCE_SORT_FETCH_SAFETY_CEILING(거리순 정렬 시 안전 상한)과 동일한

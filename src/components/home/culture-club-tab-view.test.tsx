@@ -637,9 +637,9 @@ describe('CultureClubTabView — 브랜드 필터', () => {
       expect(call?.[0]).toContain('radius_km=10');
     });
 
-    fireEvent.click(screen.getByText('20km'));
+    fireEvent.click(screen.getByText('5km'));
     await waitFor(() => {
-      const call = fetchMock.mock.calls.find(([url]) => (url as string).includes('/api/culture-club/search?') && (url as string).includes('radius_km=20'));
+      const call = fetchMock.mock.calls.find(([url]) => (url as string).includes('/api/culture-club/search?') && (url as string).includes('radius_km=5'));
       expect(call).toBeTruthy();
     });
   });
@@ -877,7 +877,7 @@ describe('CultureClubTabView — 코어 데이터 캐싱 & 로컬 필터링', ()
     await screen.findByText(/두근두근/);
     const before = countSearchCalls(fetchMock);
 
-    fireEvent.click(screen.getByText('20km'));
+    fireEvent.click(screen.getByText('5km'));
 
     await waitFor(() => expect(countSearchCalls(fetchMock)).toBe(before + 1));
   });
