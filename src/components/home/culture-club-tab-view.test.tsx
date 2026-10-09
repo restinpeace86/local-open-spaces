@@ -7,8 +7,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { CultureClubTabView } from './culture-club-tab-view';
 
 const mockUser = { current: null as { id: string } | null };
+const mockAuthIsLoading = { current: false };
 vi.mock('@/hooks/use-user', () => ({
-  useUser: () => ({ user: mockUser.current, isLoading: false }),
+  useUser: () => ({ user: mockUser.current, isLoading: mockAuthIsLoading.current }),
 }));
 const getMyProfileMock = vi.fn();
 vi.mock('@/lib/auth/profile', () => ({
@@ -970,6 +971,33 @@ describe('CultureClubTabView — 코어 데이터 캐싱 & 로컬 필터링', ()
     fireEvent.click(screen.getByText('5km'));
 
     await waitFor(() => expect(countSearchCalls(fetchMock)).toBe(before + 1));
+  });
+
+  // [첫 로딩 중복 조회 제거](2026-10-09 사용자 지적: "처음 로딩때 너무
+  // 느려보이지... 다른것도 불러오는게 많아서 다합쳐서 느려지는거같은데")
+  // 로그인 여부 확인(useUser의 isLoading)이 끝나기 전엔 기본 데이터 풀을
+  // 조회하지 않고, 끝난 뒤(+프로필 확정 뒤) 정확히 한 번만 조회해야 한다
+  // — 이전엔 "로그인 여부 모름=비로그인"으로 잘못 간주해 연령 필터 없는
+  // 풀을 먼저 조회하고, 로그인 확인이 끝나면 다시 조회하는 이중 요청이
+  // 있었다.
+  it('로그인 여부 확인이 끝나기 전에는 기본 데이터 풀을 조회하지 않고, 끝나면 정확히 한 번만 조회한다', async () => {
+    mockAuthIsLoading.current = true;
+    const fetchMock = stubFetch([makeEmartClass()]);
+    const { rerender } = render(<CultureClubTabView />);
+
+    // 로그인 여부 확인 중엔 basePool 조회 자체가 나가지 않아야 한다.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(countSearchCalls(fetchMock)).toBe(0);
+
+    mockAuthIsLoading.current = false;
+    rerender(<CultureClubTabView />);
+
+    await waitFor(() => expect(countSearchCalls(fetchMock)).toBe(1));
+    // 그 뒤로도 불필요한 추가 조회가 뒤따르지 않는지(중복 요청 재발 방지) 한 번 더 확인.
+    await screen.findByText(/두근두근/);
+    expect(countSearchCalls(fetchMock)).toBe(1);
+
+    mockAuthIsLoading.current = false;
   });
 
   it('찜/상세 열람과 무관하게, 2차 필터를 아무리 바꿔도 처음 받은 기본 풀 1건 조회만 유지된다', async () => {

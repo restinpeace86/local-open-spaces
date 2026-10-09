@@ -759,9 +759,22 @@ function ChildAgeBanner({
 }
 
 export function CultureClubTabView() {
-  const { user } = useUser();
+  const { user, isLoading: isAuthLoading } = useUser();
   const { center } = useUserLocation();
   const [profile, setProfile] = useState<{ birth_years: number[]; birth_months: number[] } | null>(null);
+  // [첫 로딩 중복 조회 제거](2026-10-09 사용자 지적: "처음 로딩때 너무
+  // 느려보이지... 다른것도 불러오는게 많아서 다합쳐서 느려지는거같은데")
+  // 실측 확인: useUser()의 로그인 여부 확인(auth.getUser)이 끝나기 전엔
+  // user가 항상 null이라, 로그인 여부를 "아직 모름"과 "진짜 비로그인"을
+  // 구분 못 하고 바로 profile=null로 확정해버렸다. 그 결과 1차로 연령
+  // 필터 없는 basePool을 한 번 조회하고, 조금 뒤 로그인 확인이 끝나
+  // 진짜 프로필이 들어오면 연령 필터가 있는 basePool을 다시 조회하는
+  // 이중 요청(+그 사이 "로딩 끝→다시 로딩" 깜빡임)이 매 첫 진입마다
+  // 발생했다 — 각 요청이 Supabase 왕복 고정 지연(~400~600ms, route.ts의
+  // Branch-First 최적화 때 실측한 것과 동일 사실)을 또 한 번 더 먹는다.
+  // isAuthLoading이 끝날 때까지는 profile 판정 자체를 미뤄 이 중복을
+  // 없앤다(아래 basePool 조회도 이 판정이 끝나야 시작하도록 묶는다).
+  const [isProfileReady, setIsProfileReady] = useState(false);
   const [activeChildIndex, setActiveChildIndex] = useState(0);
 
   const [brandKey, setBrandKey] = useState<CultureClubBrandKey>('all');
@@ -791,22 +804,29 @@ export function CultureClubTabView() {
   // 이미 "둘 다 있어야 계산 가능, 음수(미래 출생)는 제외" 로직을 갖고 있다
   // (src/lib/ai-chat/personalization.ts).
   useEffect(() => {
+    if (isAuthLoading) return; // 로그인 여부 자체가 아직 안 끝남 — 판정을 미룬다
     if (!user) {
       setProfile(null);
+      setIsProfileReady(true);
       return;
     }
     let cancelled = false;
+    setIsProfileReady(false);
     getMyProfile()
       .then((p) => {
-        if (!cancelled) setProfile(p ? { birth_years: p.birth_years, birth_months: p.birth_months } : null);
+        if (cancelled) return;
+        setProfile(p ? { birth_years: p.birth_years, birth_months: p.birth_months } : null);
+        setIsProfileReady(true);
       })
       .catch(() => {
-        if (!cancelled) setProfile(null);
+        if (cancelled) return;
+        setProfile(null);
+        setIsProfileReady(true);
       });
     return () => {
       cancelled = true;
     };
-  }, [user]);
+  }, [user, isAuthLoading]);
 
   const children = useMemo(() => {
     if (!profile) return [];
@@ -855,6 +875,11 @@ export function CultureClubTabView() {
   }, [activeAgeMonths, center.lat, center.lng, radiusKm]);
 
   useEffect(() => {
+    // 연령 필터 여부가 아직 확정 안 됐으면 기다린다(위 "첫 로딩 중복
+    // 조회 제거" 참고) — 여기서 멈춰도 isLoading은 초기값 true 그대로라
+    // 로딩 화면은 계속 보인다(깜빡임 없이 매끄럽게 이어짐).
+    if (!isProfileReady) return;
+
     let cancelled = false;
     setIsLoading(true);
     setErrorMessage(null);
@@ -877,7 +902,7 @@ export function CultureClubTabView() {
     return () => {
       cancelled = true;
     };
-  }, [buildBasePoolUrl]);
+  }, [buildBasePoolUrl, isProfileReady]);
 
   // [2차 필터 — 로컬 메모리](2026-10-08 todo.md 개선사항1) brand/지점/요일/
   // 카테고리/대상/검색어는 서버를 다시 타지 않고 이미 캐싱된 basePool에서
