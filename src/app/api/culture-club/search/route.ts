@@ -192,12 +192,20 @@ export async function GET(request: NextRequest) {
     // 그 자체가 정확한 총건수라 count 결과를 쓸 필요도 없다(실제로는 그래도
     // 정직한 count 값을 그대로 쓴다 — 거의 항상 서로 일치하고, 더 저렴한
     // 쪽을 고르느라 복잡도를 늘리지 않는다).
+    // [실측으로 발견한 버그 — 마감 강좌가 화면에 계속 보임](2026-10-09 사용자
+    // 지적: "정원마감된게 나오는건 왜그러는거야?") 신규 수집 시엔 마감 강좌를
+    // 저장하지 않지만(splitOpenAndClosedRows, 모든 브랜드 공통 정책), 이미
+    // 저장된 OPEN 강좌가 나중에 상태감시 배치로 CLOSED로 바뀌어도 이 쿼리가
+    // normalized_status를 전혀 거르지 않아 테이블에 남은 그대로 계속 노출되고
+    // 있었다. 마감 전환되기 전에 상세수집이 못 따라간 강좌는 썸네일도 없어
+    // "썸네일 없는 마감 강좌가 대량 노출"되는 증상도 같은 원인이다 — CLOSED를
+    // 걸러내면 두 증상이 함께 해결된다.
     const countQuery = applyCommonFilters(
-      supabase.from('culture_club_classes').select('*', { count: 'exact', head: true }).eq('is_excluded', false),
+      supabase.from('culture_club_classes').select('*', { count: 'exact', head: true }).eq('is_excluded', false).neq('normalized_status', 'CLOSED'),
       storeScopeFilter
     );
     const firstPageQuery = applyCommonFilters(
-      supabase.from('culture_club_classes').select(SEARCH_RESULT_COLUMNS).eq('is_excluded', false),
+      supabase.from('culture_club_classes').select(SEARCH_RESULT_COLUMNS).eq('is_excluded', false).neq('normalized_status', 'CLOSED'),
       storeScopeFilter
     );
     const firstPageRange = hasLocation ? ([0, PAGE_FETCH_SIZE - 1] as const) : ([from, to] as const);
@@ -230,7 +238,10 @@ export async function GET(request: NextRequest) {
       for (let offset = PAGE_FETCH_SIZE; offset < fetchCeiling; offset += PAGE_FETCH_SIZE) remainingOffsets.push(offset);
       const morePages = await Promise.all(
         remainingOffsets.map((offset) =>
-          applyCommonFilters(supabase.from('culture_club_classes').select(SEARCH_RESULT_COLUMNS).eq('is_excluded', false), storeScopeFilter).range(
+          applyCommonFilters(
+            supabase.from('culture_club_classes').select(SEARCH_RESULT_COLUMNS).eq('is_excluded', false).neq('normalized_status', 'CLOSED'),
+            storeScopeFilter
+          ).range(
             offset,
             offset + PAGE_FETCH_SIZE - 1
           )

@@ -30,6 +30,7 @@ function mockAdminClient({
   const chain = {
     select: () => chain,
     eq: () => chain,
+    neq: () => chain,
     in: () => chain,
     overlaps: () => chain,
     or: orMock,
@@ -192,6 +193,36 @@ describe('GET /api/culture-club/search — Branch-First 거리순 정렬', () =>
     expect(fromMock).toHaveBeenCalled();
   });
 
+  // [실측으로 발견한 버그 — 마감 강좌가 화면에 계속 보임](2026-10-09 사용자
+  // 지적: "정원마감된게 나오는건 왜그러는거야?") 신규 수집 시엔 마감 강좌를
+  // 저장하지 않지만, 이미 저장된 OPEN 강좌가 나중에 상태감시 배치로 CLOSED로
+  // 바뀌면 이 쿼리가 normalized_status를 거르지 않아 그대로 계속 노출되고
+  // 있었다 — count/첫 페이지 쿼리 둘 다 CLOSED를 제외해야 한다.
+  it('normalized_status가 CLOSED인 강좌는 count/조회 쿼리 둘 다에서 제외한다', async () => {
+    const neqCalls: [string, unknown][] = [];
+    const chain: Record<string, unknown> = {};
+    chain.select = () => chain;
+    chain.eq = () => chain;
+    chain.neq = (column: string, value: unknown) => {
+      neqCalls.push([column, value]);
+      return chain;
+    };
+    chain.in = () => chain;
+    chain.overlaps = () => chain;
+    chain.or = () => chain;
+    chain.ilike = () => chain;
+    chain.order = () => chain;
+    chain.range = () => Promise.resolve({ data: [], error: null });
+    chain.then = (resolve: (v: { data: null; error: null; count: number }) => void) => resolve({ data: null, error: null, count: 0 });
+    const fromMock = vi.fn(() => chain);
+    vi.doMock('@/lib/supabase/admin', () => ({ createAdminClient: () => ({ from: fromMock }) }));
+    const { GET } = await import('./route');
+
+    await GET(new Request('http://localhost/api/culture-club/search') as never);
+
+    expect(neqCalls.filter(([column, value]) => column === 'normalized_status' && value === 'CLOSED').length).toBeGreaterThanOrEqual(2);
+  });
+
   it('지점 다중 선택(store_codes)이 있으면 선택된 지점으로만 좁힌다', async () => {
     const { fromMock, rpcMock } = mockAdminClient({
       rowsByRange: () => [makeRow(1, 'emart', 'A'), makeRow(2, 'emart', 'B')],
@@ -244,6 +275,7 @@ describe('GET /api/culture-club/search — age_months 파라미터', () => {
     const chain = {
       select: () => chain,
       eq: () => chain,
+      neq: () => chain,
       order: () => chain,
       range: () => Promise.resolve({ data: [], error: null }),
       or: (filter: string) => {
