@@ -56,6 +56,27 @@ const CHILD_ORDINAL_LABELS = ['첫째', '둘째', '셋째', '넷째', '다섯째
 // 건드리지 않는다.
 const RADIUS_KM_OPTIONS = [5, 10] as const;
 const DEFAULT_RADIUS_KM = 10;
+
+// [지점 뱃지 드릴다운 — 6개 브랜드 추가](2026-10-09 사용자 지시: "신세계
+// 브랜드 선택시 데이터는 나오는데 그 상세지점 왜안나와 ?" → "6개 브랜드
+// 전부 지금 추가") 2026-10-08 Decision 029 범위에서 이마트/롯데마트
+// 2개만 지점 선택 UI를 연결하고 나머지 6개는 "API는 만들어뒀지만 화면
+// 연결은 나중에"로 미뤄뒀었는데, 관리자 패널(culture-club-panel.tsx)이
+// 이미 6개 브랜드 전용 지점 목록 API(hyundai-stores/shinsegae-stores/
+// akplaza-stores/starfield-stores/lotte-department-stores/eland-
+// retail-stores)를 쓰고 있어 그대로 재사용한다(제5장 제4조 기존 구조
+// 우선) — 새 API를 만들 필요 없이 이 화면에서도 brandKey별로 맞는
+// 엔드포인트만 연결하면 된다.
+const STORE_ENDPOINT_BY_BRAND: Record<Exclude<CultureClubBrandKey, 'all'>, string> = {
+  emart: '/api/culture-club/stores',
+  lottemart: '/api/culture-club/lottemart-stores',
+  hyundai: '/api/culture-club/hyundai-stores',
+  shinsegae: '/api/culture-club/shinsegae-stores',
+  ak_plaza: '/api/culture-club/akplaza-stores',
+  starfield: '/api/culture-club/starfield-stores',
+  lotte_department: '/api/culture-club/lotte-department-stores',
+  eland_retail: '/api/culture-club/eland-retail-stores',
+};
 // [코어 데이터 캐싱 — 기본 풀 크기](2026-10-08 todo.md 개선사항1) route.ts의
 // DISTANCE_SORT_FETCH_SAFETY_CEILING(거리순 정렬 시 안전 상한)과 동일한
 // 값으로 요청해, 그 반경·연령 조건의 전체 풀을 한 번에 받아 캐싱한다.
@@ -329,10 +350,15 @@ function formatRegistrationDateLabel(item: CultureClubClass): string | null {
 
 // [데이터 신선도 안내] 상태가 일 1회 배치 갱신임을 숨기지 않고 그대로 보여준다
 // (이전 두 화면의 동일 패턴 유지, 제3장 제5조 — 실시간인 척하지 않음).
+// [시간 제거 — 일자만](2026-10-09 사용자 지적: "이거 각각의 브랜드마다
+// 다르잖아... 마지막 업데이트는 시간은 빼... 일자만 넣어") 보여주는 값은
+// 화면에 뜬 첫 강좌 1건의 collected_at일 뿐인데, 브랜드마다 배치 시각이
+// 달라(일일 배치 vs 롯데백화점 4~6시간 랜덤 주기 등) 분 단위 시각까지
+// 보여주면 "전체가 그 시각에 갱신됐다"는 오해를 줄 수 있다 — 일자만
+// 보여주는 거친 단위로 낮춰 그 오해를 줄인다.
 function formatUpdatedAt(raw: string) {
   const date = new Date(raw);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${date.getMonth() + 1}.${date.getDate()} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return `${date.getMonth() + 1}.${date.getDate()}`;
 }
 
 // [위치 클릭 → 인앱 지도 팝업](2026-10-07 사용자 지시: "스타필드시티위례..
@@ -798,26 +824,11 @@ export function CultureClubTabView() {
     setSelectedStoreCodes(new Set());
     setSelectedSubCategories(new Set());
     setSelectedTargets(new Set());
-    // [현대백화점/신세계/AK플라자/스타필드/롯데백화점 — 지점 뱃지
-    // 드릴다운 아직 미지원](2026-10-08, Decision 029 / todo.md 개선사항2
-    // — 신규 브랜드 추가 때마다 동일하게 적용) 이 화면(사용자 노출용
-    // 지점 뱃지 드릴다운) 전용 API가 아직 없다 — 관리자 패널용 지점 목록
-    // API는 각 브랜드마다 추가했지만 그건 별개 용도라, 추측으로 이
-    // 화면에 지점 목록을 지어내지 않고 빈 목록으로 둔다(브랜드 필터 자체는
-    // 정상 동작, 요일 등 다른 필터와 함께 전체 통합검색에 그대로 걸린다).
-    if (
-      brandKey === 'all' ||
-      brandKey === 'hyundai' ||
-      brandKey === 'shinsegae' ||
-      brandKey === 'ak_plaza' ||
-      brandKey === 'starfield' ||
-      brandKey === 'lotte_department' ||
-      brandKey === 'eland_retail'
-    ) {
+    if (brandKey === 'all') {
       setStores([]);
       return;
     }
-    const endpoint = brandKey === 'emart' ? '/api/culture-club/stores' : '/api/culture-club/lottemart-stores';
+    const endpoint = STORE_ENDPOINT_BY_BRAND[brandKey];
     const params = new URLSearchParams({ lat: String(center.lat), lng: String(center.lng), radius_km: String(radiusKm) });
     fetch(`${endpoint}?${params.toString()}`)
       .then((res) => res.json())
@@ -1101,9 +1112,20 @@ export function CultureClubTabView() {
           {isLoading && items.length === 0 && <EventListSkeleton label="문화센터 강좌 불러오는 중" />}
           {errorMessage && <p className="text-sm text-red-500">{errorMessage}</p>}
           {isEmpty && <EmptyState onReset={resetFilters} />}
+          {/* [문구 정확도 — "하루 1회"는 브랜드별로 다름](2026-10-09 사용자
+              지적: "접수상태는 하루 1회 갱신된다는것도... 이거 각각의
+              브랜드마다 다르잖아" → "접수상태는 하루 1회 갱신 맞아 ?")
+              실측 확인(Windows 작업 스케줄러 "반복: 매" 값 직접 조회):
+              이마트는 전용 경량 배치(emart-culture-club-status-refresh.mjs)
+              가 30분마다 전체 강좌 상태를 갱신하고, 나머지 브랜드(롯데마트/
+              현대백화점/신세계/AK플라자/스타필드/롯데백화점)는 일일 목록
+              배치가 상태를 같이 갱신해 하루 1회뿐이다 — "하루 1회"로 단정
+              하면 이마트는 과소평가, 반대로 "30분마다"로 단정하면 나머지
+              브랜드는 과대평가가 된다. 혼합 브랜드 목록에 공통으로 보여줄
+              문구라 양쪽 다 거짓이 되지 않는 "최소 하루 1회"로 바꾼다. */}
           {items.length > 0 && (
             <p className="mb-2 text-[11px] text-gray-400">
-              ⏱ 마지막 업데이트 {formatUpdatedAt(items[0].collected_at)} · 접수 상태는 하루 1회 갱신돼요(찜하면 더 자주 확인해 알려드려요)
+              ⏱ 마지막 업데이트 {formatUpdatedAt(items[0].collected_at)} · 접수 상태는 최소 하루 1회 갱신돼요(찜하면 더 자주 확인해 알려드려요)
             </p>
           )}
           {/* [반응형 — PC에서 여러 칸](2026-10-07 사용자 지적: "문센같은 경우

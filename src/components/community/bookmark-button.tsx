@@ -82,16 +82,27 @@ export function BookmarkButton({ target }: { target: BookmarkTarget }) {
 
   if (!canShow) return null;
 
+  // [낙관적 갱신 — 1~2초 지연 제거](2026-10-09 사용자 지적: "찜하면 이제
+  // 색깔 바뀌긴 한데 바뀌기까지 꽤오래걸리네 1~2초걸리는거 같아") 원인은
+  // addBookmark/removeBookmark 내부가 auth.getUser → getMyProfile → 캡
+  // 개수 확인 → (강좌면) resolveCultureClubClassId → insert/delete까지
+  // 최대 5번의 순차 Supabase 왕복을 거치는데, 왕복마다 ~400~600ms 고정
+  // 지연이 있다(route.ts의 Branch-First 최적화 때 실측한 것과 동일한
+  // 사실) — 그 전체가 끝나야 state를 바꾸던 기존 구조라 체감 지연이 컸다.
+  // mom-pick-feed.tsx의 낙관적 갱신 관례와 동일하게, 클릭 즉시 state를
+  // 먼저 바꾸고 실패했을 때만 되돌린다(제5장 제4조 기존 구조 우선).
   async function handleToggle() {
+    const wasBookmarked = isBookmarked;
+    setIsBookmarked(!wasBookmarked);
     setIsBusy(true);
     try {
-      if (isBookmarked) {
+      if (wasBookmarked) {
         await removeBookmark(target);
       } else {
         await addBookmark(target);
       }
-      setIsBookmarked((prev) => !prev);
     } catch (err) {
+      setIsBookmarked(wasBookmarked); // 실패 시 되돌림
       if (err instanceof BookmarkCapExceededError) {
         setToastMessage(err.message);
       }

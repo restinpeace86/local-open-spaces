@@ -320,7 +320,33 @@ function makeElandRetailClass(overrides: Partial<ClassFixture> = {}): ClassFixtu
   };
 }
 
-function stubFetch(classes: ClassFixture[], opts: { emartStores?: object[]; lottemartStores?: object[] } = {}) {
+// [6개 브랜드 지점 뱃지 드릴다운 추가](2026-10-09 사용자 지시: "신세계
+// 브랜드 선택시 데이터는 나오는데 그 상세지점 왜안나와 ?" → "6개 브랜드
+// 전부 지금 추가") 현대백화점/신세계/AK플라자/스타필드/롯데백화점/
+// 이랜드리테일의 지점 목록 엔드포인트도 이마트/롯데마트와 동일한 패턴으로
+// 모의 응답을 둔다.
+const OTHER_BRAND_STORE_ENDPOINTS: Record<string, string> = {
+  hyundaiStores: '/api/culture-club/hyundai-stores',
+  shinsegaeStores: '/api/culture-club/shinsegae-stores',
+  akplazaStores: '/api/culture-club/akplaza-stores',
+  starfieldStores: '/api/culture-club/starfield-stores',
+  lotteDepartmentStores: '/api/culture-club/lotte-department-stores',
+  elandRetailStores: '/api/culture-club/eland-retail-stores',
+};
+
+function stubFetch(
+  classes: ClassFixture[],
+  opts: {
+    emartStores?: object[];
+    lottemartStores?: object[];
+    hyundaiStores?: object[];
+    shinsegaeStores?: object[];
+    akplazaStores?: object[];
+    starfieldStores?: object[];
+    lotteDepartmentStores?: object[];
+    elandRetailStores?: object[];
+  } = {}
+) {
   const fetchMock = vi.fn((url: string) => {
     if (url.startsWith('/api/culture-club/stores')) {
       return Promise.resolve({
@@ -331,6 +357,13 @@ function stubFetch(classes: ClassFixture[], opts: { emartStores?: object[]; lott
       return Promise.resolve({
         json: () => Promise.resolve({ stores: opts.lottemartStores ?? [{ storeCode: '455', label: '고양점' }] }),
       } as Response);
+    }
+    for (const [optKey, endpoint] of Object.entries(OTHER_BRAND_STORE_ENDPOINTS)) {
+      if (url.startsWith(endpoint)) {
+        return Promise.resolve({
+          json: () => Promise.resolve({ stores: (opts as Record<string, object[] | undefined>)[optKey] ?? [] }),
+        } as Response);
+      }
     }
     if (url.startsWith('/api/culture-club/search')) {
       return Promise.resolve({ json: () => Promise.resolve({ items: classes, total: classes.length }) } as Response);
@@ -516,12 +549,22 @@ describe('CultureClubTabView — 기본값(전체, 브랜드 무관 통합검색
     expect(await screen.findAllByText('대기자신청')).not.toHaveLength(0);
   });
 
-  it('하루 1회 갱신이라는 안내와 함께 마지막 업데이트 시각을 보여준다', async () => {
-    stubFetch([makeEmartClass({ collected_at: '2026-10-03T04:12:00+00:00' })]);
+  // [시간 제거 — 일자만](2026-10-09 사용자 지시: "마지막 업데이트는 시간은
+  // 빼... 일자만 넣어") + ["최소 하루 1회"로 문구 수정](같은 날 "접수상태는
+  // 하루 1회 갱신 맞아 ?" — 이마트는 30분마다 갱신되고 나머지는 하루
+  // 1회뿐이라 "하루 1회"로 단정하면 틀리는 브랜드가 생겨 "최소 하루 1회"로
+  // 바꿨다).
+  it('최소 하루 1회 갱신이라는 안내와 함께 마지막 업데이트 일자(시간 제외)를 보여준다', async () => {
+    // [시간대 경계 회피] 정오(KST) 근처 시각을 써서 로컬 타임존이 달라도
+    // 날짜가 10.3에서 안 밀리게 한다.
+    stubFetch([makeEmartClass({ collected_at: '2026-10-03T12:00:00+09:00' })]);
     render(<CultureClubTabView />);
 
-    expect(await screen.findByText(/마지막 업데이트/)).toBeInTheDocument();
-    expect(screen.getByText(/하루 1회 갱신돼요/)).toBeInTheDocument();
+    const notice = await screen.findByText(/마지막 업데이트/);
+    expect(notice).toBeInTheDocument();
+    expect(notice.textContent).toContain('10.3');
+    expect(notice.textContent).not.toMatch(/\d{1,2}:\d{2}/);
+    expect(screen.getByText(/최소 하루 1회 갱신돼요/)).toBeInTheDocument();
   });
 
   it('카드 목록이 반응형 그리드로 보인다(2026-10-07 사용자 지적: "PC에서 보면 한줄에 3개... 우리도 그렇게 안되나")', async () => {
@@ -657,6 +700,38 @@ describe('CultureClubTabView — 브랜드 필터', () => {
       const call = fetchMock.mock.calls.find(([url]) => (url as string).includes('/api/culture-club/search?') && (url as string).includes('radius_km=5'));
       expect(call).toBeTruthy();
     });
+  });
+});
+
+// [지점 뱃지 드릴다운 — 6개 브랜드 추가](2026-10-09 사용자 지시: "신세계
+// 브랜드 선택시 데이터는 나오는데 그 상세지점 왜안나와 ?" → "6개 브랜드
+// 전부 지금 추가") 이마트/롯데마트만 지점 선택 UI가 연결돼 있었는데,
+// 나머지 6개 브랜드도 관리자 패널이 이미 쓰고 있는 지점 목록 API를 그대로
+// 재사용해 연결한다.
+describe('CultureClubTabView — 지점 뱃지 드릴다운(6개 브랜드 추가, 2026-10-09)', () => {
+  // [뱃지 라벨 — 카드 위치 줄과 겹치지 않는 값 사용] 카드의 위치 줄도
+  // "브랜드명 + store_name"을 보여주게 됐기 때문에(formatStoreNameWithBrand),
+  // 뱃지 라벨을 실제 지점명과 같게 두면 getByText가 둘 다 찾아 모호해진다
+  // — 테스트용으로 분명히 다른 지점(실제 fixture의 store_name과 무관한
+  // 가상 지점)을 써서 뱃지만 유일하게 매칭되게 한다.
+  it.each([
+    ['현대백화점', 'hyundaiStores', '/api/culture-club/hyundai-stores', makeHyundaiClass, '현대백화점 테스트지점'],
+    ['신세계', 'shinsegaeStores', '/api/culture-club/shinsegae-stores', makeShinsegaeClass, '신세계 테스트지점'],
+    ['AK플라자', 'akplazaStores', '/api/culture-club/akplaza-stores', makeAkplazaClass, 'AK플라자 테스트지점'],
+    ['스타필드', 'starfieldStores', '/api/culture-club/starfield-stores', makeStarfieldClass, '스타필드 테스트지점'],
+    ['롯데백화점', 'lotteDepartmentStores', '/api/culture-club/lotte-department-stores', makeLotteDepartmentClass, '롯데백화점 테스트지점'],
+    ['이랜드리테일', 'elandRetailStores', '/api/culture-club/eland-retail-stores', makeElandRetailClass, '이랜드리테일 테스트지점'],
+  ] as const)('%s를 선택하면 전용 지점 목록 API(%s)를 조회해 지점 뱃지를 보여준다', async (brandLabel, optKey, endpoint, makeClass, storeLabel) => {
+    const fetchMock = stubFetch([makeClass()], { [optKey]: [{ storeCode: 'X1', label: storeLabel }] });
+    render(<CultureClubTabView />);
+
+    fireEvent.click(await screen.findByText(brandLabel));
+
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find(([url]) => (url as string).startsWith(endpoint));
+      expect(call).toBeTruthy();
+    });
+    expect(await screen.findByText(storeLabel)).toBeInTheDocument();
   });
 });
 

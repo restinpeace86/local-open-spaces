@@ -64,6 +64,29 @@ describe('BookmarkButton', () => {
     expect(screen.getByLabelText('찜하기')).toBeTruthy();
   });
 
+  // [낙관적 갱신](2026-10-09 사용자 지적: "찜하면 이제 색깔 바뀌긴 한데
+  // 바뀌기까지 꽤오래걸리네 1~2초걸리는거 같아") addBookmark가 최대 5번의
+  // 순차 Supabase 왕복을 거쳐 느린데, 응답을 기다리지 않고 클릭 즉시
+  // 하트 색(aria-label)이 바뀌어야 한다 — booking-card.test.tsx의 "즉시
+  // 활성 표시가 바뀐다" 검증과 동일한 패턴(제5장 제4조).
+  it('클릭 즉시(서버 응답 전) 하트 라벨이 바뀌고, 서버 요청이 끝날 때까지 기다리지 않는다', async () => {
+    mockUser.current = { id: 'user-1' };
+    getMyProfileMock.mockResolvedValue({ grade: 'active' });
+    getMyBookmarkedIdsMock.mockResolvedValue({ spotIds: new Set(), eventIds: new Set() });
+    let resolveAdd: (() => void) | undefined;
+    addBookmarkMock.mockReturnValue(new Promise<void>((resolve) => (resolveAdd = resolve)));
+
+    render(<BookmarkButton target={{ kind: 'spot', spotId: 'spot-1' }} />);
+    await waitFor(() => expect(screen.getByLabelText('찜하기')).toBeTruthy());
+
+    fireEvent.click(screen.getByLabelText('찜하기'));
+    // addBookmark는 아직 응답하지 않았는데도 즉시 '찜 해제'로 바뀌어야 한다.
+    expect(screen.getByLabelText('찜 해제')).toBeTruthy();
+
+    resolveAdd?.();
+    await waitFor(() => expect(screen.getByLabelText('찜 해제')).toBeTruthy());
+  });
+
   it('찜이 성공하면 하트가 채워지고 토스트는 뜨지 않는다', async () => {
     mockUser.current = { id: 'user-1' };
     getMyProfileMock.mockResolvedValue({ grade: 'active' });
