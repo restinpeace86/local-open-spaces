@@ -941,3 +941,76 @@ events로 이관해달라"고 지시했다. 이는 **Decision 017** 2항("체육
   (register_start_at — 목록에 노출되지 않아 추측하지 않고 비워둠),
   classroom/main_category_name(목록에 없음, 상세 페이지를 안 긁기로
   했으므로 공란 유지).
+
+---
+
+### Decision 030: 스팟픽 기본 화면(노출 중분류 미선택)도 노출 중분류 매핑된 스팟만 노출 — Decision 022 정정
+- **날짜:** 2026-10-10
+- **상태:** 승인 (Approved) — 사용자가 직접 명시적으로 지시.
+
+#### 배경 — Decision 022의 문구와 실제 전제가 어긋나 있었음
+사용자가 지적했다: "스팟픽에 내가 계속 노출 중분류 있는 것만 나오고
+노출중분류만 보여야한다고 하지 않았어 ? 왜 안그런것도 보여? ... 이건
+로그인안한 유저든 한유저든 전부 마찬가지인데." 조사 결과를 "카테고리를
+선택했을 때만 노출 중분류 기준이 적용되고, 기본 화면은 Decision 022가
+명시한 대로 반경 내 전체 스팟을 보여준다"로 보고했으나, 사용자가 다시
+정정했다: "카테고리 자체도 노출중분류들로만 구성이 되어야되는건 당연하고
+이때는 선택한 카테고리에 대하여 해당 노출중분류 스팟만나오는거아니야..
+아무 카테고리도 안고른 기본화면도 노출중분류의 하나의 카테고리만
+선택한게 아니라 노출중분류가 매핑된 데이터들 중에서 반경내 전체 스팟을
+보여주는거야.. 내가 전제조건을 노출중분류가 매핑됐는지로 얘기했을텐데?"
+
+즉 원래 전제는 "스팟픽에 노출되는 모든 스팟은 노출 중분류가 매핑된
+것만"이었고, Decision 022의 "기본 화면은 전체 조회" 문구/구현은 그
+전제를 놓친 것이었다 — 트레이드오프를 다시 논의해 뒤집은 게 아니라,
+원래 전제가 구현에 반영 안 된 버그였다는 사용자의 정정이다.
+
+#### 실측으로 확인한 원인
+`get_nearby_spaces_and_events` RPC의 `p_category_mins`가 null인 분기
+(카테고리 미선택 시 기본 지도 조회, `map-explorer.tsx`가 쓰는 유일한
+경로)가 `open_spaces` 쿼리에 `service_category_id`를 전혀 거르지
+않았다 — `location_precision='EXACT'`와 그룹 대표 1건 조건만 걸고
+있었다. 반면 카테고리를 선택했을 때 쓰는 경로(`get_spots_by_service_
+category` RPC, `p_category_mins`가 있는 분기)는 원래부터 올바르게
+동작하고 있었다.
+
+#### 결정 내용
+`get_nearby_spaces_and_events`의 `p_category_mins is null`(기본 화면)
+분기, SPACE 쿼리에 `and s.service_category_id is not null`을 추가한다.
+`p_category_mins`가 있는 분기(카테고리 선택 시 및 `getNearbyKidsRestaurants`
+등 category_min 기반 별도 기능)와 EVENT 쪽(이 개념이 원래 없음)은
+건드리지 않는다.
+
+**실측으로 발견한 성능 회귀 — 부분 인덱스로 해결**: 인덱스 없이 이
+조건만 추가하자 EXPLAIN(ANALYZE)로 4,449ms가 나왔다(기존 GiST 인덱스로
+거리순 스캔하면서 매핑 안 된 86%를 하나씩 걸러내다 보니, limit 1001을
+채우려면 ~13,500건을 훑어야 했음) — 실제 PostgREST(anon 롤) 호출로도
+`statement timeout`으로 500 에러가 났다(라이브 REST 호출로 직접 재현
+확인). `service_category_id is not null`로 걸러진 부분(partial) GiST
+인덱스(`idx_open_spaces_location_geography_mapped`)를 추가하자 173ms로
+돌아왔다(25배 단축) — 라이브 REST 재호출로 200 응답(723ms→195ms,
+`service_category_id` 전부 채워짐)을 재확인했다.
+
+#### 결정 이유
+- 사용자가 원래 전제를 직접 재확인했다 — "로그인 여부와 무관" 하다는
+  지적도 맞다(이 필터는 인증과 전혀 무관한 로직이었다).
+- 실측 확인(2026-10-10): `open_spaces` 143,241건 중 10,584건(7.4%)만
+  노출 중분류가 매핑돼 있어, 기본 화면에 이 필터를 걸면 보이는 스팟
+  수가 크게 줄어든다 — 사용자가 이 트레이드오프를 인지한 상태에서
+  "그게 원래 전제였다"고 재확인했으므로 임의 판단이 아니다.
+
+#### 영향
+- **DB**: `scripts/migrations/2026-10-10-nearby-rpc-default-view-
+  require-service-category.sql`(적용 완료) — 부분 GiST 인덱스
+  `idx_open_spaces_location_geography_mapped` 신규 추가 + `get_nearby_
+  spaces_and_events` 함수 재정의(반환 타입/파라미터 시그니처는 동일,
+  WHERE 조건만 추가).
+- **코드**: TypeScript 쪽 변경 없음(RPC 내부 로직만 바뀌고 반환 스키마는
+  그대로라 `get-nearby.ts`/`map-explorer.tsx` 호출부는 그대로).
+- **스펙**: `spec/map/spatial-search.md` §2.1 "노출 중분류 미선택 시
+  (기본 화면)" 항목 정정.
+- **라이브 검증**: 수정된 RPC를 판교(37.3947, 127.1086) 5km 기준으로
+  실제 anon 키 REST 호출(브라우저 호출과 동일 경로)로 재현해 200 응답
+  (195~723ms)과 반환 SPACE 34건 전부 `service_category_id`가 채워져
+  있음을 확인. 인덱스 추가 전에는 이 동일한 REST 호출이 500(statement
+  timeout)으로 실패하는 것도 직접 재현해 확인했다.
