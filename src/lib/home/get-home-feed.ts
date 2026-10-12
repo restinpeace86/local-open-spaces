@@ -877,10 +877,17 @@ export async function searchEvents(keyword: string, limit = 30): Promise<NearbyI
 // (예: '놀이방식당' = "키즈친화 식당") 안에서만 스팟을 찾을 수 있어야 해서 선택적
 // categoryMin 필터를 추가한다. /nearby의 일반 검색(전국구, 카테고리 무관)은 이 값을
 // 넘기지 않아 기존 동작 그대로 유지된다.
+// [스팟픽 지도 검색도 노출중분류 매핑된 것만](2026-10-10 사용자 지시,
+// Decision 030 연장) — requireServiceCategory는 map-explorer.tsx(스팟픽
+// 지도 검색)만 true로 넘긴다. 이 함수는 글쓰기 스팟 매핑(spot-picker.tsx)
+// /관리자 큐레이션 자동완성과도 공유되는데, 그 두 곳은 노출중분류 없는
+// 스팟도 찾아서 매핑/관리할 수 있어야 해서(Decision 030이 직접 확인한
+// 의도된 예외) 기본값은 false(거르지 않음)로 둔다.
 export async function searchSpacesNationwide(
   keyword: string,
   limit = 201,
-  categoryMin?: string
+  categoryMin?: string,
+  requireServiceCategory = false
 ): Promise<NearbyItem[]> {
   const tokens = splitSearchTokens(keyword);
   if (tokens.length === 0) return [];
@@ -888,6 +895,7 @@ export async function searchSpacesNationwide(
   const supabase = await createClient();
   let query = supabase.from('open_spaces').select(SPACE_COLUMNS).eq('location_precision', 'EXACT');
   if (categoryMin) query = query.eq('category_min', categoryMin);
+  if (requireServiceCategory) query = query.not('service_category_id', 'is', null);
 
   for (const token of selectTrigramFriendlyTokens(tokens)) {
     const escaped = escapeIlikePattern(token);

@@ -15,7 +15,14 @@ export async function GET(request: NextRequest) {
     // 중분류(예: '놀이방식당')로만 좁힌 검색을 요청할 때 쓴다. 넘기지 않으면(일반
     // /nearby 검색) 기존처럼 전국구 무제한 검색이다.
     const categoryMin = searchParams.get('category_min')?.trim() || undefined;
-    const items = await searchSpacesNationwide(q, 201, categoryMin);
+    // [스팟픽 지도 검색도 노출중분류 매핑된 것만](2026-10-10 사용자 지시: "스팟픽에서의
+    // 검색이니깐 마찬가지로 노출중분류 매핑된데만 보이도록") — 이 엔드포인트는 글쓰기
+    // 스팟 매핑(spot-picker.tsx)/관리자 큐레이션 자동완성과도 공유되는데, 그 두 곳은
+    // 노출중분류 없는 스팟도 찾아서 매핑/관리할 수 있어야 해서(Decision 030 — 사용자가
+    // 직접 확인한 의도된 예외) 무조건 거를 수 없다 — map-explorer.tsx(스팟픽 지도 검색)
+    // 만 이 파라미터를 보내 선택적으로 거른다.
+    const requireServiceCategory = searchParams.get('require_service_category') === 'true';
+    const items = await searchSpacesNationwide(q, 201, categoryMin, requireServiceCategory);
     return NextResponse.json({ items });
   } catch (err) {
     const message = err instanceof Error ? err.message : '스팟 검색 실패';

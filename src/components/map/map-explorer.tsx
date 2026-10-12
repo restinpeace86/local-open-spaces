@@ -298,7 +298,9 @@ export function MapExplorer() {
     setIsSearching(true);
     setSearchError(null);
 
-    fetch(`/api/spots/search?q=${encodeURIComponent(trimmed)}`)
+    // [노출중분류 매핑된 것만](2026-10-10 사용자 지시, Decision 030 연장) —
+    // 스팟픽 지도 검색이라 기본 핀 로딩과 동일한 전제를 적용한다.
+    fetch(`/api/spots/search?q=${encodeURIComponent(trimmed)}&require_service_category=true`)
       .then((res) => res.json())
       .then((data: { items?: NearbyItem[]; error?: string }) => {
         if (cancelled) return;

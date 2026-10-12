@@ -252,7 +252,9 @@ describe('MapExplorer 전국구 서버사이드 검색 (2026-08-30)', () => {
     const calledUrl = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.find((c) =>
       (c[0] as string).includes('/api/spots/search')
     )![0] as string;
-    expect(decodeURIComponent(calledUrl)).toBe('/api/spots/search?q=용인 어린이상상');
+    // [노출중분류 매핑된 것만](2026-10-10 사용자 지시, Decision 030 연장)
+    // 스팟픽 지도 검색은 require_service_category=true를 항상 함께 보낸다.
+    expect(decodeURIComponent(calledUrl)).toBe('/api/spots/search?q=용인 어린이상상&require_service_category=true');
 
     await waitFor(() => expect(screen.getAllByText('용인어린이상상의숲').length).toBeGreaterThan(0), {
       timeout: 1000,

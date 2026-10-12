@@ -1874,13 +1874,15 @@ describe('searchSpacesNationwide', () => {
   function makeSearchBuilder(row: ReturnType<typeof spaceRow>) {
     const orMock = vi.fn(() => builder);
     const eqMock = vi.fn(() => builder);
+    const notMock = vi.fn(() => builder);
     const builder: Record<string, unknown> = {};
     builder.select = () => builder;
     builder.eq = eqMock;
     builder.or = orMock;
+    builder.not = notMock;
     builder.order = () => builder;
     builder.limit = () => Promise.resolve({ data: [row], error: null });
-    return { builder, orMock, eqMock };
+    return { builder, orMock, eqMock, notMock };
   }
 
   it('검색어가 비어있으면(공백만 있어도) DB를 조회하지 않고 빈 배열을 반환한다', async () => {
@@ -1975,6 +1977,39 @@ describe('searchSpacesNationwide', () => {
 
     expect(items[0].lng).toBe(129.05);
     expect(items[0].lat).toBe(35.15);
+  });
+
+  // [스팟픽 지도 검색도 노출중분류 매핑된 것만](2026-10-10 사용자 지시,
+  // Decision 030 연장) — requireServiceCategory=true일 때만
+  // service_category_id가 null이 아닌 것만 거른다. 기본값(false)은
+  // 글쓰기 스팟 매핑(spot-picker.tsx)/관리자 큐레이션 자동완성이 노출중분류
+  // 없는 스팟도 찾을 수 있어야 해서(Decision 030의 의도된 예외) 그대로 둔다.
+  it('requireServiceCategory=true면 service_category_id가 null이 아닌 것만 거른다', async () => {
+    const row = spaceRow({ id: 'nationwide-5' });
+    const { builder, notMock } = makeSearchBuilder(row);
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => builder }),
+    }));
+
+    const { searchSpacesNationwide } = await import('./get-home-feed');
+    await searchSpacesNationwide('물놀이', 201, undefined, true);
+
+    expect(notMock).toHaveBeenCalledWith('service_category_id', 'is', null);
+  });
+
+  it('requireServiceCategory를 생략하면(기본값 false) service_category_id 조건을 걸지 않는다(글쓰기 스팟 매핑/관리자 자동완성이 의존)', async () => {
+    const row = spaceRow({ id: 'nationwide-6' });
+    const { builder, notMock } = makeSearchBuilder(row);
+
+    vi.doMock('@/lib/supabase/server', () => ({
+      createClient: () => Promise.resolve({ from: () => builder }),
+    }));
+
+    const { searchSpacesNationwide } = await import('./get-home-feed');
+    await searchSpacesNationwide('물놀이');
+
+    expect(notMock).not.toHaveBeenCalled();
   });
 });
 
