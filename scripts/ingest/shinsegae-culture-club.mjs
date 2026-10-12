@@ -201,14 +201,27 @@ export async function run({ dryRun = false } = {}) {
   console.log(`▶ 신세계 아카데미 문화센터 강좌 리스트 수집 시작 (dry-run: ${dryRun})`);
   const startedAt = Date.now();
 
+  // [수집 루프 실패 시에도 알림](2026-10-13 사용자 지시: "다른 문화센터도 ?
+  // 다 점검해줘" — 롯데마트에서 발견한 공백이 전 브랜드에 복제돼 있었다)
   const allRows = [];
-  for (const [storeCode, storeName] of SHINSEGAE_STORES) {
-    for (const targetCode of SHINSEGAE_TARGET_CODES) {
-      const items = await fetchAllForStoreAndTarget(storeCode, targetCode);
-      allRows.push(...items);
-      console.log(`  [${storeName}/${targetCode}] ${items.length}건 수신`);
-      await sleep(randomPacingDelay());
+  try {
+    for (const [storeCode, storeName] of SHINSEGAE_STORES) {
+      for (const targetCode of SHINSEGAE_TARGET_CODES) {
+        const items = await fetchAllForStoreAndTarget(storeCode, targetCode);
+        allRows.push(...items);
+        console.log(`  [${storeName}/${targetCode}] ${items.length}건 수신`);
+        await sleep(randomPacingDelay());
+      }
     }
+  } catch (err) {
+    await postPipelineLog(createAdminClient(), { status: 'FAILED', errorMessage: err.message.slice(0, 500) });
+    await notifyBatchResult({
+      title: '❌ [local-open-spaces] 신세계 아카데미 컬처클럽 배치 실패',
+      description: err.message.slice(0, 500),
+      status: `${((Date.now() - startedAt) / 1000).toFixed(1)}초`,
+      color: 0xed4245,
+    });
+    throw err;
   }
 
   // 동일 강좌가 수강대상 조합 중복에 걸릴 가능성에 대비(실측상 흔치는 않음 —

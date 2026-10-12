@@ -413,14 +413,32 @@ export async function run({ dryRun = false } = {}) {
   console.log(`▶ 이마트 컬처클럽 강좌 리스트 수집 시작 (dry-run: ${dryRun})`);
   const startedAt = Date.now();
 
+  // [수집 루프 실패 시에도 알림 — 실측으로 발견한 공백](2026-10-13 사용자
+  // 지시: "다른 문화센터도 ? 다 점검해줘" — 롯데마트에서 먼저 발견한 문제가
+  // 사실 전 브랜드에 복제돼 있었다) 기존엔 이 루프가 try/catch 밖에 있어서,
+  // fetchAllForStatus가 던지는 에러(네트워크 오류, JSON 파싱 실패 등)가
+  // postPipelineLog/Discord 알림을 전혀 거치지 않고 CLI 진입점의
+  // console.error까지 그대로 올라가버렸다 — 뒤쪽 upsert 실패만 알림이 가고
+  // 앞쪽 수집 자체가 실패하면 아무도 몰랐다.
   const allRows = [];
-  for (const status of TARGET_STATUSES) {
-    console.log(`  [${status}] 수집 시작 (지점 ${STORE_CODES.length}개 전체를 한 번에 요청)`);
-    const items = await fetchAllForStatus(status, STORE_CODES);
-    const rows = items.map((item) => transform(item, status)).filter(Boolean);
-    allRows.push(...rows);
-    console.log(`  [${status}] ${items.length}건 수신`);
-    await sleep(randomPacingDelay());
+  try {
+    for (const status of TARGET_STATUSES) {
+      console.log(`  [${status}] 수집 시작 (지점 ${STORE_CODES.length}개 전체를 한 번에 요청)`);
+      const items = await fetchAllForStatus(status, STORE_CODES);
+      const rows = items.map((item) => transform(item, status)).filter(Boolean);
+      allRows.push(...rows);
+      console.log(`  [${status}] ${items.length}건 수신`);
+      await sleep(randomPacingDelay());
+    }
+  } catch (err) {
+    await postPipelineLog(createAdminClient(), { status: 'FAILED', errorMessage: err.message.slice(0, 500) });
+    await notifyBatchResult({
+      title: '❌ [local-open-spaces] 이마트 컬처클럽 배치 실패',
+      description: err.message.slice(0, 500),
+      status: `${((Date.now() - startedAt) / 1000).toFixed(1)}초`,
+      color: 0xed4245,
+    });
+    throw err;
   }
 
   // 동일 classId가 상태 전환 중 두 상태 조회 사이에 걸쳐 중복 수신될 가능성에 대비

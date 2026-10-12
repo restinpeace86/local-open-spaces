@@ -4,7 +4,7 @@ vi.mock('./lib/fetch-with-timeout.mjs', () => ({
   fetchWithTimeout: vi.fn(),
 }));
 
-const { run, splitOpenAndClosedRows } = await import('./eland-retail-culture-club.mjs');
+const { run, splitOpenAndClosedRows, looksLikeSuspiciousEmptyResponse } = await import('./eland-retail-culture-club.mjs');
 const { fetchWithTimeout } = await import('./lib/fetch-with-timeout.mjs');
 
 function cardHtml({ storeId = '8222', semNum = '66', lecTypeId, seq, statusText, title }) {
@@ -15,6 +15,23 @@ function cardHtml({ storeId = '8222', semNum = '66', lecTypeId, seq, statusText,
     <span class="assist"> 월요일 13:50 ~ 14:30 <span>|</span> 77,000원</span>
   </a></li>`;
 }
+
+describe('looksLikeSuspiciousEmptyResponse', () => {
+  it('실측으로 확인된 진짜 "0건" 응답(mobLectureCnt_1=0 고정 템플릿)은 의심하지 않는다', () => {
+    const realEmptyResponse = '\n\n\n\n\n\t\n\t<input type="hidden" id="mobLectureCnt_1" value="0">\n';
+    expect(looksLikeSuspiciousEmptyResponse(realEmptyResponse, 0)).toBe(false);
+  });
+
+  it('카드가 1건 이상 있으면(정상 데이터) 의심하지 않는다', () => {
+    const html = '<input type="hidden" id="mobLectureCnt_1" value="1">';
+    expect(looksLikeSuspiciousEmptyResponse(html, 1)).toBe(false);
+  });
+
+  it('카드가 0건인데 "0건" 마커가 없으면(차단/공지 페이지 등) 의심한다', () => {
+    const blockLikeHtml = '<html><body>일시적으로 접속이 원활하지 않습니다.</body></html>';
+    expect(looksLikeSuspiciousEmptyResponse(blockLikeHtml, 0)).toBe(true);
+  });
+});
 
 describe('splitOpenAndClosedRows — 현장문의/마감 등 비활성 상태 제외', () => {
   it('OPEN/WAITING만 openRows로, 그 외(CLOSED)는 closedClassIds로 분리한다', () => {
@@ -49,7 +66,10 @@ describe('run(dryRun) — LecTypeID 8개를 각각 지점 없이 조회한다', 
           text: async () => cardHtml({ lecTypeId: 'B', seq: '36', statusText: '현장문의', title: '(월)테스트(11-20개월)' }),
         });
       } else {
-        fetchWithTimeout.mockResolvedValueOnce({ ok: true, text: async () => '' });
+        fetchWithTimeout.mockResolvedValueOnce({
+          ok: true,
+          text: async () => '<input type="hidden" id="mobLectureCnt_1" value="0">',
+        });
       }
     }
 

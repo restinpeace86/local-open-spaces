@@ -194,14 +194,27 @@ export async function run({ dryRun = false, now = new Date() } = {}) {
   const startedAt = Date.now();
   const window = buildSearchWindow(now);
 
+  // [수집 루프 실패 시에도 알림](2026-10-13 사용자 지시: "다른 문화센터도 ?
+  // 다 점검해줘" — 롯데마트에서 발견한 공백이 전 브랜드에 복제돼 있었다)
   const allRows = [];
-  for (const [storeCode, storeName] of STARFIELD_STORES) {
-    for (const targetCtgryCd of STARFIELD_TARGET_CODES) {
-      const items = await fetchAllForStoreAndTarget(storeCode, targetCtgryCd, window);
-      allRows.push(...items);
-      console.log(`  [${storeName}/${targetCtgryCd}] ${items.length}건 수신`);
-      await sleep(randomPacingDelay());
+  try {
+    for (const [storeCode, storeName] of STARFIELD_STORES) {
+      for (const targetCtgryCd of STARFIELD_TARGET_CODES) {
+        const items = await fetchAllForStoreAndTarget(storeCode, targetCtgryCd, window);
+        allRows.push(...items);
+        console.log(`  [${storeName}/${targetCtgryCd}] ${items.length}건 수신`);
+        await sleep(randomPacingDelay());
+      }
     }
+  } catch (err) {
+    await postPipelineLog(createAdminClient(), { status: 'FAILED', errorMessage: err.message.slice(0, 500) });
+    await notifyBatchResult({
+      title: '❌ [local-open-spaces] 스타필드 컬처클럽 배치 실패',
+      description: err.message.slice(0, 500),
+      status: `${((Date.now() - startedAt) / 1000).toFixed(1)}초`,
+      color: 0xed4245,
+    });
+    throw err;
   }
 
   const collectedAt = new Date().toISOString();

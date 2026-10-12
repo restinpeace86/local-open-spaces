@@ -44,6 +44,17 @@ function randomPacingDelay() {
   return REQUEST_PACING_MIN_MS + Math.random() * (REQUEST_PACING_MAX_MS - REQUEST_PACING_MIN_MS);
 }
 
+// [봇 차단/이상 응답 감지 — 실측 확인](2026-10-13) 진짜 0건 응답은 항상
+// `<input type="hidden" id="mobLectureCnt_1" value="0">`를 포함한 63바이트
+// 짜리 고정 템플릿이다(LecTypeID='J'(사용자가 이미 0건으로 확인한 실제
+// 코드)와 존재하지 않는 코드 둘 다 바이트 단위로 완전히 동일한 응답을
+// 반환함을 라이브 요청으로 확인). 카드가 0개인데 이 마커가 없으면 사이트
+// 구조 변경이나 차단을 의심한다(롯데마트 looksLikeSuspiciousEmptyResponse와
+// 동일한 방법론 — 제3장 제5조 추측 금지, 실측으로만 판단).
+export function looksLikeSuspiciousEmptyResponse(html, cardCount) {
+  return cardCount === 0 && !html.includes('mobLectureCnt_1" value="0"');
+}
+
 async function fetchLecTypeAll(lecTypeId) {
   const res = await fetchWithTimeout(
     LIST_URL,
@@ -58,7 +69,11 @@ async function fetchLecTypeAll(lecTypeId) {
     throw new Error(`이랜드리테일 문화센터 목록 조회 실패 (HTTP ${res.status}, LecTypeID=${lecTypeId})`);
   }
   const html = await res.text();
-  return parseLectureListResponse(html);
+  const items = parseLectureListResponse(html);
+  if (looksLikeSuspiciousEmptyResponse(html, items.length)) {
+    throw new Error(`⚠️ 이랜드리테일 목록 응답이 예상과 다름(0건인데 빈 템플릿이 아님) — 봇 차단 또는 사이트 정책 변경 의심 (LecTypeID=${lecTypeId}, bytes=${html.length})`);
+  }
+  return items;
 }
 
 async function postPipelineLog(client, { status, errorMessage = null, metaData = null }) {
@@ -119,12 +134,25 @@ export async function run({ dryRun = false } = {}) {
   console.log(`▶ 이랜드리테일 문화센터 강좌 리스트 수집 시작 (dry-run: ${dryRun})`);
   const startedAt = Date.now();
 
+  // [수집 루프 실패 시에도 알림](2026-10-13 사용자 지시: "다른 문화센터도 ?
+  // 다 점검해줘" — 롯데마트에서 발견한 공백이 전 브랜드에 복제돼 있었다)
   const allRows = [];
-  for (const lecTypeId of ELAND_LEC_TYPE_CODES) {
-    const items = await fetchLecTypeAll(lecTypeId);
-    allRows.push(...items);
-    console.log(`  [${lecTypeId}] ${items.length}건 수신`);
-    await sleep(randomPacingDelay());
+  try {
+    for (const lecTypeId of ELAND_LEC_TYPE_CODES) {
+      const items = await fetchLecTypeAll(lecTypeId);
+      allRows.push(...items);
+      console.log(`  [${lecTypeId}] ${items.length}건 수신`);
+      await sleep(randomPacingDelay());
+    }
+  } catch (err) {
+    await postPipelineLog(createAdminClient(), { status: 'FAILED', errorMessage: err.message.slice(0, 500) });
+    await notifyBatchResult({
+      title: '❌ [local-open-spaces] 이랜드리테일 컬처클럽 배치 실패',
+      description: err.message.slice(0, 500),
+      status: `${((Date.now() - startedAt) / 1000).toFixed(1)}초`,
+      color: 0xed4245,
+    });
+    throw err;
   }
 
   const collectedAt = new Date().toISOString();

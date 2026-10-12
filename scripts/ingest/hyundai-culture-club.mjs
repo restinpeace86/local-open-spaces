@@ -51,6 +51,17 @@ function randomPacingDelay() {
   return REQUEST_PACING_MIN_MS + Math.random() * (REQUEST_PACING_MAX_MS - REQUEST_PACING_MIN_MS);
 }
 
+// [봇 차단/이상 응답 감지 — 실측 확인](2026-10-13) 진짜 "마지막 페이지를
+// 넘어감"/"검색결과 없음" 응답은 항상 `<div class="no_result">`를 포함한다
+// (실측: 정상 마지막 페이지 이후 페이지, 존재하지 않는 category keyword
+// 둘 다 이 마커를 포함 — 반대로 결과가 있는 페이지는 라이브 샘플 어디서도
+// 이 마커가 나타나지 않음을 확인). 카드가 0개인데 이 마커가 없으면 사이트
+// 구조 변경이나 차단을 의심한다(롯데마트 looksLikeSuspiciousEmptyResponse와
+// 동일한 방법론 — 제3장 제5조 추측 금지, 실측으로만 판단).
+export function looksLikeSuspiciousEmptyResponse(html, itemCount) {
+  return itemCount === 0 && !html.includes('class="no_result"');
+}
+
 async function fetchPage(categoryKeyword, page) {
   const body = new URLSearchParams({
     stCd: 'ALL',
@@ -91,7 +102,12 @@ export async function fetchAllForCategory(categoryKeyword) {
   for (let page = 1; page <= MAX_PAGES_SAFETY; page += 1) {
     const html = await fetchPage(categoryKeyword, page);
     const pageItems = parseCourseListPage(html, categoryKeyword);
-    if (pageItems.length === 0) break;
+    if (pageItems.length === 0) {
+      if (looksLikeSuspiciousEmptyResponse(html, pageItems.length)) {
+        throw new Error(`⚠️ 현대백화점 목록 응답이 예상과 다름(0건인데 "결과 없음" 마커가 없음) — 봇 차단 또는 사이트 정책 변경 의심 (keyword=${categoryKeyword}, page=${page}, bytes=${html.length})`);
+      }
+      break;
+    }
     items.push(...pageItems);
     await sleep(randomPacingDelay());
   }
@@ -126,12 +142,25 @@ export async function run({ dryRun = false } = {}) {
   console.log(`▶ 현대백화점 문화센터 강좌 리스트 수집 시작 (dry-run: ${dryRun})`);
   const startedAt = Date.now();
 
+  // [수집 루프 실패 시에도 알림](2026-10-13 사용자 지시: "다른 문화센터도 ?
+  // 다 점검해줘" — 롯데마트에서 발견한 공백이 전 브랜드에 복제돼 있었다)
   const allRows = [];
-  for (const categoryKeyword of HYUNDAI_CATEGORY_CODES) {
-    console.log(`  [${categoryKeyword}] 수집 시작`);
-    const items = await fetchAllForCategory(categoryKeyword);
-    allRows.push(...items);
-    console.log(`  [${categoryKeyword}] ${items.length}건 수신`);
+  try {
+    for (const categoryKeyword of HYUNDAI_CATEGORY_CODES) {
+      console.log(`  [${categoryKeyword}] 수집 시작`);
+      const items = await fetchAllForCategory(categoryKeyword);
+      allRows.push(...items);
+      console.log(`  [${categoryKeyword}] ${items.length}건 수신`);
+    }
+  } catch (err) {
+    await postPipelineLog(createAdminClient(), { status: 'FAILED', errorMessage: err.message.slice(0, 500) });
+    await notifyBatchResult({
+      title: '❌ [local-open-spaces] 현대백화점 컬처클럽 배치 실패',
+      description: err.message.slice(0, 500),
+      status: `${((Date.now() - startedAt) / 1000).toFixed(1)}초`,
+      color: 0xed4245,
+    });
+    throw err;
   }
 
   // 동일 class_id가 여러 카테고리 조회에 걸쳐 중복 수신될 가능성에 대비.

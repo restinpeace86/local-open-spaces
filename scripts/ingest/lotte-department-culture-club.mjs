@@ -174,15 +174,32 @@ export async function run({ dryRun = false } = {}) {
   console.log(`▶ 롯데백화점 문화센터 강좌 리스트 수집 시작 (dry-run: ${dryRun})`);
   const startedAt = Date.now();
 
+  // [수집 루프 실패 시에도 알림 — 실측으로 발견한 공백](2026-10-13 사용자
+  // 지시: "다른 문화센터도 ? 다 점검해줘") 이 브랜드는 이미 봇 차단 감지
+  // 로직이 있지만(looksLikeListBotBlocked 등), 그 감지가 실제로 던지는
+  // 에러가 이 루프 밖에서는 아무도 안 받아서 postPipelineLog/Discord 알림을
+  // 거치지 않고 CLI 진입점까지 그대로 올라가버리는 공백이 다른 브랜드와
+  // 똑같이 있었다 — 감지만 있고 "알림"은 없었던 셈이라 이번에 함께 고친다.
   const allRows = [];
-  for (const lrclsCtegryCd of LOTTE_DEPARTMENT_LARGE_CATEGORY_CODES) {
-    const { items, totalCount } = await fetchLargeCategoryAll(lrclsCtegryCd);
-    allRows.push(...items);
-    console.log(`  [대분류 ${lrclsCtegryCd}] 총 ${totalCount}건 중 ${items.length}건 파싱`);
-    if (items.length < totalCount) {
-      console.warn(`⚠️ 대분류 ${lrclsCtegryCd}: 파싱 건수(${items.length})가 총건수(${totalCount})보다 적음 — listCnt 확대 필요할 수 있음`);
+  try {
+    for (const lrclsCtegryCd of LOTTE_DEPARTMENT_LARGE_CATEGORY_CODES) {
+      const { items, totalCount } = await fetchLargeCategoryAll(lrclsCtegryCd);
+      allRows.push(...items);
+      console.log(`  [대분류 ${lrclsCtegryCd}] 총 ${totalCount}건 중 ${items.length}건 파싱`);
+      if (items.length < totalCount) {
+        console.warn(`⚠️ 대분류 ${lrclsCtegryCd}: 파싱 건수(${items.length})가 총건수(${totalCount})보다 적음 — listCnt 확대 필요할 수 있음`);
+      }
+      await sleep(randomPacingDelay());
     }
-    await sleep(randomPacingDelay());
+  } catch (err) {
+    await postPipelineLog(createAdminClient(), { status: 'FAILED', errorMessage: err.message.slice(0, 500) });
+    await notifyBatchResult({
+      title: '❌ [local-open-spaces] 롯데백화점 컬처클럽 배치 실패',
+      description: err.message.slice(0, 500),
+      status: `${((Date.now() - startedAt) / 1000).toFixed(1)}초`,
+      color: 0xed4245,
+    });
+    throw err;
   }
 
   const collectedAt = new Date().toISOString();

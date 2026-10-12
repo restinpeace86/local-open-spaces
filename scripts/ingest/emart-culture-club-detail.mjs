@@ -19,6 +19,7 @@ import { loadEnv } from '../lib/load-env.mjs';
 import { fetchWithTimeout } from './lib/fetch-with-timeout.mjs';
 import { createAdminClient } from './lib/supabase-admin.mjs';
 import { applyRandomStartupDelay } from './lib/random-startup-delay.mjs';
+import { sendDiscordNotification } from '../notify-discord.mjs';
 
 const env = loadEnv();
 const SOURCE_KEY = 'EMART_CULTURE_CLUB_DETAIL';
@@ -147,8 +148,17 @@ async function postPipelineLog(client, { status, errorMessage = null, metaData =
   }
 }
 
+async function notifyBatchResult(args) {
+  try {
+    await sendDiscordNotification(args);
+  } catch (err) {
+    console.error(`⚠️ Discord 알림 전송 실패(배치 자체에는 영향 없음): ${err.message}`);
+  }
+}
+
 export async function run({ dryRun = false } = {}) {
   console.log(`▶ 이마트 컬처클럽 상세정보 수집 시작 (dry-run: ${dryRun})`);
+  const startedAt = Date.now();
 
   const client = createAdminClient();
   const pendingRows = await fetchAllPendingRows(client);
@@ -188,11 +198,27 @@ export async function run({ dryRun = false } = {}) {
   }
 
   console.log(`✅ 상세정보 수집 완료: 성공 ${successCount}건 / 강좌 소실 ${notFoundCount}건 / 실패 ${errors.length}건`);
+  const isFailed = errors.length > 0 && successCount === 0;
   await postPipelineLog(client, {
-    status: errors.length > 0 && successCount === 0 ? 'FAILED' : 'OK',
+    status: isFailed ? 'FAILED' : 'OK',
     errorMessage: errors.length > 0 ? `${errors.length}건 실패(예: ${errors[0]?.classId})` : null,
     metaData: { pending: pendingRows.length, success: successCount, notFound: notFoundCount, failed: errors.length },
   });
+  if (isFailed) {
+    await notifyBatchResult({
+      title: '❌ [local-open-spaces] 이마트 컬처클럽 상세수집 실패',
+      description: `${errors.length}건 실패(예: ${errors[0]?.classId} — ${errors[0]?.message})`,
+      status: `${((Date.now() - startedAt) / 1000).toFixed(1)}초`,
+      color: 0xed4245,
+    });
+  } else if (errors.length > 0) {
+    await notifyBatchResult({
+      title: '⚠️ [local-open-spaces] 이마트 컬처클럽 상세수집 일부 실패',
+      description: `성공 ${successCount}건 / 강좌 소실 ${notFoundCount}건 / 실패 ${errors.length}건`,
+      status: `${((Date.now() - startedAt) / 1000).toFixed(1)}초`,
+      color: 0xfee75c,
+    });
+  }
 
   return { sourceKey: SOURCE_KEY, count: successCount, upserted: true };
 }

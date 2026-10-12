@@ -187,17 +187,30 @@ export async function run({ dryRun = false } = {}) {
   console.log(`▶ AK플라자 문화아카데미 강좌 리스트 수집 시작 (dry-run: ${dryRun})`);
   const startedAt = Date.now();
 
+  // [수집 루프 실패 시에도 알림](2026-10-13 사용자 지시: "다른 문화센터도 ?
+  // 다 점검해줘" — 롯데마트에서 발견한 공백이 전 브랜드에 복제돼 있었다)
   const allRows = [];
-  for (const [storeCode, storeName] of AKPLAZA_STORES) {
-    const items = await fetchAllForStore(storeCode);
-    const withStoreName = items.map((item) => ({ ...item, store_name: storeName }));
-    // [수강대상 — Adult(1)/미사용(5) 제외](akplaza-culture-club-parser.mjs
-    // AKPLAZA_MAIN_CODES 주석 참고) 목록은 전체를 한 번에 받고 여기서
-    // 사후 필터링한다.
-    const inScope = withStoreName.filter((item) => AKPLAZA_MAIN_CODES.includes(item.main_cd));
-    allRows.push(...inScope);
-    console.log(`  [${storeName}] 전체 ${items.length}건 수신, 수강대상 필터 후 ${inScope.length}건`);
-    await sleep(randomPacingDelay());
+  try {
+    for (const [storeCode, storeName] of AKPLAZA_STORES) {
+      const items = await fetchAllForStore(storeCode);
+      const withStoreName = items.map((item) => ({ ...item, store_name: storeName }));
+      // [수강대상 — Adult(1)/미사용(5) 제외](akplaza-culture-club-parser.mjs
+      // AKPLAZA_MAIN_CODES 주석 참고) 목록은 전체를 한 번에 받고 여기서
+      // 사후 필터링한다.
+      const inScope = withStoreName.filter((item) => AKPLAZA_MAIN_CODES.includes(item.main_cd));
+      allRows.push(...inScope);
+      console.log(`  [${storeName}] 전체 ${items.length}건 수신, 수강대상 필터 후 ${inScope.length}건`);
+      await sleep(randomPacingDelay());
+    }
+  } catch (err) {
+    await postPipelineLog(createAdminClient(), { status: 'FAILED', errorMessage: err.message.slice(0, 500) });
+    await notifyBatchResult({
+      title: '❌ [local-open-spaces] AK플라자 컬처클럽 배치 실패',
+      description: err.message.slice(0, 500),
+      status: `${((Date.now() - startedAt) / 1000).toFixed(1)}초`,
+      color: 0xed4245,
+    });
+    throw err;
   }
 
   const collectedAt = new Date().toISOString();
