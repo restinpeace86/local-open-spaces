@@ -1014,3 +1014,58 @@ category` RPC, `p_category_mins`가 있는 분기)는 원래부터 올바르게
   (195~723ms)과 반환 SPACE 34건 전부 `service_category_id`가 채워져
   있음을 확인. 인덱스 추가 전에는 이 동일한 REST 호출이 500(statement
   timeout)으로 실패하는 것도 직접 재현해 확인했다.
+
+### Decision 031: 롯데백화점 문화센터 수집 일시 정지 — WAF 차단, 사용자 로컬 PC 포함 확인
+- **날짜:** 2026-10-13
+- **상태:** 승인 (Approved) — 사용자 직접 지시("일단 롯데백화점은 멈춰").
+
+#### 배경
+문화센터 8개 브랜드 알림 점검 중 `pipeline_logs`에서 `LOTTE_DEPARTMENT_
+CULTURE_CLUB`의 반복 FAILED를 발견했다. 조사해보니 그 일부는 테스트
+스위트가 실제 프로덕션 Discord/DB를 오염시킨 가짜 기록이었지만(별도 수정
+완료, `implementation/2026-10-13-culture-club-test-suite-production-
+pollution-fix.md`), 그와 별개로 이 세션(클라우드/샌드박스 네트워크)에서
+`culture.lotteshopping.com/search/list.ajax`에 라이브로 직접 요청해본 결과
+`lrclsCtegryCd=02`/`03` 둘 다 실제 WAF 차단 페이지("The request / response
+that are contrary to the Web firewall security policies have been
+blocked.")를 받았다. 사용자가 **자신의 로컬 PC에서도 동일하게 막히고
+있음을 직접 확인**해줬다("지금 waf 차단 내 로컬 pc에서 똑같이 막히고
+있어") — 2026-10-06 이마트가 겪은 것(`implementation/2026-10-06-emart-
+local-pc-bridge.md`)과 달리, 이번엔 로컬 PC까지 포함해 막혀 있어 "로컬
+PC로 옮기면 우회된다"는 기존 해법이 통하지 않는 경우다.
+
+#### 결정 내용
+롯데백화점 문화센터 수집을 **코드 변경 없이, 운영(스케줄러) 레벨에서
+일시 정지**한다. 이 브랜드는 GitHub Actions 워크플로가 아니라 Windows
+작업 스케줄러로만 등록돼 있다(`implementation/2026-10-09-lotte-
+department-culture-club-integration.md`): `LocalOpenSpaces-
+LotteDepartmentBatch`(목록, 5시간 간격)·`LocalOpenSpaces-
+LotteDepartmentDetailFetch`(상세, 5시간 간격) — 이 세션(샌드박스)에서는
+사용자의 실제 Task Scheduler를 조회/제어할 수 없어(`schtasks` 호출이 이
+환경에선 빈 결과만 반환), 사용자가 직접 아래 명령으로 두 작업을
+비활성화해야 한다:
+```
+schtasks /change /tn "LocalOpenSpaces-LotteDepartmentBatch" /disable
+schtasks /change /tn "LocalOpenSpaces-LotteDepartmentDetailFetch" /disable
+```
+재개 시(차단이 풀리거나 우회 방안이 마련된 뒤)는 `/disable`을 `/enable`로
+바꿔 실행.
+
+#### 결정 이유
+- 로컬 PC까지 막혀 있다는 건 "데이터센터 IP만 차단"이라는 기존 가설이
+  이 브랜드엔 적용되지 않는다는 뜻이다 — 계속 재시도하면 계정/IP 차단이
+  더 굳어질 위험(추측이지만 일반적인 WAF 운영 상식)과, 어차피 실패할
+  요청에 Discord 실패 알림만 반복 적재되는 노이즈를 막기 위해 사용자가
+  직접 중단을 지시했다.
+- 코드(스크립트/워크플로 파일) 쪽에는 이 브랜드를 멈출 스위치가 없다
+  (이마트처럼 `.yml.disabled`로 끌 수 있는 GitHub Actions 워크플로 자체가
+  없음) — 그래서 이 결정은 "운영 작업(Task Scheduler 비활성화)"이며,
+  사용자가 자신의 PC에서 직접 실행해야 한다는 점을 명시해 둔다.
+
+#### 영향
+- 코드/스펙 변경 없음 — 문화센터 통합 화면에서 롯데백화점은 당분간
+  신규 강좌가 갱신되지 않고 기존 데이터만 남는다(기존 행을 지우거나
+  `is_excluded` 처리하지는 않음 — 사용자가 별도로 요청하지 않았다).
+- 재개 조건(우회 방안 마련, 또는 차단이 자연 해제됨 확인)과 재개 방법은
+  이 결정 항목 자체에 남겨 뒀다 — 추후 세션이 이 브랜드의 반복 실패를
+  다시 "고쳐야 할 버그"로 오인하지 않도록 한다.
