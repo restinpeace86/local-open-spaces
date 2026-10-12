@@ -37,6 +37,20 @@
 // 너무 많아 제외해도 된다"고 지시해서 뺐다. 롯데마트는 그런 지시가 없었다 —
 // 추측으로 데이터를 버리지 않는다(제3장 제5조). 전부 수집하고, 필요해지면
 // is_excluded로 관리자가 개별 배제하거나 후속 지시로 기본 수집 범위를 좁힌다.
+//
+// [봇 차단 대처 — 실측 확인](2026-10-13 사용자 지적: "롯데마트가 가져오기
+// 실패하는것같은데 봇차단 같은거로.. 확인하고 대처방안 마련해봐") 60개
+// 지점 × 3개 대상(target=2/3/4) 조합 180건을 직접 재조회해 확인한 결과,
+// 지금 이 시점엔 차단 증거가 없었다(전부 HTTP 200, 응답시간 50~260ms로
+// 일정, 의심 마커 없음) — 다만 이 스크립트는 다른 7개 브랜드(이마트/
+// AK플라자/롯데백화점 등)와 달리 ① 봇 차단 감지 로직이 전혀 없고(0건
+// 응답을 무조건 "진짜 0건"으로 간주) ② 실패해도 Discord 알림이 전혀
+// 없어(pipeline_logs에만 조용히 남음) 사용자가 실제로 차단/오류가
+// 나도 알 방법이 없었다. 실측으로 확인한 "진짜 0건" 응답의 정확한
+// 모양(공백/탭/줄바꿈만 있는 빈 템플릿, looksLikeSuspiciousEmptyResponse
+// 참고)을 기준으로 삼아, 그 모양과 다른데 <tr>이 0건이면(차단/공지
+// 페이지가 섞여 들어온 경우) 이상 응답으로 간주해 실패 처리하고, 다른
+// 브랜드들과 동일하게 Discord로 성공/실패를 알린다.
 import { pathToFileURL } from 'url';
 import { parse } from 'node-html-parser';
 import { loadEnv } from '../lib/load-env.mjs';
@@ -47,6 +61,7 @@ import { parseAgeRangeToMonths } from './lib/age-range-parser.mjs';
 import { normalizeDaysToCodes, yyyymmddToIso } from './lib/schedule-normalizer.mjs';
 import { normalizeLottemartStatus, stampCollectedAt, mergeDetailEnrichment } from './lib/culture-club-common.mjs';
 import { toUnifiedLottemartRow } from './lib/culture-club-unified-row.mjs';
+import { sendDiscordNotification } from '../notify-discord.mjs';
 
 loadEnv();
 
@@ -133,6 +148,17 @@ export async function fetchPage(storeCode, targetCode, termCode, pageNo) {
     throw new Error(`롯데마트 목록 API 호출 실패 (HTTP ${res.status}, store=${storeCode} target=${targetCode} term=${termCode} page=${pageNo}): ${text.slice(0, 300)}`);
   }
   return text;
+}
+
+// [봇 차단 감지 — 실측으로 확인한 "진짜 0건" 응답 모양 기준](2026-10-13)
+// 180개 조합(지점×대상)을 직접 조회해 확인: 실제로 0건인 조합은 항상
+// 공백/탭/줄바꿈만 있는 빈 템플릿을 돌려준다(trim 시 완전히 빈 문자열,
+// 실측 27바이트). `<tr>`이 0건인데 그 모양이 아니면(예: 차단/공지/에러
+// 페이지가 `<tr>` 없이 내려온 경우) 진짜 0건이 아니라 이상 응답으로
+// 간주한다 — 차단 페이지의 구체적인 문구를 추측해서 짜지 않고, 실측으로
+// 확인된 "정상이면 반드시 이래야 한다"만 기준으로 삼는다(제3장 제5조).
+export function looksLikeSuspiciousEmptyResponse(html, trCount) {
+  return trCount === 0 && html.trim().length > 0;
 }
 
 // [실측 확인] "수강료 : 8회 96,000원" 또는 "수강료 : 11회 137,500원 82,500원"
@@ -335,6 +361,11 @@ export async function fetchAllForCombo(storeCode, storeName, targetCode, targetN
     const html = await fetchPage(storeCode, targetCode, semesterCode, page);
     const root = parse(html);
     const trs = root.querySelectorAll('tr');
+    if (looksLikeSuspiciousEmptyResponse(html, trs.length)) {
+      throw new Error(
+        `⚠️ 롯데마트 목록 응답이 예상과 다름(0건인데 빈 템플릿이 아님) — 봇 차단 또는 사이트 정책 변경 의심 (store=${storeCode} target=${targetCode} term=${semesterCode} page=${page}, bytes=${html.length})`
+      );
+    }
     const context = { storeCode, storeName, targetCode, targetName, semesterCode };
     for (const tr of trs) {
       const row = parseRow(tr, context);
@@ -452,21 +483,51 @@ async function postPipelineLog(client, { status, errorMessage = null, metaData =
   }
 }
 
+// [Discord 알림 — 다른 브랜드와 동일한 관례](2026-10-13, akplaza-culture-
+// club.mjs/lotte-department-culture-club.mjs 등과 동일 패턴) 이 스크립트는
+// 지금까지 실패해도 pipeline_logs에만 조용히 남아 사용자가 알 방법이 없었다.
+async function notifyBatchResult(args) {
+  try {
+    await sendDiscordNotification(args);
+  } catch (err) {
+    console.error(`⚠️ Discord 알림 전송 실패(배치 자체에는 영향 없음): ${err.message}`);
+  }
+}
+
 export async function run({ dryRun = false, storesLimit = null } = {}) {
   console.log(`▶ 롯데마트 문화센터 강좌 리스트 수집 시작 (dry-run: ${dryRun})`);
+  const startedAt = Date.now();
 
   const stores = storesLimit ? STORES.slice(0, storesLimit) : STORES;
   const allRows = [];
 
-  for (const [storeCode, storeName] of stores) {
-    for (const [targetCode, targetName] of TARGETS) {
-      for (const semesterCode of SEMESTERS) {
-        const rows = await fetchAllForCombo(storeCode, storeName, targetCode, targetName, semesterCode);
-        allRows.push(...rows);
-        await sleep(randomPacingDelay());
+  // [수집 루프 실패 시에도 알림 — 실측으로 발견한 공백](2026-10-13) 기존엔
+  // 이 루프가 아무 try/catch 없이 run()의 최상단에 그대로 노출돼 있어서,
+  // fetchAllForCombo가 던지는 에러(네트워크 오류, 이번에 추가한 봇 차단
+  // 의심 에러 등)가 postPipelineLog/Discord 알림 둘 다 거치지 않고 곧바로
+  // CLI 진입점의 console.error까지 올라가버렸다 — 작업 스케줄러가 리다이렉트
+  // 하는 로그 파일을 사용자가 직접 열어보지 않으면 실패 사실 자체를 알 수
+  // 없었다.
+  try {
+    for (const [storeCode, storeName] of stores) {
+      for (const [targetCode, targetName] of TARGETS) {
+        for (const semesterCode of SEMESTERS) {
+          const rows = await fetchAllForCombo(storeCode, storeName, targetCode, targetName, semesterCode);
+          allRows.push(...rows);
+          await sleep(randomPacingDelay());
+        }
       }
+      console.log(`  [${storeName}] 누적 ${allRows.length}건`);
     }
-    console.log(`  [${storeName}] 누적 ${allRows.length}건`);
+  } catch (err) {
+    await postPipelineLog(createAdminClient(), { status: 'FAILED', errorMessage: err.message.slice(0, 500) });
+    await notifyBatchResult({
+      title: '❌ [local-open-spaces] 롯데마트 컬처클럽 배치 실패',
+      description: err.message.slice(0, 500),
+      status: `${((Date.now() - startedAt) / 1000).toFixed(1)}초`,
+      color: 0xed4245,
+    });
+    throw err;
   }
 
   // 동일 classId가 여러 대상(target) 조회에 걸쳐 중복 수신될 가능성에 대비
@@ -496,6 +557,12 @@ export async function run({ dryRun = false, storesLimit = null } = {}) {
     }
   } catch (err) {
     await postPipelineLog(client, { status: 'FAILED', errorMessage: err.message.slice(0, 500) });
+    await notifyBatchResult({
+      title: '❌ [local-open-spaces] 롯데마트 컬처클럽 배치 실패',
+      description: err.message.slice(0, 500),
+      status: `${((Date.now() - startedAt) / 1000).toFixed(1)}초`,
+      color: 0xed4245,
+    });
     throw err;
   }
 
@@ -530,20 +597,21 @@ export async function run({ dryRun = false, storesLimit = null } = {}) {
     console.error(`⚠️ 접수불가 갱신 실패(배치 자체는 성공으로 처리): ${err.message}`);
   }
 
-  await postPipelineLog(client, {
-    status: 'OK',
-    metaData: {
-      unavailableCount,
-      count: upsertedCount,
-      // [search_reg_status=1 고정 이후] 신규 수신분은 거의 항상 바로신청/대기자신청
-      // 뿐이지만, 혹시 다른 상태가 섞여 들어오면(실측과 다른 경우) 0이 아닌 값으로
-      // 바로 드러나도록 5개 상태 전부 센다(접수불가는 신규 수신이 아니라 갱신
-      // 전용이라 제외).
-      byStatus: ['바로신청', '대기자신청', '접수마감', '전화문의', '현장접수'].reduce(
-        (acc, s) => ({ ...acc, [s]: rows.filter((r) => r.registration_status === s).length }),
-        {}
-      ),
-    },
+  const byStatus = ['바로신청', '대기자신청', '접수마감', '전화문의', '현장접수'].reduce(
+    // [search_reg_status=1 고정 이후] 신규 수신분은 거의 항상 바로신청/대기자신청
+    // 뿐이지만, 혹시 다른 상태가 섞여 들어오면(실측과 다른 경우) 0이 아닌 값으로
+    // 바로 드러나도록 5개 상태 전부 센다(접수불가는 신규 수신이 아니라 갱신
+    // 전용이라 제외).
+    (acc, s) => ({ ...acc, [s]: rows.filter((r) => r.registration_status === s).length }),
+    {}
+  );
+
+  await postPipelineLog(client, { status: 'OK', metaData: { unavailableCount, count: upsertedCount, byStatus } });
+  await notifyBatchResult({
+    title: '✅ [local-open-spaces] 롯데마트 컬처클럽 배치 완료',
+    description: `총 ${upsertedCount}건 수집/upsert, 접수불가 갱신 ${unavailableCount}건 (바로신청 ${byStatus['바로신청']}건, 대기자신청 ${byStatus['대기자신청']}건)`,
+    status: `${((Date.now() - startedAt) / 1000).toFixed(1)}초`,
+    color: 0x5865f2,
   });
 
   return { sourceKey: SOURCE_KEY, count: upsertedCount, upserted: true };

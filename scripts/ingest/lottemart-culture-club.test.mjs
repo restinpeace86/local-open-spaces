@@ -2,7 +2,7 @@
 // 실측 표본 그대로(2026-10-04 searchList.do 직접 호출, 응답 그대로 복사한 <tr>).
 import { describe, expect, it, vi } from 'vitest';
 import { parse } from 'node-html-parser';
-import { markFallenOutRowsAsUnavailable, parsePageInfo, parseRow } from './lottemart-culture-club.mjs';
+import { looksLikeSuspiciousEmptyResponse, markFallenOutRowsAsUnavailable, parsePageInfo, parseRow } from './lottemart-culture-club.mjs';
 
 const CONTEXT = {
   storeCode: '455',
@@ -347,5 +347,26 @@ describe('markFallenOutRowsAsUnavailable', () => {
 
     expect(count).toBe(0);
     expect(updateCalls).toHaveLength(0);
+  });
+});
+
+// [봇 차단 감지 — 실측 확인](2026-10-13 사용자 지적: "롯데마트가 가져오기
+// 실패하는것같은데 봇차단 같은거로.. 확인하고 대처방안 마련해봐") 180개
+// 조합(지점×대상)을 직접 재조회해 확인한 "진짜 0건" 응답의 정확한 모양
+// (공백/탭/줄바꿈만 있는 빈 템플릿, 실측 27바이트)을 기준으로 삼는다.
+describe('looksLikeSuspiciousEmptyResponse', () => {
+  it('실측으로 확인된 진짜 "0건" 응답(공백/탭/줄바꿈만)은 의심하지 않는다', () => {
+    const realEmptyResponse = '\r\n\r\n\r\n\r\n\r\n\r\n\t\r\n\t\r\n\t\t\r\n\t\r\n\r\n';
+    expect(looksLikeSuspiciousEmptyResponse(realEmptyResponse, 0)).toBe(false);
+  });
+
+  it('<tr>이 1건 이상 있으면(정상 데이터) 의심하지 않는다', () => {
+    const html = '<table><tr><td>정상 데이터</td></tr></table>';
+    expect(looksLikeSuspiciousEmptyResponse(html, 1)).toBe(false);
+  });
+
+  it('<tr>이 0건인데 내용이 비어있지 않으면(차단/공지 페이지 등) 의심한다', () => {
+    const blockLikeHtml = '<html><body>일시적으로 접속이 원활하지 않습니다.</body></html>';
+    expect(looksLikeSuspiciousEmptyResponse(blockLikeHtml, 0)).toBe(true);
   });
 });
