@@ -4,6 +4,19 @@ vi.mock('./lib/fetch-with-timeout.mjs', () => ({
   fetchWithTimeout: vi.fn(),
 }));
 
+// [프로덕션 오염 방지](2026-10-13 실측 확인) 수집 루프 catch 블록(Phase M)이
+// 이 두 모듈을 실제로 호출한다 — mock하지 않으면 테스트 중 발생하는 throw가
+// 실제 Supabase pipeline_logs에 가짜 FAILED 행을 쓰고 실제 Discord 웹훅으로
+// 알림을 전송한다(라이브 환경에서 실제로 재현/확인됨).
+vi.mock('./lib/supabase-admin.mjs', () => ({
+  createAdminClient: vi.fn(() => ({
+    from: vi.fn(() => ({ insert: vi.fn().mockResolvedValue({ error: null }) })),
+  })),
+}));
+vi.mock('../notify-discord.mjs', () => ({
+  sendDiscordNotification: vi.fn().mockResolvedValue(undefined),
+}));
+
 const { run, splitOpenAndClosedRows, looksLikeSuspiciousEmptyResponse } = await import('./eland-retail-culture-club.mjs');
 const { fetchWithTimeout } = await import('./lib/fetch-with-timeout.mjs');
 

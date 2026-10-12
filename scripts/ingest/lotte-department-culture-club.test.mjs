@@ -4,6 +4,21 @@ vi.mock('./lib/fetch-with-timeout.mjs', () => ({
   fetchWithTimeout: vi.fn(),
 }));
 
+// [프로덕션 오염 방지](2026-10-13 실측 확인) 이 파일의 "봇 차단 응답" 테스트는
+// run()의 수집 루프 catch 블록(2026-10-13 Phase M에서 추가)까지 실제로
+// 도달하는데, 이 두 모듈을 mock하지 않으면 테스트가 실행될 때마다 진짜
+// Supabase pipeline_logs에 가짜 FAILED 행이 쓰이고 실제 Discord 웹훅으로
+// "봇 차단 의심" 알림이 전송된다(라이브 환경에서 실제로 재현/확인됨 — 사용자가
+// "롯데백화점 계속 에러나는거 같다"고 보고한 원인 중 하나였다).
+vi.mock('./lib/supabase-admin.mjs', () => ({
+  createAdminClient: vi.fn(() => ({
+    from: vi.fn(() => ({ insert: vi.fn().mockResolvedValue({ error: null }) })),
+  })),
+}));
+vi.mock('../notify-discord.mjs', () => ({
+  sendDiscordNotification: vi.fn().mockResolvedValue(undefined),
+}));
+
 const { run, splitOpenAndClosedRows } = await import('./lotte-department-culture-club.mjs');
 const { fetchWithTimeout } = await import('./lib/fetch-with-timeout.mjs');
 
