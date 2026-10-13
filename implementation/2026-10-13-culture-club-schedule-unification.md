@@ -46,7 +46,24 @@ Actions 워크플로 비활성화)은 이미 커밋·푸시 완료.
 
 ## Windows 작업 스케줄러 — 실행할 명령
 
-### 1단계: 기존 "하루 1회" 작업 삭제
+**정정(2026-10-13, 두 번째 시도 실패 후)**: 처음 드린 명령은 `cmd.exe /c
+"...&&...&&..."`를 통째로 `/tr`에 중첩 따옴표로 박아넣는 방식이었는데,
+(1) PowerShell에서 실행하면 `\"`를 PowerShell이 escape로 인식하지 않아
+문자열이 중간에 끊기고 `&&`가 노출돼 "토큰이 올바른 문 구분 기호가
+아닙니다" 오류가 났고, (2) cmd.exe에서 실행해도 cmd.exe 자체의 네이티브
+토크나이저가 `\"`를 escape로 보지 않고 그냥 또 하나의 `"`(따옴표 토글)로
+처리해 중간에 따옴표가 조기 종료되면서 `/sc` 옵션을 못 찾는 오류가 났다.
+**그 사이 1단계(기존 작업 5개 삭제)만 성공해서, 잠깐 이마트/롯데마트/
+현대/신세계 목록 배치와 이마트 상태갱신이 스케줄에서 완전히 빠진 상태가
+됐었다** — 아래 수정된 방법으로 바로 복구했다.
+
+**수정된 방법 — 중첩 따옴표/`&&` 자체를 없앰**: `scripts/scheduled-tasks/`
+에 브랜드별 `.bat` 래퍼 파일을 만들어 두고, `/tr`에는 그 `.bat` 파일
+경로만 전달한다. `.bat` 파일 내부는 그냥 평범한 여러 줄(`set ...`,
+`cd ...`, `node ...`)이라 이스케이프가 전혀 필요 없고, cmd.exe든
+PowerShell이든 똑같이 동작한다.
+
+### 1단계: 기존 "하루 1회" 작업 삭제 (이미 완료됨 — 다시 안 해도 됨)
 ```
 schtasks /delete /tn "LocalOpenSpaces-EmartBatch" /f
 schtasks /delete /tn "LocalOpenSpaces-EmartStatusRefresh" /f
@@ -54,41 +71,38 @@ schtasks /delete /tn "LocalOpenSpaces-LottemartBatch" /f
 schtasks /delete /tn "LocalOpenSpaces-HyundaiBatch" /f
 schtasks /delete /tn "LocalOpenSpaces-ShinsegaeBatch" /f
 ```
-(존재하지 않는 작업명이면 "지정한 작업 이름을 찾을 수 없습니다" 오류가
-나지만 무시하고 계속 진행하면 된다.)
 
-### 2단계: "하루 2회(AM/PM)"로 재등록
-아래 전부 `IS_SCHEDULED_RUN=true`를 포함한다(없으면 스크립트의 랜덤
-지연이 조용히 비활성화됨 — Decision 032 배경 참고). 로그 경로는 기존
-`C:\Users\momob\local-open-spaces-*.log` 관례를 그대로 따른다.
+### 2단계: "하루 2회(AM/PM)"로 재등록 — `.bat` 파일 경로 방식
+`.bat` 파일 안에 `IS_SCHEDULED_RUN=true`/로그 경로/스크립트 경로가 전부
+이미 들어있다(`scripts/scheduled-tasks/run-*.bat` 참고, git에 커밋됨).
 
 ```
-schtasks /create /tn "LocalOpenSpaces-EmartBatch-AM" /tr "cmd.exe /c \"set IS_SCHEDULED_RUN=true && cd /d D:\workspace\local-open-spaces && node scripts\ingest\emart-culture-club.mjs >> C:\Users\momob\local-open-spaces-emart-batch.log 2>&1\"" /sc DAILY /st 09:00 /f
-schtasks /create /tn "LocalOpenSpaces-EmartBatch-PM" /tr "cmd.exe /c \"set IS_SCHEDULED_RUN=true && cd /d D:\workspace\local-open-spaces && node scripts\ingest\emart-culture-club.mjs >> C:\Users\momob\local-open-spaces-emart-batch.log 2>&1\"" /sc DAILY /st 21:00 /f
+schtasks /create /tn "LocalOpenSpaces-EmartBatch-AM" /tr "D:\workspace\local-open-spaces\scripts\scheduled-tasks\run-emart-batch.bat" /sc DAILY /st 09:00 /f
+schtasks /create /tn "LocalOpenSpaces-EmartBatch-PM" /tr "D:\workspace\local-open-spaces\scripts\scheduled-tasks\run-emart-batch.bat" /sc DAILY /st 21:00 /f
 
-schtasks /create /tn "LocalOpenSpaces-EmartStatusRefresh-AM" /tr "cmd.exe /c \"set IS_SCHEDULED_RUN=true && cd /d D:\workspace\local-open-spaces && node scripts\ingest\emart-culture-club-status-refresh.mjs >> C:\Users\momob\local-open-spaces-emart-status-refresh.log 2>&1\"" /sc DAILY /st 09:05 /f
-schtasks /create /tn "LocalOpenSpaces-EmartStatusRefresh-PM" /tr "cmd.exe /c \"set IS_SCHEDULED_RUN=true && cd /d D:\workspace\local-open-spaces && node scripts\ingest\emart-culture-club-status-refresh.mjs >> C:\Users\momob\local-open-spaces-emart-status-refresh.log 2>&1\"" /sc DAILY /st 21:05 /f
+schtasks /create /tn "LocalOpenSpaces-EmartStatusRefresh-AM" /tr "D:\workspace\local-open-spaces\scripts\scheduled-tasks\run-emart-status-refresh.bat" /sc DAILY /st 09:05 /f
+schtasks /create /tn "LocalOpenSpaces-EmartStatusRefresh-PM" /tr "D:\workspace\local-open-spaces\scripts\scheduled-tasks\run-emart-status-refresh.bat" /sc DAILY /st 21:05 /f
 
-schtasks /create /tn "LocalOpenSpaces-LottemartBatch-AM" /tr "cmd.exe /c \"set IS_SCHEDULED_RUN=true && cd /d D:\workspace\local-open-spaces && node scripts\ingest\lottemart-culture-club.mjs >> C:\Users\momob\local-open-spaces-lottemart-batch.log 2>&1\"" /sc DAILY /st 09:10 /f
-schtasks /create /tn "LocalOpenSpaces-LottemartBatch-PM" /tr "cmd.exe /c \"set IS_SCHEDULED_RUN=true && cd /d D:\workspace\local-open-spaces && node scripts\ingest\lottemart-culture-club.mjs >> C:\Users\momob\local-open-spaces-lottemart-batch.log 2>&1\"" /sc DAILY /st 21:10 /f
+schtasks /create /tn "LocalOpenSpaces-LottemartBatch-AM" /tr "D:\workspace\local-open-spaces\scripts\scheduled-tasks\run-lottemart-batch.bat" /sc DAILY /st 09:10 /f
+schtasks /create /tn "LocalOpenSpaces-LottemartBatch-PM" /tr "D:\workspace\local-open-spaces\scripts\scheduled-tasks\run-lottemart-batch.bat" /sc DAILY /st 21:10 /f
 
-schtasks /create /tn "LocalOpenSpaces-HyundaiBatch-AM" /tr "cmd.exe /c \"set IS_SCHEDULED_RUN=true && cd /d D:\workspace\local-open-spaces && node scripts\ingest\hyundai-culture-club.mjs >> C:\Users\momob\local-open-spaces-hyundai-batch.log 2>&1\"" /sc DAILY /st 09:20 /f
-schtasks /create /tn "LocalOpenSpaces-HyundaiBatch-PM" /tr "cmd.exe /c \"set IS_SCHEDULED_RUN=true && cd /d D:\workspace\local-open-spaces && node scripts\ingest\hyundai-culture-club.mjs >> C:\Users\momob\local-open-spaces-hyundai-batch.log 2>&1\"" /sc DAILY /st 21:20 /f
+schtasks /create /tn "LocalOpenSpaces-HyundaiBatch-AM" /tr "D:\workspace\local-open-spaces\scripts\scheduled-tasks\run-hyundai-batch.bat" /sc DAILY /st 09:20 /f
+schtasks /create /tn "LocalOpenSpaces-HyundaiBatch-PM" /tr "D:\workspace\local-open-spaces\scripts\scheduled-tasks\run-hyundai-batch.bat" /sc DAILY /st 21:20 /f
 
-schtasks /create /tn "LocalOpenSpaces-ShinsegaeBatch-AM" /tr "cmd.exe /c \"set IS_SCHEDULED_RUN=true && cd /d D:\workspace\local-open-spaces && node scripts\ingest\shinsegae-culture-club.mjs >> C:\Users\momob\local-open-spaces-shinsegae-batch.log 2>&1\"" /sc DAILY /st 09:30 /f
-schtasks /create /tn "LocalOpenSpaces-ShinsegaeBatch-PM" /tr "cmd.exe /c \"set IS_SCHEDULED_RUN=true && cd /d D:\workspace\local-open-spaces && node scripts\ingest\shinsegae-culture-club.mjs >> C:\Users\momob\local-open-spaces-shinsegae-batch.log 2>&1\"" /sc DAILY /st 21:30 /f
+schtasks /create /tn "LocalOpenSpaces-ShinsegaeBatch-AM" /tr "D:\workspace\local-open-spaces\scripts\scheduled-tasks\run-shinsegae-batch.bat" /sc DAILY /st 09:30 /f
+schtasks /create /tn "LocalOpenSpaces-ShinsegaeBatch-PM" /tr "D:\workspace\local-open-spaces\scripts\scheduled-tasks\run-shinsegae-batch.bat" /sc DAILY /st 21:30 /f
 ```
 
 ### 3단계: 자동 스케줄이 없던 3개 브랜드 — 신규 등록
 ```
-schtasks /create /tn "LocalOpenSpaces-AkplazaBatch-AM" /tr "cmd.exe /c \"set IS_SCHEDULED_RUN=true && cd /d D:\workspace\local-open-spaces && node scripts\ingest\akplaza-culture-club.mjs >> C:\Users\momob\local-open-spaces-akplaza-batch.log 2>&1\"" /sc DAILY /st 09:40 /f
-schtasks /create /tn "LocalOpenSpaces-AkplazaBatch-PM" /tr "cmd.exe /c \"set IS_SCHEDULED_RUN=true && cd /d D:\workspace\local-open-spaces && node scripts\ingest\akplaza-culture-club.mjs >> C:\Users\momob\local-open-spaces-akplaza-batch.log 2>&1\"" /sc DAILY /st 21:40 /f
+schtasks /create /tn "LocalOpenSpaces-AkplazaBatch-AM" /tr "D:\workspace\local-open-spaces\scripts\scheduled-tasks\run-akplaza-batch.bat" /sc DAILY /st 09:40 /f
+schtasks /create /tn "LocalOpenSpaces-AkplazaBatch-PM" /tr "D:\workspace\local-open-spaces\scripts\scheduled-tasks\run-akplaza-batch.bat" /sc DAILY /st 21:40 /f
 
-schtasks /create /tn "LocalOpenSpaces-StarfieldBatch-AM" /tr "cmd.exe /c \"set IS_SCHEDULED_RUN=true && cd /d D:\workspace\local-open-spaces && node scripts\ingest\starfield-culture-club.mjs >> C:\Users\momob\local-open-spaces-starfield-batch.log 2>&1\"" /sc DAILY /st 09:50 /f
-schtasks /create /tn "LocalOpenSpaces-StarfieldBatch-PM" /tr "cmd.exe /c \"set IS_SCHEDULED_RUN=true && cd /d D:\workspace\local-open-spaces && node scripts\ingest\starfield-culture-club.mjs >> C:\Users\momob\local-open-spaces-starfield-batch.log 2>&1\"" /sc DAILY /st 21:50 /f
+schtasks /create /tn "LocalOpenSpaces-StarfieldBatch-AM" /tr "D:\workspace\local-open-spaces\scripts\scheduled-tasks\run-starfield-batch.bat" /sc DAILY /st 09:50 /f
+schtasks /create /tn "LocalOpenSpaces-StarfieldBatch-PM" /tr "D:\workspace\local-open-spaces\scripts\scheduled-tasks\run-starfield-batch.bat" /sc DAILY /st 21:50 /f
 
-schtasks /create /tn "LocalOpenSpaces-ElandRetailBatch-AM" /tr "cmd.exe /c \"set IS_SCHEDULED_RUN=true && cd /d D:\workspace\local-open-spaces && node scripts\ingest\eland-retail-culture-club.mjs >> C:\Users\momob\local-open-spaces-eland-retail-batch.log 2>&1\"" /sc DAILY /st 10:00 /f
-schtasks /create /tn "LocalOpenSpaces-ElandRetailBatch-PM" /tr "cmd.exe /c \"set IS_SCHEDULED_RUN=true && cd /d D:\workspace\local-open-spaces && node scripts\ingest\eland-retail-culture-club.mjs >> C:\Users\momob\local-open-spaces-eland-retail-batch.log 2>&1\"" /sc DAILY /st 22:00 /f
+schtasks /create /tn "LocalOpenSpaces-ElandRetailBatch-AM" /tr "D:\workspace\local-open-spaces\scripts\scheduled-tasks\run-eland-retail-batch.bat" /sc DAILY /st 10:00 /f
+schtasks /create /tn "LocalOpenSpaces-ElandRetailBatch-PM" /tr "D:\workspace\local-open-spaces\scripts\scheduled-tasks\run-eland-retail-batch.bat" /sc DAILY /st 22:00 /f
 ```
 
 ### 4단계: 등록 확인
