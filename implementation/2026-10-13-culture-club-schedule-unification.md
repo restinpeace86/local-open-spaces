@@ -10,12 +10,18 @@ Decision 032(`project/decision-log.md`) 실행 — 롯데백화점 WAF 차단
 2026-10-13
 
 ## 이 문서의 역할
-이 세션(샌드박스 환경)은 사용자의 실제 로컬 PC Windows 작업 스케줄러를
-조회·수정할 수 없다(`schtasks` 호출이 이 환경에선 빈 결과만 반환 —
-Decision 031에서도 동일하게 확인됨). 아래 명령은 **사용자가 자신의 PC
-관리자 권한 PowerShell/CMD에서 직접 실행**해야 한다. 코드 쪽(스크립트의
-`MAX_STARTUP_DELAY_MS`, GitHub Actions 워크플로 비활성화)은 이미 이
-커밋에서 처리됐다.
+**정정(2026-10-13)**: 처음엔 "이 세션은 사용자의 실제 로컬 PC 작업
+스케줄러에 접근할 수 없다"고 잘못 판단했었다 — 원인은 Git Bash가
+`schtasks /query`의 `/query`를 경로로 잘못 해석해 빈 결과가 나온 것뿐이고
+(`//query`처럼 슬래시를 두 번 쓰면 정상 동작), 실제로는 같은 PC(호스트명
+DESKTOP-4NANTTM)다. **조회(`/query`)는 이 세션에서 직접 실행해 확인
+가능**하다(기존 13개 작업 전부 `IS_SCHEDULED_RUN=true` 정상 확인,
+롯데백화점 2개가 사용자가 직접 끈 대로 "사용 안 함" 상태인 것도 확인).
+다만 **삭제(`/delete`)·생성(`/create`)은 Claude Code의 자동 권한
+분류기가 "위험한 작업"으로 판단해 이 세션에서 직접 실행이 막혔다** —
+그래서 아래 명령은 **사용자가 자신의 PC 관리자 권한 PowerShell/CMD에서
+직접 실행**해야 한다. 코드 쪽(스크립트의 `MAX_STARTUP_DELAY_MS`, GitHub
+Actions 워크플로 비활성화)은 이미 커밋·푸시 완료.
 
 ## 코드 변경 사항 (이미 완료)
 - `emart-culture-club.mjs`/`lottemart-culture-club.mjs`/`hyundai-
@@ -26,8 +32,17 @@ Decision 031에서도 동일하게 확인됨). 아래 명령은 **사용자가 �
   → 10분(600,000).
 - `.github/workflows/lottemart-culture-club-batch.yml` →
   `.yml.disabled`(로컬 PC 작업 스케줄러와 중복 제거).
+- **상세수집 중복도 실측 확인 후 추가로 정리**(2026-10-13, 사용자 지시
+  "중복인지 확인하고 중복이면 정리해"): GitHub API로 실행 이력을 직접
+  조회해 `emart-culture-club-detail-batch.yml`(KST 05:00)과 `lottemart-
+  culture-club-detail-batch.yml`(KST 01:30)이 로컬 PC 작업(`EmartDetailFetch`
+  09:40, `LottemartDetailFetch` 10:00)과 별개로 **최근 5일 연속 매일
+  둘 다 실제로 실행**되고 있었음을 확인(추측이 아니라 `GET /repos/.../
+  actions/workflows/{id}/runs`로 직접 조회) — 둘 다 `.yml.disabled`로
+  전환해 로컬 PC 단일 경로로 정리했다.
 - 검증: `npx tsc --noEmit` / `npm run test -- --run`(316개 파일 3,201개
-  테스트 전부 통과) / `npm run build` 전부 통과.
+  테스트 전부 통과, 1회 단발성 flaky 재현 후 재실행 시 정상) / `npm run
+  build` 전부 통과.
 
 ## Windows 작업 스케줄러 — 실행할 명령
 
@@ -82,19 +97,15 @@ schtasks /query /fo LIST /v | findstr /c:"LocalOpenSpaces" /c:"다음 실행 시
 ```
 각 작업의 "다음 실행 시간"이 의도한 시각으로 잡혀 있는지 확인.
 
-### 5단계(선택, 중요): 손대지 않은 기존 작업들의 `IS_SCHEDULED_RUN=true` 여부 확인
-이번에 건드리지 않은 작업들(`EmartDetailFetch`/`EmartRegisterReminder`/
-`CultureClubStatusWatch`/`LottemartDetailFetch`/`ShinsegaeDetailFetch`/
-`LotteDepartment*`/`CultureClubRehostThumbnails`)은 등록된 명령문에
-`IS_SCHEDULED_RUN=true`가 실제로 포함돼 있는지 문서로 확인이 안 된다.
-각각:
-```
-schtasks /query /tn "<작업명>" /fo LIST /v
-```
-의 "실행할 작업" 항목에 `set IS_SCHEDULED_RUN=true`가 보이는지 확인하면
-된다. 없으면 해당 스크립트의 랜덤 시작 지연이 실제로는 전혀 동작하지
-않고 있었던 것 — 필요하면 2단계와 동일한 패턴으로 `/change`나 삭제 후
-재등록으로 추가해야 한다(이번 범위 밖, 별도 확인 필요 항목으로 남김).
+### 5단계 — `IS_SCHEDULED_RUN=true` 여부: 확인 완료
+(2026-10-13, Claude Code 세션에서 직접 조회) 건드리지 않은 작업들
+(`EmartDetailFetch`/`EmartRegisterReminder`/`CultureClubStatusWatch`/
+`LottemartDetailFetch`/`ShinsegaeDetailFetch`/`CultureClubRehostThumbnails`)
+전부 `schtasks /query /tn "<작업명>" /fo LIST /v`로 직접 조회해 "실행할
+작업" 항목에 `set IS_SCHEDULED_RUN=true`가 정상적으로 포함돼 있음을
+확인했다 — 랜덤 시작 지연은 전부 의도대로 동작 중이었다. `LotteDepartment
+Batch`/`DetailFetch`는 "사용 안 함"(사용자가 Decision 031에 따라 직접
+비활성화한 상태)로 확인됨.
 
 ## 변경 전/후 요약
 | 스크립트 | 변경 전 | 변경 후 |
@@ -108,13 +119,15 @@ schtasks /query /tn "<작업명>" /fo LIST /v
 | starfield-culture-club.mjs | 자동 스케줄 없음 | 09:50·21:50(신규), 지연 최대 30분 |
 | eland-retail-culture-club.mjs | 자동 스케줄 없음 | 10:00·22:00(신규), 지연 최대 30분 |
 | lotte-department-culture-club.mjs | 5시간마다 | **중단(Decision 031, 변경 없음)** |
+| emart-culture-club-detail.mjs | 매일 09:40(**+GH Actions 05:00 중복 확인됨**) | 09:40(GH Actions 비활성화, 로컬 PC 주기는 변경 없음) |
+| lottemart-culture-club-detail.mjs | 매일 10:00(**+GH Actions 01:30 중복 확인됨**) | 10:00(GH Actions 비활성화, 로컬 PC 주기는 변경 없음) |
 
 ## 특이 사항 — 이번 범위에 포함하지 않은 것
-- 상세수집(`*-detail.mjs`)·핑(`lottemart-culture-club-ping.mjs`)·상태감시
-  (`culture-club-status-watch.mjs`)·알림(`emart-culture-club-register-
-  reminder.mjs`) 스크립트는 사용자가 "현재 목록 리스트"라고 범위를
-  명시했기 때문에 건드리지 않았다.
-- 롯데마트 상세수집의 GitHub Actions/로컬 PC 중복 등록(`lottemart-
-  culture-club-detail-batch.yml` vs `LocalOpenSpaces-LottemartDetailFetch`)
-  도 동일한 성격의 문제지만 이번 범위(목록 배치) 밖이라 그대로 뒀다 —
-  필요하면 별도 지시로 정리.
+- 핑(`lottemart-culture-club-ping.mjs`)·상태감시(`culture-club-status-
+  watch.mjs`)·알림(`emart-culture-club-register-reminder.mjs`) 스크립트는
+  사용자가 "현재 목록 리스트"라고 범위를 명시했기 때문에 건드리지 않았다.
+- 상세수집(`*-detail.mjs`)의 GitHub Actions 중복은 처음엔 범위 밖으로
+  남겼으나, 사용자가 "중복인지 확인하고 중복이면 정리해"라고 추가 지시해
+  GitHub API로 실행 이력을 직접 조회(추측 아님)해 중복 확인 후 정리했다
+  (위 표 참고) — 다만 상세수집의 **빈도/지연값 자체**는 변경하지 않았다
+  (로컬 PC 쪽 기존 1일 1회 그대로, 목록 배치만 하루 2회로 바뀜).

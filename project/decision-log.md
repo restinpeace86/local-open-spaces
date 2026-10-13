@@ -1162,6 +1162,16 @@ bridge.md`). 롯데백화점은 ±60분 지연 + 5시간 주기로 지금까지 
   → `.yml.disabled`.
 - **운영**: 로컬 PC 작업 스케줄러 등록/수정은 사용자가 직접 수행해야
   한다 — 상세 명령은 별도 implementation 문서 참고.
-- **범위 밖(별도 확인 필요)**: 상세수집/핑/상태감시/알림 스크립트의 빈도,
-  그리고 롯데마트 상세수집의 GitHub Actions/로컬 PC 중복 등록은 이번
+- **범위 밖(별도 확인 필요)**: 핑/상태감시/알림 스크립트의 빈도는 이번
   결정에 포함되지 않았다 — 필요하면 별도 지시로 진행.
+
+#### 후속 — 상세수집 GitHub Actions/로컬 PC 중복도 실측 확인 후 정리(같은 날 추가 지시)
+사용자 추가 지시("중복인지 확인하고 중복이면 정리해")에 따라, 처음엔
+범위 밖으로 남겼던 이마트/롯데마트 **상세수집**의 GitHub Actions 워크플로
+(`emart-culture-club-detail-batch.yml` KST 05:00, `lottemart-culture-club-
+detail-batch.yml` KST 01:30)가 로컬 PC 작업(각각 09:40/10:00)과 실제로
+중복 실행되고 있는지 GitHub API(`GET /repos/.../actions/workflows/{id}/
+runs`)로 직접 조회했다 — 추측 없이 최근 5일치 실행 이력(둘 다 `schedule`
+이벤트로 매일 `completed`/`success`)으로 중복을 확인하고, 두 워크플로를
+`.yml.disabled`로 전환해 로컬 PC 단일 경로로 정리했다. 상세수집 자체의
+빈도/지연값은 변경하지 않았다(목록 배치만 하루 2회 대상).
