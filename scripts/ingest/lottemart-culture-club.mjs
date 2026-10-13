@@ -71,9 +71,13 @@ const UPSERT_CHUNK_SIZE = 500;
 const EXISTING_ID_PAGE_SIZE = 1000;
 const REQUEST_PACING_MIN_MS = 1000;
 const REQUEST_PACING_MAX_MS = 1500;
-// [랜덤 시작 지연](2026-10-04 사용자 지시) — 하루 1회 배치라 다음 배치(상세
-// 수집, KST 01:30)까지 충분히 여유가 있어 넉넉하게(최대 10분) 둔다.
-const MAX_STARTUP_DELAY_MS = 10 * 60 * 1000;
+// [랜덤 시작 지연 — 하루 2회로 확대, 변동폭도 키움](2026-10-13 Decision 032:
+// 롯데백화점 WAF 차단 이후 "너무 자주 하지 말고 변화폭도 잘 줘"라는 사용자
+// 지시로 전 브랜드 목록 배치를 하루 2회(12시간 주기)로 통일하면서, 변동폭도
+// 10분→30분으로 함께 키운다. 기존에 GitHub Actions(KST 01:00)와 로컬 PC
+// 작업 스케줄러(KST 09:10)에 중복 등록돼 있던 것도 이번에 GitHub Actions
+// 쪽을 꺼서 로컬 PC 단일 경로로 정리한다.
+const MAX_STARTUP_DELAY_MS = 30 * 60 * 1000;
 const PAGE_SIZE = 20;
 
 // [ping 배치 재사용](2026-10-04) — lottemart-culture-club-ping.mjs가 동일한

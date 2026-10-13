@@ -1069,3 +1069,99 @@ schtasks /change /tn "LocalOpenSpaces-LotteDepartmentDetailFetch" /disable
 - 재개 조건(우회 방안 마련, 또는 차단이 자연 해제됨 확인)과 재개 방법은
   이 결정 항목 자체에 남겨 뒀다 — 추후 세션이 이 브랜드의 반복 실패를
   다시 "고쳐야 할 버그"로 오인하지 않도록 한다.
+
+### Decision 032: 문화센터 목록 배치 전 브랜드 "하루 2회(12시간 주기)"로 통일 — 롯데백화점 WAF 차단 재발 방지
+- **날짜:** 2026-10-13
+- **상태:** 승인 (Approved) — 사용자 직접 지시("다른것들도 롯데백화점과
+  같이 안되도록.. 주기에 대하여 너무 자주하지 말고 변화폭도 잘 줘").
+
+#### 배경 — 변경 전 실측 현황(조사 에이전트 결과)
+롯데백화점 WAF 차단(Decision 031) 이후, 나머지 브랜드들도 같은 일을
+겪지 않도록 현재 스케줄 전체를 먼저 조사했다.
+
+**GitHub Actions(.github/workflows/):**
+| 워크플로 | 스크립트 | 크론(UTC/KST) | 상태 |
+|---|---|---|---|
+| emart-culture-club-batch.yml.disabled | emart-culture-club.mjs | 19:00/04:00 | 비활성(2026-10-06) |
+| emart-culture-club-detail-batch.yml | emart-culture-club-detail.mjs | 20:00/05:00 | 활성 |
+| lottemart-culture-club-batch.yml | lottemart-culture-club.mjs | 16:00/01:00 | 활성(**로컬 PC와 중복**) |
+| lottemart-culture-club-detail-batch.yml | lottemart-culture-club-detail.mjs | 16:30/01:30 | 활성(로컬 PC와 중복) |
+| lottemart-culture-club-ping.yml | lottemart-culture-club-ping.mjs | 매시 07분 | 활성 |
+| lottemart-culture-club-status-watch.yml.disabled | (구) lottemart-culture-club-status-watch.mjs | 5분마다 | 비활성(2026-10-06, 통합판으로 대체) |
+
+현대/신세계/AK플라자/스타필드/이랜드리테일/롯데백화점은 GitHub Actions
+워크플로 자체가 없다.
+
+**Windows 작업 스케줄러(로컬 PC, implementation/*.md에 기록된 것만 확인
+가능 — 이 환경에선 실제 조회 불가):**
+| 작업명 | 스크립트 | 주기(문서 기록) |
+|---|---|---|
+| LocalOpenSpaces-EmartBatch | emart-culture-club.mjs | 매일 09:00 |
+| LocalOpenSpaces-EmartDetailFetch | emart-culture-club-detail.mjs | 매일 09:40 |
+| LocalOpenSpaces-EmartRegisterReminder | emart-culture-club-register-reminder.mjs | 5분마다(09:03~) |
+| LocalOpenSpaces-EmartStatusRefresh | emart-culture-club-status-refresh.mjs | **30분마다**(09:05~) |
+| LocalOpenSpaces-CultureClubStatusWatch | culture-club-status-watch.mjs(통합) | 5분마다 |
+| LocalOpenSpaces-LottemartBatch | lottemart-culture-club.mjs | 매일 09:10(**GitHub Actions와 중복**) |
+| LocalOpenSpaces-LottemartDetailFetch | lottemart-culture-club-detail.mjs | 매일 10:00(GitHub Actions와 중복) |
+| LocalOpenSpaces-HyundaiBatch | hyundai-culture-club.mjs | 매일 09:20 |
+| LocalOpenSpaces-ShinsegaeBatch | shinsegae-culture-club.mjs | 매일 09:30 |
+| LocalOpenSpaces-ShinsegaeDetailFetch | shinsegae-culture-club-detail.mjs | 매일 10:10 |
+| LocalOpenSpaces-LotteDepartmentBatch/-DetailFetch | lotte-department-* | 5시간마다(09:15/09:55~) — **Decision 031로 중단** |
+| LocalOpenSpaces-CultureClubRehostThumbnails | rehost-culture-club-thumbnails.mjs | 매일 10:40 |
+
+AK플라자/스타필드/이랜드리테일은 **자동 스케줄이 전혀 없었다**(통합
+문서에 "별도 등록 진행하지 않음"으로 명시).
+
+**가장 위험한 발견**: `emart-culture-club-status-refresh.mjs`가 30분마다
+(하루 48회) 이마트 전체 카탈로그를 classId 배열 + classStatus 필터로
+훑는데, 이게 정확히 이마트가 과거 GitHub Actions에서 WAFForbiddenException
+으로 막혔던 그 쿼리 패턴이다(`implementation/2026-10-06-emart-local-pc-
+bridge.md`). 롯데백화점은 ±60분 지연 + 5시간 주기로 지금까지 브랜드 중
+가장 큰 변동폭을 갖고도 차단됐다 — 변동폭만으로는 충분하지 않을 수
+있다는 뜻이라, 빈도 자체를 줄이는 쪽을 우선한다.
+
+#### 결정 내용
+1. **목록(list) 배치 전 브랜드를 하루 2회(약 12시간 주기)로 통일**
+   (상세수집/핑/상태감시/알림 스크립트는 이번 범위에 포함하지 않음 —
+   사용자가 "현재 목록 리스트"라고 명시했다):
+   - emart-culture-club.mjs: 09:00 / 21:00
+   - emart-culture-club-status-refresh.mjs: 30분마다 → 09:05 / 21:05
+   - lottemart-culture-club.mjs: 09:10 / 21:10
+   - hyundai-culture-club.mjs: 09:20 / 21:20
+   - shinsegae-culture-club.mjs: 09:30 / 21:30
+   - akplaza-culture-club.mjs(신규 등록): 09:40 / 21:40
+   - starfield-culture-club.mjs(신규 등록): 09:50 / 21:50
+   - eland-retail-culture-club.mjs(신규 등록): 10:00 / 22:00
+   - lotte-department-culture-club.mjs: Decision 031에 따라 계속 중단.
+2. **각 스크립트의 `MAX_STARTUP_DELAY_MS`를 10분→30분으로 확대**(emart-
+   status-refresh는 30초→10분) — 빈도를 줄인 만큼 변동폭도 함께 키운다.
+3. **롯데마트 목록 배치의 GitHub Actions 중복 제거**: `lottemart-
+   culture-club-batch.yml`을 `.yml.disabled`로 변경, 로컬 PC 작업
+   스케줄러 단일 경로로 통일(데이터센터 IP 노출도 함께 줄어듦).
+   상세수집(`lottemart-culture-club-detail-batch.yml`)의 동일한 중복은
+   이번 범위(목록 배치)에 포함되지 않아 그대로 둔다 — 별도 확인 필요.
+4. **Windows 작업 스케줄러 실제 등록/수정은 사용자가 직접 수행** — 이
+   세션(샌드박스 환경)은 사용자의 실제 로컬 PC 작업 스케줄러를 조회·
+   제어할 수 없다(Decision 031에서도 동일하게 확인됨). 정확한 `schtasks`
+   명령은 `implementation/2026-10-13-culture-club-schedule-unification.md`
+   에 전부 기록해 둔다.
+
+#### 결정 이유
+- 롯데백화점처럼 다른 브랜드도 반복 요청 패턴으로 WAF에 걸릴 위험을
+  사전에 줄이자는 사용자의 명시적 지시.
+- `emart-culture-club-status-refresh.mjs`가 이마트의 과거 차단 원인과
+  동일한 쿼리 패턴을 가장 높은 빈도로 반복하고 있어 최우선 완화 대상으로
+  판단했다(추측이 아니라 기존 문서에 기록된 실제 차단 원인과 직접 대조).
+- 변경 전 상태를 먼저 전부 기록해 두어, 나중에 "원래 얼마였는지" 복원이
+  필요할 때 참고할 수 있게 한다.
+
+#### 영향
+- **코드**: 7개 목록 배치 스크립트 + status-refresh의 `MAX_STARTUP_DELAY_MS`
+  상향(10분→30분, status-refresh는 30초→10분), 각 변경 지점에 이 결정을
+  인용하는 주석 추가. `.github/workflows/lottemart-culture-club-batch.yml`
+  → `.yml.disabled`.
+- **운영**: 로컬 PC 작업 스케줄러 등록/수정은 사용자가 직접 수행해야
+  한다 — 상세 명령은 별도 implementation 문서 참고.
+- **범위 밖(별도 확인 필요)**: 상세수집/핑/상태감시/알림 스크립트의 빈도,
+  그리고 롯데마트 상세수집의 GitHub Actions/로컬 PC 중복 등록은 이번
+  결정에 포함되지 않았다 — 필요하면 별도 지시로 진행.

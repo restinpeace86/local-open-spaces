@@ -60,9 +60,11 @@ const UPSERT_CHUNK_SIZE = 500;
 const EXISTING_ID_PAGE_SIZE = 1000;
 const REQUEST_PACING_MIN_MS = 1000;
 const REQUEST_PACING_MAX_MS = 1500;
-// [랜덤 시작 지연](2026-10-04 사용자 지시 — 롯데마트 배치에 먼저 적용한 걸
-// "같이 적용해"): 일 1회 배치, 넉넉하게 최대 10분.
-const MAX_STARTUP_DELAY_MS = 10 * 60 * 1000;
+// [랜덤 시작 지연 — 하루 2회로 확대, 변동폭도 키움](2026-10-13 Decision 032:
+// 롯데백화점 WAF 차단 이후 "너무 자주 하지 말고 변화폭도 잘 줘"라는 사용자
+// 지시로 전 브랜드 목록 배치를 하루 2회(12시간 주기)로 통일하면서, 변동폭도
+// 10분→30분으로 함께 키운다.
+const MAX_STARTUP_DELAY_MS = 30 * 60 * 1000;
 const BROWSER_LIKE_HEADERS = {
   Origin: 'https://www.cultureclub.emart.com',
   Referer: 'https://www.cultureclub.emart.com/enrolment',

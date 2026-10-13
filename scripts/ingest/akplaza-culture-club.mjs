@@ -60,8 +60,12 @@ const UPSERT_CHUNK_SIZE = 500;
 const EXISTING_ID_PAGE_SIZE = 1000;
 const REQUEST_PACING_MIN_MS = 500;
 const REQUEST_PACING_MAX_MS = 1000;
-// [랜덤 시작 지연] 하루 1회 배치 — 다른 브랜드 배치들과 동일한 관례.
-const MAX_STARTUP_DELAY_MS = 10 * 60 * 1000;
+// [랜덤 시작 지연 — 하루 2회로 확대, 변동폭도 키움](2026-10-13 Decision 032:
+// 롯데백화점 WAF 차단 이후 "너무 자주 하지 말고 변화폭도 잘 줘"라는 사용자
+// 지시로 전 브랜드 목록 배치를 하루 2회(12시간 주기)로 통일하면서, 변동폭도
+// 10분→30분으로 함께 키운다. 이 브랜드는 지금까지 자동 스케줄 자체가 없었어
+// 이번에 처음 로컬 PC 작업 스케줄러에 등록한다.
+const MAX_STARTUP_DELAY_MS = 30 * 60 * 1000;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));

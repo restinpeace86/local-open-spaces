@@ -1,3 +1,11 @@
+# [GitHub Actions에서 비활성화 — 로컬 PC 작업 스케줄러 단일 경로로 통일]
+# (2026-10-13 Decision 032) 이 워크플로(KST 01:00)와 로컬 PC 작업 스케줄러
+# (`LocalOpenSpaces-LottemartBatch`, KST 09:10)에 중복 등록돼 있던 것을,
+# 롯데백화점 WAF 차단을 계기로 "너무 자주 하지 말고" 사용자 지시에 따라
+# 하루 2회(12시간 주기)로 통일하면서 로컬 PC 단일 경로로 정리한다(데이터
+# 센터 IP 노출도 함께 줄어듦 — 이마트가 겪은 WAFForbiddenException과 동일한
+# 위험 경로). 되돌리려면 `lottemart-culture-club-batch.yml`로 다시 이름을
+# 바꾸고 로컬 PC 쪽 중복 등록 여부를 먼저 확인할 것.
 name: Lottemart Culture Club Batch
 
 # [롯데마트 문화센터 강좌 리스트 일일 배치](2026-10-04 사용자 지시): "롯데마트 문화센터

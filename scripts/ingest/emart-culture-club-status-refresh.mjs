@@ -36,9 +36,15 @@ const env = loadEnv();
 const SOURCE_KEY = 'EMART_CULTURE_CLUB_STATUS_REFRESH';
 const REQUEST_PACING_MIN_MS = 1000;
 const REQUEST_PACING_MAX_MS = 1500;
-// [랜덤 시작 지연] 30분 주기라 다른 일일 배치(최대 10분)처럼 길게 흔들면
-// "30분마다"라는 약속이 무너진다 — 5분 주기 찜 감시와 동일하게 최대 30초만.
-const MAX_STARTUP_DELAY_MS = 30 * 1000;
+// [30분 → 하루 2회(12시간)로 완화, 지연도 확대](2026-10-13 Decision 032):
+// 이 스크립트는 classId 배열 + classStatus 필터로 이마트 전체 카탈로그를
+// 훑는데, 이게 바로 이마트가 과거 WAFForbiddenException으로 막혔던 그
+// 쿼리 패턴이다(2026-10-06 emart-local-pc-bridge.md) — 30분마다(하루 48회)
+// 전체 카탈로그 규모로 반복하면 같은 위험을 계속 재현하는 셈이라, 롯데
+// 백화점 WAF 차단을 계기로 "너무 자주 하지 말고 변화폭도 잘 줘"라는 사용자
+// 지시에 따라 다른 목록 배치들과 동일하게 하루 2회(12시간 주기)로 줄이고
+// 지연도 30초→10분으로 키운다.
+const MAX_STARTUP_DELAY_MS = 10 * 60 * 1000;
 const DB_PAGE_SIZE = 1000;
 
 function randomPacingDelay() {
