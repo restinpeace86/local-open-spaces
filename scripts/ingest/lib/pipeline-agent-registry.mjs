@@ -190,6 +190,15 @@ export const PIPELINE_AGENTS = {
     description: '부설 주차장-스팟 50m 반경 + 이름 유사도 매칭 — open_spaces.parking_id 갱신',
     period: 'monthly',
   },
+  // [서울시 시영주차장 실시간 주차대수](2026-10-15, todo.md 개선사항2): 10분
+  // 주기 로컬 PC 작업 스케줄러 전용(API 자체가 자주 바뀌는 데이터라 월간
+  // 배치가 아님) — period는 이 레지스트리의 daily/monthly 2분류에 안 맞지만
+  // 억지로 맞추지 않고 가장 가까운 daily로 등록(관리자 화면 표시용, 실제
+  // 실행 주기는 로컬 스케줄러가 결정).
+  PARKING_REALTIME_SEOUL: {
+    description: '서울시 시영주차장 실시간 주차대수(GetParkingInfo, 10분 주기) — parking_metadata.realtime_available_count 갱신',
+    period: 'daily',
+  },
 
   // [이마트 컬처클럽 강좌 리스트 수집](2026-10-03 사용자 지시): 홈플러스와 달리
   // 로그인/Playwright 불필요 — 공개 AWS AppSync GraphQL API 직접 호출. open_spaces가
