@@ -130,11 +130,14 @@ export async function run({
   return { ...stats, processed, total: rows.length };
 }
 
+// [비주기적 수동 실행](search-and-match.mjs와 동일한 2026-10-15 사용자 지시
+// — 인자 없는 CSV 경로는 기존 metadata/식당.csv로 하위 호환 유지).
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const limitArg = process.argv[2] ? Number(process.argv[2]) : Infinity;
-  run({ limit: limitArg })
+  const csvPathArg = process.argv[2] ? path.resolve(process.cwd(), process.argv[2]) : CSV_PATH;
+  const limitArg = process.argv[3] ? Number(process.argv[3]) : Infinity;
+  run({ csvPath: csvPathArg, limit: limitArg })
     .then((stats) => {
-      console.log(`✅ 키즈친화 속성 분석 완료:`, stats);
+      console.log(`✅ 키즈친화 속성 분석 완료(${csvPathArg}):`, stats);
     })
     .catch((err) => {
       console.error('❌ 키즈친화 속성 분석 실패:', err.message);

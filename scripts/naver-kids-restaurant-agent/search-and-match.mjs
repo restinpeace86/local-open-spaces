@@ -103,11 +103,19 @@ export async function run({
   return { ...stats, processed, total: rows.length };
 }
 
+// [비주기적 수동 실행](2026-10-15 사용자 지시): "주기적으로 할건 아니고..
+// 새로운 식당들에 대하여 csv파일로 추출하면 그 파일에 대하여 수동으로
+// 돌릴수있도록 해놔" — pipeline-agent-registry.mjs(일일/월간 자동배치)에
+// 등록하지 않고, 사용자가 필요할 때마다 임의의 CSV 경로를 지정해 직접
+// 실행하는 용도로만 둔다. 인자 없이 실행하면 기존 metadata/식당.csv를
+// 그대로 쓴다(하위 호환, classify-unassigned-category-min.mjs와 동일한
+// "위치 인자 + 기본값" 관례).
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
-  const limitArg = process.argv[2] ? Number(process.argv[2]) : Infinity;
-  run({ limit: limitArg })
+  const csvPathArg = process.argv[2] ? path.resolve(process.cwd(), process.argv[2]) : CSV_PATH;
+  const limitArg = process.argv[3] ? Number(process.argv[3]) : Infinity;
+  run({ csvPath: csvPathArg, limit: limitArg })
     .then((stats) => {
-      console.log(`✅ 검색/매칭 완료:`, stats);
+      console.log(`✅ 검색/매칭 완료(${csvPathArg}):`, stats);
     })
     .catch((err) => {
       console.error('❌ 검색/매칭 실패:', err.message);
