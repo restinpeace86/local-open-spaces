@@ -1320,3 +1320,42 @@ runs`)로 직접 조회했다 — 추측 없이 최근 5일치 실행 이력(둘
   matching.sql`(`search_parking_metadata_near` RPC 신규).
 - **실측 검증**: ingest 실제 실행(712건 매칭/갱신), DB 직접 재조회로
   `is_multi_child_discount=true` 행의 `discount_info` 내용 확인.
+
+### Decision 036: "표준 중분류 기타>>식당"의 실제 의미 — open_spaces.category='ETC'가 아니라 category_min='식당' 전체
+- **날짜:** 2026-10-15
+- **상태:** 승인(Approved) — todo.md 개선사항4(네이버 플레이스 키즈친화
+  스크래핑 에이전트) 1단계(CSV 추출) 착수 전 확인.
+
+#### 배경
+사용자 지시: "표준 중분류가 기타 >> 식당인 것에 대하여 csv파일로
+추출해줘." open_spaces에는 비슷하게 들리는 두 축이 있어 그대로는 어느
+쪽인지 불명확했다(제3장 제5조 추측 금지 대상):
+1. `open_spaces.category`(영문 코드, 'ETC'='🎈 기타' — region-grid-view.tsx
+   UI 라벨) — 실측: `category='ETC' and category_min='식당'`은 딱 1건.
+2. `open_spaces.category_min`("표준중분류") 값 자체가 관리자 화면의
+   표준중분류 그룹 드롭다운(category-min-groups.ts)에서 어느 major 그룹의
+   minors 목록에도 없어 자동으로 '기타' 버킷에 떨어지는 경우(
+   buildCategoryMinGroups의 unassigned→'기타' 병합 로직) — 실측: '식당'은
+   '놀이방식당'/'키즈친화 식당(오케이존)'과 달리 어떤 정적 그룹의 minors에도
+   없어 이 경로로 '기타'에 속한다. `category_min='식당'` 전체는 1,612건
+   (category='KIDS_ACTIVITY' 1,611건 + 'ETC' 1건).
+
+#### 결정 내용
+2번(`category_min='식당'` 전체, 1,612건)이 사용자가 말한 "표준중분류
+기타>>식당"이다 — "표준 중분류"라는 단어 자체가 1번(category, 소비자
+화면 전용 5대+기타 UI 탭 구분)이 아니라 2번(category_min, 관리자 화면
+전용 분류 체계) 쪽 용어와 정확히 일치하고, 1번 해석으로는 식당이 1건뿐이라
+"csv로 추출해달라"는 요청의 실익이 없다. `get_open_spaces_by_category_min`
+RPC(신규, get_spots_by_service_category와 동일 패턴 — standard_name 우선,
+dedup 대표만)로 `category_min='식당'`을 조회해 1,594건(대표 아닌 중복
+18건 제외)을 추출했다.
+
+#### 영향
+- **코드**: `scripts/migrations/2026-10-15-get-open-spaces-by-category-min-
+  rpc.sql`(신규 RPC), `scripts/naver-kids-restaurant-agent/export-
+  restaurants.mjs`(신규, 테스트 4개).
+- **실측 버그 1건 추가 발견/수정**: 이 RPC 호출도 get_spots_by_service_
+  category와 동일하게 PostgREST 기본 max-rows(1,000)에 걸려 1,612건
+  중 1,000건만 조용히 잘렸다(실측 확인) — get-nearby.ts의
+  getSpotsByServiceCategory와 동일한 `.range()` 페이지네이션 루프를
+  적용해 1,594건 전체를 받도록 수정했다.
