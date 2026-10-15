@@ -1359,3 +1359,47 @@ dedup 대표만)로 `category_min='식당'`을 조회해 1,594건(대표 아닌 
   중 1,000건만 조용히 잘렸다(실측 확인) — get-nearby.ts의
   getSpotsByServiceCategory와 동일한 `.range()` 페이지네이션 루프를
   적용해 1,594건 전체를 받도록 수정했다.
+
+### Decision 037: 네이버 플레이스 검색 단계 — Playwright 대신 fetch(__APOLLO_STATE__ 정적 파싱)
+- **날짜:** 2026-10-15
+- **상태:** 승인(Approved) — todo.md 개선사항4 1~3단계(검색/주소교차검증/ID
+  추출) 구현 착수 전 실측 확인.
+
+#### 배경
+todo.md 개선사항4는 "playwrite 를 이용하여 구현"하라고 명시했다. 하지만
+이미 이 프로젝트의 관리자 네이버 플레이스 크롤링 기능(`naver-place-
+crawler.ts`, 2026-09-18)이 상세/메뉴/공지/리뷰투표 페이지가 전부 Next.js
+서버 렌더링이라 `window.__APOLLO_STATE__`에 데이터가 정적으로 박혀있어
+헤드리스 브라우저 없이 fetch만으로 파싱 가능함을 이미 확인해 둔 상태였다.
+검색 결과 페이지도 같은 방식인지 직접 떠서 확인했다(2026-10-15, 실측):
+`map.naver.com/p/search/<검색어>`를 Playwright로 열면 내부적으로
+`pcmap.place.naver.com/place/list?query=<검색어>...`를 iframe으로
+불러오는데, **이 list 페이지 자체도 서버 렌더링**(`PlaceListBusinessesItem:
+<id>` 엔티티에 명칭/도로명주소/지번주소/전체주소/좌표가 전부 포함)이라
+plain fetch만으로 동일한 검색 결과를 그대로 받을 수 있었다.
+
+#### 결정 내용
+검색(1단계)과 뒤이을 상세·리뷰 스크래핑(4단계)을 모두 fetch 기반으로
+구현한다 — Playwright/헤드리스 브라우저는 쓰지 않는다. 근거:
+1. **차단 위험이 더 낮다**: 이 세션에서 이미 두 번 실측된 전례 — (a) 네이버
+   WAF가 IP 단위로 429 레이트리밋을 건다는 사실(`naver-crawl/route.ts`,
+   2026-09-27), (b) 이마트/롯데 문화센터 스크래핑이 GitHub Actions(클라우드
+   IP)에서 WAF에 차단된 전례(`emart-culture-club.mjs`). 일반 HTTP 클라이언트
+   요청이 헤드리스 브라우저보다 자동화 탐지 신호가 적어 상대적으로 안전하다.
+2. **더 안정적이고 빠르다**: 브라우저 구동/렌더링 대기가 없어 요청당
+   지연이 적고, DOM 셀렉터 변경에 취약하지 않다(Apollo 캐시 키 구조는
+   DOM 레이아웃보다 덜 자주 바뀐다 — 이 프로젝트의 기존 크롤러가 이미
+   여러 달째 이 방식으로 안정 동작 중).
+3. **기존 구조 재사용**(제5장 제4조): `naver-place-crawler.ts`가 이미
+   검증한 방식과 완전히 같은 패턴(파싱 함수만 독립 복제, 네트워크는
+   fetch)이라 새로운 리스크를 들이지 않는다.
+
+Playwright(`@playwright/test`, devDependency로 이미 존재)는 혹시 이후
+단계(리뷰 탭의 "아이와 가기 좋아요" 필터 클릭 등 정적 파싱만으로 안 되는
+상호작용)에서 필요해지면 그때 그 지점에서만 쓴다 — 현재까지는 불필요했다.
+
+#### 영향
+- **코드**: `scripts/naver-kids-restaurant-agent/lib/`(naver-search.mjs,
+  address-match.mjs, apollo-state.mjs 등), `search-and-match.mjs`.
+- **실측 검증**: "원조남원추어탕" 동명이인 사례(경기 시흥시/안산시)에서
+  주소 교차검증으로 정확한 지점을 골라냄을 라이브 호출로 확인.
