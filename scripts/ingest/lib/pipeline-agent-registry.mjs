@@ -175,12 +175,19 @@ export const PIPELINE_AGENTS = {
     period: 'daily',
   },
 
-  // [스팟/이벤트 상세 "주변 주차장" 아코디언](2026-10-02 사용자 지시): open_spaces가 아닌
-  // 전용 테이블(seoul_public_parking_lots)에 적재하는 독립 소스라 run-monthly.mjs의
-  // STEPS/recordBatchRun(open_spaces/events 건수 집계 전용)에 편입하지 않고, 이 소스만
-  // 자체적으로 pipeline_logs에 기록한다(scripts/ingest/seoul-public-parking.mjs 참고).
-  SEOUL_PUBLIC_PARKING: {
-    description: '서울시 공영주차장 안내 정보 수집(GetParkInfo) — open_spaces 아님, 주변 주차장 아코디언 전용',
+  // [전국 주차장 표준데이터 통합](2026-10-15, todo.md 개선사항1): open_spaces가
+  // 아닌 전용 테이블(parking_metadata)에 적재하는 독립 소스라 run-monthly.mjs의
+  // STEPS/recordBatchRun(open_spaces/events 건수 집계 전용)에 편입하지 않고, 이
+  // 소스만 자체적으로 pipeline_logs에 기록한다. seoul_public_parking_lots(서울
+  // 전용 850개소)를 대체한다 — 전국 표준데이터가 서울도 포함.
+  PARKING_METADATA: {
+    description: '전국주차장정보표준데이터(data.go.kr) 수집 — 노상 제외, parking_metadata 전체 교체(안정적 자연키 없음)',
+    period: 'monthly',
+  },
+  // [부설 주차장 1:1 스팟 매칭](2026-10-15, todo.md 개선사항1): PARKING_METADATA
+  // ingest 다음 순서로 실행돼야 한다(그 배치가 매번 parking_id를 끊고 다시 채움).
+  PARKING_SPOT_MATCHING: {
+    description: '부설 주차장-스팟 50m 반경 + 이름 유사도 매칭 — open_spaces.parking_id 갱신',
     period: 'monthly',
   },
 

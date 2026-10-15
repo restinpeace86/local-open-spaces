@@ -169,3 +169,102 @@ describe('getNearbyParkingLots', () => {
     await expect(getNearbyParkingLots(127.0, 37.5, 500)).rejects.toThrow('주변 공영주차장 조회 실패');
   });
 });
+
+describe('getSpotParkingId', () => {
+  afterEach(() => {
+    vi.doUnmock('@/lib/supabase/client');
+    vi.resetModules();
+  });
+
+  it('open_spaces.parking_id를 조회해 반환한다', async () => {
+    const maybeSingle = vi.fn(() => Promise.resolve({ data: { parking_id: 'p-1' }, error: null }));
+    const eq = vi.fn(() => ({ maybeSingle }));
+    const select = vi.fn(() => ({ eq }));
+    const from = vi.fn(() => ({ select }));
+    vi.doMock('@/lib/supabase/client', () => ({ createClient: () => ({ from }) }));
+
+    const { getSpotParkingId } = await import('./get-nearby');
+    const result = await getSpotParkingId('spot-1');
+
+    expect(result).toBe('p-1');
+    expect(from).toHaveBeenCalledWith('open_spaces');
+    expect(eq).toHaveBeenCalledWith('id', 'spot-1');
+  });
+
+  it('parking_id가 없으면 null을 반환한다', async () => {
+    const maybeSingle = vi.fn(() => Promise.resolve({ data: { parking_id: null }, error: null }));
+    vi.doMock('@/lib/supabase/client', () => ({
+      createClient: () => ({ from: () => ({ select: () => ({ eq: () => ({ maybeSingle }) }) }) }),
+    }));
+
+    const { getSpotParkingId } = await import('./get-nearby');
+    await expect(getSpotParkingId('spot-1')).resolves.toBeNull();
+  });
+
+  it('에러가 나면 던진다', async () => {
+    vi.doMock('@/lib/supabase/client', () => ({
+      createClient: () => ({
+        from: () => ({ select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: null, error: { message: 'db down' } }) }) }) }),
+      }),
+    }));
+
+    const { getSpotParkingId } = await import('./get-nearby');
+    await expect(getSpotParkingId('spot-1')).rejects.toThrow('스팟 주차장 매칭 조회 실패');
+  });
+});
+
+describe('getMatchedParkingLot', () => {
+  afterEach(() => {
+    vi.doUnmock('@/lib/supabase/client');
+    vi.resetModules();
+  });
+
+  it('parking_metadata 행을 조회해 좌표/필드를 매핑해 반환한다', async () => {
+    const maybeSingle = vi.fn(() =>
+      Promise.resolve({
+        data: {
+          id: 'p-1',
+          name: '테스트 전용 주차장',
+          road_address: '서울 어딘가 1',
+          lot_address: null,
+          capacity: 20,
+          fee_type: '무료',
+          base_minutes: null,
+          base_fee: null,
+          extra_unit_minutes: null,
+          extra_unit_fee: null,
+          day_pass_hours: null,
+          day_pass_fee: null,
+          monthly_fee: null,
+          payment_methods: null,
+          notes: null,
+          phone: null,
+          has_disabled_parking: null,
+          data_reference_date: null,
+          is_multi_child_discount: false,
+          discount_info: null,
+          realtime_available_count: null,
+          location: { coordinates: [127.1, 37.2] },
+        },
+        error: null,
+      })
+    );
+    vi.doMock('@/lib/supabase/client', () => ({
+      createClient: () => ({ from: () => ({ select: () => ({ eq: () => ({ maybeSingle }) }) }) }),
+    }));
+
+    const { getMatchedParkingLot } = await import('./get-nearby');
+    const result = await getMatchedParkingLot('p-1');
+
+    expect(result).toMatchObject({ id: 'p-1', name: '테스트 전용 주차장', lng: 127.1, lat: 37.2, address: '서울 어딘가 1' });
+  });
+
+  it('행이 없으면 null을 반환한다', async () => {
+    vi.doMock('@/lib/supabase/client', () => ({
+      createClient: () => ({ from: () => ({ select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: null, error: null }) }) }) }) }),
+    }));
+
+    const { getMatchedParkingLot } = await import('./get-nearby');
+    await expect(getMatchedParkingLot('p-1')).resolves.toBeNull();
+  });
+});

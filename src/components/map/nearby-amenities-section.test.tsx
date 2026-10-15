@@ -6,22 +6,40 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 // ("지금은 직선거리 기반 직경거리로 해" — 2026-10-02, 도보거리 API 호출 제거).
 const getNearbyParkingLots = vi.fn();
 const getNearbyKidsRestaurants = vi.fn();
+const getMatchedParkingLot = vi.fn();
+const getSpotParkingId = vi.fn();
 
 vi.mock('@/lib/spaces/get-nearby', () => ({
   getNearbyParkingLots: (...args: unknown[]) => getNearbyParkingLots(...args),
   getNearbyKidsRestaurants: (...args: unknown[]) => getNearbyKidsRestaurants(...args),
+  getMatchedParkingLot: (...args: unknown[]) => getMatchedParkingLot(...args),
+  getSpotParkingId: (...args: unknown[]) => getSpotParkingId(...args),
 }));
 
 const PARKING_LOT = {
-  id: 1,
+  id: 'parking-1',
   name: '테스트 공영주차장',
   address: '서울 어딘가',
   distance_meters: 320,
   lng: 127.001,
   lat: 37.501,
-  is_paid: true,
-  total_capacity: 50,
-  tel: null,
+  capacity: 50,
+  fee_type: '유료',
+  base_minutes: 30,
+  base_fee: 500,
+  extra_unit_minutes: 10,
+  extra_unit_fee: 200,
+  day_pass_hours: null,
+  day_pass_fee: null,
+  monthly_fee: null,
+  payment_methods: null,
+  notes: null,
+  phone: null,
+  has_disabled_parking: null,
+  data_reference_date: null,
+  is_multi_child_discount: false,
+  discount_info: null,
+  realtime_available_count: null,
 };
 
 const RESTAURANT = {

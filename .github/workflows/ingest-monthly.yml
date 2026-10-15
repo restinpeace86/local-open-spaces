@@ -99,19 +99,15 @@ jobs:
           fi
           exit $exit_code
 
-      # [스팟/이벤트 상세 "주변 주차장" 아코디언](2026-10-02 사용자 지시): open_spaces가
-      # 아닌 전용 테이블(seoul_public_parking_lots)에 적재하는 완전 별도 소스라
-      # run-monthly.mjs의 STEPS에 편입하지 않고(제5장 제4조 기존 구조 우선이되, 테이블
-      # 성격이 달라 억지로 끼워맞추지 않음) 독립된 스텝으로 둔다. 위 배치와 같은
-      # "말일에만 실행" 가드를 그대로 공유한다(변경 빈도가 낮은 상시 데이터라는 성격이
-      # 동일하기 때문).
-      - name: Seoul Public Parking Lots (독립 소스, open_spaces 아님)
-        if: steps.last_day.outputs.is_last_day == 'true' || github.event_name == 'workflow_dispatch'
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          SEOUL_OPEN_DATA_KEY: ${{ secrets.SEOUL_OPEN_DATA_KEY }}
-        run: node scripts/ingest/seoul-public-parking.mjs
+      # [주차장 데이터는 수동 배치로 전환](2026-10-15, todo.md 개선사항1) 기존
+      # "Seoul Public Parking Lots" 스텝(GetParkInfo API 자동 호출)은
+      # seoul_public_parking_lots와 함께 전국주차장정보표준데이터(data.go.kr) 기반
+      # parking_metadata로 대체됐다. 새 ingest(scripts/ingest/parking-metadata.mjs)
+      # 는 API 호출이 아니라 사람이 metadata/ 폴더에 올려주는 CSV 스냅샷을 읽는
+      # 구조라 "자동 월간 재실행"이 의미가 없다(새 CSV가 없으면 매번 같은 데이터만
+      # 재적재) — 이 자동 워크플로에는 옮기지 않고, 로컬에서 새 CSV를 받을 때마다
+      # `npm run ingest:parking-metadata && npm run ingest:match-parking-to-spots`
+      # 를 수동 실행하는 걸로 바꿨다.
 
       # [워크플로 푸시 경합 수정](2026-08-30 실측 발견, ingest-daily.yml과 동일한 사유):
       # main에 다른 커밋이 그 사이 올라오면 단순 `git push`는 non-fast-forward로 거부되고

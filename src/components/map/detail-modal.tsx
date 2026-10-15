@@ -14,7 +14,7 @@ import { EventOperatingCalendarSheet } from '@/components/map/event-operating-ca
 import { BookmarkButton } from '@/components/community/bookmark-button';
 import { KIDS_RESTAURANT_CATEGORY_MIN } from '@/lib/spaces/spot-category-groups';
 import { usePublishedSpotNotices, SpotNoticesSection } from '@/components/common/spot-notices-section';
-import { NearbyAmenitiesSection } from '@/components/map/nearby-amenities-section';
+import { NearbyAmenitiesSection, SpotParkingBadge } from '@/components/map/nearby-amenities-section';
 import { EventReservationReminderHint } from '@/components/common/event-reservation-reminder-hint';
 import { isOpenSpaceClosedOn } from '@/lib/spaces/open-space-closure';
 
@@ -1304,6 +1304,18 @@ export function DetailModal({
               <p className="mt-4 text-sm text-gray-400">
                 📍 {item.sigungu_name ? `${item.sigungu_name} 일대 (정확한 위치 정보 없음)` : '정확한 위치 정보가 없는 행사입니다'}
               </p>
+            )}
+
+            {/* [부설 전용 주차장 뱃지](2026-10-15, todo.md 개선사항1): 이 스팟 건물
+                자체의 1:1 매칭 주차장 — 반경검색(주변 공영주차장)과는 별개로, 매칭된
+                경우에만(parking_id 있을 때만) 그 위에 보여준다. */}
+            {hasExactLocation && (
+              <div className="mt-4">
+                <SpotParkingBadge
+                  spotId={item.id}
+                  origin={{ lat: item.lat, lng: item.lng, name: item.name, originTable: 'open_spaces', originId: item.id }}
+                />
+              </div>
             )}
 
             {/* [주변 주차장/식당 아코디언](2026-10-02 사용자 지시): EVENT 분기와 동일 —

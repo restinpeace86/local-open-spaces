@@ -4,7 +4,10 @@ import { useEffect, useRef, useState } from 'react';
 import {
   getNearbyParkingLots,
   getNearbyKidsRestaurants,
+  getMatchedParkingLot,
+  getSpotParkingId,
   type NearbyParkingLot,
+  type MatchedParkingLot,
   type NearbyItem,
 } from '@/lib/spaces/get-nearby';
 
@@ -76,17 +79,115 @@ function DirectionsLink({
   );
 }
 
-function ParkingCard({ lot, origin }: { lot: NearbyParkingLot; origin: OriginInfo }) {
+// [요금/결제/특기사항 상세](2026-10-15, todo.md 개선사항1): "너무 UI가
+// 지저분해질거같으면 주차장 뱃지를 누르면 해당 정보확인할수 있게" — 카드를 눌러야
+// 요금/결제방법/특기사항/데이터기준일자가 펼쳐지는 접었다펴기 구조로, 목록 화면
+// 자체는 이름·거리·요금유형 한 줄만 보여 깔끔하게 유지한다.
+function ParkingDetailLines({ lot }: { lot: Pick<NearbyParkingLot, 'base_minutes' | 'base_fee' | 'extra_unit_minutes' | 'extra_unit_fee' | 'day_pass_fee' | 'monthly_fee' | 'payment_methods' | 'notes' | 'has_disabled_parking' | 'data_reference_date' | 'is_multi_child_discount' | 'discount_info' | 'realtime_available_count' | 'capacity'> }) {
   return (
-    <div className="flex items-center justify-between gap-2 py-2 px-3 bg-gray-50 rounded-lg">
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold text-gray-900 truncate">🅿️ {lot.name}</p>
-        <p className="text-xs text-gray-500">
-          직선거리 {formatDistance(lot.distance_meters)}
-          {lot.is_paid !== null && <> · {lot.is_paid ? '유료' : '무료'}</>}
+    <div className="mt-1.5 pt-1.5 border-t border-gray-200 flex flex-col gap-0.5 text-xs text-gray-600">
+      {lot.capacity !== null && <p>주차면수 {lot.capacity}면</p>}
+      {lot.base_minutes !== null && lot.base_fee !== null && (
+        <p>
+          기본 {lot.base_minutes}분 {lot.base_fee.toLocaleString()}원
+          {lot.extra_unit_minutes !== null && lot.extra_unit_fee !== null && (
+            <> · 추가 {lot.extra_unit_minutes}분당 {lot.extra_unit_fee.toLocaleString()}원</>
+          )}
         </p>
-      </div>
-      <DirectionsLink origin={origin} destination={lot} />
+      )}
+      {lot.day_pass_fee !== null && <p>1일 주차권 {lot.day_pass_fee.toLocaleString()}원</p>}
+      {lot.monthly_fee !== null && <p>월정기권 {lot.monthly_fee.toLocaleString()}원</p>}
+      {lot.payment_methods && <p>결제방법 {lot.payment_methods}</p>}
+      {lot.has_disabled_parking && <p>장애인 전용 주차구역 있음</p>}
+      {lot.realtime_available_count !== null && (
+        <p className="font-semibold text-emerald-700">실시간 주차가능 {lot.realtime_available_count}면</p>
+      )}
+      {lot.is_multi_child_discount && (
+        <p className="text-emerald-700 font-semibold">
+          🟢 다자녀 할인 {lot.discount_info ? `· ${lot.discount_info}` : ''}
+        </p>
+      )}
+      {lot.notes && <p className="text-gray-500">{lot.notes}</p>}
+      {lot.data_reference_date && <p className="text-gray-400">데이터 기준일 {lot.data_reference_date}</p>}
+    </div>
+  );
+}
+
+function ParkingCard({ lot, origin }: { lot: NearbyParkingLot; origin: OriginInfo }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  return (
+    <div className="py-2 px-3 bg-gray-50 rounded-lg">
+      <button
+        type="button"
+        onClick={() => setIsExpanded((v) => !v)}
+        className="w-full flex items-center justify-between gap-2 text-left"
+      >
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-gray-900 truncate">🅿️ {lot.name}</p>
+          <p className="text-xs text-gray-500">
+            직선거리 {formatDistance(lot.distance_meters)}
+            {lot.fee_type && <> · {lot.fee_type}</>}
+            {lot.is_multi_child_discount && <span className="ml-1 text-emerald-700">🟢 다자녀 할인</span>}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2" onClick={(e) => e.stopPropagation()}>
+          <DirectionsLink origin={origin} destination={lot} />
+          <span className="text-xs text-gray-400">{isExpanded ? '간략히' : '상세보기'}</span>
+        </div>
+      </button>
+      {isExpanded && <ParkingDetailLines lot={lot} />}
+    </div>
+  );
+}
+
+// [부설(건물 전용) 주차장 1:1 매칭 카드](2026-10-15, todo.md 개선사항1): "스팟 테이블에
+// parking_id (FK)를 연결하여 상세 페이지에 주차장 뱃지를 달아주며... 주차정보의
+// 정보확인이 가능하도록". 반경검색이 아니라 이 스팟 자신의 주차장이라 거리 표시가
+// 없고, 항상 접힌 상태로 시작한다(아코디언이 아니라 단일 카드).
+export function MatchedParkingCard({ parkingId, origin }: { parkingId: string; origin: OriginInfo }) {
+  const [lot, setLot] = useState<MatchedParkingLot | null | undefined>(undefined);
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    getMatchedParkingLot(parkingId)
+      .then((result) => {
+        if (!cancelled) setLot(result);
+      })
+      .catch(() => {
+        if (!cancelled) setLot(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [parkingId]);
+
+  if (!lot) return null;
+
+  return (
+    <div className="border border-gray-200 rounded-xl overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setIsExpanded((v) => !v)}
+        className="w-full flex items-center justify-between gap-2 px-3 py-2.5 bg-white text-left"
+      >
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-gray-900 truncate">🅿️ 전용 주차장 — {lot.name}</p>
+          <p className="text-xs text-gray-500">
+            {lot.fee_type ?? ''}
+            {lot.is_multi_child_discount && <span className="ml-1 text-emerald-700">🟢 다자녀 할인</span>}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-2" onClick={(e) => e.stopPropagation()}>
+          <DirectionsLink origin={origin} destination={lot} />
+          <span className="text-xs text-gray-400">{isExpanded ? '▲' : '▼'}</span>
+        </div>
+      </button>
+      {isExpanded && (
+        <div className="p-3 bg-gray-50/50 border-t border-gray-100">
+          <ParkingDetailLines lot={lot} />
+        </div>
+      )}
     </div>
   );
 }
@@ -227,6 +328,30 @@ function RestaurantAccordion(origin: OriginInfo) {
       ))}
     </AccordionShell>
   );
+}
+
+// [부설 매칭 조회 + 카드 렌더링을 한 번에](2026-10-15, todo.md 개선사항1) 호출부
+// (detail-modal.tsx)가 parking_id 유무를 직접 신경 쓰지 않도록, 조회부터 렌더링까지
+// 이 컴포넌트 안에서 처리한다 — 매칭이 없으면 아무것도 그리지 않는다.
+export function SpotParkingBadge({ spotId, origin }: { spotId: string; origin: OriginInfo }) {
+  const [parkingId, setParkingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getSpotParkingId(spotId)
+      .then((id) => {
+        if (!cancelled) setParkingId(id);
+      })
+      .catch(() => {
+        if (!cancelled) setParkingId(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [spotId]);
+
+  if (!parkingId) return null;
+  return <MatchedParkingCard parkingId={parkingId} origin={origin} />;
 }
 
 export function NearbyAmenitiesSection(origin: OriginInfo) {

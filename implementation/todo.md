@@ -26,7 +26,7 @@
 ---
 
 
-[개선사항 1] #  주차장 데이터 인프라 및 매칭 시스템 구현 명세서
+[개선사항 1] [완료 — 2026-10-15, implementation/2026-10-15-parking-metadata-national-dataset.md 및 project/decision-log.md Decision 033 참고] #  주차장 데이터 인프라 및 매칭 시스템 구현 명세서
 
 ## 1. 개요 (Overview)
 본 문서는 키즈/나들이 큐레이션 서비스인 'SpotPick'(및 'EventPick')에 전국 공공 주차장 데이터를 연동하여, 부모 유저들에게 안전하고 유용한 주차 정보를 제공하기 위한 데이터베이스 및 쿼리 구현 지침입니다.

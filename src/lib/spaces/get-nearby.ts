@@ -164,20 +164,36 @@ export async function getNearbyKidsRestaurants(lng: number, lat: number, radiusM
 }
 
 export type NearbyParkingLot = {
-  id: number;
+  id: string;
   name: string;
-  address: string;
+  address: string | null;
   distance_meters: number;
   lng: number;
   lat: number;
-  is_paid: boolean | null;
-  total_capacity: number | null;
-  tel: string | null;
+  capacity: number | null;
+  fee_type: string | null;
+  base_minutes: number | null;
+  base_fee: number | null;
+  extra_unit_minutes: number | null;
+  extra_unit_fee: number | null;
+  day_pass_hours: number | null;
+  day_pass_fee: number | null;
+  monthly_fee: number | null;
+  payment_methods: string | null;
+  notes: string | null;
+  phone: string | null;
+  has_disabled_parking: boolean | null;
+  data_reference_date: string | null;
+  is_multi_child_discount: boolean;
+  discount_info: string | null;
+  realtime_available_count: number | null;
 };
 
-// [스팟/이벤트 상세 "주변 공영주차장" 아코디언](2026-10-02 사용자 지시): open_spaces가
-// 아닌 전용 테이블(seoul_public_parking_lots)이라 get_nearby_spaces_and_events를 쓸 수
-// 없어 전용 RPC(2026-10-02-nearby-parking-and-restaurant-amenities.sql)를 호출한다.
+// [스팟/이벤트 상세 "주변 공영주차장" 아코디언](2026-10-02 사용자 지시, 2026-10-15
+// 전국주차장정보표준데이터로 교체): open_spaces가 아닌 전용 테이블(parking_metadata,
+// 2026-10-15-parking-metadata-national-dataset.sql)이라 get_nearby_spaces_and_events를
+// 쓸 수 없어 전용 RPC를 호출한다. 노외(공용) 주차장만 반환한다 — 부설(건물 전용)은
+// open_spaces.parking_id로 1:1 매칭돼 그 스팟 자신의 상세페이지에서만 노출된다.
 export async function getNearbyParkingLots(lng: number, lat: number, radiusMeters: number): Promise<NearbyParkingLot[]> {
   const supabase = createClient();
 
@@ -192,6 +208,67 @@ export async function getNearbyParkingLots(lng: number, lat: number, radiusMeter
   }
 
   return (data ?? []) as NearbyParkingLot[];
+}
+
+// [부설 매칭 여부 조회 — 가벼운 단독 조회](2026-10-15, todo.md 개선사항1)
+// get_nearby_spaces_and_events는 성능이 민감한(과거 4,449ms 회귀/부분 인덱스로
+// 해결한 전례가 있는) RPC라 parking_id 컬럼 하나를 더 얹으려고 건드리지 않는다
+// (제5장 제4조 기존 구조 우선이되, 안정성이 더 중요한 경로는 건드리지 않음) —
+// 대신 상세 모달이 열릴 때만 스팟 1건에 대해 가볍게 별도 조회한다.
+export async function getSpotParkingId(spotId: string): Promise<string | null> {
+  const supabase = createClient();
+  const { data, error } = await supabase.from('open_spaces').select('parking_id').eq('id', spotId).maybeSingle();
+  if (error) throw new Error(`스팟 주차장 매칭 조회 실패: ${error.message}`);
+  return data?.parking_id ?? null;
+}
+
+export type MatchedParkingLot = Omit<NearbyParkingLot, 'distance_meters'>;
+
+// [부설(건물 전용) 주차장 1:1 매칭 조회](2026-10-15, todo.md 개선사항1): open_spaces.
+// parking_id가 가리키는 parking_metadata 행을 그대로 가져온다 — 반경검색이 아니라
+// "이 스팟 자신의 주차장"이라 거리 개념이 없다.
+export async function getMatchedParkingLot(parkingId: string): Promise<MatchedParkingLot | null> {
+  const supabase = createClient();
+
+  const { data, error } = await supabase
+    .from('parking_metadata')
+    .select(
+      'id, name, road_address, lot_address, capacity, fee_type, base_minutes, base_fee, extra_unit_minutes, extra_unit_fee, day_pass_hours, day_pass_fee, monthly_fee, payment_methods, notes, phone, has_disabled_parking, data_reference_date, is_multi_child_discount, discount_info, realtime_available_count, location'
+    )
+    .eq('id', parkingId)
+    .maybeSingle();
+
+  if (error) {
+    throw new Error(`부설 주차장 조회 실패: ${error.message}`);
+  }
+  if (!data) return null;
+
+  const coords = (data.location as { coordinates?: [number, number] } | null)?.coordinates;
+
+  return {
+    id: data.id,
+    name: data.name,
+    address: data.road_address ?? data.lot_address,
+    lng: coords?.[0] ?? 0,
+    lat: coords?.[1] ?? 0,
+    capacity: data.capacity,
+    fee_type: data.fee_type,
+    base_minutes: data.base_minutes,
+    base_fee: data.base_fee,
+    extra_unit_minutes: data.extra_unit_minutes,
+    extra_unit_fee: data.extra_unit_fee,
+    day_pass_hours: data.day_pass_hours,
+    day_pass_fee: data.day_pass_fee,
+    monthly_fee: data.monthly_fee,
+    payment_methods: data.payment_methods,
+    notes: data.notes,
+    phone: data.phone,
+    has_disabled_parking: data.has_disabled_parking,
+    data_reference_date: data.data_reference_date,
+    is_multi_child_discount: data.is_multi_child_discount,
+    discount_info: data.discount_info,
+    realtime_available_count: data.realtime_available_count,
+  };
 }
 
 export async function getSpotGroupMembers(groupId: string): Promise<NearbyItem[]> {

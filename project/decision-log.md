@@ -1175,3 +1175,65 @@ runs`)로 직접 조회했다 — 추측 없이 최근 5일치 실행 이력(둘
 이벤트로 매일 `completed`/`success`)으로 중복을 확인하고, 두 워크플로를
 `.yml.disabled`로 전환해 로컬 PC 단일 경로로 정리했다. 상세수집 자체의
 빈도/지연값은 변경하지 않았다(목록 배치만 하루 2회 대상).
+
+### Decision 033: 전국 주차장 표준데이터 통합 — 부설 1:1 FK 매칭 + 노외 반경검색 이원화, LLM 대신 결정적 이름유사도
+- **날짜:** 2026-10-15
+- **상태:** 승인(Approved) — `implementation/todo.md` 개선사항1 명세에 따라 진행,
+  명세 자체가 "검토 필요"/"제안해주세요"로 열어둔 지점은 이 결정으로 확정.
+
+#### 배경
+`todo.md`가 "전국주차장정보표준데이터.csv"(18,939건) 기반 `parking_metadata`
+테이블 구축을 지시하면서, 핵심 설계를 몇 가지 열어뒀다: ① 부설(건물 전용)/노외
+(공용) 주차장을 FK 매칭과 반경검색 중 어느 쪽으로 할지, ② 18,000여 건 반경검색의
+성능 최적화 방법, ③ 기존 `seoul_public_parking_lots`와의 병합 방식.
+
+#### 결정 내용
+1. **부설=FK 1:1 매칭, 노외=반경검색 — 이원화**(명세 원안 그대로 확정):
+   `open_spaces.parking_id`(nullable FK)로 부설 주차장을 스팟에 직접 연결하고,
+   `get_nearby_parking_lots` RPC는 `type_name='노외'`만 반환(부설은 반경검색
+   목록에 중복 노출하지 않음 — 이미 그 스팟 자신의 전용 자원이므로).
+2. **LLM 교차확인 대신 결정적 이름 유사도**: 매 실행 결정성(같은 입력 → 같은
+   결과)이 필요한 반복 배치라 LLM 호출을 피했다. 50m 반경 내 후보를 PostGIS로
+   찾은 뒤, 정규화(주차장/공영/지하 등 공통 단어 제거) + 2-gram 유사도로
+   점수화, 0.5 미만은 매칭하지 않는다(오탐이 미탐보다 나쁘다고 판단해 보수적
+   임계값). 실측: 888개 후보 쌍 중 222건 매칭.
+3. **성능 최적화 — 새로운 장치 불필요**: 13,977건(노상 제외 후)은 PostGIS
+   GIST 인덱스 + `st_dwithin` 조합(이미 `get_nearby_spaces_and_events` 등에서
+   검증된 패턴)으로 충분하다 — 수십만 건 규모에서나 의미 있는 별도 캐싱/샤딩은
+   이번 규모에 과잉설계로 판단, 추가하지 않았다.
+4. **기존 `seoul_public_parking_lots` 테이블 — 삭제 대신 이름만 변경 보관**:
+   전국 표준데이터가 서울 소재 856건도 포함해(실측 확인) 더는 필요 없지만,
+   두 출처를 행 단위로 교차 매칭/병합하진 않았다(서로 다른 소스라 이름 표기가
+   달라 자동 매칭 오탐 위험, 제3장 제5조 추측 금지) — `DROP` 대신
+   `seoul_public_parking_lots_deprecated_20261015`로 이름만 바꿔 되돌릴 수
+   있게 남겼다.
+5. **`get_nearby_spaces_and_events` RPC는 건드리지 않음**: 이 RPC는 과거
+   4,449ms 성능 회귀를 겪고 부분 인덱스로 겨우 해결한 전례가 있는 민감한
+   경로라, `parking_id` 노출을 위해 컬럼을 더 얹는 대신 상세 모달이 열릴 때만
+   스팟 1건을 가볍게 별도 조회(`getSpotParkingId`)하는 쪽을 선택했다.
+6. **ingest는 전체교체(TRUNCATE 대신 DELETE+재적재), GitHub Actions 미편입**:
+   `주차장관리번호`가 유일키가 아님을 실측 확인(18,939건 중 고유 17,798개,
+   서로 다른 지자체 데이터 충돌 1,141건)해 증분 upsert 대신 매번 전체 교체.
+   이 CSV는 API가 아니라 사람이 수동으로 올리는 스냅샷이라, 자동 월간
+   워크플로에 넣지 않고 로컬 수동 실행(`npm run ingest:parking-metadata`)으로
+   뒀다 — 매달 같은 파일을 의미 없이 재적재하는 것을 피함.
+
+#### 영향
+- **DB**: `scripts/migrations/2026-10-15-parking-metadata-national-dataset.sql`
+  (적용 완료) — `parking_metadata` 신규, `open_spaces.parking_id` FK 신규,
+  `get_nearby_parking_lots` 재정의(반환 컬럼 확대), `truncate_parking_metadata`/
+  `find_busul_parking_candidates` 신규 RPC, `seoul_public_parking_lots` rename.
+- **코드**: `scripts/ingest/parking-metadata.mjs`(ingest, 신규),
+  `scripts/ingest/match-parking-to-spots.mjs`(매칭, 신규), 각 테스트 포함.
+  `scripts/ingest/seoul-public-parking.mjs`(구 버전) 삭제.
+  `src/lib/spaces/get-nearby.ts`(`getNearbyParkingLots` 타입 확장,
+  `getMatchedParkingLot`/`getSpotParkingId` 신규),
+  `src/components/map/nearby-amenities-section.tsx`(`ParkingCard` 상세 펼치기,
+  `MatchedParkingCard`/`SpotParkingBadge` 신규), `detail-modal.tsx`(SPACE 분기에
+  부설 뱃지 추가).
+- **실측 검증**: ingest 실행(13,977건 적재, 지오코딩 백필 443건 성공), 매칭
+  실행(222건), 좌표-주소 일치·anon 키 RLS 읽기 전부 라이브 REST 호출로 재확인.
+- **범위 밖**: 개선사항2(서울시 실시간 주차대수)/개선사항3(다자녀 할인)이
+  채울 `realtime_available_count`/`is_multi_child_discount`/`discount_info`
+  컬럼은 이번에 스키마만 선점, 데이터는 비어 있음 — 각 개선사항에서 후속
+  채움.

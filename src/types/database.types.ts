@@ -10,7 +10,7 @@ export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: "14.15"
   }
   graphql_public: {
     Tables: {
@@ -1186,6 +1186,7 @@ export type Database = {
           naver_place_id: string | null
           notice_checked_at: string | null
           operating_hours: string | null
+          parking_id: string | null
           raw_data: Json | null
           service_category_id: string | null
           sigungu_name: string | null
@@ -1225,6 +1226,7 @@ export type Database = {
           naver_place_id?: string | null
           notice_checked_at?: string | null
           operating_hours?: string | null
+          parking_id?: string | null
           raw_data?: Json | null
           service_category_id?: string | null
           sigungu_name?: string | null
@@ -1264,6 +1266,7 @@ export type Database = {
           naver_place_id?: string | null
           notice_checked_at?: string | null
           operating_hours?: string | null
+          parking_id?: string | null
           raw_data?: Json | null
           service_category_id?: string | null
           sigungu_name?: string | null
@@ -1276,6 +1279,13 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "open_spaces_parking_id_fkey"
+            columns: ["parking_id"]
+            isOneToOne: false
+            referencedRelation: "parking_metadata"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "open_spaces_service_category_id_fkey"
             columns: ["service_category_id"]
             isOneToOne: false
@@ -1283,6 +1293,108 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      parking_metadata: {
+        Row: {
+          base_fee: number | null
+          base_minutes: number | null
+          capacity: number | null
+          category_name: string | null
+          created_at: string
+          data_reference_date: string | null
+          day_pass_fee: number | null
+          day_pass_hours: number | null
+          discount_info: string | null
+          extra_unit_fee: number | null
+          extra_unit_minutes: number | null
+          fee_type: string | null
+          has_disabled_parking: boolean | null
+          id: string
+          is_multi_child_discount: boolean
+          location: unknown
+          lot_address: string | null
+          management_no: string | null
+          management_org: string | null
+          monthly_fee: number | null
+          name: string
+          notes: string | null
+          payment_methods: string | null
+          phone: string | null
+          provider_code: string | null
+          provider_name: string | null
+          realtime_available_count: number | null
+          realtime_updated_at: string | null
+          road_address: string | null
+          type_name: string
+          updated_at: string
+        }
+        Insert: {
+          base_fee?: number | null
+          base_minutes?: number | null
+          capacity?: number | null
+          category_name?: string | null
+          created_at?: string
+          data_reference_date?: string | null
+          day_pass_fee?: number | null
+          day_pass_hours?: number | null
+          discount_info?: string | null
+          extra_unit_fee?: number | null
+          extra_unit_minutes?: number | null
+          fee_type?: string | null
+          has_disabled_parking?: boolean | null
+          id?: string
+          is_multi_child_discount?: boolean
+          location?: unknown
+          lot_address?: string | null
+          management_no?: string | null
+          management_org?: string | null
+          monthly_fee?: number | null
+          name: string
+          notes?: string | null
+          payment_methods?: string | null
+          phone?: string | null
+          provider_code?: string | null
+          provider_name?: string | null
+          realtime_available_count?: number | null
+          realtime_updated_at?: string | null
+          road_address?: string | null
+          type_name: string
+          updated_at?: string
+        }
+        Update: {
+          base_fee?: number | null
+          base_minutes?: number | null
+          capacity?: number | null
+          category_name?: string | null
+          created_at?: string
+          data_reference_date?: string | null
+          day_pass_fee?: number | null
+          day_pass_hours?: number | null
+          discount_info?: string | null
+          extra_unit_fee?: number | null
+          extra_unit_minutes?: number | null
+          fee_type?: string | null
+          has_disabled_parking?: boolean | null
+          id?: string
+          is_multi_child_discount?: boolean
+          location?: unknown
+          lot_address?: string | null
+          management_no?: string | null
+          management_org?: string | null
+          monthly_fee?: number | null
+          name?: string
+          notes?: string | null
+          payment_methods?: string | null
+          phone?: string | null
+          provider_code?: string | null
+          provider_name?: string | null
+          realtime_available_count?: number | null
+          realtime_updated_at?: string | null
+          road_address?: string | null
+          type_name?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       partner_products: {
         Row: {
@@ -1631,7 +1743,7 @@ export type Database = {
           },
         ]
       }
-      seoul_public_parking_lots: {
+      seoul_public_parking_lots_deprecated_20261015: {
         Row: {
           add_fee: number | null
           add_minutes: number | null
@@ -2601,14 +2713,28 @@ export type Database = {
         Args: { radius_meters?: number; user_lat: number; user_lng: number }
         Returns: {
           address: string
+          base_fee: number
+          base_minutes: number
+          capacity: number
+          data_reference_date: string
+          day_pass_fee: number
+          day_pass_hours: number
+          discount_info: string
           distance_meters: number
-          id: number
-          is_paid: boolean
+          extra_unit_fee: number
+          extra_unit_minutes: number
+          fee_type: string
+          has_disabled_parking: boolean
+          id: string
+          is_multi_child_discount: boolean
           lat: number
           lng: number
+          monthly_fee: number
           name: string
-          tel: string
-          total_capacity: number
+          notes: string
+          payment_methods: string
+          phone: string
+          realtime_available_count: number
         }[]
       }
       get_nearby_spaces_and_events:
