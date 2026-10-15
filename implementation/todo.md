@@ -26,193 +26,34 @@
 ---
 
 
-[개선사항 1] [완료 — 2026-10-08, implementation/2026-10-08-culture-club-core-data-caching.md 참고]
+[개선사항 1] #  주차장 데이터 인프라 및 매칭 시스템 구현 명세서
 
-# [프로젝트 맥락]
-현재 Next.js와 Supabase를 기반으로 개발 중인 '문화센터 통합 플랫폼'에서, 공식 앱 대비 초기 로딩 및 조건 변경(필터링) 속도가 느린 문제를 해결하고 아키텍처를 최적화하려고 합니다. 다음 분석과 개선 사항을 바탕으로 코드를 진단하고 수정해주세요.
-
----
-
-# [핵심 아키텍처 전략: '코어 데이터 캐싱 & 로컬 필터링']
-1. **DB 조회 대상 (서버 쿼리 필수):**
-   - 오직 **'사용자의 위치 반경(예: 10km)'**이 변경되거나, 사용자가 현재 위치 재탐색하거나,  **'아이의 나이(온보딩 정보)'**가 바뀔 때(ex. 아이 2명일 경우 첫째아이 둘째아이 스위칭) 만 Supabase로 가서 새로운 기본 데이터 풀(Base Pool)을 새로 조회해 옵니다.
-2. **로컬 필터링 대상 (클라이언트 메모리 처리):**
-   - 위에서 가져온 기본 데이터 풀은 프론트엔드 상태(메모리)에 캐싱해 둡니다.
-   - 이후 유저가 요일을 바꾸거나, 반경 내에서 특정 지점(예: 롯데마트 XX점만 보기)을 켜고 끄거나, 키워드를 검색하는 등의 **2차 필터링은 서버를 타지 않고 이미 캐싱된 데이터에서 즉시 로컬 필터링**하여 체감 속도를 '0초'로 만듭니다.
-
-# [점검 및 수정 요청 사항]
-
-### 1. 성능 병목 진단 (아래 체크리스트를 기준으로 코드 점검)
-다음 4가지 포인트에서 병목이 발생하고 있는지 면밀히 진단하고 문제점을 찾아주세요.
-- **① 무거운 페이로드 (`SELECT *` 및 JSONB):** 리스트를 뿌릴 때 불필요하게 거대한 `JSONB` 메타데이터나 안 쓰는 컬럼까지 `SELECT *`로 통째로 끌어오고 있는지 확인해주세요.
-- **② 페이징(Pagination) 처리 방식:** 조건에 맞는 데이터를 전부 다(수백~수천 개) 일단 메모리로 불러온 뒤 자바스크립트(`.slice()`)로 끊고 있는지, 아니면 Supabase 쿼리 레벨(`LIMIT`, `range`)에서 애초에 필요한 만큼만 끊어오고 있는지 확인해주세요.
-- **③ 거리순 정렬(Sorting) 부하:** 초기 로딩이나 조회 시 "가까운 거리순" 정렬이 매번 무거운 연산을 유발하고 있는지 확인해주세요.
-- **④ DB 인덱스(Index) 부재:** Supabase(PostgreSQL)에서 WHERE 조건으로 자주 쓰는 필터 컬럼(`branch_id`, 개월 수 관련 컬럼, `brand`)에 인덱스가 제대로 걸려있는지 점검해주세요.
-
-### 2. 스마트 캐싱 & 로컬 필터링 상태 관리 구현
-- React 상태(State) 또는 React Query/Zustand 등을 활용하여, **위치나 아이 나이가 바뀔 때만 서버 API(DB)를 호출**하고, 요일 선택이나 지점 토글 같은 세부 필터는 **메모리에 캐싱된 데이터 내에서 즉각 필터링**되도록 리팩토링 코드를 제안해주세요.
-
-위 내용을 바탕으로 현재 코드에서 어떤 부분을 고쳐야 하는지 진단하고 구체적인 코드를 작성해주세요.
+## 1. 개요 (Overview)
+본 문서는 키즈/나들이 큐레이션 서비스인 'SpotPick'(및 'EventPick')에 전국 공공 주차장 데이터를 연동하여, 부모 유저들에게 안전하고 유용한 주차 정보를 제공하기 위한 데이터베이스 및 쿼리 구현 지침입니다.
 
 ---
 
-[개선사항 2] [완료 — 2026-10-08. 최초 조사에서 targetCode가 "전부 미해결"로 잘못 결론났었음 — 사용자가 제공한 실제 캡처(reference/sinsegae.png)로 재확인한 결과 올바른 지점(storeCode=03)과 조합하면 정상 동작함을 확인, 전체 연동 구현 완료. 아래 "조사 결과"는 원래 작성 그대로 두고 그 아래에 정정 내용을 추가함]
-
-신세계 문화센터의 url 이야 이것도 다른 문화센터처럼 주기적으로 데이터 가져오기 위한 연동 작업 점검해줘.
-- storeCode는 지점 Code임. 이걸 전체 지점으로 해서 데이터 가져올 수 있는지.. storeCode에 지점코드 안넣었을경우.. 혹은 배열로 ON,01,03,14, ... 이렇게 해서 가져올수 있는지 여부
-- rcptStat는 상태코드임RC는 접수마감을 의미하여 제외하고 PR RT ST인데 이3개 한번에 요청할 수 있는지도 확인할 것
-- targetCode는 연령대상임 . 위드맘(대디), 패밀리, 키즈인데 이것도 마찬가지로 한번에 가져올수 있는지 확인할 것
-Request URL   https://sacademy.shinsegae.com/sdotcom/web/HP0010P0/getLectList.do
-Request method   POST
-Status code   200 OK
-Remote address   202.3.19.35:443
-Referrer policy   strict-origin-when-cross-origin
-
-accept   application/json, text/javascript, */*; q=0.01
-accept-encoding   gzip, deflate, br, zstd
-accept-language   ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7,ja;q=0.6
-connection   keep-alive
-content-length   317
-content-type   application/x-www-form-urlencoded; charset=UTF-8
-cookie   cookLectGrType=; cookLectGrCode=; cookRcptStat=; cookDayCode=; cookLectTimeCode=; cookTchName=; cookLectName=; cookSrchCndCd=01; cookCurPage=1; cook_dtl=N; cookOrdKey=; cookSrchWrd=; cookTargetCode=B1; JSESSIONID=VFUfcmHg2sFWyCpGeNbGECRSG1tQS1U63b8uznb4skpUbS1pTvPoq6f3mQlOp6WX.c2Ftc19kb21haW4vc2RvdGNvbTJfMg==; _ga=GA1.1.1488620935.1791446880; _ga_K1NBN99SFR=GS2.1.s1791446880$o1$g0$t1791446880$j60$l0$h0; _ga_FN49J2HYEX=GS2.1.s1791446880$o1$g1$t1791446988$j60$l0$h0; store_code=ON
-host   sacademy.shinsegae.com
-origin   https://sacademy.shinsegae.com
-referer   https://sacademy.shinsegae.com/sdotcom/web/HP0010P0/HP0010P0.do
-sec-ch-ua   "Google Chrome";v="155", "Chromium";v="155", "Not(A:Brand";v="24"
-sec-ch-ua-mobile   ?0
-sec-ch-ua-platform   "Windows"
-sec-fetch-dest   empty
-sec-fetch-mode   cors
-sec-fetch-site   same-origin
-user-agent    Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36
-x-requested-with   XMLHttpRequest
-
-ordKey
-curPage		1
-vipUseFlag
-prmStoreCode
-prmYearCode
-prmSmstCode
-prmLectCode
-yearCode
-smstCode
-sttlmBtnYn		Y
-adminFlag
-autoSeachYn		Y
-search			Y
-storeCode		  ON   01   03  14  15 16 18 19 37 40 70 90 D1
-onOffCode
-onlineStoreCode
-lectGrType
-lectGrCode
-schSmstCode		S3
-rcptStat		   PR  RT  ST  (RC는 접수마감 제외)
-dayCode
-lectTimeCode
-targetCode		B1 B2 C1
-tchName
-lectName
-srchCndCd		01
-srchWrd
-
+## 2. 핵심 데이터 기획 및 필터링 원칙 (Core Rules)
+1. **전국주차장정보표준데이터.csv 파일 제공:**
+   - xxx 경로에 제공된 .csv 파일 참조하고 해당 데이터를 담을수 있는 테이블 생성 (table 명 : parking_metadata)
+2. **주차장 유형 - 노상, 노외, 부설 중 노상인 row 전면 제외:** 
+   - 갓길 주차 등 안전과 유모차 동선에 치명적인 '노상' 타입은 수집 단계에서 제거하고 테이블에 Upsert 합니다.
+3. **부설 주차장 (Attached / Busul) - 1:1 본진 매칭:**
+   - 목적지 건물 자체의 주차장입니다. 
+   - 우리 DB의 스팟(Spots) 좌표와 부설 주차장 좌표를 비교하여, 반경 내(예: 50m 이내)에 매칭되는 경우 (주차장명과 위경도를 LLM으로 던져서 교차확인하는 것이 필요하다고 판단됨)으로 스팟 테이블에 `parking_id` (FK)를 연결하여 상세 페이지에 주차장 뱃지를 달아주며, 또한 해당 주차정보(요금, 운영요일, 시간 결제방법, 특기사항, 데이터 기준일자 등)의 정보확인이 가능하도록 노출합니다. (너무 UI가 지저분해질거같으면 주차장 뱃지를 누르면 해당 정보확인할수 있게 해주며, 주차장 뱃지에 대하여 누르면, 상세 정보 확인 가능해요 라던가.. 언급해서 사용자가 직관적으로 알수 있도록.)
+   - 우리 DB에 없는 스팟의 경우라도 주차장정보는 parking_metadata에 존재하니 추후 주변주차장 정보로 활용가능
+4. **노외 주차장 (Off-Street / No-oe) - 동적 반경 검색 (주변 백업):**
+   - 공영/민영 노외 주차장은 주변 스팟들이 공유하는 공용 자원이므로, 수동 FK 매핑 대신 **위경도 기반 PostGIS 반경 쿼리(Spatial Query)**를 통해 유저가 상세 페이지를 열 때 가장 가까운 주차장 3개를 실시간으로 긁어와 노출합니다. (현재 유사한 기능 있음.. 반경 xxxm이내 주차장 정보 가져오는 로직.. ) 
+   - 상기 둘중 어느 방법쓸지는.. 한번더 검토 필요. 어떤게 더 나을지 제안해봐주세요.
+5. **기존에 주변주차장정보로 보여주던 주차장에 대하여서도 해당 테이블과 병합할것:**
+   - 주차장 정보를 가진 테이블이 여러개 필요없고 기존에 있던 주차장정보에 대하여 병합필요.
+   - 주변 주차장  보여주던것도 마찬가지로 현재 추가되는 주차장 정보(요금, 운영요일, 시간, 결제방법, 특기사항, 데이터 기준일자 등)들에 대하여 필요한 정보들 사용자에게 노출시킬것.
+6. ** 성능을 고려한 최적화 필요. 전체 건수 약 18000여건에 대하여 상세페이지 열때마다 주변 주차장정보에 대하여 위도 경도 기반 PostGIS 로 쿼리 검색..이 일단하나의 방법인데 이게 최적의 방법인지 이 외에 또 좋은 방법은 없는건지 제안할 것**
 ---
 
-### 조사 결과(2026-10-08, 실측 — 실제 엔드포인트에 직접 요청해 확인)
+## 3. Database Schema & Supabase Setup (PostGIS)
 
-**1. storeCode — 다중값 불가, 단건만 지원.**
-공백 구분("01 03")도 콤마 구분("01,03")도 둘 다 `totalCount=0`으로 깨진다
-(요청 자체는 200으로 성공하지만 매칭이 전부 사라짐 — 롯데마트와 동일한
-실패 패턴). 단건으로는 12개 지점 전부 정상 동작 확인(본점=208건,
-타임스퀘어&ON=400건, 강남점=230건, 마산점=177건, 사우스시티=371건,
-센텀시티=485건, 의정부점=331건, 김해점=117건, 스타필드하남점=339건,
-천안아산점=288건, 대구신세계=519건, 대전신세계=361건). 캡처된 요청의
-`storeCode`값 맨 앞 "ON"은 13번째 지점이 아니다 — `storeCode=ON` 단독은
-0건이고, 오히려 `onlineStoreCode=ON`이 유효한 값으로 보인다(온라인/
-오프라인 구분용 별도 필드로 추정, "타임스퀘어 & ON"이라는 지점명 자체에
-온라인몰이 통합돼 있는 것과 연관된 것으로 보임 — 확실친 않아 추측으로
-단정하지 않음). **결론: 지점은 12개를 하나씩 순회해야 한다**(이마트
-64개/롯데마트 60개 순회와 동일한 구조).
-
-**2. rcptStat — 다중값도 불가지만, 더 쉬운 우회로가 있다.**
-"PR RT ST" 공백 결합은 역시 0건으로 깨진다. 그런데 **`rcptStat`을 아예
-안 보내면(빈 값) PR+RT+RC+ST 전부의 합집합을 한 번에 돌려준다**(실측:
-본점 기준 빈값=208건, 개별 합산 RC(94)+RT(103)+ST(11)+PR(0)=208건으로
-정확히 일치). 즉 매 지점마다 상태값 3번 나눠 조회할 필요 없이 **지점당
-1번만** 조회하고, 응답에서 `lectStat==='RC'`(접수마감)인 행만 우리 쪽에서
-걸러내면 된다 — 사용자가 원하는 "RC 제외"를 요청 단계가 아니라 응답
-후처리 단계에서 하면 되므로 오히려 이마트/롯데마트보다 가볍다.
-
-**3. targetCode — 미해결, 재확인 필요.**
-캡처값(B1/B2/C1) 전부 단건으로도 0건이었다. 12개 지점 전체(수백~수천
-페이지)를 실측으로 훑어봐도 응답에 등장하는 대상 코드가 `01:대중`
-(일반/대중) 하나뿐이라 — 지금 이 가을학기(schSmstCode=S3) 데이터 안에
-"위드맘/패밀리/키즈" 계열 강좌가 아예 안 보인다. 두 가지 가능성이 있는데
-추측으로 단정하지 않는다(제3장 제5조):
-  - (a) 이 `sacademy.shinsegae.com` 도메인 자체가 일반 성인 대상
-    아카데미(요리/자격증/어학 등) 위주라, 캡처하신 B1/B2/C1(아이 동반
-    강좌) 카테고리는 현재 이 학기엔 지점별로 개설분이 없을 수 있다.
-  - (b) targetCode가 실제로 작동하려면 `lectGrCode`/`lectGrType`(강좌
-    분류) 같은 다른 파라미터와 같이 넘겨야만 의미가 생기는 구조일 수
-    있는데, 그 조합을 아직 못 찾았다.
-  **다음에 실제로 "위드맘/패밀리/키즈" 강좌가 목록에 떠 있는 화면에서
-  네트워크 캡처(이번과 같은 방식)를 다시 떠주시면, 그 요청의 전체
-  파라미터를 보고 정확한 조합을 찾을 수 있다.** 그 전까지는 연동 스크립트
-  작성을 보류한다(제대로 안 되는 필터를 가진 채 "일단 전체"로 긁으면
-  나중에 "위드맘/패밀리/키즈만 가져온다"는 원래 목적과 안 맞는 데이터가
-  쌓일 수 있어서다).
-
-### 정정(2026-10-08, 사용자 제공 캡처 reference/sinsegae.png로 재확인)
-
-위 "targetCode 미해결" 결론은 **틀렸다** — 원인은 내가 targetCode를 재현할
-때 매번 매장 01(본점)로만 테스트했기 때문이다(본점은 애초에 위드맘/패밀리/
-키즈 계열 강좌가 없는 매장). 사용자가 보내준 실제 화면 캡처는
-storeCode=03(타임스퀘어 & ON) + targetCode=C1(수강대상 드롭다운 "패밀리"
-선택 상태) 조합이었다 — 이 조합으로 다시 실측하니 정확히 캡처와 동일한
-강좌("어린이 뮤지컬, 방귀공주와 다니엘")가 그대로 재현됐다.
-
-재확인된 전체 그림:
-- storeCode=03 + targetCode=B1: 95건, targetCode=B2: 83건, targetCode=C1: 2건
-  — 전부 정상 동작(매장만 맞으면 단건 조회는 문제없다).
-- storeCode/targetCode 멀티값(공백/콤마)은 여전히 0건으로 깨짐(최초 조사와
-  동일 — 이 부분은 틀리지 않았다) → 12개 지점 × 3개 대상코드를 전부 순회.
-- rcptStat은 최초 조사대로 빈 값 하나로 전체 상태를 받아 사후 필터링(RC만
-  제외) — 변경 없음.
-- targetCode 라벨: HP0010P0.do 원문 HTML에서 접수상태(rcptStat) 라디오
-  버튼은 라벨이 그대로 있었지만(PR=접수전/RT=접수중/RC=접수마감/ST=
-  대기등록, 전부 확정), 수강대상(targetCode) 드롭다운은 지점 선택 시 JS로
-  동적 생성되는 구조라 정적 분석으로 라벨을 확정하지 못했다 — C1="패밀리"
-  만 스크린샷으로 확정, B1/B2는 라벨 없이 코드만 보존(추측 금지).
-
-**연동 스크립트 구현 완료**(아래 "변경 사항" 참고) — 보류 해제.
-
-## 변경 사항(구현)
-- `scripts/ingest/lib/shinsegae-culture-club-parser.mjs`(신규): 순수 파싱
-  함수. 날짜("YYYY.MM.DD~YYYY.MM.DD")/시간("HH:MM~HH:MM")/연령(기존 공유
-  `age-range-parser.mjs` 재사용 — "22년생이상" 같은 년생 표기가 이미
-  지원됨)/접수상태 정규화.
-- `scripts/ingest/shinsegae-culture-club.mjs`(신규): 지점 12개 × 대상코드
-  3개(총 36조합) 순회, 상태는 조합당 1회(빈 값)만 조회 후 사후 필터링,
-  통합 테이블(`culture_club_classes`) 직접 upsert(별도 원본 스테이징
-  테이블 없음 — 현대백화점과 동일 패턴, 목록에 필요한 필드가 다 있어
-  상세수집 단계 자체가 불필요).
-- `culture-club-unified-row.mjs`: `toUnifiedShinsegaeRow()` 추가.
-- 프론트엔드(`culture-club-tab-view.tsx`, `culture-club-options.ts`):
-  brand 유니온/BRAND_LABELS/브랜드 필터 pill에 신세계 아카데미 추가.
-  썸네일(목록에 이미지 필드 자체가 없음)/찜(Decision 028 — 브랜드별
-  쓰기 통합은 당장 미룸)/외부 신청 딥링크(실제 상세 페이지 URL 파라미터
-  구성을 아직 확인 못해 추측으로 만들지 않음 — 버튼 대신 상태 라벨만
-  노출)는 기존 브랜드들의 "미확인/미지원 시 안전한 기본값" 패턴을 그대로
-  따른다.
-- 검증: `npx tsc --noEmit` / `npm run test`(287개 파일 2,970개) /
-  `npm run build` 전부 통과. `--dry-run`으로 실제 12개 지점 전체를
-  순회해 실측 확인(예: 타임스퀘어 & ON — B1 95건/B2 83건/C1 2건, 마산점/
-  사우스시티 등 다른 지점에서도 실제 데이터 확인).
-
-## 특이 사항
-- 외부 신청 딥링크(`HP0010P0/HP0010P1.do` 추정, 정확한 쿼리 파라미터
-  구성은 미확인)는 추측으로 만들지 않고 비워뒀다 — 사용자가 실제 강좌를
-  클릭해 상세/신청 페이지로 이동하는 네트워크 캡처를 한 번 더 제공하면
-  이어서 채울 수 있다.
-- 학기 코드는 확정된 'S3'(가을)만 쓴다 — 드롭다운이 JS 동적 생성이라
-  다른 학기 코드를 추측하지 않았다. 학기가 바뀌면(겨울학기 전환 등)
-  다음 캡처 때 새 코드를 확인해 추가해야 한다.
+### 3.1. PostGIS 확장 활성화
+Supabase SQL Editor에서 PostGIS 확장을 활성화합니다.
+```sql
+CREATE EXTENSION IF NOT EXISTS postgis;
