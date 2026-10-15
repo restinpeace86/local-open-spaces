@@ -57,8 +57,8 @@
 Supabase SQL Editor에서 PostGIS 확장을 활성화합니다.
 ```sql
 CREATE EXTENSION IF NOT EXISTS postgis;
-
-
+```
+---
 [개선사항 2] # 서울시 시영주차장 실시간 주차대수 정보 데이터 api 연동 및 관리 ( 실시간 데이터 주기 정책 수립 필요.. 데이터 수집 주기 제안 할 것)   <-- 출처 https://data.seoul.go.kr/
 샘플 URL	서울시 시영주차장 실시간 주차대수 정보  http://openapi.seoul.go.kr:8088/(인증키)/xml/GetParkingInfo/1/5/
 샘플 URL	서울시 구로구 시영주차장 실시간 주차대수 정보  http://openapi.seoul.go.kr:8088/(인증키)/xml/GetParkingInfo/1/5/구로구
