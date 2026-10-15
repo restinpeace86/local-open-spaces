@@ -57,3 +57,25 @@
 Supabase SQL Editor에서 PostGIS 확장을 활성화합니다.
 ```sql
 CREATE EXTENSION IF NOT EXISTS postgis;
+
+
+[개선사항 2] # 서울시 시영주차장 실시간 주차대수 정보 데이터 api 연동 및 관리 ( 실시간 데이터 주기 정책 수립 필요.. 데이터 수집 주기 제안 할 것)   <-- 출처 https://data.seoul.go.kr/
+샘플 URL	서울시 시영주차장 실시간 주차대수 정보  http://openapi.seoul.go.kr:8088/(인증키)/xml/GetParkingInfo/1/5/
+샘플 URL	서울시 구로구 시영주차장 실시간 주차대수 정보  http://openapi.seoul.go.kr:8088/(인증키)/xml/GetParkingInfo/1/5/구로구
+
+KEY	String(필수)	인증키	OpenAPI 에서 발급된 인증키
+TYPE	String(필수)	요청파일타입	xml : xml, xml파일 : xmlf, 엑셀파일 : xls, json파일 : json
+SERVICE	String(필수)	서비스명	GetParkingInfo
+START_INDEX	INTEGER(필수)	요청시작위치	정수 입력 (페이징 시작번호 입니다 : 데이터 행 시작번호)
+END_INDEX	INTEGER(필수)	요청종료위치	정수 입력 (페이징 끝번호 입니다 : 데이터 행 끝번호)
+ADDR	STRING(선택)	주소	자치구명
+
+https://data.gg.go.kr/portal/data/service/selectServicePage.do?infId=3PZJH1FO7U3QMEFORFOH37688713&infSeq=1&page=1&size=10&sort=reg
+마이데이터 통합플랫폼_다자녀카드수혜정보
+마이데이터 통합플랫폼 다자녀카드수혜정보(공영주차장, 공공기관 및 민간시설 등 사용처별 혜택)
+csv 파일 다운로드
+
+이 데이터는 다자녀 가정을 포함한 다양한 수혜대상자에게 제공되는 카드 혜택 정보를 담고 있으며, 공영주차장과 공공기관 및 민간시설 등 사용처별 혜택을 포함하고 있습니다.
+주요 항목은 사용처구분, 혜택명, 혜택기간, 혜택참고, 혜택주소, 위경도좌표, 시군명, 등록일, 대상자명, 할인율, 필요서류, 혜택기타사항으로 구성되어 있습니다.
+혜택 제공 장소의 공간정보(위경도)를 제공하여 위치 분석에 활용될 수 있습니다. '혜택기타사항'을 통해 시간제한이나 조건부 무료 이용 등 세부 조건을 안내하고 있어,
+ 실질적인 혜택 적용 조건을 이해하는 데 도움이 됩니다. 이 데이터는 지역사회 복지정책 수립, 공간기반 수요 분석, 행정서비스 개선 등의 목적으로 활용될 수 있습니다.
