@@ -1403,3 +1403,44 @@ Playwright(`@playwright/test`, devDependency로 이미 존재)는 혹시 이후
   address-match.mjs, apollo-state.mjs 등), `search-and-match.mjs`.
 - **실측 검증**: "원조남원추어탕" 동명이인 사례(경기 시흥시/안산시)에서
   주소 교차검증으로 정확한 지점을 골라냄을 라이브 호출로 확인.
+
+### Decision 038: 리뷰 "아이와 가기 좋아요" 태그 코드 확인(kid_good) + CSV 단계 간 헤더 유실 버그 수정
+- **날짜:** 2026-10-15
+- **상태:** 승인(Approved) — todo.md 개선사항4 4~6단계(상세/리뷰 LLM 분석)
+  구현 중 실측 확인.
+
+#### 배경 1 — "아이와 함께가기좋아요" 뱃지의 실제 네이버 코드명
+todo.md 원문은 "리뷰(아이와 함께가기좋아요)"라고만 적어, 네이버 쪽 실제
+코드/필드명을 특정하지 않았다(추측 금지 대상). 실측 확인(2026-10-15,
+아웃백스테이크하우스 판교점 사례): 네이버 리뷰 투표 키워드 코드는
+`kid_good`이고 현재 표시 문구는 "아이와 가기 좋아요"다(todo.md의
+"아이와 함께가기좋아요"와 문구가 약간 다르지만 동일한 기능으로 판단—
+식당 카테고리에만 존재하는 코드이고 의미가 정확히 일치). 개별
+`VisitorReview` 엔티티의 `votedKeywords` 배열에 이 코드가 있는 리뷰만
+"키즈친화 근거 리뷰"로 추린다.
+
+#### 배경 2 — CSV 멀티스텝 파이프라인의 헤더 유실 버그
+`search-and-match.mjs`(2단계)와 `scrape-kids-attributes.mjs`(3단계)는
+같은 `metadata/식당.csv`를 순서대로 읽고 쓴다. 각자 자기 단계가 아는
+컬럼만 담은 고정 `HEADER` 배열로 `writeCsvUtf8`을 호출하도록 초안을
+작성했는데, 이러면 **먼저 실행된 단계가 이미 채워둔 컬럼을 나중 단계가
+모르는 채로 다시 쓰면 그 컬럼이 통째로 사라진다**(예: 3단계가 채운
+아기의자 등 6개 컬럼이 있는 CSV에 2단계를 재실행하면 — 매칭 실패 건
+재시도 등의 상황 — 그 6개 컬럼이 사라짐). 실측 재현 전 코드 리뷰 중
+발견했다.
+
+#### 결정 내용
+1. kid_good 코드를 `naver-reviews.mjs`에 하드코딩하되, 실측 근거를
+   주석으로 명시해 둔다(나중에 네이버가 코드를 바꾸면 추적 가능하도록).
+2. `lib/csv.mjs`에 `mergeHeader(existingRows, requiredColumns)`를
+   추가 — 파일을 읽었을 때의 기존 컬럼 순서를 보존하고, 이번 단계가
+   요구하는 컬럼 중 없는 것만 뒤에 추가한다. 두 orchestrator 모두 고정
+   HEADER 대신 이 함수로 매번 헤더를 계산하도록 교체했다.
+
+#### 영향
+- **코드**: `scripts/naver-kids-restaurant-agent/lib/naver-reviews.mjs`,
+  `lib/csv.mjs`(`mergeHeader` 추가, 테스트 4개로 라운드트립 보존 확인),
+  `search-and-match.mjs`/`scrape-kids-attributes.mjs`(헤더 계산 방식 교체).
+- **실측 검증**: 실제 매칭된 플레이스 ID 2건으로 3단계를 라이브 실행,
+  LLM이 근거 부족 시 정직하게 "없음"으로 판단함(할루시네이션 없음)을
+  확인.

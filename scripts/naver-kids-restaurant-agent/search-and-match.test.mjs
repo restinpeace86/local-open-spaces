@@ -4,7 +4,12 @@ vi.mock('../lib/load-env.mjs', () => ({ loadEnv: vi.fn() }));
 
 const readCsvUtf8Mock = vi.fn();
 const writeCsvUtf8Mock = vi.fn();
-vi.mock('./lib/csv.mjs', () => ({ readCsvUtf8: readCsvUtf8Mock, writeCsvUtf8: writeCsvUtf8Mock }));
+const mergeHeaderMock = vi.fn((rows, required) => required);
+vi.mock('./lib/csv.mjs', () => ({
+  readCsvUtf8: readCsvUtf8Mock,
+  writeCsvUtf8: writeCsvUtf8Mock,
+  mergeHeader: mergeHeaderMock,
+}));
 
 const searchNaverPlacesMock = vi.fn();
 vi.mock('./lib/naver-search.mjs', () => ({ searchNaverPlaces: searchNaverPlacesMock }));

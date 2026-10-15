@@ -11,7 +11,7 @@
 import path from 'path';
 import { pathToFileURL } from 'url';
 import { loadEnv } from '../lib/load-env.mjs';
-import { readCsvUtf8, writeCsvUtf8 } from './lib/csv.mjs';
+import { readCsvUtf8, writeCsvUtf8, mergeHeader } from './lib/csv.mjs';
 import { searchNaverPlaces } from './lib/naver-search.mjs';
 import { pickBestCandidate } from './lib/address-match.mjs';
 import { suggestSearchTerm } from './lib/llm-search-term.mjs';
@@ -19,7 +19,7 @@ import { suggestSearchTerm } from './lib/llm-search-term.mjs';
 loadEnv();
 
 const CSV_PATH = path.resolve(process.cwd(), 'metadata', '식당.csv');
-const HEADER = ['명칭', '주소', '위도', '경도', '네이버플레이스ID', '네이버플레이스URL'];
+const REQUIRED_COLUMNS = ['명칭', '주소', '위도', '경도', '네이버플레이스ID', '네이버플레이스URL'];
 const NOT_FOUND_MARKER = 'NOT_FOUND';
 // 네이버 WAF 429 레이트리밋 실측 전례(naver-crawl/route.ts)를 감안한 보수적 간격 —
 // 한 건당 검색이 최대 2회(원본명 + LLM 재시도)라 429를 유발하지 않을 정도로 둔다.
@@ -66,6 +66,7 @@ export async function run({
   delayMs = REQUEST_DELAY_MS,
 } = {}) {
   const rows = readCsvUtf8(csvPath);
+  const header = mergeHeader(rows, REQUIRED_COLUMNS);
   const stats = { matched: 0, notFound: 0, skipped: 0, rateLimited: 0 };
   let processed = 0;
 
@@ -93,12 +94,12 @@ export async function run({
 
     processed += 1;
     if (processed % SAVE_EVERY === 0) {
-      writeCsvUtf8(csvPath, HEADER, rows);
+      writeCsvUtf8(csvPath, header, rows);
     }
     await sleep(delayMs);
   }
 
-  writeCsvUtf8(csvPath, HEADER, rows);
+  writeCsvUtf8(csvPath, header, rows);
   return { ...stats, processed, total: rows.length };
 }
 
