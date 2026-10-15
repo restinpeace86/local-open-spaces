@@ -39,6 +39,7 @@
     "ingest:parking-metadata": "node scripts/ingest/parking-metadata.mjs",
     "ingest:match-parking-to-spots": "node scripts/ingest/match-parking-to-spots.mjs",
     "ingest:parking-realtime-seoul": "node scripts/ingest/parking-realtime-seoul.mjs",
+    "ingest:parking-multi-child-discount": "node scripts/ingest/parking-multi-child-discount.mjs",
     "ingest:emart-culture-club": "node scripts/ingest/emart-culture-club.mjs",
     "ingest:emart-culture-club-detail": "node scripts/ingest/emart-culture-club-detail.mjs",
     "ingest:daily": "node scripts/ingest/run-daily.mjs",

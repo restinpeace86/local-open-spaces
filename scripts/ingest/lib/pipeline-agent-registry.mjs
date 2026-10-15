@@ -199,6 +199,13 @@ export const PIPELINE_AGENTS = {
     description: '서울시 시영주차장 실시간 주차대수(GetParkingInfo, 10분 주기) — parking_metadata.realtime_available_count 갱신',
     period: 'daily',
   },
+  // [주차장 다자녀 할인 혜택](2026-10-15, todo.md 개선사항3): 경기도/서울시
+  // CSV도 사람이 수동 배치하는 스냅샷이라 PARKING_METADATA와 동일하게
+  // 자동 월간 워크플로에는 넣지 않고 로컬 수동 실행.
+  PARKING_MULTI_CHILD_DISCOUNT: {
+    description: '주차장 다자녀 할인 혜택(경기도+서울시 CSV) 매칭 — parking_metadata.is_multi_child_discount/discount_info 갱신',
+    period: 'monthly',
+  },
 
   // [이마트 컬처클럽 강좌 리스트 수집](2026-10-03 사용자 지시): 홈플러스와 달리
   // 로그인/Playwright 불필요 — 공개 AWS AppSync GraphQL API 직접 호출. open_spaces가
