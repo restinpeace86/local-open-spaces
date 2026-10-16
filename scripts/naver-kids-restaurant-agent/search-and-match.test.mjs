@@ -83,6 +83,36 @@ describe('search-and-match run()', () => {
     expect(row.네이버플레이스ID).toBe('999');
   });
 
+  it('이름에 "공원"이 있고 1차 검색이 실패하면, "공원"을 뗀 이름으로 재시도한다', async () => {
+    const row = { 명칭: '불암산공원 유아숲체험원', 주소: '서울특별시 노원구 중계동 산 95-1', 네이버플레이스ID: '' };
+    readCsvUtf8Mock.mockReturnValue([row]);
+    searchNaverPlacesMock
+      .mockResolvedValueOnce({ results: [], status: 200 })
+      .mockResolvedValueOnce({ results: [{ id: '777', name: '불암산 유아숲체험장' }], status: 200 });
+    pickBestCandidateMock
+      .mockReturnValueOnce(null)
+      .mockReturnValueOnce({ candidate: { id: '777', name: '불암산 유아숲체험장' } });
+
+    const stats = await run({ apiKey: null, delayMs: 0 });
+
+    expect(stats.matched).toBe(1);
+    expect(row.네이버플레이스ID).toBe('777');
+    expect(searchNaverPlacesMock).toHaveBeenNthCalledWith(2, '불암산 유아숲체험원');
+  });
+
+  it('이름에 "공원"이 없으면 공원제거 재시도 없이 바로 LLM 단계로 간다', async () => {
+    const row = { 명칭: '식당A', 주소: '주소A', 네이버플레이스ID: '' };
+    readCsvUtf8Mock.mockReturnValue([row]);
+    searchNaverPlacesMock.mockResolvedValue({ results: [], status: 200 });
+    pickBestCandidateMock.mockReturnValue(null);
+    suggestSearchTermMock.mockResolvedValue('식당A 공식점');
+
+    await run({ apiKey: 'key', delayMs: 0 });
+
+    // 1차(원본) + LLM 제안 검색어 2회만 — "공원" 제거 재시도 단계는 호출되지 않는다.
+    expect(searchNaverPlacesMock).toHaveBeenCalledTimes(2);
+  });
+
   it('429(레이트리밋)이면 NOT_FOUND로 기록하지 않고 빈 값을 유지한다', async () => {
     const row = { 명칭: '식당A', 주소: '주소A', 네이버플레이스ID: '' };
     readCsvUtf8Mock.mockReturnValue([row]);

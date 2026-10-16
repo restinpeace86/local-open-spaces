@@ -34,6 +34,23 @@ function buildPlaceUrl(id) {
   return `https://map.naver.com/p/entry/place/${id}`;
 }
 
+// [공원형 시설 이름 변형 재시도](2026-10-16 사용자 지시, 유아숲체험원 사례):
+// "불암산공원 유아숲체험원은 불암산 유아숲체험원처럼.. 바꿔봐" — 공공데이터
+// 원본 명칭에 "공원"이 붙어있으면 네이버에 등록된 실제 이름과 달라 검색이
+// 실패하는 경우가 실측으로 확인됐다. 결정적 문자열 변형이라 LLM보다 먼저,
+// 무료로 한 번 더 시도한다. 주소 교차검증은 그대로 거치므로(pickBestCandidate)
+// 엉뚱한 변형이어도 오탐으로 이어지지 않고 그냥 매칭 실패로 끝난다 — 식당 등
+// 다른 카테고리에도 안전하게 적용 가능(이름에 "공원"이 없으면 null을 반환해
+// 재시도 자체를 건너뜀).
+function buildGenericRetryTerm(name) {
+  const stripped = name
+    .replace(/\([^)]*\)/g, '')
+    .replace(/공원/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return stripped && stripped !== name.trim() ? stripped : null;
+}
+
 async function matchOneRestaurant(row, { apiKey, delayMs }) {
   const target = { name: row.명칭, address: row.주소 };
 
@@ -44,6 +61,17 @@ async function matchOneRestaurant(row, { apiKey, delayMs }) {
   if (firstMatch) return { outcome: 'MATCHED', candidate: firstMatch.candidate };
 
   await sleep(delayMs);
+
+  const genericRetryTerm = buildGenericRetryTerm(row.명칭);
+  if (genericRetryTerm) {
+    const { results: genericResults, status: genericStatus } = await searchNaverPlaces(genericRetryTerm);
+    if (genericStatus === 429) return { outcome: 'RATE_LIMITED' };
+
+    const genericMatch = pickBestCandidate(target, genericResults);
+    if (genericMatch) return { outcome: 'MATCHED', candidate: genericMatch.candidate };
+
+    await sleep(delayMs);
+  }
 
   if (!apiKey) return { outcome: 'NOT_FOUND' };
 
