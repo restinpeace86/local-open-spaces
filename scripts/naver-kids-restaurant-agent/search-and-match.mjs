@@ -138,10 +138,14 @@ export async function run({
 // 실행하는 용도로만 둔다. 인자 없이 실행하면 기존 metadata/식당.csv를
 // 그대로 쓴다(하위 호환, classify-unassigned-category-min.mjs와 동일한
 // "위치 인자 + 기본값" 관례).
+// [요청 간격 조정 가능](2026-10-16) — 1,594건 식당 전체 실행 때 500ms 간격이
+// 네이버 WAF에 걸린 전례(실측: 1,334건 429)가 있어, 카테고리/건수에 맞게
+// 호출부가 직접 더 느린 간격을 줄 수 있게 3번째 인자로 열어둔다.
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const csvPathArg = process.argv[2] ? path.resolve(process.cwd(), process.argv[2]) : CSV_PATH;
   const limitArg = process.argv[3] ? Number(process.argv[3]) : Infinity;
-  run({ csvPath: csvPathArg, limit: limitArg })
+  const delayMsArg = process.argv[4] ? Number(process.argv[4]) : REQUEST_DELAY_MS;
+  run({ csvPath: csvPathArg, limit: limitArg, delayMs: delayMsArg })
     .then((stats) => {
       console.log(`✅ 검색/매칭 완료(${csvPathArg}):`, stats);
     })

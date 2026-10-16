@@ -135,7 +135,8 @@ export async function run({
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const csvPathArg = process.argv[2] ? path.resolve(process.cwd(), process.argv[2]) : CSV_PATH;
   const limitArg = process.argv[3] ? Number(process.argv[3]) : Infinity;
-  run({ csvPath: csvPathArg, limit: limitArg })
+  const delayMsArg = process.argv[4] ? Number(process.argv[4]) : REQUEST_DELAY_MS;
+  run({ csvPath: csvPathArg, limit: limitArg, delayMs: delayMsArg })
     .then((stats) => {
       console.log(`✅ 키즈친화 속성 분석 완료(${csvPathArg}):`, stats);
     })
