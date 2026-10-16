@@ -72,6 +72,19 @@ describe('buildOpenSpacesCategoryMinGroups', () => {
     const group = result.find((g) => g.major === '농장/체험');
     expect(group?.minors).toEqual(expect.arrayContaining(['체험휴양마을', '교육농장']));
   });
+
+  // [백화점/아울렛/쇼핑몰 문화센터 그룹 배정 수정 회귀 테스트](todo.md 개선사항1,
+  // 2026-10-16 사용자 지시) — 이 3개가 minors 목록에 없어 "기타"로 떨어지고
+  // 있었다(대형마트문화센터만 이미 있었음, 실측 확인).
+  it('백화점/아울렛/쇼핑몰 문화센터는 "문화시설" 그룹에 배정되고, "기타"에는 없다', () => {
+    const result = buildOpenSpacesCategoryMinGroups(['백화점문화센터', '아울렛문화센터', '쇼핑몰문화센터']);
+    const cultureGroup = result.find((g) => g.major === '문화시설');
+    expect(cultureGroup?.minors).toEqual(
+      expect.arrayContaining(['백화점문화센터', '아울렛문화센터', '쇼핑몰문화센터'])
+    );
+    const etcGroup = result.find((g) => g.major === '기타');
+    expect(etcGroup).toBeUndefined();
+  });
 });
 
 describe('buildEventsCategoryMinGroups', () => {

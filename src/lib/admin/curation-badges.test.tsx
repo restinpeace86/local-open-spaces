@@ -237,6 +237,31 @@ describe('children_library 카테고리 뱃지 — 어린이도서관 전용', (
   });
 });
 
+// [유아숲체험원 전용 뱃지 구성](todo.md 개선사항2, 2026-10-16 사용자 지시) —
+// 2026-10-01에는 보편 임시 config(generic)로 묶어뒀다가 이번에 전용 config로
+// 승격했다.
+describe('forest_experience(유아숲체험원) 카테고리 뱃지', () => {
+  it('노출 중분류 "유아숲체험원"은 forest_experience로 매핑된다(더 이상 보편 임시가 아님)', () => {
+    expect(resolveCurationCategoryId('유아숲체험원')).toBe('forest_experience');
+  });
+
+  it('요청받은 5개 뱃지를 모두 갖는다(상시무료개방/주차/화장실/유모차진입/숲체험프로그램)', () => {
+    const options = getBadgeOptionsForCategory('forest_experience');
+    expect(options.map((o) => o.label)).toEqual([
+      '상시 무료 개방',
+      '주차 가능',
+      '화장실 있음',
+      '유모차 진입 가능',
+      '숲체험 프로그램 운영',
+    ]);
+  });
+
+  it('주차/유모차는 다른 카테고리와 동일한 키를 재사용한다(기존 뱃지 체계와 일관성)', () => {
+    const keys = getBadgeOptionsForCategory('forest_experience').map((o) => o.key);
+    expect(keys).toEqual(expect.arrayContaining(['parking', 'stroller']));
+  });
+});
+
 // [캠핑장/휴양마을/체험농장 뱃지 체계 전면 재작성](2026-09-10 사용자 지시,
 // implementation/todo.md 개선사항1): 임시 cp_/rv_/ef_ 키 → 스펙 확정 키
 // (CAMPING_TRAMPOLINE / NEG_BACKPACKING / RURAL_* / EDU_*)로 교체.
