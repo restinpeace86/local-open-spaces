@@ -71,18 +71,77 @@ export function extractRoadAndNumber(address) {
   return match ? match[1] : null;
 }
 
-// 양쪽 모두 도로명+번지가 추출되면: 정확히 같으면 1.0, 다르면(번지가 다른 건물)
-// 낮은 점수(0.2) — 전체 문자열이 비슷해도 번지가 다르면 다른 곳일 가능성이 높다.
-// 한쪽이라도 추출에 실패하면 전체 주소의 Dice 유사도로 대체한다.
+// [실측으로 발견한 지번 주소 오탐](2026-10-16, 유아숲체험원 매칭 중 발견):
+// 도로명이 없는 지번(산 번지) 주소는 둘 다 extractRoadAndNumber가 null을
+// 반환해 전체 문자열 Dice 유사도로 대체되는데, "서울특별시 노원구"처럼 공유되는
+// 시/구 접두어가 길어서 동(洞) 이름과 번지가 완전히 다른데도 0.5를 넘어 오탐이
+// 났다(실측: "노원구 공릉동 산223-1"과 "노원구 상계동 산59-2"가 서로 다른
+// 산/시설인데 0.52로 통과해 전혀 다른 "수락산 생태 노원골 유아숲체험원"에
+// 잘못 매칭됨). 도로명과 동일한 원칙으로, 동 이름+번지를 먼저 추출해 그게
+// 다르면 낮은 점수로 명확히 구분한다.
+const DONG_LOT_PATTERN = /([가-힣]+(?:동|읍|면|리))\s*산?\s*(\d+(?:-\d+)?)/;
+
+function extractDongAndLot(address) {
+  if (!address) return null;
+  const match = address.match(DONG_LOT_PATTERN);
+  return match ? `${match[1]}${match[2]}` : null;
+}
+
+// "경기도 성남시 분당구 ..."처럼 맨 앞에 오는 시/도·시/군/구 토큰(최대 2개)을
+// 뗀다 — 두 주소의 동/번지/도로명이 전혀 달라도 이 접두어를 공유한다는 이유만
+// 으로 Dice 유사도가 부풀려지는 걸 막기 위함(아래 addressSimilarity 마지막
+// 분기 전용 전처리).
+function stripLeadingAdminTokens(address) {
+  if (!address) return '';
+  const tokens = address.trim().split(/\s+/);
+  let i = 0;
+  while (i < tokens.length && i < 2 && /[시도군구]$/.test(tokens[i])) i += 1;
+  return tokens.slice(i).join(' ');
+}
+
+// 1) 도로명+번지가 양쪽에서 추출되면: 정확히 같으면 1.0, 다르면 0.2.
+// 2) 도로명이 없으면(지번 주소) 동 이름+번지로 같은 방식 재시도.
+// 3) 둘 다 추출 실패하면 전체 주소의 Dice 유사도로 대체한다(최후의 수단 —
+//    이 경로는 동/도로명 토큰 자체가 없는 매우 짧거나 비정형인 주소에만 탄다).
 export function addressSimilarity(addressA, addressB) {
   const roadA = extractRoadAndNumber(addressA);
   const roadB = extractRoadAndNumber(addressB);
-
   if (roadA && roadB) {
     return normalizeText(roadA) === normalizeText(roadB) ? 1 : 0.2;
   }
 
-  return diceSimilarity(normalizeText(addressA), normalizeText(addressB));
+  const dongLotA = extractDongAndLot(addressA);
+  const dongLotB = extractDongAndLot(addressB);
+  if (dongLotA && dongLotB) {
+    return normalizeText(dongLotA) === normalizeText(dongLotB) ? 1 : 0.2;
+  }
+
+  // [실측으로 발견한 "시/구 접두어 공유로 인한 오탐" — 2단계로 발견된 같은 근본
+  // 원인](2026-10-16, 유아숲체험원 참고 목록 매칭 중) — "서울특별시 구로구"처럼
+  // 두 주소가 공유하는 시/도+시/군/구 접두어가, 그 뒤의 동/번지가 전혀 다른데도
+  // 전체 문자열 Dice 비율을 끌어올렸다. 1차로는 "한쪽이 시/구까지만 있는
+  // 극단적으로 짧은 경우"만 길이로 걸러냈는데, 그 다음 재검증에서 "양쪽 다
+  // 어느 정도 길어도 같은 시/구 접두어 때문에 여전히 0.5를 넘는" 사례를 추가로
+  // 발견했다(실측: "오리로 1102-4, 천왕동"과 전혀 다른 동인 "개봉동 416-102"가
+  // 같은 "서울특별시 구로구"를 공유한다는 이유만으로 통과). 근본 원인 자체를
+  // 없애기 위해 Dice 비교 전에 선행 시/도+시/군/구 토큰(최대 2개)을 떼고 그
+  // 뒤쪽(동/번지/상세) 부분만 비교한다 — 공유 접두어가 비교에 전혀 기여하지
+  // 않게 된다.
+  const tailA = stripLeadingAdminTokens(addressA);
+  const tailB = stripLeadingAdminTokens(addressB);
+  const normTailA = normalizeText(tailA);
+  const normTailB = normalizeText(tailB);
+  if (normTailA && normTailA === normTailB) return 1;
+
+  // 접두어를 뗀 뒤 남는 부분이 너무 짧으면(동/번지 정보가 거의 없음) 근거가
+  // 부족하므로 매칭하지 않는다(추측 금지, 제3장 제5조) — 위 사례처럼 시/구까지
+  // 밖에 없는 주소는 접두어를 떼면 빈 문자열이 돼 자연히 여기서 걸린다.
+  const MIN_MEANINGFUL_ADDRESS_TAIL_LENGTH = 4;
+  if (normTailA.length < MIN_MEANINGFUL_ADDRESS_TAIL_LENGTH || normTailB.length < MIN_MEANINGFUL_ADDRESS_TAIL_LENGTH) {
+    return 0;
+  }
+
+  return diceSimilarity(normTailA, normTailB);
 }
 
 // [매칭 기준](todo.md 3단계 "일치하는 경우 ➔ 네이버 place 고유 ID를 발췌"):
