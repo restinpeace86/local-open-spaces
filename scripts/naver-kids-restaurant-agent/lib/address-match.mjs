@@ -79,12 +79,20 @@ export function extractRoadAndNumber(address) {
 // 산/시설인데 0.52로 통과해 전혀 다른 "수락산 생태 노원골 유아숲체험원"에
 // 잘못 매칭됨). 도로명과 동일한 원칙으로, 동 이름+번지를 먼저 추출해 그게
 // 다르면 낮은 점수로 명확히 구분한다.
-const DONG_LOT_PATTERN = /([가-힣]+(?:동|읍|면|리))\s*산?\s*(\d+(?:-\d+)?)/;
+// [동(洞) 뒤 "N가" 구역 표기까지 동 이름의 일부로 포함](2026-10-17 실측 발견,
+// "매봉산중구/금호산" 사례 검증 중): "금호동3가"처럼 동 이름 뒤에 바로 구역
+// 숫자+"가"가 붙는 서울 구주소 표기가 있다 — 이걸 동 이름에 포함하지 않으면
+// 그 "3"을 뒤에 올 지번 숫자로 잘못 캡처해버린다(실측: "금호동3가 산2-1"에서
+// 번지를 "2-1"이 아니라 "3"으로 잘못 추출함, 우연히 비교 대상 양쪽이 같은
+// 문자열이라 결과가 맞게 나왔을 뿐 근본적으로는 오류). "N가"는 동 식별의
+// 일부(금호동1가~4가는 서로 다른 행정동)이므로 동 이름에 포함해 정확히 비교한다.
+const DONG_LOT_PATTERN = /([가-힣]+(?:동|읍|면|리)(?:\d+가)?)\s*산?\s*(\d+)(?:-(\d+))?/;
 
 function extractDongAndLot(address) {
   if (!address) return null;
   const match = address.match(DONG_LOT_PATTERN);
-  return match ? `${match[1]}${match[2]}` : null;
+  if (!match) return null;
+  return { dong: match[1], mainLot: match[2], subLot: match[3] ?? null };
 }
 
 // "경기도 성남시 분당구 ..."처럼 맨 앞에 오는 시/도·시/군/구 토큰(최대 2개)을
@@ -110,10 +118,21 @@ export function addressSimilarity(addressA, addressB) {
     return normalizeText(roadA) === normalizeText(roadB) ? 1 : 0.2;
   }
 
+  // [실측으로 발견한 과잉교정 — 산/공원 시설의 인접 지번 허용](2026-10-17,
+  // 사용자 지적: "배봉산근린공원 유아숲체험원 이거는 쳤을때 나오는데?") —
+  // 네이버 검색에 정확히 같은 이름("배봉산근린공원 유아숲체험원")으로 결과가
+  // 있었는데도(id 615747111, "휘경동 산6-80") 우리 DB 행(휘경동 산6-91)과
+  // 번지 끝자리만 달라 매칭되지 않았다. 공원/산림 시설은 하나의 넓은 부지가
+  // 여러 인접 지번("산6-80"/"산6-91"/"산6-35" 등, 전부 원 지번 "6"에서 갈라진
+  // 하위 구획)에 걸쳐 등재되는 경우가 흔해, 동(洞)과 메인 지번(하이픈 앞)까지
+  // 같으면 서브 지번(하이픈 뒤)이 달라도 같은 부지일 가능성이 높다 — 동 자체가
+  // 다르면(공릉동/상계동 사례처럼) 여전히 낮은 점수로 걸러낸다.
   const dongLotA = extractDongAndLot(addressA);
   const dongLotB = extractDongAndLot(addressB);
   if (dongLotA && dongLotB) {
-    return normalizeText(dongLotA) === normalizeText(dongLotB) ? 1 : 0.2;
+    if (dongLotA.dong !== dongLotB.dong) return 0.2;
+    if (dongLotA.mainLot !== dongLotB.mainLot) return 0.2;
+    return dongLotA.subLot === dongLotB.subLot ? 1 : 0.7;
   }
 
   // [실측으로 발견한 "시/구 접두어 공유로 인한 오탐" — 2단계로 발견된 같은 근본
@@ -162,15 +181,42 @@ export function scoreCandidate(target, candidate) {
   return { nameScore, addressScore, candidate };
 }
 
-// 후보 중 이름/주소 유사도 모두 임계값을 넘는 것 중 (이름+주소 합산) 최고점 하나를
-// 고른다. 없으면 null(추측 금지 — 애매하면 매칭하지 않고 그대로 "미매칭"으로 남긴다).
+// 포함판정(nameSimilarity의 containment shortcut, 지점명이 덧붙는 경우 등)과
+// 구분되는 "완전히 같은 이름"만 본다 — 아래 pickBestCandidate가 "이름이 유일하게
+// 정확히 일치하면 주소 확인 없이 확정"할 때 쓰는 더 엄격한 기준.
+function isExactNameMatch(nameA, nameB) {
+  const a = normalizeText(nameA);
+  const b = normalizeText(nameB);
+  return Boolean(a) && a === b;
+}
+
+// [매칭 기준 — 이름 유일성 우선](2026-10-17 사용자 지시): "이름 검색시 여러개
+// 나오는경우.. 이경우 다건에 대하여 우리주소 교차로 봐서 가장 적합한거.. 정확히
+// 같은 이름인데 지번이 다르면 지번을 네이버껄로 바꿔" — 주소 교차검증은
+// 동명(同名)이 여러 건 나왔을 때 그중 하나를 고르기 위한 도구이고, 이름이
+// 정확히 일치하는 후보가 검색 결과 중 유일하면 그 자체로 확정 근거가 충분하다
+// (주소/지번 표기 차이로 거부하지 않는다 — 공원/산림 시설은 지번이 여러 개로
+// 쪼개져 등재되는 경우가 흔해 우리 쪽 지번이 네이버와 정확히 안 맞을 수 있고,
+// 그때는 네이버 쪽 지번이 더 정확한 최신 등록 정보다). 이름이 정확히 같은 후보가
+// 여러 개면(동명이인) 그중 주소가 가장 잘 맞는 것을 고르고, 정확히 같은 이름이
+// 하나도 없으면 기존처럼 이름+주소 둘 다 최소 기준을 만족하는 것만 고른다.
 export function pickBestCandidate(target, candidates) {
-  const scored = candidates
-    .map((candidate) => scoreCandidate(target, candidate))
-    .filter((s) => s.nameScore >= MIN_NAME_SIMILARITY && s.addressScore >= MIN_ADDRESS_SIMILARITY);
+  const scored = candidates.map((candidate) => scoreCandidate(target, candidate));
+  const exactNameMatches = scored.filter((s) => isExactNameMatch(target.name, s.candidate.name));
 
-  if (scored.length === 0) return null;
+  if (exactNameMatches.length === 1) {
+    return exactNameMatches[0];
+  }
+  if (exactNameMatches.length > 1) {
+    const withAddress = exactNameMatches.filter((s) => s.addressScore >= MIN_ADDRESS_SIMILARITY);
+    if (withAddress.length === 0) return null;
+    withAddress.sort((a, b) => b.addressScore - a.addressScore);
+    return withAddress[0];
+  }
 
-  scored.sort((a, b) => b.nameScore + b.addressScore - (a.nameScore + a.addressScore));
-  return scored[0];
+  const fuzzyMatches = scored.filter((s) => s.nameScore >= MIN_NAME_SIMILARITY && s.addressScore >= MIN_ADDRESS_SIMILARITY);
+  if (fuzzyMatches.length === 0) return null;
+
+  fuzzyMatches.sort((a, b) => b.nameScore + b.addressScore - (a.nameScore + a.addressScore));
+  return fuzzyMatches[0];
 }

@@ -68,6 +68,25 @@ describe('addressSimilarity', () => {
     expect(score).toBeLessThan(0.5);
   });
 
+  // [실측 과잉교정 회귀 테스트](2026-10-17 사용자 지적: "배봉산근린공원
+  // 유아숲체험원 이거는 쳤을때 나오는데?") — 네이버에 정확히 같은 이름으로
+  // 결과가 있었는데도("휘경동 산6-80") 우리 DB 행("휘경동 산6-91")과 번지
+  // 끝자리만 달라 매칭되지 않았다. 공원/산림 시설은 같은 부지가 여러 인접
+  // 지번에 걸쳐 등재되는 경우가 흔하므로, 동과 메인 지번(하이픈 앞)까지
+  // 같으면 서브 지번만 달라도 높은 점수(0.5 이상)를 줘야 한다.
+  it('동과 메인 지번이 같으면 서브 지번만 달라도 매칭 가능한 점수(인접 지번 허용)', () => {
+    const score = addressSimilarity('서울특별시 동대문구 휘경동 산 6-91', '서울특별시 동대문구 휘경동 산6-80');
+    expect(score).toBeGreaterThanOrEqual(0.5);
+  });
+
+  it('동 이름 뒤 "N가" 구역 표기가 있어도 지번을 정확히 추출한다(금호동3가 사례)', () => {
+    // 수정 전엔 "3가"의 "3"을 지번으로 잘못 잡아 "2-1"을 놓쳤다 — 서로 다른
+    // 지번("2-1" vs "9-9")인데도 "3"만 비교해 우연히 같아져 오탐이 날 수 있는
+    // 구조였다. 지금은 정확히 "2-1"/"9-9"를 비교해 제대로 구분해야 한다.
+    const score = addressSimilarity('서울특별시 성동구 금호동3가 산 2-1번지', '서울특별시 성동구 금호동3가 산 9-9번지');
+    expect(score).toBeLessThan(0.5);
+  });
+
   it('도로명도 동 이름도 둘 다 추출 실패하면 전체 문자열 유사도로 최종 대체한다', () => {
     // "번지"형태(동/읍/면/리 명시 없음)라 DONG_LOT_PATTERN도 매칭되지 않는 극단적
     // 사례 — 완전히 같은 문자열이면 짧아도(10자 미만) 1.0이어야 한다(아래
@@ -111,9 +130,36 @@ describe('pickBestCandidate', () => {
     expect(result.candidate.id).toBe('2');
   });
 
-  it('이름은 같지만 주소가 전혀 다르면(동명이인) 매칭하지 않는다', () => {
+  // [매칭 기준 변경](2026-10-17 사용자 지시): "이름 검색시 여러개 나오는경우..
+  // 이경우 다건에 대하여 우리주소 교차로 봐서 가장 적합한거.. 정확히 같은
+  // 이름인데 지번이 다르면 지번을 네이버껄로 바꿔" — 주소 교차검증은 동명이
+  // 여러 건 나왔을 때만 쓰는 도구다. 검색 결과에 이름이 정확히 같은 후보가
+  // 단 하나뿐이면, 주소/지번 표기가 달라도(공원/산림 시설은 지번이 여러 개로
+  // 쪼개져 있을 수 있음) 그 자체로 확정한다 — 이전엔 주소까지 안 맞으면
+  // 거부했으나, 더 이상 그렇게 하지 않는다(아래 "여러 건" 테스트와 대비).
+  it('이름이 정확히 일치하는 후보가 유일하면 주소가 달라도 확정한다(지번은 네이버가 더 정확할 수 있음)', () => {
     const candidates = [
       { id: '1', name: '원조남원추어탕', roadAddress: '테헤란로 152', fullAddress: '서울특별시 강남구 테헤란로 152' },
+    ];
+
+    const result = pickBestCandidate(target, candidates);
+    expect(result.candidate.id).toBe('1');
+  });
+
+  it('이름이 정확히 같은 후보가 여러 개면(동명이인) 주소가 가장 잘 맞는 것을 고른다', () => {
+    const candidates = [
+      { id: 'wrong-region', name: '원조남원추어탕', roadAddress: '테헤란로 152', fullAddress: '서울특별시 강남구 테헤란로 152' },
+      { id: 'right-region', name: '원조남원추어탕', roadAddress: '동서로10번길 3', fullAddress: '경기도 시흥시 동서로10번길 3' },
+    ];
+
+    const result = pickBestCandidate(target, candidates);
+    expect(result.candidate.id).toBe('right-region');
+  });
+
+  it('이름이 정확히 같은 후보가 여러 개인데 주소로도 못 가르면 매칭하지 않는다', () => {
+    const candidates = [
+      { id: 'a', name: '원조남원추어탕', roadAddress: '테헤란로 152', fullAddress: '서울특별시 강남구 테헤란로 152' },
+      { id: 'b', name: '원조남원추어탕', roadAddress: '올림픽로 300', fullAddress: '서울특별시 송파구 올림픽로 300' },
     ];
 
     expect(pickBestCandidate(target, candidates)).toBeNull();
@@ -123,13 +169,13 @@ describe('pickBestCandidate', () => {
     expect(pickBestCandidate(target, [])).toBeNull();
   });
 
-  it('여러 후보가 기준을 만족하면 이름+주소 합산 점수가 가장 높은 것을 고른다', () => {
+  it('이름이 정확히 같은 후보가 없으면 이름+주소 둘 다 최소 기준을 만족하는 것 중 합산 점수가 가장 높은 것을 고른다', () => {
     const candidates = [
       { id: 'low', name: '원조남원추어탕집', roadAddress: '동서로10번길', fullAddress: '시흥 동서로10번길' },
-      { id: 'high', name: '원조남원추어탕', roadAddress: '동서로10번길 3', fullAddress: '경기도 시흥시 동서로10번길 3' },
+      { id: 'also-low', name: '원조남원추어탕점', roadAddress: '동서로10번길 3', fullAddress: '경기도 시흥시 동서로10번길 3' },
     ];
 
     const result = pickBestCandidate(target, candidates);
-    expect(result.candidate.id).toBe('high');
+    expect(result.candidate.id).toBe('also-low');
   });
 });
