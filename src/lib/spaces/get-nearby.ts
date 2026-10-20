@@ -58,6 +58,11 @@ export type NearbyItem = {
   // 경우가 많아 상세 팝업에 본문 설명을 추가한다. get-home-feed.ts의 events 조회 경로만
   // 채운다(공간/RPC 경로는 이 컬럼을 조회하지 않아 undefined로 남는다).
   description?: string | null;
+  // [설명글 감성 톤 재작성](2026-10-21 사용자 지시): "AI가 글쓰는것도 좋을 것
+  // 같아" — 배치 스크립트(generate-event-ai-descriptions.mjs)가 채운 재작성본.
+  // description과 동일하게 get-home-feed.ts 경로만 채운다. 있으면 detail-modal.tsx가
+  // description 대신 이걸 보여준다.
+  ai_description?: string | null;
   // [장소 단위 대표 1건 노출](2026-09-09 사용자 지시): "장소기준으로는 난지캠핑장
   // 하나 아니야?" → "장소 단위로 묶어서 대표 1건만 노출.. 다건에 대하여서는
   // 클릭시 쫙 뜨는걸로 하자" — 관리자가 '중복 스팟 검토'로 여러 open_spaces

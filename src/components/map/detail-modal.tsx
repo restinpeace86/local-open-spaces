@@ -494,7 +494,11 @@ export function DetailModal({
   // 이상/미취학/가족/유아 등)을 안내한다. OTHER(수동 검수 대상)나 매핑 안 된 값은 null이라
   // 노출하지 않는다(getTargetAudienceLabel 참고).
   const targetAudienceLabel = isEvent ? getTargetAudienceLabel(item.target_audience) : null;
-  const description = isEvent ? item.description : null;
+  // [설명글 감성 톤 재작성](2026-10-21 사용자 지시): "전체적으로 감성적인 글과
+  // 부드러운 톤으로" — 배치 스크립트가 재작성한 ai_description이 있으면 원본
+  // description 대신 그걸 보여준다(없으면 기존처럼 원본 그대로, 추측 없이
+  // 있는 값만 우선순위대로 사용).
+  const description = isEvent ? item.ai_description ?? item.description : null;
   const isLongDescription = (description?.length ?? 0) > DESCRIPTION_PREVIEW_THRESHOLD;
   const reservationDeadline = isEvent && item.is_reservation_required
     ? formatDateTime(item.reservation_end_date)

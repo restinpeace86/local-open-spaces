@@ -98,13 +98,17 @@ function extractCoords(location: unknown): { lng: number; lat: number } {
 // 허용목록/정기 휴무 제외목록/매월 N번째 요일 규칙을 이벤트픽 화면 전체에서
 // 걸러내려면 이 세 컬럼이 모든 이벤트 조회에 공통으로 실려야 한다(EVENT_COLUMNS를
 // 쓰는 모든 함수가 대상).
+// [설명글 감성 톤 재작성](2026-10-21 사용자 지시): ai_description이 있으면(배치
+// 스크립트가 채움) detail-modal.tsx가 원본 description 대신 그걸 보여준다 —
+// 이 SELECT 목록에 없으면 애초에 화면까지 도달하지 못한다.
 export const EVENT_COLUMNS =
-  'id, title, description, event_type, category_min, target_audience, location, location_precision, thumbnail_url, start_date, end_date, reservation_start_date, reservation_end_date, reservation_url, is_reservation_required, is_free, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, venue_name, sigungu_name, price_text, source_url, operating_weekdays, excluded_weekdays, operating_nth_weekdays, operating_specific_dates, space_id';
+  'id, title, description, ai_description, event_type, category_min, target_audience, location, location_precision, thumbnail_url, start_date, end_date, reservation_start_date, reservation_end_date, reservation_url, is_reservation_required, is_free, is_kids_friendly, has_parking, stroller_accessible, facility_type, target_age_group, booking_status, venue_name, sigungu_name, price_text, source_url, operating_weekdays, excluded_weekdays, operating_nth_weekdays, operating_specific_dates, space_id';
 
 export type EventRow = {
   id: string;
   title: string;
   description: string | null;
+  ai_description: string | null;
   event_type: string;
   category_min: string | null;
   target_audience: string | null;
@@ -157,6 +161,7 @@ export function toEventItem(row: EventRow): NearbyItem {
     category_min: row.category_min,
     target_audience: row.target_audience,
     description: row.description,
+    ai_description: row.ai_description,
     // Task 9-1-3: 더 이상 거리를 계산하지 않는다 — -1 sentinel(기존 컴포넌트들이 이미
     // "거리 정보 없음"으로 처리하는 관례값)을 그대로 쓴다.
     distance_meters: -1,

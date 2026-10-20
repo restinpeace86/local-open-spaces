@@ -434,6 +434,33 @@ describe('DetailModal 설명(description) 표시', () => {
 
     expect(screen.queryByText('이건 공간 설명')).not.toBeInTheDocument();
   });
+
+  it('ai_description이 있으면 원본 description 대신 그걸 보여준다(2026-10-21)', () => {
+    render(
+      <DetailModal
+        item={makeSpaceItem({
+          item_type: 'EVENT',
+          description: '원본 설명',
+          ai_description: '감성적으로 다시 쓴 설명',
+        })}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.getByText('감성적으로 다시 쓴 설명')).toBeInTheDocument();
+    expect(screen.queryByText('원본 설명')).not.toBeInTheDocument();
+  });
+
+  it('ai_description이 없으면 원본 description으로 폴백한다', () => {
+    render(
+      <DetailModal
+        item={makeSpaceItem({ item_type: 'EVENT', description: '원본 설명', ai_description: null })}
+        onClose={() => {}}
+      />
+    );
+
+    expect(screen.getByText('원본 설명')).toBeInTheDocument();
+  });
 });
 
 // [스마트 폴백 아키텍처](2026-09-01 사용자 지시) 섹션 1: View Fallback(spot_curations

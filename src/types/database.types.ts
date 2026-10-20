@@ -677,6 +677,7 @@ export type Database = {
       }
       events: {
         Row: {
+          ai_description: string | null
           booking_status: string | null
           category_maj: string | null
           category_min: string | null
@@ -722,6 +723,7 @@ export type Database = {
           venue_name: string | null
         }
         Insert: {
+          ai_description?: string | null
           booking_status?: string | null
           category_maj?: string | null
           category_min?: string | null
@@ -767,6 +769,7 @@ export type Database = {
           venue_name?: string | null
         }
         Update: {
+          ai_description?: string | null
           booking_status?: string | null
           category_maj?: string | null
           category_min?: string | null
@@ -2489,6 +2492,16 @@ export type Database = {
         Args: { p_sigungu_name: string; p_venue_name: string }
         Returns: string
       }
+      find_busul_parking_candidates: {
+        Args: { radius_meters?: number }
+        Returns: {
+          distance_meters: number
+          parking_id: string
+          parking_name: string
+          spot_id: string
+          spot_name: string
+        }[]
+      }
       find_nearby_open_spaces: {
         Args: { p_limit?: number; p_radius_meters?: number; p_spot_id: string }
         Returns: Json
@@ -2823,6 +2836,16 @@ export type Database = {
           updated_at: string
         }[]
       }
+      get_open_spaces_by_category_min: {
+        Args: { p_category_min: string }
+        Returns: {
+          address: string
+          id: string
+          lat: number
+          lng: number
+          name: string
+        }[]
+      }
       get_open_spaces_category_options: {
         Args: never
         Returns: {
@@ -2989,6 +3012,14 @@ export type Database = {
       postgis_wagyu_version: { Args: never; Returns: string }
       refresh_events_filter_options_cache: { Args: never; Returns: undefined }
       refresh_sigungu_options_cache: { Args: never; Returns: undefined }
+      search_parking_metadata_near: {
+        Args: { radius_meters?: number; target_lat: number; target_lng: number }
+        Returns: {
+          distance_meters: number
+          id: string
+          name: string
+        }[]
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       spot_province_code: { Args: { p_text: string }; Returns: string }
@@ -3573,6 +3604,7 @@ export type Database = {
         Args: { geom: unknown; move: number; wrap: number }
         Returns: unknown
       }
+      truncate_parking_metadata: { Args: never; Returns: undefined }
       unlockrows: { Args: { "": string }; Returns: number }
       updategeometrysrid: {
         Args: {
