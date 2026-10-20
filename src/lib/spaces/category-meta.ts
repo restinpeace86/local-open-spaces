@@ -2,15 +2,20 @@
 // (PARK/SPORTS/CULTURE/FESTIVAL/EXHIBITION/PERFORMANCE/POPUP/RESERVATION) 표기를 완전히
 // 제거하고 5대 UI 카테고리로 통일했다 — 수집 파이프라인(schema-mapper.mjs/category-map.mjs)이
 // 이제 이 5개 값만 만들어내고, 기존 DB의 레거시 값도 백필 마이그레이션으로 전량 정리했다.
-const CATEGORY_META: Record<string, { color: string; label: string }> = {
-  EXPERIENCE_CLASS: { color: '#f43f5e', label: '체험·클래스' },
-  OUTDOOR_NATURE: { color: '#16a34a', label: '야외·자연' },
-  EXHIBITION_MUSEUM: { color: '#8b5cf6', label: '전시·박물관' },
-  PERFORMANCE_FESTIVAL: { color: '#0ea5e9', label: '공연·축제' },
-  KIDS_ACTIVITY: { color: '#f59e0b', label: '키즈·액티비티' },
+// [카테고리별 기본 이미지 플레이스홀더](2026-10-20 todo.md 개선사항2 사용자 지시):
+// "이미지 나타내는거 이미지 없는것에 대하여서는... 넣을 수 있도록" — 실시간 AI
+// 이미지 생성 대신(비용/품질 미해결 사항이 많아 사용자가 직접 보류 선택) 카테고리당
+// 고정 이모지 하나로 간단한 플레이스홀더를 만든다. emoji는 실제 콘텐츠가 아니라
+// 순수 UI 장식이라 하드코딩 최소화(제5장 제6조) 대상이 아니다.
+const CATEGORY_META: Record<string, { color: string; label: string; emoji: string }> = {
+  EXPERIENCE_CLASS: { color: '#f43f5e', label: '체험·클래스', emoji: '🎨' },
+  OUTDOOR_NATURE: { color: '#16a34a', label: '야외·자연', emoji: '🌳' },
+  EXHIBITION_MUSEUM: { color: '#8b5cf6', label: '전시·박물관', emoji: '🖼️' },
+  PERFORMANCE_FESTIVAL: { color: '#0ea5e9', label: '공연·축제', emoji: '🎪' },
+  KIDS_ACTIVITY: { color: '#f59e0b', label: '키즈·액티비티', emoji: '🧸' },
 };
 
-const DEFAULT_META = { color: '#6b7280', label: '기타' };
+const DEFAULT_META = { color: '#6b7280', label: '기타', emoji: '📍' };
 
 export function getCategoryMeta(category: string) {
   return CATEGORY_META[category] ?? DEFAULT_META;

@@ -635,9 +635,21 @@ export function DetailModal({
           </button>
 
           <div className="flex-1 overflow-y-auto">
-            {/* 1단: 최상단 이미지 슬라이드 — 이미지가 아예 없으면 영역 자체를 숨긴다.
-                현재 데이터는 thumbnail_url 1장뿐이라 좌우 화살표/점은 여러 장일 때만
-                (배열 길이 > 1) 나타난다(추측으로 다중 이미지를 지어내지 않는다). */}
+            {/* 1단: 최상단 이미지 슬라이드 — 실제 이미지가 없으면 카테고리별 기본
+                플레이스홀더(2026-10-20 사용자 지시: "이미지 없는것에 대하여서는...
+                넣을 수 있도록" — 실시간 AI 생성 대신 카테고리당 고정 이모지로 단순화,
+                사용자 확인)를 보여준다. 현재 데이터는 thumbnail_url 1장뿐이라 좌우
+                화살표/점은 여러 장일 때만(배열 길이 > 1) 나타난다(추측으로 다중
+                이미지를 지어내지 않는다). */}
+            {eventImages.length === 0 && (
+              <div
+                className="flex h-48 w-full items-center justify-center text-6xl"
+                style={{ backgroundColor: `${meta.color}1a` }}
+                aria-hidden
+              >
+                {meta.emoji}
+              </div>
+            )}
             {eventImages.length > 0 && (
               <div className="relative bg-gray-100">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -993,14 +1005,24 @@ export function DetailModal({
         >
           {/* [View Fallback](2026-09-01 사용자 지시): 스팟은 원래 헤더 이미지가 없었다
               (공공데이터에 이미지 필드 자체가 없음) — 관리자가 spot_curations에 등록한
-              대표 이미지가 있으면(is_active) 그 "풍성한" 이미지를 보여준다. */}
-          {curation?.image_url && (
+              대표 이미지가 있으면(is_active) 그 "풍성한" 이미지를 보여준다.
+              [카테고리별 기본 플레이스홀더](2026-10-20 사용자 지시): 이미지가 없으면
+              EVENT 쪽과 동일하게 카테고리 이모지 플레이스홀더를 보여준다. */}
+          {curation?.image_url ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={curation.image_url}
               alt={item.name}
               className="w-full h-40 object-cover rounded-t-2xl md:rounded-t-2xl"
             />
+          ) : (
+            <div
+              className="flex h-40 w-full items-center justify-center rounded-t-2xl text-5xl md:rounded-t-2xl"
+              style={{ backgroundColor: `${meta.color}1a` }}
+              aria-hidden
+            >
+              {meta.emoji}
+            </div>
           )}
 
           <div className="p-5">

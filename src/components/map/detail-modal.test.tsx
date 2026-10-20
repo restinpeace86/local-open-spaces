@@ -723,6 +723,27 @@ describe('DetailModal 스마트 폴백(View/Reservation Fallback, 2026-09-01)', 
     expect(container.querySelectorAll('img')).toHaveLength(1);
   });
 
+  it('큐레이션 대표 이미지가 없으면 카테고리별 기본 플레이스홀더를 보여준다(2026-10-20)', async () => {
+    mockCurationResponse({
+      id: 'curation-1',
+      spot_id: 'space-1',
+      image_url: null,
+      operating_hours_raw: null,
+      open_time: null,
+      close_time: null,
+      break_start: null,
+      break_end: null,
+      last_order: null,
+      menu_items: [],
+      naver_booking_url: null,
+      curation_note: null,
+    });
+    const { container } = render(<DetailModal item={makeSpaceItem({ category: 'KIDS_ACTIVITY' })} onClose={() => {}} />);
+
+    await screen.findByText('🧸');
+    expect(container.querySelectorAll('img')).toHaveLength(0);
+  });
+
   it('공식 홈페이지(info_url)가 있으면 네이버 예약 링크가 있어도 공식 링크를 우선한다', async () => {
     mockCurationResponse({
       id: 'curation-1',
@@ -1131,12 +1152,13 @@ describe('DetailModal 이벤트 상세카드 8단 구조 (개선사항6, 2026-09
     vi.unstubAllGlobals();
   });
 
-  it('1단: 썸네일이 없으면 이미지 영역 자체를 렌더링하지 않는다', () => {
+  it('1단: 썸네일이 없으면 <img> 대신 카테고리별 기본 플레이스홀더를 보여준다(2026-10-20)', () => {
     const { container } = render(
-      <DetailModal item={makeSpaceItem({ item_type: 'EVENT', thumbnail_url: null })} onClose={() => {}} />
+      <DetailModal item={makeSpaceItem({ item_type: 'EVENT', thumbnail_url: null, category: 'OUTDOOR_NATURE' })} onClose={() => {}} />
     );
 
     expect(container.querySelector('img')).toBeNull();
+    expect(screen.getByText('🌳')).toBeInTheDocument();
   });
 
   it('1단: 썸네일이 있으면 이미지를 보여주고, 1장뿐이면 좌우 넘김/점 표시는 없다', () => {
