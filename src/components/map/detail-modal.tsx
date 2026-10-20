@@ -17,6 +17,7 @@ import { usePublishedSpotNotices, SpotNoticesSection } from '@/components/common
 import { NearbyAmenitiesSection, SpotParkingBadge } from '@/components/map/nearby-amenities-section';
 import { EventReservationReminderHint } from '@/components/common/event-reservation-reminder-hint';
 import { isOpenSpaceClosedOn } from '@/lib/spaces/open-space-closure';
+import { getBadgeOneLiner } from '@/lib/spaces/badge-copy';
 
 const NO_INFO_TEXT = '정보 준비 중 (공공 기관 문의)';
 
@@ -1014,14 +1015,6 @@ export function DetailModal({
                         만 {minAgeRecommended}세 이상
                       </span>
                     )}
-                    {spotBadgeLabels.map((label) => (
-                      <span
-                        key={label}
-                        className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-700"
-                      >
-                        {label}
-                      </span>
-                    ))}
                   </>
                 ) : (
                   <span
@@ -1069,6 +1062,28 @@ export function DetailModal({
                 <BookmarkButton target={{ kind: 'spot', spotId: item.id }} />
               </div>
             </div>
+
+            {/* [뱃지영역 확대 + 한 줄 감성 문구](2026-10-20 사용자 지시, todo.md
+                개선사항2): "뱃지영역 넓히고 뱃지별 한 줄씩 감성적인 글로써 표현,
+                예시) 주차가능 뱃지는 '주차하기 편해요'" — 기존엔 다른 상태성
+                뱃지(특가/연령/정기휴무)와 한 줄에 좁게 끼어 있던 것을, 자체
+                영역으로 분리해 라벨 아래 한 줄 설명을 함께 보여준다. 문구
+                사전(badge-copy.ts)에 없는 라벨은 설명 없이 라벨만 보여준다
+                (추측으로 문구를 지어내지 않음). */}
+            {spotPickCard && spotBadgeLabels.length > 0 && (
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {spotBadgeLabels.map((label) => {
+                  const oneLiner = getBadgeOneLiner(label);
+                  return (
+                    <div key={label} className="rounded-xl bg-gray-50 px-3 py-2">
+                      <p className="text-xs font-bold text-gray-800">{label}</p>
+                      {oneLiner && <p className="mt-0.5 text-xs text-gray-500">{oneLiner}</p>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
             {/* [스팟픽 상세 카드 인터랙티브 거리/길찾기](2026-09-10 사용자 지시, todo.md
                 개선사항3-3·2-4): "현재 거리 클릭 시 서비스 내에 구현되어 있는 인앱 길찾기
                 API를 정상 호출하여 내 위치 기준 길안내 실행. 해당 거리 누르면 길 찾기가

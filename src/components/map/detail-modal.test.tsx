@@ -920,6 +920,21 @@ describe('DetailModal 스팟픽 카드(spotPickCard)', () => {
     expect(screen.queryByText('야외·자연')).not.toBeInTheDocument();
   });
 
+  it('뱃지별 한 줄 감성 문구가 사전에 있으면 라벨 아래에 함께 보여준다', async () => {
+    mockSpotPickFetch({ curation: { ...CURATION, badge_labels: ['트램폴린/방방'] } });
+    render(<DetailModal item={makeSpaceItem()} onClose={() => {}} spotPickCard hideMapSection />);
+
+    expect(await screen.findByText('트램폴린/방방')).toBeInTheDocument();
+    expect(screen.getByText('방방 뛰며 신나게 놀 수 있어요')).toBeInTheDocument();
+  });
+
+  it('사전에 없는 뱃지 라벨은 한 줄 문구 없이 라벨만 보여준다(추측으로 문구를 지어내지 않음)', async () => {
+    mockSpotPickFetch({ curation: { ...CURATION, badge_labels: ['존재하지않는뱃지라벨'] } });
+    render(<DetailModal item={makeSpaceItem()} onClose={() => {}} spotPickCard hideMapSection />);
+
+    expect(await screen.findByText('존재하지않는뱃지라벨')).toBeInTheDocument();
+  });
+
   it('min_age_recommended > 0이면 "만 N세 이상" 뱃지를 보여준다', async () => {
     mockSpotPickFetch({ curation: { ...CURATION, min_age_recommended: 7 } });
     render(<DetailModal item={makeSpaceItem()} onClose={() => {}} spotPickCard hideMapSection />);
