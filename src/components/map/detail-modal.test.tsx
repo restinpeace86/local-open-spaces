@@ -877,15 +877,19 @@ describe('DetailModal 스팟픽 카드(spotPickCard)', () => {
   });
 
   // /api/spot-curations와 /api/spot-blog-reviews 응답을 URL로 구분해 돌려준다.
+  // [블로그 후기 제목 노출](2026-10-20): API가 {url, title} 형태로 내려주므로
+  // 테스트 편의상 string[]을 받아 title: null로 감싼다(제목 없음 폴백 케이스와
+  // 동일 — 제목이 있는 경우는 별도 테스트에서 직접 {url, title}을 넘긴다).
   function mockSpotPickFetch({
     curation = null,
     blogUrls = [],
-  }: { curation?: unknown; blogUrls?: string[] } = {}) {
+  }: { curation?: unknown; blogUrls?: (string | { url: string; title: string | null })[] } = {}) {
+    const normalizedBlogUrls = blogUrls.map((entry) => (typeof entry === 'string' ? { url: entry, title: null } : entry));
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string) => {
         if (url.includes('/api/spot-blog-reviews')) {
-          return Promise.resolve({ ok: true, json: () => Promise.resolve({ item: { urls: blogUrls } }) } as Response);
+          return Promise.resolve({ ok: true, json: () => Promise.resolve({ item: { urls: normalizedBlogUrls } }) } as Response);
         }
         return Promise.resolve({ ok: true, json: () => Promise.resolve({ item: curation }) } as Response);
       })
@@ -1064,6 +1068,17 @@ describe('DetailModal 스팟픽 카드(spotPickCard)', () => {
     expect(b1).toHaveAttribute('target', '_blank');
     expect(screen.getByText('📝 블로그 후기 2')).toBeInTheDocument();
     expect(screen.queryByText('📝 블로그 후기 3')).not.toBeInTheDocument();
+  });
+
+  it('블로그 URL에 제목이 있으면 "블로그 후기 N" 대신 제목을 보여준다', async () => {
+    mockSpotPickFetch({
+      curation: CURATION,
+      blogUrls: [{ url: 'https://blog.naver.com/a', title: '진짜 다녀온 솔직 후기' }],
+    });
+    render(<DetailModal item={makeSpaceItem()} onClose={() => {}} spotPickCard hideMapSection />);
+
+    expect(await screen.findByText('📝 진짜 다녀온 솔직 후기')).toBeInTheDocument();
+    expect(screen.queryByText('📝 블로그 후기 1')).not.toBeInTheDocument();
   });
 
   it('spotPickCard가 아니면(다른 화면) 기존 5대 카테고리 라벨을 그대로 보여준다', async () => {
@@ -1257,7 +1272,13 @@ describe('DetailModal 이벤트 상세카드 8단 구조 (개선사항6, 2026-09
         if (url.includes('/api/events/curated-blog-urls')) {
           return Promise.resolve({
             ok: true,
-            json: () => Promise.resolve({ urls: ['https://blog.naver.com/a', 'https://blog.naver.com/b'] }),
+            json: () =>
+              Promise.resolve({
+                urls: [
+                  { url: 'https://blog.naver.com/a', title: null },
+                  { url: 'https://blog.naver.com/b', title: null },
+                ],
+              }),
           } as Response);
         }
         return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
@@ -1276,6 +1297,25 @@ describe('DetailModal 이벤트 상세카드 8단 구조 (개선사항6, 2026-09
     render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT' })} onClose={() => {}} />);
 
     expect(screen.queryByText('📝 방문 후기 / 추천 블로그')).not.toBeInTheDocument();
+  });
+
+  it('블로그 URL에 제목이 있으면 "블로그 후기 N" 대신 제목을 보여준다', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        if (url.includes('/api/events/curated-blog-urls')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ urls: [{ url: 'https://blog.naver.com/a', title: '이벤트 다녀온 후기' }] }),
+          } as Response);
+        }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve({}) } as Response);
+      })
+    );
+    render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT' })} onClose={() => {}} />);
+
+    expect(await screen.findByText('이벤트 다녀온 후기')).toBeInTheDocument();
+    expect(screen.queryByText('블로그 후기 1')).not.toBeInTheDocument();
   });
 });
 

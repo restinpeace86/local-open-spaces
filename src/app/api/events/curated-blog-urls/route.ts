@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import { fetchBlogTitle } from '@/lib/spaces/blog-title';
 
 // [이벤트픽 유저용 큐레이션 블로그](2026-09-11 사용자 지시, implementation/todo.md
 // 개선사항8): "관리자 화면에서 저장한 URL들이 유저 상세 화면에 노출". 관리자가
@@ -28,9 +29,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ urls: [] });
     }
 
-    const urls = Array.isArray(data.curated_blog_urls)
+    const rawUrls = Array.isArray(data.curated_blog_urls)
       ? data.curated_blog_urls.filter((u): u is string => typeof u === 'string' && u.length > 0)
       : [];
+
+    // [블로그 후기 제목 노출](2026-10-20 사용자 지시): /api/spot-blog-reviews와
+    // 동일하게 URL별 제목을 함께 내려준다.
+    const urls = await Promise.all(rawUrls.map(async (url) => ({ url, title: await fetchBlogTitle(url) })));
     return NextResponse.json({ urls });
   } catch {
     return NextResponse.json({ urls: [] });

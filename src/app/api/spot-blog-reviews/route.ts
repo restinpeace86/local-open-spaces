@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { fetchBlogTitle } from '@/lib/spaces/blog-title';
 
 // [자동 블로그 후기 기능 폐지](2026-10-16 사용자 지시): "유지하지마.. 일단 입력한것만
 // 받는걸로 해.. 수동으로 체크한 블로그.. 외에는 다 없애" — 원래 이 라우트는 관리자
@@ -35,7 +36,14 @@ export async function GET(request: NextRequest) {
       .slice(0, BLOG_REVIEW_MAX);
 
     if (curatedUrls.length > 0) {
-      return NextResponse.json({ item: { urls: curatedUrls, source: 'curation' } });
+      // [블로그 후기 제목 노출](2026-10-20 사용자 지시): URL만으로는 "블로그 후기 N"
+      // 외엔 보여줄 게 없었다 — 각 URL을 fetch해 제목을 함께 내려준다. 실패해도
+      // (느린 블로그/서버 오류) 전체 요청을 막지 않고 그 URL만 title: null로 폴백한다
+      // (제5장 제11조 무중단 원칙).
+      const urls = await Promise.all(
+        curatedUrls.map(async (url) => ({ url, title: await fetchBlogTitle(url) }))
+      );
+      return NextResponse.json({ item: { urls, source: 'curation' } });
     }
     return NextResponse.json({ item: { urls: [], source: 'none' } });
   } catch (err) {

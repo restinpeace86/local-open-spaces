@@ -18,6 +18,7 @@ import { NearbyAmenitiesSection, SpotParkingBadge } from '@/components/map/nearb
 import { EventReservationReminderHint } from '@/components/common/event-reservation-reminder-hint';
 import { isOpenSpaceClosedOn } from '@/lib/spaces/open-space-closure';
 import { getBadgeOneLiner } from '@/lib/spaces/badge-copy';
+import { truncateTitle } from '@/lib/spaces/blog-title';
 
 const NO_INFO_TEXT = '정보 준비 중 (공공 기관 문의)';
 
@@ -213,14 +214,18 @@ export function DetailModal({
   // [개선사항8](2026-09-11 사용자 지시, implementation/todo.md): 관리자가 큐레이션한
   // "방문 후기/추천 블로그" URL — 이벤트 상세에서만 조회한다(스팟픽 상세 카드의
   // blogUrls 조회와 동일 패턴, 아래 참고). 0건이면 섹션 자체를 숨긴다.
-  const [curatedBlogUrls, setCuratedBlogUrls] = useState<string[]>([]);
+  // [블로그 후기 제목 노출](2026-10-20 사용자 지시): "블로그 1 블로그 2 블로그 3
+  // 이렇게 되어있는데.. 제목 같은거 몇자 나오게" — API가 url과 함께 fetch한
+  // title(없으면 null)을 내려준다(아래 렌더링에서 null이면 "블로그 후기 N"으로
+  // 폴백).
+  const [curatedBlogUrls, setCuratedBlogUrls] = useState<{ url: string; title: string | null }[]>([]);
   // undefined = 아직 조회 전(로딩), null = 큐레이션 없음(정상), 객체 = 큐레이션 있음.
   // spot_curations는 open_spaces에만 FK가 있어(이벤트는 대상 아님) 이벤트는 조회하지 않는다.
   const [curation, setCuration] = useState<SpotCuration | null | undefined>(undefined);
   // [스팟픽 상세 카드 네이버 블로그 후기](2026-09-10 사용자 지시, todo.md
   // 개선사항3-5): 10일 캐싱(TTL)이 적용된 /api/spot-blog-reviews를 스팟픽 카드에서만
   // 조회한다(다른 화면은 불필요한 요청을 만들지 않는다). URL이 0개면 영역 숨김.
-  const [blogUrls, setBlogUrls] = useState<string[]>([]);
+  const [blogUrls, setBlogUrls] = useState<{ url: string; title: string | null }[]>([]);
   // [실측 디버깅 발견 — 뒤로가기 인터셉트 제거](2026-08-29): 이 모달을 React onClick 경로
   // (리스트/카드 클릭 등)로 열면 useModalBackClose 내부의 history.pushState 호출이 Next.js
   // App Router의 자체 라우팅 감지와 충돌해 모달이 아예 커밋되지 않거나(상태가 조용히
@@ -277,7 +282,7 @@ export function DetailModal({
     setBlogUrls([]);
     fetch(`/api/spot-blog-reviews?spot_id=${encodeURIComponent(item.id)}`)
       .then((res) => res.json())
-      .then((data: { item?: { urls?: string[] } }) => {
+      .then((data: { item?: { urls?: { url: string; title: string | null }[] } }) => {
         if (!cancelled) setBlogUrls(Array.isArray(data.item?.urls) ? data.item!.urls! : []);
       })
       .catch(() => {
@@ -306,7 +311,7 @@ export function DetailModal({
     setCuratedBlogUrls([]);
     fetch(`/api/events/curated-blog-urls?event_id=${encodeURIComponent(item.id)}`)
       .then((res) => res.json())
-      .then((data: { urls?: string[] }) => {
+      .then((data: { urls?: { url: string; title: string | null }[] }) => {
         if (!cancelled) setCuratedBlogUrls(Array.isArray(data.urls) ? data.urls : []);
       })
       .catch(() => {
@@ -853,7 +858,7 @@ export function DetailModal({
                 <div className="mt-4">
                   <p className="text-xs font-semibold text-gray-500 mb-1.5">📝 방문 후기 / 추천 블로그</p>
                   <div className="flex flex-col gap-1.5">
-                    {curatedBlogUrls.map((url, i) => (
+                    {curatedBlogUrls.map(({ url, title }, i) => (
                       <a
                         key={url}
                         href={url}
@@ -861,8 +866,8 @@ export function DetailModal({
                         rel="noopener noreferrer"
                         className="rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center justify-between gap-2"
                       >
-                        <span>블로그 후기 {i + 1}</span>
-                        <span className="text-gray-400" aria-hidden>↗</span>
+                        <span className="truncate">{title ? truncateTitle(title) : `블로그 후기 ${i + 1}`}</span>
+                        <span className="text-gray-400 shrink-0" aria-hidden>↗</span>
                       </a>
                     ))}
                   </div>
@@ -1132,7 +1137,7 @@ export function DetailModal({
                 으로 열려 우리 앱 상태가 그대로 유지된다. URL이 없으면 영역 숨김. */}
             {spotPickCard && blogUrls.length > 0 && (
               <div className="mt-3 flex flex-wrap gap-2">
-                {blogUrls.map((url, i) => (
+                {blogUrls.map(({ url, title }, i) => (
                   <a
                     key={url}
                     href={url}
@@ -1140,7 +1145,7 @@ export function DetailModal({
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1 rounded-full border border-green-500 bg-green-50 px-3 py-1 text-xs font-semibold text-green-700 hover:bg-green-100"
                   >
-                    📝 블로그 후기 {i + 1}
+                    📝 {title ? truncateTitle(title, 16) : `블로그 후기 ${i + 1}`}
                   </a>
                 ))}
               </div>
