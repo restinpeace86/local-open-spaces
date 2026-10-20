@@ -27,7 +27,6 @@ import { ThemeSpotKey } from '@/lib/theme-spots';
 import { themeOptionsFor } from '@/lib/home-categories';
 import { DetailModal } from '@/components/map/detail-modal';
 import { LocationOnboardingModal } from '@/components/map/location-onboarding-modal';
-import { AiChatFab } from '@/components/chat/ai-chat-fab';
 
 // Task 9-1-9: Hero Carousel은 처음엔 이만큼만 보여주고, 10개를 넘는 나머지는 마지막 슬라이드의
 // "전체 보기" CTA 카드(/events/today 연동, Task 9-6-6)로 대체한다.
@@ -738,12 +737,6 @@ export function HomeView({
         <LocationOnboardingModal onConfirm={confirmLocation} onClose={closeOnboarding} />
       )}
 
-      {/* [UI/UX 개선 및 기능 수정](2026-09-01 사용자 지시) 항목 1: 이 화면(`/`, 하단 탭
-          "이벤트픽")이 실제 "이벤트픽"이다 — 직전 챗봇 작업에서 "이벤트픽"을 `/calendar`
-          (하단 탭이 아니라 "도감/캘린더" 상단 서브탭으로 진입하는 별개 화면)로 잘못
-          판단해 그쪽에 FAB를 마운트했던 것을 여기로 정정한다(bottom-tabs.tsx 실측 확인:
-          `{ href: '/', label: '이벤트픽' }`). */}
-      <AiChatFab center={center} />
     </div>
   );
 }

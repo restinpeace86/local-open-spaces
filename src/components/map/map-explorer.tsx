@@ -10,7 +10,6 @@ import { EmptyState } from '@/components/map/empty-state';
 import { DetailModal } from '@/components/map/detail-modal';
 import { MarkerGroupModal } from '@/components/map/marker-group-modal';
 import { AiRecommendSheet } from '@/components/map/ai-recommend-sheet';
-import { AiChatFab } from '@/components/chat/ai-chat-fab';
 import { Toast } from '@/components/map/toast';
 import { LocationHeader } from '@/components/map/location-header';
 import { LocationOnboardingModal } from '@/components/map/location-onboarding-modal';
@@ -837,9 +836,6 @@ export function MapExplorer() {
         />
       )}
 
-      {/* [스팟픽 AI 맞춤 추천 챗봇 엔진](2026-09-01 사용자 지시): 기존 "AI 추천" 칩
-          (AiRecommendSheet, 위에서 이미 렌더링)과 별개의 신규 플로팅 바텀시트 챗봇. */}
-      <AiChatFab center={center} />
     </div>
   );
 }
