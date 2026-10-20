@@ -287,8 +287,9 @@ describe('DetailModal 보조 액션(공식 홈페이지 / 간편 예약·신청 
     fireEvent.click(await screen.findByText('📝 간편 예약/신청하기'));
 
     expect(screen.getByText('📝 간편 예약/신청')).toBeInTheDocument();
-    // "버섯구지마을"은 DetailModal 제목과 신청 폼 모달 부제 두 곳에 함께 표시된다.
-    expect(screen.getAllByText('버섯구지마을')).toHaveLength(2);
+    // "버섯구지마을"은 DetailModal 상단 고정 바(2026-10-20 추가)/제목/신청 폼 모달
+    // 부제 세 곳에 함께 표시된다.
+    expect(screen.getAllByText('버섯구지마을')).toHaveLength(3);
   });
 
   it('이벤트(EVENT)에는 어떤 보조 액션도 노출하지 않는다(요구사항이 "스팟" 한정)', () => {
@@ -1347,6 +1348,34 @@ describe('DetailModal 이벤트 상세카드 8단 구조 (개선사항6, 2026-09
   });
 });
 
+// [풀페이지 전환 + 상단 고정 헤더](2026-10-20 todo.md 개선사항2 사용자 지시):
+// "상세페이지는... 전체의 100% 다 차지하도록" + "원페이지에서 내릴때 각 영역에
+// 대하여 위에는 상단 고정이 되도록" — 모바일 기준 바텀시트(85vh)를 풀페이지
+// (100dvh)로 바꾸고, 스크롤 중에도 이름을 보여주는 고정 바를 추가했다.
+describe('DetailModal 풀페이지 전환 + 상단 고정 헤더 (2026-10-20)', () => {
+  it('EVENT: 모바일 기준 h-[100dvh]로 전체 화면을 차지한다', () => {
+    const { container } = render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT' })} onClose={() => {}} />);
+    expect(container.querySelector('[class*="h-\\[100dvh\\]"]')).not.toBeNull();
+  });
+
+  it('EVENT: 스크롤 시 상단에 고정되는 헤더 바가 이름을 보여준다', () => {
+    render(<DetailModal item={makeSpaceItem({ item_type: 'EVENT' })} onClose={() => {}} />);
+    const stickyBar = screen.getAllByText('율동공원')[0].closest('div');
+    expect(stickyBar).toHaveClass('sticky');
+  });
+
+  it('SPACE: 모바일 기준 h-[100dvh]로 전체 화면을 차지한다', () => {
+    const { container } = render(<DetailModal item={makeSpaceItem()} onClose={() => {}} />);
+    expect(container.querySelector('[class*="h-\\[100dvh\\]"]')).not.toBeNull();
+  });
+
+  it('SPACE: 스크롤 시 상단에 고정되는 헤더 바가 이름을 보여준다', () => {
+    render(<DetailModal item={makeSpaceItem()} onClose={() => {}} />);
+    const stickyBar = screen.getAllByText('율동공원')[0].closest('div');
+    expect(stickyBar).toHaveClass('sticky');
+  });
+});
+
 // [개선사항10](2026-09-11 사용자 지시, implementation/todo.md): Event↔Spot 양방향
 // 링킹 — 이벤트 상세에서 연결된 스팟, 스팟 상세에서 연결된 이벤트를 각각 탭하면
 // DetailModal 자신을 중첩 렌더링해 그 상세를 연다.
@@ -1406,8 +1435,9 @@ describe('DetailModal Event↔Spot 양방향 링킹 (개선사항10, 2026-09-11)
     expect(await screen.findByText('🎪 진행 중인 이벤트')).toBeInTheDocument();
     fireEvent.click(screen.getByText('연결된 가을 축제'));
 
-    // 중첩된 DetailModal은 이벤트 분기라 카테고리 뱃지가 하나 더 나타난다.
-    expect(screen.getAllByText('연결된 가을 축제')).toHaveLength(2);
+    // 중첩된 DetailModal은 이벤트 분기라 상단 고정 바(2026-10-20 추가)와 제목(h2)
+    // 두 곳에 더해, 바깥 목록의 링크 텍스트까지 총 세 곳에 나타난다.
+    expect(screen.getAllByText('연결된 가을 축제')).toHaveLength(3);
   });
 
   it('스팟에 연결된 이벤트가 없으면 섹션 자체를 렌더링하지 않는다', () => {
@@ -1480,7 +1510,9 @@ describe('DetailModal 동일 스팟 예약 옵션 (2026-09-19)', () => {
     expect(screen.queryByText(/주소 다름/)).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByText('일반캠핑존 B형'));
-    expect(screen.getAllByText('일반캠핑존 B형')).toHaveLength(2);
+    // 중첩된 DetailModal의 상단 고정 바(2026-10-20 추가)와 제목(h2) 두 곳에 더해,
+    // 바깥 목록의 링크 텍스트까지 총 세 곳에 나타난다.
+    expect(screen.getAllByText('일반캠핑존 B형')).toHaveLength(3);
   });
 
   it('space_id가 없으면 섹션을 렌더링하지 않는다', () => {

@@ -622,19 +622,35 @@ export function DetailModal({
     >
       {isEvent ? (
         <div
-          className="relative w-full md:w-[480px] max-h-[85vh] md:max-h-[80vh] bg-white rounded-t-2xl md:rounded-2xl shadow-xl flex flex-col overflow-hidden"
+          className="relative w-full h-[100dvh] md:h-auto md:w-[480px] md:max-h-[80vh] bg-white md:rounded-2xl shadow-xl flex flex-col overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           <button
             type="button"
             onClick={onClose}
             aria-label="닫기"
-            className="absolute top-2 right-2 z-10 w-7 h-7 rounded-full bg-white/90 text-gray-500 shadow flex items-center justify-center hover:bg-white"
+            className="absolute right-2 z-20 w-7 h-7 rounded-full bg-white/90 text-gray-500 shadow flex items-center justify-center hover:bg-white"
+            style={{ top: 'max(0.5rem, env(safe-area-inset-top))' }}
           >
             ✕
           </button>
 
           <div className="flex-1 overflow-y-auto">
+            {/* [풀페이지 전환 + 상단 고정 헤더](2026-10-20 todo.md 개선사항2 사용자
+                지시): "상세페이지는... 전체의 100% 다 차지하도록" — 바텀시트(85vh)
+                에서 모바일 기준 풀페이지(100dvh)로 바꾼다(데스크톱은 기존 중앙 모달
+                유지). "원페이지에서 내릴때 각 영역에 대하여 위에는 상단 고정이
+                되도록" — 스크롤 중에도 지금 보고 있는 이벤트가 무엇인지 알 수
+                있도록 이름을 보여주는 고정 바를 하나 둔다(각 소영역마다 별도
+                헤더를 두는 대신, 전체 페이지에 하나의 지속적인 식별 바 — 실제
+                서비스들의 "스크롤 시 제목바 고정" 표준 패턴과 동일하게 단순화해
+                위험을 줄였다. 영역별로 각각 다른 헤더를 원하면 별도 지시 필요). */}
+            <div
+              className="sticky top-0 z-10 flex items-center bg-white/95 px-4 py-2 backdrop-blur-sm"
+              style={{ paddingTop: 'max(0.5rem, env(safe-area-inset-top))' }}
+            >
+              <p className="truncate pr-8 text-sm font-semibold text-gray-900">{item.name}</p>
+            </div>
             {/* 1단: 최상단 이미지 슬라이드 — 실제 이미지가 없으면 카테고리별 기본
                 플레이스홀더(2026-10-20 사용자 지시: "이미지 없는것에 대하여서는...
                 넣을 수 있도록" — 실시간 AI 생성 대신 카테고리당 고정 이모지로 단순화,
@@ -1000,9 +1016,20 @@ export function DetailModal({
         </div>
       ) : (
         <div
-          className="w-full md:w-[480px] max-h-[85vh] md:max-h-[80vh] overflow-y-auto bg-white rounded-t-2xl md:rounded-2xl shadow-xl"
+          className="w-full h-[100dvh] md:h-auto md:w-[480px] md:max-h-[80vh] overflow-y-auto bg-white md:rounded-2xl shadow-xl"
           onClick={(e) => e.stopPropagation()}
         >
+          {/* [풀페이지 전환 + 상단 고정 헤더](2026-10-20 사용자 지시) — EVENT 분기와
+              동일한 패턴. 스크롤 중에도 지금 보는 스팟 이름을 보여주는 고정 바를
+              하나 둔다(EVENT 쪽 주석 참고 — 영역별 개별 헤더 대신 전체 페이지에
+              하나의 지속적인 식별 바로 단순화). */}
+          <div
+            className="sticky top-0 z-10 flex items-center bg-white/95 px-4 py-2 backdrop-blur-sm"
+            style={{ paddingTop: 'max(0.5rem, env(safe-area-inset-top))' }}
+          >
+            <p className="truncate text-sm font-semibold text-gray-900">{item.name}</p>
+          </div>
+
           {/* [View Fallback](2026-09-01 사용자 지시): 스팟은 원래 헤더 이미지가 없었다
               (공공데이터에 이미지 필드 자체가 없음) — 관리자가 spot_curations에 등록한
               대표 이미지가 있으면(is_active) 그 "풍성한" 이미지를 보여준다.
@@ -1013,11 +1040,11 @@ export function DetailModal({
             <img
               src={curation.image_url}
               alt={item.name}
-              className="w-full h-40 object-cover rounded-t-2xl md:rounded-t-2xl"
+              className="w-full h-40 object-cover md:rounded-t-2xl"
             />
           ) : (
             <div
-              className="flex h-40 w-full items-center justify-center rounded-t-2xl text-5xl md:rounded-t-2xl"
+              className="flex h-40 w-full items-center justify-center text-5xl md:rounded-t-2xl"
               style={{ backgroundColor: `${meta.color}1a` }}
               aria-hidden
             >
