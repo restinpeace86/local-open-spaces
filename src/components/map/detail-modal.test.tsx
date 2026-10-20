@@ -389,6 +389,12 @@ describe('DetailModal 메인 피드에서 옮겨온 뱃지 (2026-09-17, Decision
 
     expect(screen.getByText('실내')).toBeInTheDocument();
   });
+
+  it('SPACE(스팟)에도 실내/야외 뱃지를 보여준다(2026-10-20 — 기존엔 EVENT에만 있던 결함)', () => {
+    render(<DetailModal item={makeSpaceItem({ item_type: 'SPACE', facility_type: '야외' })} onClose={() => {}} />);
+
+    expect(screen.getByText('야외')).toBeInTheDocument();
+  });
 });
 
 // [상세보기 설명 추가](2026-08-27 사용자 지시)

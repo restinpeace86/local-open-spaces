@@ -1034,6 +1034,16 @@ export function DetailModal({
                     {item.is_free ? '무료' : '유료'}
                   </span>
                 )}
+                {/* [실내/야외 뱃지 — 스팟에도 노출](2026-10-20 todo.md 개선사항2 사용자
+                    지시): "가격 정보라던가도 야외인지 실내인지 이런것도 확실히
+                    나오고" — 기존엔 facility_type 뱃지가 EVENT 분기(eventExtraBadges)
+                    에만 있고 SPACE(스팟) 분기엔 없었다(실측 확인). 같은 필드를 같은
+                    방식으로 SPACE에도 추가한다. */}
+                {(item.facility_type === '실내' || item.facility_type === '야외') && (
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                    {item.facility_type}
+                  </span>
+                )}
                 {/* [open_spaces 정기휴무 상세 안내](2026-09-27 사용자 지시): "마커눌렀을때도
                     오늘은 정기휴무입니다 띄워주고" — 이 else 분기가 실제 SPACE(스팟)
                     상세 카드다(위 isEvent 분기는 EVENT 전용이라 SPACE는 절대 안 지나감). */}
