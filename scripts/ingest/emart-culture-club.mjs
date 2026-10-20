@@ -39,6 +39,7 @@
 import { pathToFileURL } from 'url';
 import { loadEnv } from '../lib/load-env.mjs';
 import { fetchWithTimeout } from './lib/fetch-with-timeout.mjs';
+import { withRetry, isRetryableError } from './lib/retry.mjs';
 import { createAdminClient } from './lib/supabase-admin.mjs';
 import { applyRandomStartupDelay } from './lib/random-startup-delay.mjs';
 import { parseAgeRangeToMonths } from './lib/age-range-parser.mjs';
@@ -203,13 +204,29 @@ async function fetchPage(status, storeCodes, from, size) {
   return json.data.getClassByFiltering;
 }
 
+// [배치 반복 실패 원인 확인](2026-10-20 사용자 지시 "원인확인해줘") — ingest.log
+// 실측: 최근 실행들이 "GraphQL 에러: ...Elasticsearch:UserIllegalArgumentException
+// ... Bad Request"로 첫 페이지부터 바로 실패하고 있었다. 실측 재현 결과(동일
+// filterData/변수로 직접 재호출) 이 에러는 영구적인 요청 오류가 아니라 일시적
+// 현상이다 — 같은 쿼리가 몇 초 뒤 재시도하면 그냥 성공한다(이마트 쪽 Elasticsearch
+// 가 가끔 일시적으로 Bad Request를 내는 것으로 보임, 정확한 내부 원인은 알 수
+// 없음 — 추측 금지). isRetryableError의 기본 패턴(타임아웃/네트워크류)엔 이
+// 메시지가 안 걸려 지금까지는 재시도 없이 바로 배치 전체가 실패했다 — 이
+// 에러 유형도 재시도 대상에 추가한다.
+export function isEmartTransientError(err) {
+  return isRetryableError(err) || /Elasticsearch|UserIllegalArgumentException/i.test(err?.message ?? '');
+}
+
 async function fetchAllForStatus(status, storeCodes) {
   const items = [];
   let from = 0;
 
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const page = await fetchPage(status, storeCodes, from, PAGE_SIZE);
+    const page = await withRetry(() => fetchPage(status, storeCodes, from, PAGE_SIZE), {
+      label: `emart-fetchPage(${status}, from=${from})`,
+      isRetryable: isEmartTransientError,
+    });
     items.push(...page.data);
     if (page.data.length < PAGE_SIZE) break;
     from += PAGE_SIZE;
@@ -223,10 +240,16 @@ async function fetchAllForStatus(status, storeCodes) {
 // - minClassCapacity/classMaterialFee가 가끔 숫자가 아니라 문자열("1") 또는
 //   빈 문자열("")로 온다 — integer 컬럼에 빈 문자열을 그대로 넣으면 postgres가
 //   거부한다. 빈 문자열/undefined/null은 전부 null로, 그 외엔 숫자로 변환한다.
+// [배치 반복 실패 원인 확인](2026-10-20 사용자 지시 "원인확인해줘") — ingest.log
+// 실측: "invalid input syntax for type integer: 46.2"로 upsert가 반복
+// 실패했다. 위 코드가 문자열→숫자 변환까지만 하고 정수로 반올림하지 않아,
+// API가 "46.2"처럼 소수 문자열을 주면 그대로 integer 컬럼에 밀어넣다가
+// postgres가 거부했다 — 반올림을 추가해 항상 정수를 만든다(원래 의도
+// "그 외엔 숫자로 변환한다"를 소수 케이스까지 포함하도록 보강).
 function toIntOrNull(value) {
   if (value === null || value === undefined || value === '') return null;
   const n = Number(value);
-  return Number.isFinite(n) ? n : null;
+  return Number.isFinite(n) ? Math.round(n) : null;
 }
 
 // channel.online/offline이 boolean이 아니라 "Y"/"N" 문자열로 온다(실측 확인) —

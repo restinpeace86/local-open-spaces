@@ -1,7 +1,13 @@
 // [이마트 컬처클럽 강좌 리스트 수집](2026-10-03 사용자 지시) — transform() 단위 테스트.
 // 실측 표본 그대로(2026-10-03 getClassByFiltering 직접 호출, 응답 그대로 복사).
 import { describe, expect, it } from 'vitest';
-import { transform, parseRegisterStartAt, diagnoseRegisterWindowCapture, formatDurationSeconds } from './emart-culture-club.mjs';
+import {
+  transform,
+  parseRegisterStartAt,
+  diagnoseRegisterWindowCapture,
+  formatDurationSeconds,
+  isEmartTransientError,
+} from './emart-culture-club.mjs';
 
 const SAMPLE_ITEM = {
   classId: '4065WabI62026S3964',
@@ -86,6 +92,11 @@ describe('emart-culture-club transform', () => {
   it('classMaterialFee가 빈 문자열이면 null로 변환한다(실측 확인 — integer 컬럼에 빈 문자열 불가)', () => {
     const row = transform({ ...SAMPLE_ITEM, classMaterialFee: '' }, '접수중');
     expect(row.class_material_fee).toBeNull();
+  });
+
+  it('classFee가 소수 문자열("46.2")이어도 정수로 반올림한다(실측 확인 — integer 컬럼이 소수를 거부해 배치가 반복 실패했음)', () => {
+    const row = transform({ ...SAMPLE_ITEM, classFee: '46.2' }, '접수중');
+    expect(row.class_fee).toBe(46);
   });
 
   it('channel.online/offline이 "N"이면 false로 변환한다', () => {
@@ -174,6 +185,23 @@ describe('formatDurationSeconds', () => {
   it('밀리초를 소수점 1자리 초 단위 문자열로 바꾼다', () => {
     expect(formatDurationSeconds(12345)).toBe('12.3초');
     expect(formatDurationSeconds(500)).toBe('0.5초');
+  });
+});
+
+describe('isEmartTransientError', () => {
+  it('Elasticsearch/UserIllegalArgumentException 메시지를 재시도 대상으로 본다(실측 확인된 배치 반복 실패 원인)', () => {
+    const err = new Error(
+      '이마트 컬처클럽 GraphQL 에러: [{"errorType":"Elasticsearch:UserIllegalArgumentException","message":"Elasticsearch responded with an error: Bad Request"}]'
+    );
+    expect(isEmartTransientError(err)).toBe(true);
+  });
+
+  it('기존 재시도 대상 패턴(타임아웃 등)도 그대로 재시도 대상으로 본다', () => {
+    expect(isEmartTransientError(new Error('fetch failed: ETIMEDOUT'))).toBe(true);
+  });
+
+  it('관계 없는 영구적 오류(예: 인증 실패)는 재시도 대상이 아니다', () => {
+    expect(isEmartTransientError(new Error('EMART_CULTURE_CLUB_API_KEY 환경변수가 설정되지 않았습니다.'))).toBe(false);
   });
 });
 
