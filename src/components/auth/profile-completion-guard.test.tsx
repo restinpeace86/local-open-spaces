@@ -1,6 +1,7 @@
 import { render, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ProfileCompletionGuard } from './profile-completion-guard';
+import { invalidateMyProfileCache } from '@/lib/auth/profile';
 
 const getUserMock = vi.fn();
 const onAuthStateChangeMock = vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } }));
@@ -34,6 +35,12 @@ describe('ProfileCompletionGuard', () => {
     fromMock.mockReset();
     replaceMock.mockReset();
     mockPathname = '/';
+    // [산발적 실패 수정](2026-10-20 발견): getMyProfile()의 모듈 스코프 캐시
+    // (profile.ts, TTL 기반)가 테스트 간에 비워지지 않아, 이전 테스트가 조회한
+    // 프로필이 캐시에 남아 다음 테스트의 새 스텁을 가려 테스트 순서/타이밍에
+    // 따라 간헐적으로 실패했다(실측 재현: 같은 파일을 연속 실행하면 통과/실패가
+    // 번갈아 남). 이 기능과 무관한 사전 존재 버그라 여기서 테스트 격리만 고친다.
+    invalidateMyProfileCache();
   });
 
   it('로그인하지 않았으면 아무 것도 하지 않는다', async () => {
