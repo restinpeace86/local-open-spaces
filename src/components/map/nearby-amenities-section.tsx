@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   getNearbyParkingLots,
   getNearbyKidsRestaurants,
@@ -28,9 +28,12 @@ import {
 // `order by distance_meters`로 정렬해 반환하므로, 받은 배열을 그대로 렌더링하면
 // 가까운 순서가 유지된다.
 //
-// [기본 접힘 상태](2026-10-02 사용자 확인): "처음에 default는 접힌상태야 사용자가
-// 펼치기 누르면 펼치는거야" — 이미 `useState(false)`로 기본 접힘이었다(변경 없음,
-// 사용자 확인 요청에 대한 재확인).
+// [기본 접힘 상태 — 아코디언 폐기로 되돌림](2026-10-02 사용자 확인: "처음에 default는
+// 접힌상태야 사용자가 펼치기 누르면 펼치는거야"로 한 번 확정했었지만, 2026-10-20
+// todo.md 개선사항2 사용자 지시로 방향이 바뀌었다: "주변 주차장정보나 주변
+// 식당정보에 대하여서도 간단하게 아코디언으로 숨기기 했는데 그러지말고 하나의
+// 영역으로써 원페이지에서 좀 사용자가 글을 내리면서 직관적으로 알수있는 구성으로
+// 가자" — 클릭해서 펼치는 토글을 완전히 없애고 항상 펼쳐진 평면 섹션으로 바꾼다.
 
 type OriginInfo = {
   lat: number;
@@ -143,10 +146,11 @@ function ParkingCard({ lot, origin }: { lot: NearbyParkingLot; origin: OriginInf
 // [부설(건물 전용) 주차장 1:1 매칭 카드](2026-10-15, todo.md 개선사항1): "스팟 테이블에
 // parking_id (FK)를 연결하여 상세 페이지에 주차장 뱃지를 달아주며... 주차정보의
 // 정보확인이 가능하도록". 반경검색이 아니라 이 스팟 자신의 주차장이라 거리 표시가
-// 없고, 항상 접힌 상태로 시작한다(아코디언이 아니라 단일 카드).
+// 없다.
+// [클릭해서 펼치던 토글 제거](2026-10-20 todo.md 개선사항2): 항상 펼쳐진 평면 카드로
+// 바꾼다(위 "기본 접힘 상태" 주석 참고).
 export function MatchedParkingCard({ parkingId, origin }: { parkingId: string; origin: OriginInfo }) {
   const [lot, setLot] = useState<MatchedParkingLot | null | undefined>(undefined);
-  const [isExpanded, setIsExpanded] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -166,11 +170,7 @@ export function MatchedParkingCard({ parkingId, origin }: { parkingId: string; o
 
   return (
     <div className="border border-gray-200 rounded-xl overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setIsExpanded((v) => !v)}
-        className="w-full flex items-center justify-between gap-2 px-3 py-2.5 bg-white text-left"
-      >
+      <div className="w-full flex items-center justify-between gap-2 px-3 py-2.5 bg-white text-left">
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-gray-900 truncate">🅿️ 전용 주차장 — {lot.name}</p>
           <p className="text-xs text-gray-500">
@@ -178,16 +178,13 @@ export function MatchedParkingCard({ parkingId, origin }: { parkingId: string; o
             {lot.is_multi_child_discount && <span className="ml-1 text-emerald-700">🟢 다자녀 할인</span>}
           </p>
         </div>
-        <div className="flex shrink-0 items-center gap-2" onClick={(e) => e.stopPropagation()}>
+        <div className="flex shrink-0 items-center gap-2">
           <DirectionsLink origin={origin} destination={lot} />
-          <span className="text-xs text-gray-400">{isExpanded ? '▲' : '▼'}</span>
         </div>
-      </button>
-      {isExpanded && (
-        <div className="p-3 bg-gray-50/50 border-t border-gray-100">
-          <ParkingDetailLines lot={lot} />
-        </div>
-      )}
+      </div>
+      <div className="p-3 bg-gray-50/50 border-t border-gray-100">
+        <ParkingDetailLines lot={lot} />
+      </div>
     </div>
   );
 }
@@ -207,54 +204,35 @@ function RestaurantCard({ spot, origin, badges }: { spot: NearbyItem; origin: Or
   );
 }
 
-function AccordionShell({
+// [아코디언 → 항상 펼쳐진 평면 섹션](2026-10-20 todo.md 개선사항2): 클릭해서
+// 펼치던 토글(펼침 스크롤 포커스 보정 포함)을 전부 없애고, 카운트가 0이 아니면
+// 바로 목록까지 그린다 — 사용자가 스크롤만 내리면 바로 보이도록.
+function AmenitySection({
   icon,
   label,
   count,
-  isOpen,
-  onToggle,
   children,
 }: {
   icon: string;
   label: string;
   count: number;
-  isOpen: boolean;
-  onToggle: () => void;
   children: React.ReactNode;
 }) {
-  // [펼침 스크롤 포커스 버그 수정](2026-10-02 사용자 지시): "펼치기 했을때 포커스가
-  // 이게 아닌거 같아.. 9곳펼쳐도 아래쪽으로 열리고 이걸 밑에서부터 끌어올려야돼" —
-  // 카드 목록이 토글 버튼 아래로 펼쳐지면서 상세 모달의 스크롤 영역 기준으로는
-  // 화면 밖에 남아, 유저가 직접 아래로 스크롤해야만 보였다. 펼칠 때 이 아코디언의
-  // 토글 버튼을 스크롤 가능한 조상 기준으로 상단에 맞춰 자동으로 끌어올린다.
-  const containerRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (isOpen) {
-      containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  }, [isOpen]);
-
   if (count === 0) return null;
   return (
-    <div ref={containerRef} className="border border-gray-200 rounded-xl overflow-hidden">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="w-full flex items-center justify-between px-3 py-2.5 bg-white text-left"
-      >
+    <div className="border border-gray-200 rounded-xl overflow-hidden">
+      <div className="px-3 py-2.5 bg-white">
         <span className="text-sm font-semibold text-gray-900">
           {icon} {label} ({count}곳)
         </span>
-        <span className="text-xs text-gray-400">{isOpen ? '▲' : '▼'}</span>
-      </button>
-      {isOpen && <div className="p-2 flex flex-col gap-1.5 bg-gray-50/50 border-t border-gray-100">{children}</div>}
+      </div>
+      <div className="p-2 flex flex-col gap-1.5 bg-gray-50/50 border-t border-gray-100">{children}</div>
     </div>
   );
 }
 
-function ParkingAccordion(origin: OriginInfo) {
+function NearbyParkingSection(origin: OriginInfo) {
   const [lots, setLots] = useState<NearbyParkingLot[] | null>(null);
-  const [isOpen, setIsOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -272,23 +250,16 @@ function ParkingAccordion(origin: OriginInfo) {
   }, [origin.lat, origin.lng]);
 
   return (
-    <AccordionShell
-      icon="🅿️"
-      label="주변 공영주차장"
-      count={lots?.length ?? 0}
-      isOpen={isOpen}
-      onToggle={() => setIsOpen((v) => !v)}
-    >
+    <AmenitySection icon="🅿️" label="주변 공영주차장" count={lots?.length ?? 0}>
       {lots?.map((lot) => (
         <ParkingCard key={lot.id} lot={lot} origin={origin} />
       ))}
-    </AccordionShell>
+    </AmenitySection>
   );
 }
 
-function RestaurantAccordion(origin: OriginInfo) {
+function NearbyRestaurantSection(origin: OriginInfo) {
   const [spots, setSpots] = useState<NearbyItem[] | null>(null);
-  const [isOpen, setIsOpen] = useState(false);
   const [badges, setBadges] = useState<Record<string, { labels: string[] }>>({});
 
   useEffect(() => {
@@ -316,17 +287,11 @@ function RestaurantAccordion(origin: OriginInfo) {
   }, [origin.lat, origin.lng]);
 
   return (
-    <AccordionShell
-      icon="🍽️"
-      label="주변 키즈친화 식당"
-      count={spots?.length ?? 0}
-      isOpen={isOpen}
-      onToggle={() => setIsOpen((v) => !v)}
-    >
+    <AmenitySection icon="🍽️" label="주변 키즈친화 식당" count={spots?.length ?? 0}>
       {spots?.map((spot) => (
         <RestaurantCard key={spot.id} spot={spot} origin={origin} badges={badges[spot.id]?.labels} />
       ))}
-    </AccordionShell>
+    </AmenitySection>
   );
 }
 
@@ -357,8 +322,8 @@ export function SpotParkingBadge({ spotId, origin }: { spotId: string; origin: O
 export function NearbyAmenitiesSection(origin: OriginInfo) {
   return (
     <div className="flex flex-col gap-2">
-      <ParkingAccordion {...origin} />
-      <RestaurantAccordion {...origin} />
+      <NearbyParkingSection {...origin} />
+      <NearbyRestaurantSection {...origin} />
     </div>
   );
 }
