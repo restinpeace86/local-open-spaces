@@ -47,4 +47,4 @@
 - 블로그 우리 가져오는것도 블로그 1 블로그 2 블로그 3 이렇게 되어있는데 .. 이것도 제목 같은거 몇자.. 나오게 ? 까지.. 나오도록 하자.
 - 가격 정보라던가도 야외인지 실내인지 이런것도 ...확실히 나오고 이에 대하여 추천쪽에 할수있게...
 
-
+https://www.nadrilab.com/places/%EA%B2%BD%EA%B8%B0-%ED%95%98%EB%82%A8%EC%8B%9C-%EB%AC%B4%EC%9D%B8%ED%82%A4%EC%A6%88%EC%B9%B4%ED%8E%98-%EC%9A%B0%EB%A6%AC%EB%81%BC%EB%A6%AC-%EC%8A%A4%ED%8F%AC%EC%B8%A0%EB%A7%88%EC%9D%84-%EB%AF%B8%EC%82%AC%EC%97%AD%EC%A0%90--14e5fe40-44f9-42c5-af67-c14c82b62a33
